@@ -1,0 +1,11 @@
+{
+    "//": "Defines the risk weight multiplier based on application attributes. A higher weight means a missing control has a larger negative impact on the score.",
+    "facing": {
+        "Internal": 1.0,
+        "External": 1.5
+    },
+    "dataTypes": {
+        "PII": 1.2,
+        "PCI": 1.5
+    }
+}

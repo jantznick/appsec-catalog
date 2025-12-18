@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+/* Custom theme colors - using Tailwind's default but ensuring consistency */
+:root {
+  --color-primary: #3b82f6;
+  --color-primary-dark: #2563eb;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+}
+
+

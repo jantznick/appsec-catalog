@@ -1,0 +1,299 @@
+import express from 'express';
+import { prisma } from '../prisma/client.js';
+import { requireAuth, requireAdmin } from '../middleware/auth.js';
+
+const router = express.Router();
+
+// COMP-1: Get company list
+// Admin: all companies, Regular user: only their company
+router.get('/', requireAuth, async (req, res) => {
+  try {
+    if (req.session.isAdmin) {
+      // Admin sees all companies
+      const companies = await prisma.company.findMany({
+        include: {
+          _count: {
+            select: {
+              users: true,
+              applications: true,
+            },
+          },
+        },
+        orderBy: {
+          name: 'asc',
+        },
+      });
+      return res.json(companies);
+    } else {
+      // Regular user sees only their company
+      if (!req.session.companyId) {
+        return res.json([]);
+      }
+      const company = await prisma.company.findUnique({
+        where: { id: req.session.companyId },
+        include: {
+          _count: {
+            select: {
+              users: true,
+              applications: true,
+            },
+          },
+        },
+      });
+      return res.json(company ? [company] : []);
+    }
+  } catch (error) {
+    console.error('Error fetching companies:', error);
+    res.status(500).json({ error: 'Failed to fetch companies' });
+  }
+});
+
+// COMP-2: Get company detail
+router.get('/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if user has access (admin or member of company)
+    if (!req.session.isAdmin && req.session.companyId !== id) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only access your own company',
+      });
+    }
+
+    const company = await prisma.company.findUnique({
+      where: { id },
+      include: {
+        users: {
+          select: {
+            id: true,
+            email: true,
+            verifiedAccount: true,
+            isAdmin: true,
+          },
+          orderBy: {
+            email: 'asc',
+          },
+        },
+        _count: {
+          select: {
+            applications: true,
+          },
+        },
+      },
+    });
+
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    res.json(company);
+  } catch (error) {
+    console.error('Error fetching company:', error);
+    res.status(500).json({ error: 'Failed to fetch company' });
+  }
+});
+
+// COMP-3: Create company (Admin only)
+router.post('/', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const {
+      name,
+      domains,
+      engManager,
+      language,
+      framework,
+      serverEnvironment,
+      facing,
+      deploymentType,
+      authProfiles,
+      dataTypes,
+    } = req.body;
+
+    // Validate required fields
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ error: 'Company name is required' });
+    }
+
+    // Check if company name already exists
+    const existing = await prisma.company.findUnique({
+      where: { name: name.trim() },
+    });
+
+    if (existing) {
+      return res.status(400).json({ error: 'Company name already exists' });
+    }
+
+    const company = await prisma.company.create({
+      data: {
+        name: name.trim(),
+        domains: domains?.trim() || null,
+        engManager: engManager?.trim() || null,
+        language: language?.trim() || null,
+        framework: framework?.trim() || null,
+        serverEnvironment: serverEnvironment?.trim() || null,
+        facing: facing?.trim() || null,
+        deploymentType: deploymentType?.trim() || null,
+        authProfiles: authProfiles?.trim() || null,
+        dataTypes: dataTypes?.trim() || null,
+      },
+    });
+
+    res.status(201).json(company);
+  } catch (error) {
+    console.error('Error creating company:', error);
+    res.status(500).json({ error: 'Failed to create company' });
+  }
+});
+
+// COMP-4: Update company (Admin only)
+router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      name,
+      domains,
+      engManager,
+      language,
+      framework,
+      serverEnvironment,
+      facing,
+      deploymentType,
+      authProfiles,
+      dataTypes,
+    } = req.body;
+
+    // Check if company exists
+    const existing = await prisma.company.findUnique({
+      where: { id },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    // If name is being changed, check for duplicates
+    if (name && name.trim() !== existing.name) {
+      const duplicate = await prisma.company.findUnique({
+        where: { name: name.trim() },
+      });
+
+      if (duplicate) {
+        return res.status(400).json({ error: 'Company name already exists' });
+      }
+    }
+
+    const company = await prisma.company.update({
+      where: { id },
+      data: {
+        ...(name && { name: name.trim() }),
+        ...(domains !== undefined && { domains: domains?.trim() || null }),
+        ...(engManager !== undefined && { engManager: engManager?.trim() || null }),
+        ...(language !== undefined && { language: language?.trim() || null }),
+        ...(framework !== undefined && { framework: framework?.trim() || null }),
+        ...(serverEnvironment !== undefined && { serverEnvironment: serverEnvironment?.trim() || null }),
+        ...(facing !== undefined && { facing: facing?.trim() || null }),
+        ...(deploymentType !== undefined && { deploymentType: deploymentType?.trim() || null }),
+        ...(authProfiles !== undefined && { authProfiles: authProfiles?.trim() || null }),
+        ...(dataTypes !== undefined && { dataTypes: dataTypes?.trim() || null }),
+      },
+    });
+
+    res.json(company);
+  } catch (error) {
+    console.error('Error updating company:', error);
+    res.status(500).json({ error: 'Failed to update company' });
+  }
+});
+
+// COMP-5: Assign user to company (Admin only)
+router.post('/:id/users', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id: companyId } = req.params;
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    // Check if company exists
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+    });
+
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Update user's company
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { companyId },
+      select: {
+        id: true,
+        email: true,
+        verifiedAccount: true,
+        isAdmin: true,
+      },
+    });
+
+    res.json(updatedUser);
+  } catch (error) {
+    console.error('Error assigning user to company:', error);
+    res.status(500).json({ error: 'Failed to assign user to company' });
+  }
+});
+
+// COMP-6: Remove user from company (Admin only)
+router.delete('/:id/users/:userId', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id: companyId, userId } = req.params;
+
+    // Check if company exists
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+    });
+
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    // Check if user exists and belongs to this company
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.companyId !== companyId) {
+      return res.status(400).json({
+        error: 'User does not belong to this company',
+      });
+    }
+
+    // Remove user from company
+    await prisma.user.update({
+      where: { id: userId },
+      data: { companyId: null },
+    });
+
+    res.json({ message: 'User removed from company successfully' });
+  } catch (error) {
+    console.error('Error removing user from company:', error);
+    res.status(500).json({ error: 'Failed to remove user from company' });
+  }
+});
+
+export default router;
+

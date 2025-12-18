@@ -1,0 +1,153 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  password  String?
+  verifiedAccount Boolean @default(false)
+  isAdmin   Boolean   @default(false)
+  requests  Request[]
+  companyId String?
+  company   Company?  @relation(fields: [companyId], references: [id])
+  magicCodes MagicCode[]
+}
+
+model Company {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  domains     String?
+  users       User[]
+  applications Application[]
+  engManager  String?
+  language            String?
+  framework           String?
+  serverEnvironment   String?
+  facing              String?
+  deploymentType      String?
+  authProfiles        String?
+  dataTypes           String?
+  contacts    Contact[]
+}
+
+model ChangeLog {
+  id                    String    @id @default(cuid())
+  createdAt             DateTime  @default(now())
+  userEmail             String
+  companyName           String? // Name of the company being updated (at time of submission)
+  targetCompanyId       String? // ID of the company being updated (at time of submission)
+  proposedCompanyName   String?
+  changeDetails         String // JSON blob
+  status                String    @default("PENDING") // PENDING, APPROVED, REJECTED
+
+  // New fields for historical accuracy
+  approvedBy            String?
+  approvedAt            DateTime?
+  actionTaken           String? // e.g., 'MERGE', 'CREATE_NEW'
+  finalTargetCompanyId  String?
+  finalTargetCompanyName String?
+  approvedFields        String? // Comma-separated list of fields that were approved
+}
+
+model Application {
+  id              String    @id @default(cuid())
+  name            String
+  companyId       String
+  company         Company   @relation(fields: [companyId], references: [id])
+  requests        Request[]
+  description     String?
+  owner           String?
+  repoUrl         String?
+  language        String?
+  framework       String?
+  serverEnvironment String?
+  facing          String?
+  deploymentType  String?
+  authProfiles    String?
+  dataTypes       String?
+  contacts        Contact[]
+  status          String    @default("onboarded") // pending_executive, pending_technical, onboarded
+
+  // Scoring fields
+  sastTool              String?
+  sastIntegrationLevel  Int?
+  dastTool              String?
+  dastIntegrationLevel  Int?
+  appFirewallTool       String?
+  appFirewallIntegrationLevel Int?
+  apiSecurityTool       String?
+  apiSecurityIntegrationLevel Int?
+  
+  apiSecurityNA         Boolean? @default(false)
+
+  metadataLastReviewed  DateTime?
+  
+  // Interfaces with other applications (stored as JSON array of application IDs/names)
+  interfaces            String? // JSON array of application names/IDs
+}
+
+model Contact {
+  id            String       @id @default(cuid())
+  name          String
+  title         String?
+  email         String?
+  companyId     String?
+  company       Company?     @relation(fields: [companyId], references: [id])
+  applicationId String?
+  application   Application? @relation(fields: [applicationId], references: [id])
+  createdAt     DateTime     @default(now())
+}
+
+model Request {
+  id            Int         @id @default(autoincrement())
+  products      String
+  requestType   String
+  users         String?
+  notes         String?
+  adminNotes    String?
+  status        String      @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, FAILED
+  createdAt     DateTime    @default(now())
+  userId        String?
+  User          User?       @relation(fields: [userId], references: [id])
+  applicationId String?
+  application   Application? @relation(fields: [applicationId], references: [id])
+  scriptJobs    ScriptJob[]
+}
+
+model ScriptJob {
+  id        Int      @id @default(autoincrement())
+  requestId Int
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  status    String // RUNNING, COMPLETED, FAILED
+  output    String
+  startedAt DateTime @default(now())
+  endedAt   DateTime?
+}
+
+model Session {
+  id        String   @id
+  sid       String   @unique
+  data      String
+  expiresAt DateTime
+}
+
+model MagicCode {
+  id        String   @id @default(cuid())
+  code      String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  
+  @@index([code])
+  @@index([userId])
+}
