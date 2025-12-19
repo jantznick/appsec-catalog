@@ -30,7 +30,7 @@ services:
       - "3000:3000"
     volumes:
       - ./frontend:/app
-      - /app/node_modules
+      - node_modules_frontend:/app/node_modules
     depends_on:
       - postgres
     networks:
@@ -47,7 +47,7 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-appsec}:${POSTGRES_PASSWORD:-appsec_password}@postgres:5432/${POSTGRES_DB:-appsec_catalog}
     volumes:
       - ./backend:/app
-      - /app/node_modules
+      - node_modules_backend:/app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -56,6 +56,8 @@ services:
 
 volumes:
   postgres_data:
+  node_modules_frontend:
+  node_modules_backend:
 
 networks:
   appsec-network:
