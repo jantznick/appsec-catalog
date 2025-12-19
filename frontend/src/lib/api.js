@@ -92,6 +92,11 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  regenerateUserInvite: (userId) =>
+    apiRequest(`/api/users/${userId}/regenerate-invite`, {
+      method: 'POST',
+    }),
+
   getInvitation: (token) =>
     apiRequest(`/api/invitations/${token}`),
 

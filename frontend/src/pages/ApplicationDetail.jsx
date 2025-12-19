@@ -34,7 +34,6 @@ export function ApplicationDetail() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    owner: '',
     repoUrl: '',
     language: '',
     framework: '',
@@ -43,6 +42,8 @@ export function ApplicationDetail() {
     deploymentType: '',
     authProfiles: '',
     dataTypes: '',
+    devTeamContact: '',
+    securityTestingDescription: '',
     sastTool: '',
     sastIntegrationLevel: '',
     dastTool: '',
@@ -154,7 +155,6 @@ export function ApplicationDetail() {
       const newFormData = {
         name: data.name || '',
         description: data.description || '',
-        owner: data.owner || '',
         repoUrl: data.repoUrl || '',
         language: data.language || '',
         framework: data.framework || '',
@@ -163,6 +163,8 @@ export function ApplicationDetail() {
         deploymentType: data.deploymentType || '',
         authProfiles: data.authProfiles || '',
         dataTypes: data.dataTypes || '',
+        devTeamContact: data.devTeamContact || '',
+        securityTestingDescription: data.securityTestingDescription || '',
         sastTool: data.sastTool || '',
         sastIntegrationLevel: data.sastIntegrationLevel?.toString() || '',
         dastTool: data.dastTool || '',
@@ -346,26 +348,21 @@ export function ApplicationDetail() {
                 disabled={!isEditing}
                 rows={3}
               />
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Owner / Eng. Lead"
-                  value={formData.owner}
-                  onChange={(e) => handleFieldChange('owner', e.target.value)}
-                  disabled={!isEditing}
-                />
-                <Input
-                  label="Repository URL"
-                  type="url"
-                  value={formData.repoUrl}
-                  onChange={(e) => handleFieldChange('repoUrl', e.target.value)}
-                  disabled={!isEditing}
-                />
-              </div>
-              <DomainPills
-                domains={domains}
-                onAdd={handleAddDomain}
-                onRemove={handleRemoveDomain}
-                disabled={!canEdit()}
+              <Input
+                label="Repository URL"
+                type="url"
+                value={formData.repoUrl}
+                onChange={(e) => handleFieldChange('repoUrl', e.target.value)}
+                disabled={!isEditing}
+              />
+              <Textarea
+                label="Development Team Contact Info"
+                value={formData.devTeamContact}
+                onChange={(e) => handleFieldChange('devTeamContact', e.target.value)}
+                disabled={!isEditing}
+                rows={3}
+                placeholder="Name, email, phone, etc. (can include multiple contacts)"
+                helperText="Contact information for the development team"
               />
             </div>
           </CardContent>
@@ -434,100 +431,122 @@ export function ApplicationDetail() {
                 onChange={(e) => handleFieldChange('dataTypes', e.target.value)}
                 disabled={!isEditing}
               />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Security Tools</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="SAST Tool"
-                  value={formData.sastTool}
-                  onChange={(e) => handleFieldChange('sastTool', e.target.value)}
-                  disabled={!isEditing}
-                />
-                <Select
-                  label="SAST Integration Level"
-                  value={formData.sastIntegrationLevel}
-                  onChange={(e) => handleFieldChange('sastIntegrationLevel', e.target.value)}
-                  disabled={!isEditing}
-                  options={[
-                    { value: '', label: 'Select level' },
-                    ...integrationLevels,
-                  ]}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="DAST Tool"
-                  value={formData.dastTool}
-                  onChange={(e) => handleFieldChange('dastTool', e.target.value)}
-                  disabled={!isEditing}
-                />
-                <Select
-                  label="DAST Integration Level"
-                  value={formData.dastIntegrationLevel}
-                  onChange={(e) => handleFieldChange('dastIntegrationLevel', e.target.value)}
-                  disabled={!isEditing}
-                  options={[
-                    { value: '', label: 'Select level' },
-                    ...integrationLevels,
-                  ]}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="App Firewall Tool"
-                  value={formData.appFirewallTool}
-                  onChange={(e) => handleFieldChange('appFirewallTool', e.target.value)}
-                  disabled={!isEditing}
-                />
-                <Select
-                  label="App Firewall Integration Level"
-                  value={formData.appFirewallIntegrationLevel}
-                  onChange={(e) => handleFieldChange('appFirewallIntegrationLevel', e.target.value)}
-                  disabled={!isEditing}
-                  options={[
-                    { value: '', label: 'Select level' },
-                    ...integrationLevels,
-                  ]}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="API Security Tool"
-                  value={formData.apiSecurityTool}
-                  onChange={(e) => handleFieldChange('apiSecurityTool', e.target.value)}
-                  disabled={!isEditing}
-                />
-                <Select
-                  label="API Security Integration Level"
-                  value={formData.apiSecurityIntegrationLevel}
-                  onChange={(e) => handleFieldChange('apiSecurityIntegrationLevel', e.target.value)}
-                  disabled={!isEditing}
-                  options={[
-                    { value: '', label: 'Select level' },
-                    ...integrationLevels,
-                  ]}
-                />
-              </div>
-              <Checkbox
-                id="apiSecurityNA"
-                label="API Security Not Applicable"
-                checked={formData.apiSecurityNA}
-                onChange={(e) => handleFieldChange('apiSecurityNA', e.target.checked)}
-                disabled={!isEditing}
+              <DomainPills
+                domains={domains}
+                onAdd={handleAddDomain}
+                onRemove={handleRemoveDomain}
+                disabled={!canEdit()}
               />
             </div>
           </CardContent>
         </Card>
-
       </div>
+
+      {/* Security Tools - Full Width */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Security Tools</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left Column: Security Testing Description */}
+            <div>
+              <Textarea
+                label="Security Testing Description"
+                value={formData.securityTestingDescription}
+                onChange={(e) => handleFieldChange('securityTestingDescription', e.target.value)}
+                disabled={!isEditing}
+                rows={12}
+                placeholder="Describe the security testing practices, tools, and processes"
+                helperText="Information about security testing in place"
+              />
+            </div>
+            
+            {/* Right Column: Security Tools */}
+            <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="SAST Tool"
+                    value={formData.sastTool}
+                    onChange={(e) => handleFieldChange('sastTool', e.target.value)}
+                    disabled={!isEditing}
+                  />
+                  <Select
+                    label="SAST Integration Level"
+                    value={formData.sastIntegrationLevel}
+                    onChange={(e) => handleFieldChange('sastIntegrationLevel', e.target.value)}
+                    disabled={!isEditing}
+                    options={[
+                      { value: '', label: 'Select level' },
+                      ...integrationLevels,
+                    ]}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="DAST Tool"
+                    value={formData.dastTool}
+                    onChange={(e) => handleFieldChange('dastTool', e.target.value)}
+                    disabled={!isEditing}
+                  />
+                  <Select
+                    label="DAST Integration Level"
+                    value={formData.dastIntegrationLevel}
+                    onChange={(e) => handleFieldChange('dastIntegrationLevel', e.target.value)}
+                    disabled={!isEditing}
+                    options={[
+                      { value: '', label: 'Select level' },
+                      ...integrationLevels,
+                    ]}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="App Firewall Tool"
+                    value={formData.appFirewallTool}
+                    onChange={(e) => handleFieldChange('appFirewallTool', e.target.value)}
+                    disabled={!isEditing}
+                  />
+                  <Select
+                    label="App Firewall Integration Level"
+                    value={formData.appFirewallIntegrationLevel}
+                    onChange={(e) => handleFieldChange('appFirewallIntegrationLevel', e.target.value)}
+                    disabled={!isEditing}
+                    options={[
+                      { value: '', label: 'Select level' },
+                      ...integrationLevels,
+                    ]}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="API Security Tool"
+                    value={formData.apiSecurityTool}
+                    onChange={(e) => handleFieldChange('apiSecurityTool', e.target.value)}
+                    disabled={!isEditing}
+                  />
+                  <Select
+                    label="API Security Integration Level"
+                    value={formData.apiSecurityIntegrationLevel}
+                    onChange={(e) => handleFieldChange('apiSecurityIntegrationLevel', e.target.value)}
+                    disabled={!isEditing}
+                    options={[
+                      { value: '', label: 'Select level' },
+                      ...integrationLevels,
+                    ]}
+                  />
+                </div>
+                <Checkbox
+                  id="apiSecurityNA"
+                  label="API Security Not Applicable"
+                  checked={formData.apiSecurityNA}
+                  onChange={(e) => handleFieldChange('apiSecurityNA', e.target.checked)}
+                  disabled={!isEditing}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
       {/* Sticky Save Bar - Only show when editing */}
       {isEditing && (

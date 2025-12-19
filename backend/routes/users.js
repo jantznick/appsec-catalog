@@ -512,6 +512,95 @@ router.post('/invite', requireAuth, async (req, res) => {
 });
 
 /**
+ * Regenerate invitation link for a user
+ * POST /api/users/:id/regenerate-invite
+ * - Admin: can regenerate invite for any unverified user
+ * - Company member: can regenerate invite for unverified users in their company
+ */
+router.post('/:id/regenerate-invite', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Find the user
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: {
+        company: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        error: 'User not found',
+        message: 'The specified user does not exist'
+      });
+    }
+
+    // Check if user is already verified
+    const isRequesterAdmin = req.session.isAdmin;
+
+    // Only admins can create invite links for verified users (password reset function)
+    // Non-admins can only create invites for unverified users
+    if (user.verifiedAccount && !isRequesterAdmin) {
+      return res.status(400).json({
+        error: 'User already verified',
+        message: 'Cannot regenerate invitation for a verified user. Only admins can create invite links for verified users.'
+      });
+    }
+
+    // Permission check: non-admins can only regenerate invites for users in their company or unassigned users
+    if (!isRequesterAdmin) {
+      if (!req.session.companyId) {
+        return res.status(403).json({
+          error: 'Permission denied',
+          message: 'You must be assigned to a company to regenerate invitations'
+        });
+      }
+      // Allow if user is in requester's company OR user has no company (unassigned)
+      if (user.companyId && user.companyId !== req.session.companyId) {
+        return res.status(403).json({
+          error: 'Permission denied',
+          message: 'You can only regenerate invitations for users in your company or unassigned users'
+        });
+      }
+    }
+
+    // Create new invitation for the user
+    const { token, expiresAt, invitation } = await createInvitation(
+      user.email,
+      req.session.userId,
+      user.companyId,
+      user.isAdmin
+    );
+
+    // Generate invitation URL
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const invitationUrl = `${baseUrl}/invite/${token}`;
+
+    // Log it
+    console.log(`\n📧 Regenerated invitation for ${user.email}:`);
+    console.log(`   URL: ${invitationUrl}`);
+    console.log(`   Expires at: ${expiresAt.toISOString()}\n`);
+
+    res.json({
+      message: 'Invitation regenerated successfully',
+      invitation: {
+        id: invitation.id,
+        email: invitation.email,
+        expiresAt: invitation.expiresAt,
+      },
+      invitationUrl,
+    });
+  } catch (error) {
+    console.error('Regenerate invitation error:', error);
+    res.status(500).json({
+      error: 'Failed to regenerate invitation',
+      message: 'An error occurred while regenerating the invitation'
+    });
+  }
+});
+
+/**
  * Delete a user (Admin only)
  * DELETE /api/users/:id
  * - Admin: can delete any user

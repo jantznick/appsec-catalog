@@ -39,7 +39,7 @@ export function calculateKnowledgeSharingScore(app) {
 
   // Count filled metadata fields
   if (app.description) fieldsFilled++;
-  if (app.owner) fieldsFilled++;
+  if (app.devTeamContact) fieldsFilled++;
   if (app.repoUrl) fieldsFilled++;
   if (app.language) fieldsFilled++;
   if (app.framework) fieldsFilled++;
@@ -158,5 +158,7 @@ export function calculateApplicationScore(app) {
     totalScore,
   };
 }
+
+
 
 

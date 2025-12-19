@@ -150,14 +150,15 @@ export function Auth() {
               placeholder="you@example.com"
               required
             />
-            <button
+            {/* Magic code button - commented out for now */}
+            {/* <button
               type="button"
               onClick={openMagicCodeModal}
               disabled={!email}
               className="mt-2 text-sm text-blue-600 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed"
             >
               Use magic code instead
-            </button>
+            </button> */}
           </div>
 
           <Input
@@ -232,7 +233,8 @@ export function Auth() {
         </div>
       </div>
 
-      {/* Magic Code Modal */}
+      {/* Magic Code Modal - commented out for now */}
+      {/*
       <Modal
         isOpen={showMagicCodeModal}
         onClose={closeMagicCodeModal}
@@ -329,6 +331,7 @@ export function Auth() {
           </form>
         )}
       </Modal>
+      */}
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { EditUserModal } from '../components/users/EditUserModal.jsx';
 import { DeleteUserModal } from '../components/users/DeleteUserModal.jsx';
 import { InviteUserModal } from '../components/users/InviteUserModal.jsx';
 import { ChangePasswordModal } from '../components/users/ChangePasswordModal.jsx';
+import { Modal } from '../components/ui/index.js';
 import useAuthStore from '../store/authStore.js';
 
 export function Users() {
@@ -24,6 +25,8 @@ export function Users() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [changePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
+  const [regenerateInviteModalOpen, setRegenerateInviteModalOpen] = useState(false);
+  const [regeneratedInviteUrl, setRegeneratedInviteUrl] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   
   // Table state
@@ -102,6 +105,23 @@ export function Users() {
 
   const handlePasswordChanged = async () => {
     await loadUsers();
+  };
+
+  const handleRegenerateInviteClick = async (user) => {
+    try {
+      const result = await api.regenerateUserInvite(user.id);
+      setSelectedUser(user);
+      setRegeneratedInviteUrl(result.invitationUrl);
+      setRegenerateInviteModalOpen(true);
+      toast.success('Invitation link regenerated successfully');
+    } catch (error) {
+      toast.error(error.message || 'Failed to regenerate invitation link');
+    }
+  };
+
+  const handleCopyRegeneratedInvite = () => {
+    navigator.clipboard.writeText(regeneratedInviteUrl);
+    toast.success('Invitation URL copied to clipboard');
   };
 
   // Define columns
@@ -185,6 +205,16 @@ export function Users() {
                 title={user.hasPassword ? "Change password" : "Set password"}
               >
                 {user.hasPassword ? "Change Password" : "Set Password"}
+              </Button>
+            )}
+            {(!verified || isAdmin()) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleRegenerateInviteClick(user)}
+                title={verified ? "Create invite link (password reset)" : "Regenerate invitation link"}
+              >
+                {verified ? "Reset Password" : "Get Invite Link"}
               </Button>
             )}
             {isAdmin() && (
@@ -518,6 +548,92 @@ export function Users() {
         user={selectedUser}
         onPasswordChanged={handlePasswordChanged}
       />
+
+      {/* Regenerated Invite Link Modal */}
+      {regenerateInviteModalOpen && selectedUser && (
+        <Modal
+          isOpen={regenerateInviteModalOpen}
+          onClose={() => {
+            setRegenerateInviteModalOpen(false);
+            setRegeneratedInviteUrl('');
+            setSelectedUser(null);
+          }}
+          title="Invitation Link Regenerated"
+          size="md"
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setRegenerateInviteModalOpen(false);
+                  setRegeneratedInviteUrl('');
+                  setSelectedUser(null);
+                }}
+              >
+                Close
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleCopyRegeneratedInvite}
+              >
+                Copy Link
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-green-900 mb-1">
+                    New Invitation Link Generated
+                  </h3>
+                  <p className="text-sm text-green-800">
+                    A new invitation link has been generated for <strong>{selectedUser.email}</strong>. Share the link below with them to complete their account setup.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
+              <label className="block text-sm font-semibold text-blue-900 mb-2">
+                Invitation Link
+              </label>
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  type="text"
+                  value={regeneratedInviteUrl}
+                  readOnly
+                  className="flex-1 px-4 py-3 text-sm font-mono border-2 border-blue-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onClick={(e) => e.target.select()}
+                />
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleCopyRegeneratedInvite}
+                  className="whitespace-nowrap"
+                >
+                  Copy Link
+                </Button>
+              </div>
+              <p className="text-xs text-blue-700">
+                Click the input field to select all, or use the copy button. Share this link with the user so they can set their password and complete their account setup.
+              </p>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <p className="text-xs text-yellow-800">
+                <strong>Note:</strong> This invitation link expires in 7 days. The user will appear in the users list as "Pending" until they accept the invitation.
+              </p>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

@@ -48,25 +48,31 @@ router.post('/onboard/executive', async (req, res) => {
 
     // Create all applications
     const createdApplications = await Promise.all(
-      appsToCreate.map(app => 
-        prisma.application.create({
+      appsToCreate.map(app => {
+        // Process criticalAspects - convert array to comma-separated string if needed
+        let criticalAspects = null;
+        if (app.criticalAspects) {
+          if (Array.isArray(app.criticalAspects)) {
+            criticalAspects = app.criticalAspects.filter(a => a && a.trim()).join(', ');
+          } else {
+            criticalAspects = app.criticalAspects.trim() || null;
+          }
+        }
+
+        return prisma.application.create({
           data: {
             name: app.name.trim(),
             companyId: company.id,
             description: app.description?.trim() || null,
-            owner: app.owner?.trim() || null,
-            repoUrl: app.repoUrl?.trim() || null,
-            language: app.language?.trim() || null,
-            framework: app.framework?.trim() || null,
-            serverEnvironment: app.serverEnvironment?.trim() || null,
             facing: app.facing?.trim() || null,
-            deploymentType: app.deploymentType?.trim() || null,
-            authProfiles: app.authProfiles?.trim() || null,
-            dataTypes: app.dataTypes?.trim() || null,
+            serverEnvironment: app.serverEnvironment?.trim() || null,
+            businessCriticality: app.businessCriticality ? parseInt(app.businessCriticality) : null,
+            criticalAspects: criticalAspects,
+            devTeamContact: app.devTeamContact?.trim() || null,
             status: 'pending_technical', // Needs technical form completion
           },
-        })
-      )
+        });
+      })
     );
 
     // Return single application for backward compatibility, or array for multiple
@@ -159,7 +165,22 @@ router.put('/public/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const {
+      repoUrl,
+      deploymentFrequency,
+      deploymentMethod,
+      requiresSpecialAccess,
+      authInfo,
+      handlesUserData,
+      userDataTypes,
+      userDataStorage,
+      hasInterfaces,
       interfaces,
+      pciData,
+      piiData,
+      phiData,
+      hasSecurityTesting,
+      securityTestingDescription,
+      additionalNotes,
       sastTool,
       sastIntegrationLevel,
       dastTool,
@@ -180,54 +201,124 @@ router.put('/public/:id', async (req, res) => {
       return res.status(404).json({ error: 'Application not found' });
     }
 
+    // Process deploymentType - concatenate frequency and method
+    let deploymentType = null;
+    const deploymentParts = [];
+    if (deploymentFrequency && deploymentFrequency.trim()) {
+      deploymentParts.push(deploymentFrequency.trim());
+    }
+    if (deploymentMethod && deploymentMethod.trim()) {
+      deploymentParts.push(deploymentMethod.trim());
+    }
+    if (deploymentParts.length > 0) {
+      deploymentType = deploymentParts.join(' - ');
+    }
+
+    // Process authProfiles - concatenate requiresSpecialAccess and authInfo
+    let authProfiles = null;
+    const authParts = [];
+    if (requiresSpecialAccess === 'Yes' || requiresSpecialAccess === true) {
+      authParts.push('Requires special access permissions');
+      if (authInfo && authInfo.trim()) {
+        authParts.push(authInfo.trim());
+      }
+    }
+    if (authParts.length > 0) {
+      authProfiles = authParts.join(': ');
+    }
+
+    // Process dataTypes - concatenate all data-related fields
+    let dataTypes = null;
+    const dataParts = [];
+    if (handlesUserData === 'Yes' || handlesUserData === true) {
+      if (userDataTypes && userDataTypes.trim()) {
+        dataParts.push(`User supplied data: ${userDataTypes.trim()}`);
+      }
+      if (userDataStorage && userDataStorage.trim()) {
+        dataParts.push(`Storage: ${userDataStorage.trim()}`);
+      }
+    }
+    if (pciData === true || pciData === 'true') {
+      dataParts.push('PCI');
+    }
+    if (piiData === true || piiData === 'true') {
+      dataParts.push('PII');
+    }
+    if (phiData === true || phiData === 'true') {
+      dataParts.push('PHI');
+    }
+    if (dataParts.length > 0) {
+      dataTypes = dataParts.join(', ');
+    }
+
     // Process interfaces
     let interfacesJson = null;
-    if (interfaces && Array.isArray(interfaces) && interfaces.length > 0) {
-      const interfaceAppIds = [];
-      
-      for (const interfaceName of interfaces) {
-        if (!interfaceName || !interfaceName.trim()) continue;
+    if (hasInterfaces === 'Yes' || hasInterfaces === true) {
+      if (interfaces && Array.isArray(interfaces) && interfaces.length > 0) {
+        const interfaceAppIds = [];
         
-        let interfaceApp = await prisma.application.findFirst({
-          where: {
-            name: interfaceName.trim(),
-            companyId: existing.companyId,
-          },
-        });
-
-        if (!interfaceApp) {
-          interfaceApp = await prisma.application.create({
-            data: {
+        for (const interfaceName of interfaces) {
+          if (!interfaceName || !interfaceName.trim()) continue;
+          
+          let interfaceApp = await prisma.application.findFirst({
+            where: {
               name: interfaceName.trim(),
               companyId: existing.companyId,
-              description: `Auto-created interface application`,
-              status: 'onboarded',
             },
           });
+
+          if (!interfaceApp) {
+            interfaceApp = await prisma.application.create({
+              data: {
+                name: interfaceName.trim(),
+                companyId: existing.companyId,
+                description: `Auto-created interface application`,
+                status: 'onboarded',
+              },
+            });
+          }
+
+          interfaceAppIds.push(interfaceApp.id);
         }
 
-        interfaceAppIds.push(interfaceApp.id);
+        interfacesJson = JSON.stringify(interfaceAppIds);
       }
+    }
 
-      interfacesJson = JSON.stringify(interfaceAppIds);
+    // Process description - concatenate additionalNotes to existing description
+    let description = existing.description || '';
+    if (additionalNotes && additionalNotes.trim()) {
+      if (description) {
+        description = description + '\n\n\n' + additionalNotes.trim();
+      } else {
+        description = additionalNotes.trim();
+      }
     }
 
     // Update application with technical details
+    const updateData = {
+      repoUrl: repoUrl?.trim() || null,
+      deploymentType: deploymentType || existing.deploymentType,
+      authProfiles: authProfiles || existing.authProfiles,
+      dataTypes: dataTypes || existing.dataTypes,
+      interfaces: interfacesJson || existing.interfaces,
+      description: description || null,
+      securityTestingDescription: securityTestingDescription?.trim() || null,
+      sastTool: sastTool?.trim() || null,
+      sastIntegrationLevel: sastIntegrationLevel ? parseInt(sastIntegrationLevel) : null,
+      dastTool: dastTool?.trim() || null,
+      dastIntegrationLevel: dastIntegrationLevel ? parseInt(dastIntegrationLevel) : null,
+      appFirewallTool: appFirewallTool?.trim() || null,
+      appFirewallIntegrationLevel: appFirewallIntegrationLevel ? parseInt(appFirewallIntegrationLevel) : null,
+      apiSecurityTool: apiSecurityTool?.trim() || null,
+      apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null,
+      apiSecurityNA: apiSecurityNA === true || apiSecurityNA === 'true',
+      status: 'onboarded', // Mark as fully onboarded
+    };
+
     const application = await prisma.application.update({
       where: { id },
-      data: {
-        interfaces: interfacesJson,
-        sastTool: sastTool?.trim() || null,
-        sastIntegrationLevel: sastIntegrationLevel ? parseInt(sastIntegrationLevel) : null,
-        dastTool: dastTool?.trim() || null,
-        dastIntegrationLevel: dastIntegrationLevel ? parseInt(dastIntegrationLevel) : null,
-        appFirewallTool: appFirewallTool?.trim() || null,
-        appFirewallIntegrationLevel: appFirewallIntegrationLevel ? parseInt(appFirewallIntegrationLevel) : null,
-        apiSecurityTool: apiSecurityTool?.trim() || null,
-        apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null,
-        apiSecurityNA: apiSecurityNA === true || apiSecurityNA === 'true',
-        status: 'onboarded', // Mark as fully onboarded
-      },
+      data: updateData,
     });
 
     // Recalculate and save score after update
@@ -353,7 +444,7 @@ router.get('/:id/score', requireAuth, async (req, res) => {
     // Calculate breakdown for knowledge sharing
     const knowledgeFields = [
       'description',
-      'owner',
+      'devTeamContact',
       'repoUrl',
       'language',
       'framework',
@@ -436,7 +527,6 @@ router.post('/', requireAuth, async (req, res) => {
     const {
       name,
       description,
-      owner,
       repoUrl,
       companyId,
       language,
@@ -447,6 +537,11 @@ router.post('/', requireAuth, async (req, res) => {
       authProfiles,
       dataTypes,
       interfaces, // Array of application names
+      businessCriticality,
+      criticalAspects,
+      devTeamContact,
+      securityTestingDescription,
+      additionalNotes,
       sastTool,
       sastIntegrationLevel,
       dastTool,
@@ -524,11 +619,20 @@ router.post('/', requireAuth, async (req, res) => {
       interfacesJson = JSON.stringify(interfaceAppIds);
     }
 
+    // Process criticalAspects - convert array to comma-separated string if needed
+    let criticalAspectsStr = null;
+    if (criticalAspects) {
+      if (Array.isArray(criticalAspects)) {
+        criticalAspectsStr = criticalAspects.filter(a => a && a.trim()).join(', ');
+      } else {
+        criticalAspectsStr = criticalAspects.trim() || null;
+      }
+    }
+
     const application = await prisma.application.create({
       data: {
         name: name.trim(),
         description: description?.trim() || null,
-        owner: owner?.trim() || null,
         repoUrl: repoUrl?.trim() || null,
         companyId: finalCompanyId,
         language: language?.trim() || null,
@@ -539,6 +643,11 @@ router.post('/', requireAuth, async (req, res) => {
         authProfiles: authProfiles?.trim() || null,
         dataTypes: dataTypes?.trim() || null,
         interfaces: interfacesJson,
+        businessCriticality: businessCriticality ? parseInt(businessCriticality) : null,
+        criticalAspects: criticalAspectsStr,
+        devTeamContact: devTeamContact?.trim() || null,
+        securityTestingDescription: securityTestingDescription?.trim() || null,
+        additionalNotes: additionalNotes?.trim() || null,
         sastTool: sastTool?.trim() || null,
         sastIntegrationLevel: sastIntegrationLevel ? parseInt(sastIntegrationLevel) : null,
         dastTool: dastTool?.trim() || null,
@@ -574,7 +683,6 @@ router.put('/:id', requireAuth, async (req, res) => {
     const {
       name,
       description,
-      owner,
       repoUrl,
       language,
       framework,
@@ -584,6 +692,11 @@ router.put('/:id', requireAuth, async (req, res) => {
       authProfiles,
       dataTypes,
       interfaces,
+      businessCriticality,
+      criticalAspects,
+      devTeamContact,
+      securityTestingDescription,
+      additionalNotes,
       sastTool,
       sastIntegrationLevel,
       dastTool,
@@ -652,12 +765,23 @@ router.put('/:id', requireAuth, async (req, res) => {
       }
     }
 
+    // Process criticalAspects - convert array to comma-separated string if needed
+    let criticalAspectsStr = undefined;
+    if (criticalAspects !== undefined) {
+      if (Array.isArray(criticalAspects)) {
+        criticalAspectsStr = criticalAspects.filter(a => a && a.trim()).join(', ');
+      } else if (criticalAspects) {
+        criticalAspectsStr = criticalAspects.trim() || null;
+      } else {
+        criticalAspectsStr = null;
+      }
+    }
+
     const application = await prisma.application.update({
       where: { id },
       data: {
         ...(name && { name: name.trim() }),
         ...(description !== undefined && { description: description?.trim() || null }),
-        ...(owner !== undefined && { owner: owner?.trim() || null }),
         ...(repoUrl !== undefined && { repoUrl: repoUrl?.trim() || null }),
         ...(language !== undefined && { language: language?.trim() || null }),
         ...(framework !== undefined && { framework: framework?.trim() || null }),
@@ -667,6 +791,11 @@ router.put('/:id', requireAuth, async (req, res) => {
         ...(authProfiles !== undefined && { authProfiles: authProfiles?.trim() || null }),
         ...(dataTypes !== undefined && { dataTypes: dataTypes?.trim() || null }),
         ...(interfaces !== undefined && { interfaces: interfacesJson }),
+        ...(businessCriticality !== undefined && { businessCriticality: businessCriticality ? parseInt(businessCriticality) : null }),
+        ...(criticalAspects !== undefined && { criticalAspects: criticalAspectsStr }),
+        ...(devTeamContact !== undefined && { devTeamContact: devTeamContact?.trim() || null }),
+        ...(securityTestingDescription !== undefined && { securityTestingDescription: securityTestingDescription?.trim() || null }),
+        ...(additionalNotes !== undefined && { additionalNotes: additionalNotes?.trim() || null }),
         ...(sastTool !== undefined && { sastTool: sastTool?.trim() || null }),
         ...(sastIntegrationLevel !== undefined && { sastIntegrationLevel: sastIntegrationLevel ? parseInt(sastIntegrationLevel) : null }),
         ...(dastTool !== undefined && { dastTool: dastTool?.trim() || null }),

@@ -27,7 +27,6 @@ export function ApplicationNew() {
     companyId: '',
     name: '',
     description: '',
-    owner: '',
     repoUrl: '',
     language: '',
     framework: '',
@@ -36,6 +35,12 @@ export function ApplicationNew() {
     deploymentType: '',
     authProfiles: '',
     dataTypes: '',
+    businessCriticality: '',
+    criticalAspects: [],
+    criticalAspectsOther: '',
+    devTeamContact: '',
+    securityTestingDescription: '',
+    additionalNotes: '',
     sastTool: '',
     sastIntegrationLevel: '',
     dastTool: '',
@@ -111,7 +116,7 @@ export function ApplicationNew() {
           deploymentType: company.deploymentType || prev.deploymentType,
           authProfiles: company.authProfiles || prev.authProfiles,
           dataTypes: company.dataTypes || prev.dataTypes,
-          owner: company.engManager || prev.owner,
+          devTeamContact: company.engManager ? `Engineering Manager: ${company.engManager}` : prev.devTeamContact,
         }));
       }
     } catch (error) {
@@ -156,8 +161,17 @@ export function ApplicationNew() {
 
     try {
       setLoading(true);
+      // Format criticalAspects - combine selected aspects with "Other" if provided
+      const criticalAspects = [...(formData.criticalAspects || [])];
+      if (formData.criticalAspectsOther && formData.criticalAspectsOther.trim()) {
+        criticalAspects.push(`Other: ${formData.criticalAspectsOther.trim()}`);
+      }
+      
+      // Remove owner field, use devTeamContact instead
+      const { owner, ...formDataWithoutOwner } = formData;
       const application = await api.createApplication({
-        ...formData,
+        ...formDataWithoutOwner,
+        criticalAspects: criticalAspects.length > 0 ? criticalAspects : null,
         interfaces: interfaces,
       });
       toast.success('Application created successfully');
@@ -214,17 +228,22 @@ export function ApplicationNew() {
                   rows={3}
                 />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                <Input
-                  label="Owner / Eng. Lead"
-                  value={formData.owner}
-                  onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
-                />
+              <div className="mt-4">
                 <Input
                   label="Repository URL"
                   type="url"
                   value={formData.repoUrl}
                   onChange={(e) => setFormData({ ...formData, repoUrl: e.target.value })}
+                />
+              </div>
+              <div className="mt-4">
+                <Textarea
+                  label="Development Team Contact Info"
+                  value={formData.devTeamContact}
+                  onChange={(e) => setFormData({ ...formData, devTeamContact: e.target.value })}
+                  rows={3}
+                  placeholder="Name, email, phone, etc. (can include multiple contacts)"
+                  helperText="You can list multiple team members here"
                 />
               </div>
             </CardContent>
@@ -304,6 +323,99 @@ export function ApplicationNew() {
                   value={formData.dataTypes}
                   onChange={(e) => setFormData({ ...formData, dataTypes: e.target.value })}
                   placeholder="e.g. PII, PCI"
+                />
+              </div>
+              <div className="mt-4">
+                <Input
+                  label="Business Criticality (1-5, 5 being most critical)"
+                  type="number"
+                  min="1"
+                  max="5"
+                  value={formData.businessCriticality}
+                  onChange={(e) => setFormData({ ...formData, businessCriticality: e.target.value })}
+                />
+              </div>
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Critical Aspects
+                </label>
+                <div className="space-y-2">
+                  <Checkbox
+                    id="critical-availability"
+                    label="Availability"
+                    checked={formData.criticalAspects?.includes('Availability')}
+                    onChange={() => {
+                      const aspects = formData.criticalAspects || [];
+                      if (aspects.includes('Availability')) {
+                        setFormData({ ...formData, criticalAspects: aspects.filter(a => a !== 'Availability') });
+                      } else {
+                        setFormData({ ...formData, criticalAspects: [...aspects, 'Availability'] });
+                      }
+                    }}
+                  />
+                  <Checkbox
+                    id="critical-data-handling"
+                    label="Data Handling"
+                    checked={formData.criticalAspects?.includes('Data Handling')}
+                    onChange={() => {
+                      const aspects = formData.criticalAspects || [];
+                      if (aspects.includes('Data Handling')) {
+                        setFormData({ ...formData, criticalAspects: aspects.filter(a => a !== 'Data Handling') });
+                      } else {
+                        setFormData({ ...formData, criticalAspects: [...aspects, 'Data Handling'] });
+                      }
+                    }}
+                  />
+                  <Checkbox
+                    id="critical-confidentiality"
+                    label="Confidentiality"
+                    checked={formData.criticalAspects?.includes('Confidentiality')}
+                    onChange={() => {
+                      const aspects = formData.criticalAspects || [];
+                      if (aspects.includes('Confidentiality')) {
+                        setFormData({ ...formData, criticalAspects: aspects.filter(a => a !== 'Confidentiality') });
+                      } else {
+                        setFormData({ ...formData, criticalAspects: [...aspects, 'Confidentiality'] });
+                      }
+                    }}
+                  />
+                  <Checkbox
+                    id="critical-integrity"
+                    label="Integrity"
+                    checked={formData.criticalAspects?.includes('Integrity')}
+                    onChange={() => {
+                      const aspects = formData.criticalAspects || [];
+                      if (aspects.includes('Integrity')) {
+                        setFormData({ ...formData, criticalAspects: aspects.filter(a => a !== 'Integrity') });
+                      } else {
+                        setFormData({ ...formData, criticalAspects: [...aspects, 'Integrity'] });
+                      }
+                    }}
+                  />
+                  <Input
+                    label="Other"
+                    value={formData.criticalAspectsOther}
+                    onChange={(e) => setFormData({ ...formData, criticalAspectsOther: e.target.value })}
+                    placeholder="Please specify"
+                  />
+                </div>
+              </div>
+              <div className="mt-4">
+                <Textarea
+                  label="Security Testing Description"
+                  value={formData.securityTestingDescription}
+                  onChange={(e) => setFormData({ ...formData, securityTestingDescription: e.target.value })}
+                  rows={3}
+                  placeholder="Describe the security testing in place"
+                />
+              </div>
+              <div className="mt-4">
+                <Textarea
+                  label="Additional Notes"
+                  value={formData.additionalNotes}
+                  onChange={(e) => setFormData({ ...formData, additionalNotes: e.target.value })}
+                  rows={3}
+                  placeholder="Any other information about the application"
                 />
               </div>
             </CardContent>

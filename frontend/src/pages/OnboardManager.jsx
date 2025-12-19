@@ -7,6 +7,8 @@ import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { Textarea } from '../components/ui/Textarea.jsx';
 import { Select } from '../components/ui/Select.jsx';
+import { RadioGroup, Radio } from '../components/ui/Radio.jsx';
+import { Checkbox } from '../components/ui/Checkbox.jsx';
 import { LoadingPage } from '../components/ui/Loading.jsx';
 import { Alert } from '../components/ui/Alert.jsx';
 
@@ -21,15 +23,12 @@ export function OnboardManager() {
   const [currentForm, setCurrentForm] = useState({
     name: '',
     description: '',
-    owner: '',
-    repoUrl: '',
-    language: '',
-    framework: '',
-    serverEnvironment: '',
     facing: '',
-    deploymentType: '',
-    authProfiles: '',
-    dataTypes: '',
+    serverEnvironment: '',
+    businessCriticality: '',
+    criticalAspects: [],
+    criticalAspectsOther: '',
+    devTeamContact: '',
   });
 
   useEffect(() => {
@@ -41,18 +40,6 @@ export function OnboardManager() {
       setLoading(true);
       const data = await api.getCompanyBySlug(slug);
       setCompany(data);
-      // Pre-fill with company defaults if available
-      setCurrentForm(prev => ({
-        ...prev,
-        language: data.language || prev.language,
-        framework: data.framework || prev.framework,
-        serverEnvironment: data.serverEnvironment || prev.serverEnvironment,
-        facing: data.facing || prev.facing,
-        deploymentType: data.deploymentType || prev.deploymentType,
-        authProfiles: data.authProfiles || prev.authProfiles,
-        dataTypes: data.dataTypes || prev.dataTypes,
-        owner: data.engManager || prev.owner,
-      }));
     } catch (error) {
       toast.error('Company not found');
       console.error(error);
@@ -65,15 +52,23 @@ export function OnboardManager() {
     setCurrentForm({
       name: '',
       description: '',
-      owner: company?.engManager || '',
-      repoUrl: '',
-      language: company?.language || '',
-      framework: company?.framework || '',
-      serverEnvironment: company?.serverEnvironment || '',
-      facing: company?.facing || '',
-      deploymentType: company?.deploymentType || '',
-      authProfiles: company?.authProfiles || '',
-      dataTypes: company?.dataTypes || '',
+      facing: '',
+      serverEnvironment: '',
+      businessCriticality: '',
+      criticalAspects: [],
+      criticalAspectsOther: '',
+      devTeamContact: '',
+    });
+  };
+
+  const handleCriticalAspectChange = (aspect) => {
+    setCurrentForm(prev => {
+      const aspects = prev.criticalAspects || [];
+      if (aspects.includes(aspect)) {
+        return { ...prev, criticalAspects: aspects.filter(a => a !== aspect) };
+      } else {
+        return { ...prev, criticalAspects: [...aspects, aspect] };
+      }
     });
   };
 
@@ -114,7 +109,16 @@ export function OnboardManager() {
     
     // If current form has a name, include it in the submission
     if (currentForm.name.trim()) {
-      appsToSubmit.push({ ...currentForm });
+      // Format criticalAspects - combine selected aspects with "Other" if provided
+      const criticalAspects = [...(currentForm.criticalAspects || [])];
+      if (currentForm.criticalAspectsOther && currentForm.criticalAspectsOther.trim()) {
+        criticalAspects.push(`Other: ${currentForm.criticalAspectsOther.trim()}`);
+      }
+      
+      appsToSubmit.push({
+        ...currentForm,
+        criticalAspects: criticalAspects.length > 0 ? criticalAspects : null,
+      });
     }
 
     // Validate we have at least one application
@@ -152,13 +156,13 @@ export function OnboardManager() {
   const handleDownloadCSV = () => {
     if (!submittedApplications || submittedApplications.length === 0) return;
 
-    // Check if at least one application has an engineering manager
-    const hasEngineeringManager = submittedApplications.some(app => app.owner && app.owner.trim());
+    // Check if at least one application has development team contact
+    const hasDevTeamContact = submittedApplications.some(app => app.devTeamContact && app.devTeamContact.trim());
 
     // Build headers
     const headers = ['Application Name'];
-    if (hasEngineeringManager) {
-      headers.push('Engineering Manager');
+    if (hasDevTeamContact) {
+      headers.push('Development Team Contact');
     }
     headers.push('Invite Link');
 
@@ -166,8 +170,8 @@ export function OnboardManager() {
     const rows = submittedApplications.map(app => {
       const inviteLink = `${window.location.origin}/onboard/${slug}/application/${app.id}`;
       const row = [app.name || ''];
-      if (hasEngineeringManager) {
-        row.push(app.owner || '');
+      if (hasDevTeamContact) {
+        row.push(app.devTeamContact || '');
       }
       row.push(inviteLink);
       return row;
@@ -237,12 +241,12 @@ export function OnboardManager() {
                 {submittedApplications.map((app, index) => (
                   <div key={app.id || index} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                     <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{app.name}</h3>
-                        {app.owner && (
-                          <p className="text-sm text-gray-600">Eng. Manager: {app.owner}</p>
-                        )}
-                      </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{app.name}</h3>
+                      {app.devTeamContact && (
+                        <p className="text-sm text-gray-600">Dev Team: {app.devTeamContact}</p>
+                      )}
+                    </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Input
@@ -310,8 +314,8 @@ export function OnboardManager() {
                   <div key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
                     <div>
                       <p className="font-medium text-gray-900">{app.name}</p>
-                      {app.owner && (
-                        <p className="text-sm text-gray-600">Eng. Manager: {app.owner}</p>
+                      {app.devTeamContact && (
+                        <p className="text-sm text-gray-600">Dev Team: {app.devTeamContact}</p>
                       )}
                     </div>
                     <div className="flex gap-2">
@@ -352,90 +356,110 @@ export function OnboardManager() {
 
               <div>
                 <Textarea
-                  label="Description / Use Case"
+                  label="What is the business purpose of your application? *"
                   value={currentForm.description}
                   onChange={(e) => setCurrentForm({ ...currentForm, description: e.target.value })}
                   rows={3}
+                  required
                 />
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="Owner / Eng. Lead"
-                  value={currentForm.owner}
-                  onChange={(e) => setCurrentForm({ ...currentForm, owner: e.target.value })}
-                />
-                <Input
-                  label="Repository URL"
-                  type="url"
-                  value={currentForm.repoUrl}
-                  onChange={(e) => setCurrentForm({ ...currentForm, repoUrl: e.target.value })}
-                />
-              </div>
-
-              <hr className="my-6" />
 
               <div>
-                <h2 className="text-xl font-semibold text-gray-700 mb-2">Application Details</h2>
+                <RadioGroup label="Is it externally accessible? *">
+                  <Radio
+                    name="facing"
+                    value="External"
+                    checked={currentForm.facing === 'External'}
+                    onChange={(e) => setCurrentForm({ ...currentForm, facing: e.target.value })}
+                    label="Yes"
+                  />
+                  <Radio
+                    name="facing"
+                    value="Internal"
+                    checked={currentForm.facing === 'Internal'}
+                    onChange={(e) => setCurrentForm({ ...currentForm, facing: e.target.value })}
+                    label="No"
+                  />
+                </RadioGroup>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Input
-                  label="Language"
-                  value={currentForm.language}
-                  onChange={(e) => setCurrentForm({ ...currentForm, language: e.target.value })}
-                />
-                <Input
-                  label="Framework"
-                  value={currentForm.framework}
-                  onChange={(e) => setCurrentForm({ ...currentForm, framework: e.target.value })}
-                />
+              <div>
                 <Select
-                  label="Server Environment"
+                  label="Where is it hosted? *"
                   value={currentForm.serverEnvironment || ''}
                   onChange={(e) => setCurrentForm({ ...currentForm, serverEnvironment: e.target.value })}
+                  required
                   options={[
-                    { value: '', label: 'Select environment' },
+                    { value: '', label: 'Select hosting location' },
                     { value: 'Cloud', label: 'Cloud' },
-                    { value: 'On-prem', label: 'On-prem' },
+                    { value: 'On-Prem', label: 'On-Prem' },
                     { value: 'Both', label: 'Both' },
                   ]}
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Select
-                  label="Facing"
-                  value={currentForm.facing || ''}
-                  onChange={(e) => setCurrentForm({ ...currentForm, facing: e.target.value })}
-                  options={[
-                    { value: '', label: 'Select facing' },
-                    { value: 'Internal', label: 'Internal' },
-                    { value: 'External', label: 'External' },
-                  ]}
-                />
-                <Input
-                  label="Deployment Type"
-                  value={currentForm.deploymentType}
-                  onChange={(e) => setCurrentForm({ ...currentForm, deploymentType: e.target.value })}
-                  placeholder="e.g. Scheduled, Ad-hoc"
-                />
+              <div>
+                <RadioGroup label="How critical is this application to your business? (5 Being most critical) *">
+                  {[1, 2, 3, 4, 5].map(num => (
+                    <Radio
+                      key={num}
+                      name="businessCriticality"
+                      value={num.toString()}
+                      checked={currentForm.businessCriticality === num.toString()}
+                      onChange={(e) => setCurrentForm({ ...currentForm, businessCriticality: e.target.value })}
+                      label={num.toString()}
+                    />
+                  ))}
+                </RadioGroup>
               </div>
 
               <div>
-                <Input
-                  label="Necessary Auth Profiles"
-                  value={currentForm.authProfiles}
-                  onChange={(e) => setCurrentForm({ ...currentForm, authProfiles: e.target.value })}
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  What is most critical about this application? *
+                </label>
+                <div className="space-y-2">
+                  <Checkbox
+                    id="critical-availability"
+                    label="Availability"
+                    checked={currentForm.criticalAspects?.includes('Availability')}
+                    onChange={() => handleCriticalAspectChange('Availability')}
+                  />
+                  <Checkbox
+                    id="critical-data-handling"
+                    label="Data Handling"
+                    checked={currentForm.criticalAspects?.includes('Data Handling')}
+                    onChange={() => handleCriticalAspectChange('Data Handling')}
+                  />
+                  <Checkbox
+                    id="critical-confidentiality"
+                    label="Confidentiality"
+                    checked={currentForm.criticalAspects?.includes('Confidentiality')}
+                    onChange={() => handleCriticalAspectChange('Confidentiality')}
+                  />
+                  <Checkbox
+                    id="critical-integrity"
+                    label="Integrity"
+                    checked={currentForm.criticalAspects?.includes('Integrity')}
+                    onChange={() => handleCriticalAspectChange('Integrity')}
+                  />
+                  <div className="ml-6 mt-2">
+                    <Input
+                      label="Other"
+                      value={currentForm.criticalAspectsOther}
+                      onChange={(e) => setCurrentForm({ ...currentForm, criticalAspectsOther: e.target.value })}
+                      placeholder="Please specify"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div>
-                <Input
-                  label="Data Types Collected/Stored"
-                  value={currentForm.dataTypes}
-                  onChange={(e) => setCurrentForm({ ...currentForm, dataTypes: e.target.value })}
-                  placeholder="e.g. PII, PCI"
+                <Textarea
+                  label="Please provide development team contact info"
+                  value={currentForm.devTeamContact}
+                  onChange={(e) => setCurrentForm({ ...currentForm, devTeamContact: e.target.value })}
+                  rows={3}
+                  placeholder="Name, email, phone, etc."
                 />
               </div>
 

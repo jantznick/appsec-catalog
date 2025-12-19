@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Modal } from '../ui/Modal.jsx';
 import { Button } from '../ui/Button.jsx';
 import { Input } from '../ui/Input.jsx';
@@ -17,9 +17,18 @@ export function InviteUserModal({ isOpen, onClose, onInvited }) {
     isAdmin: false,
   });
   const [invitationUrl, setInvitationUrl] = useState('');
+  const hasInvitationRef = useRef(false); // Track if we just created an invitation
 
+  // Reset form and invitation URL when modal opens/closes
   useEffect(() => {
+    // If we have an invitation URL, NEVER reset it (even if isOpen changes)
+    if (invitationUrl || hasInvitationRef.current) {
+      console.log('[InviteUserModal] useEffect - Skipping reset because invitation exists');
+      return;
+    }
+    
     if (isOpen) {
+      // Only reset form data when modal first opens
       if (isAdmin()) {
         loadCompanies();
       }
@@ -29,9 +38,14 @@ export function InviteUserModal({ isOpen, onClose, onInvited }) {
       } else {
         setFormData({ email: '', companyId: '', isAdmin: false });
       }
+    } else {
+      // Reset when modal closes (only if we don't have an invitation)
       setInvitationUrl('');
+      setFormData({ email: '', companyId: '', isAdmin: false });
+      hasInvitationRef.current = false;
     }
-  }, [isOpen, isAdmin, currentUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, invitationUrl]); // Include invitationUrl to check if it exists
 
   const loadCompanies = async () => {
     try {
@@ -67,9 +81,38 @@ export function InviteUserModal({ isOpen, onClose, onInvited }) {
 
       const result = await api.inviteUser(payload);
       
+      console.log('Invite user response:', result); // Debug log
+      
+      // Ensure we have the invitation URL
+      const url = result.invitationUrl || result.invitation?.url;
+      console.log('Extracted URL:', url); // Debug log
+      
+      if (!url) {
+        console.error('No invitationUrl in response:', result);
+        toast.error('Invitation created but URL not returned. Please check the console.');
+        return;
+      }
+      
+      console.log('Before setState - invitationUrl:', invitationUrl); // Debug log
+      console.log('Setting invitationUrl to:', url); // Debug log
+      
+      // Mark that we have an invitation to prevent useEffect from resetting it
+      hasInvitationRef.current = true;
+      console.log('hasInvitationRef set to true'); // Debug log
+      
+      // Set the invitation URL - use functional update to ensure we get the latest state
+      setInvitationUrl((prev) => {
+        console.log('setInvitationUrl callback - prev:', prev, 'new:', url); // Debug log
+        return url;
+      });
+      
+      console.log('After setState call - hasInvitationRef:', hasInvitationRef.current); // Debug log
+      
       toast.success('Invitation created successfully');
-      setInvitationUrl(result.invitationUrl);
-      onInvited?.();
+      
+      // DON'T call onInvited immediately - wait until user closes the modal
+      // This prevents parent re-renders from resetting the invitation URL
+      // The parent will reload users when the modal closes instead
       
       // Don't close modal yet - show the invitation URL
     } catch (error) {
@@ -85,7 +128,13 @@ export function InviteUserModal({ isOpen, onClose, onInvited }) {
   };
 
   const handleClose = () => {
+    // If we have an invitation URL, call onInvited before closing
+    // This ensures the parent reloads users after the invitation is created
+    if (invitationUrl || hasInvitationRef.current) {
+      onInvited?.();
+    }
     setInvitationUrl('');
+    hasInvitationRef.current = false;
     onClose();
   };
 
@@ -132,7 +181,11 @@ export function InviteUserModal({ isOpen, onClose, onInvited }) {
         )
       }
     >
-      {invitationUrl ? (
+      {(() => {
+        console.log('Modal render - invitationUrl:', invitationUrl, 'isOpen:', isOpen); // Debug log
+        if (invitationUrl) {
+          console.log('Rendering invitation URL section'); // Debug log
+          return (
         <div className="space-y-4">
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
@@ -184,7 +237,10 @@ export function InviteUserModal({ isOpen, onClose, onInvited }) {
             </p>
           </div>
         </div>
-      ) : (
+        );
+        } else {
+          console.log('Rendering form section'); // Debug log
+          return (
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             label="Email Address"
@@ -234,7 +290,9 @@ export function InviteUserModal({ isOpen, onClose, onInvited }) {
             </div>
           )}
         </form>
-      )}
+        );
+        }
+      })()}
     </Modal>
   );
 }

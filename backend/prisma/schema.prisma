@@ -99,6 +99,15 @@ model Application {
   
   // Interfaces with other applications (stored as JSON array of application IDs/names)
   interfaces            String? // JSON array of application names/IDs
+  
+  // Executive form fields
+  businessCriticality   Int?    // 1-5 scale (5 being most critical)
+  criticalAspects       String? // Availability, Data Handling, Confidentiality, Integrity, Other (comma-separated)
+  devTeamContact        String? // Development team contact information
+  
+  // Technical form fields
+  securityTestingDescription String? // Description of security testing in place
+  additionalNotes       String? // Any other information about the application
 }
 
 model Contact {
