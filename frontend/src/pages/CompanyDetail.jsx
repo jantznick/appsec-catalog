@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { Textarea } from '../components/ui/Textarea.jsx';
+import { Select } from '../components/ui/Select.jsx';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import useAuthStore from '../store/authStore.js';
@@ -14,7 +15,7 @@ import useAuthStore from '../store/authStore.js';
 export function CompanyDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isAdmin } = useAuthStore();
+  const { isAdmin, user } = useAuthStore();
   const [company, setCompany] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -23,6 +24,8 @@ export function CompanyDetail() {
   const [allUsers, setAllUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [averageScore, setAverageScore] = useState(null);
+  const [scoreData, setScoreData] = useState(null);
+  const [domains, setDomains] = useState([]);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -42,6 +45,7 @@ export function CompanyDetail() {
     if (id) {
       loadCompany();
       loadAverageScore();
+      loadDomains();
     }
   }, [id]);
 
@@ -49,8 +53,18 @@ export function CompanyDetail() {
     try {
       const data = await api.getCompanyAverageScore(id);
       setAverageScore(data.averageScore);
+      setScoreData(data);
     } catch (error) {
       console.error('Failed to load average score:', error);
+    }
+  };
+
+  const loadDomains = async () => {
+    try {
+      const data = await api.getCompanyDomains(id);
+      setDomains(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Failed to load domains:', error);
     }
   };
 
@@ -80,9 +94,16 @@ export function CompanyDetail() {
     }
   };
 
+  // Helper function to check if user can edit company fields
+  // Company members can edit everything except name and email domains
+  const canEditCompany = () => {
+    return isAdmin() || user?.companyId === id;
+  };
+
   const handleSave = async () => {
-    if (!isAdmin()) {
-      toast.error('Only admins can edit companies');
+    // Check if user has access (admin or member of company)
+    if (!isAdmin() && user?.companyId !== id) {
+      toast.error('You can only update your own company');
       return;
     }
 
@@ -152,12 +173,12 @@ export function CompanyDetail() {
   return (
     <div>
       <div className="mb-8">
-        <button
+        {!isAdmin && <button
           onClick={() => navigate('/companies')}
           className="text-blue-600 hover:text-blue-700 mb-4"
         >
           ← Back to Companies
-        </button>
+        </button>}
         <h1 className="text-3xl font-bold text-gray-900 mb-2">{company.name}</h1>
         <p className="text-gray-600">Company details and settings</p>
       </div>
@@ -165,49 +186,104 @@ export function CompanyDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Form */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Average Score Card */}
-          {averageScore !== null && (
-            <Card>
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <CardTitle>Average Application Score</CardTitle>
-                  <Link
-                    to="/docs/scoring-methodology"
-                    className="text-xs text-blue-600 hover:text-blue-700"
-                    target="_blank"
-                  >
-                    How is this calculated? →
-                  </Link>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center">
-                  <div className={`text-4xl font-bold mb-2 ${
-                    averageScore >= 76 ? 'text-green-600' :
-                    averageScore >= 51 ? 'text-yellow-600' :
-                    'text-red-600'
-                  }`}>
-                    {averageScore}
-                  </div>
-                  <div className="text-sm text-gray-600">out of 100</div>
-                  <div className={`inline-block px-3 py-1 rounded-full text-xs font-medium mt-2 ${
-                    averageScore >= 76 ? 'bg-green-100 text-green-800' :
-                    averageScore >= 51 ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
-                    {averageScore >= 76 ? 'Excellent' : averageScore >= 51 ? 'Good' : 'Needs Improvement'}
-                  </div>
-                  <div className="mt-4">
-                    <Link
-                      to={`/applications?companyId=${id}`}
-                      className="text-sm text-blue-600 hover:text-blue-700"
-                    >
-                      View all applications →
-                    </Link>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          {/* Score Cards */}
+          {scoreData && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Average Score Card */}
+              {averageScore !== null && (
+                <Card>
+                  <CardHeader>
+                    <div className="flex justify-between items-center">
+                      <CardTitle className="text-sm">Average Score 📊</CardTitle>
+                      <Link
+                        to="/docs/scoring-methodology"
+                        className="text-xs text-blue-600 hover:text-blue-700"
+                        target="_blank"
+                      >
+                        How? →
+                      </Link>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center">
+                      <div className={`text-3xl font-bold mb-1 ${
+                        averageScore >= 76 ? 'text-green-600' :
+                        averageScore >= 51 ? 'text-yellow-600' :
+                        'text-red-600'
+                      }`}>
+                        {averageScore}/100
+                      </div>
+                      <div className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                        averageScore >= 76 ? 'bg-green-100 text-green-800' :
+                        averageScore >= 51 ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {averageScore >= 76 ? 'Excellent' : averageScore >= 51 ? 'Good' : 'Needs Improvement'}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Highest Score Card */}
+              {scoreData.highestApplication && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Highest Score 👑</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center">
+                      <div className="text-3xl font-bold mb-1 text-green-600">
+                        {scoreData.highestApplication.score}/100
+                      </div>
+
+                      <Link
+                        to={`/applications/${scoreData.highestApplication.id}`}
+                        className="text-sm text-blue-600 hover:text-blue-700 block truncate"
+                        title={scoreData.highestApplication.name}
+                      >
+                        {scoreData.highestApplication.name}
+                      </Link>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Lowest Score Card */}
+              {scoreData.lowestApplication && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Lowest Score 🗑️</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center">
+                      <div className="text-3xl font-bold mb-1 text-red-600">
+                        {scoreData.lowestApplication.score}/100
+                      </div>
+                      <Link
+                        to={`/applications/${scoreData.lowestApplication.id}`}
+                        className="text-sm text-blue-600 hover:text-blue-700 block truncate"
+                        title={scoreData.lowestApplication.name}
+                      >
+                        {scoreData.lowestApplication.name}
+                      </Link>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* View All Applications Link */}
+          {scoreData && (
+            <div className="text-center">
+              <Link
+                to={`/applications?companyId=${id}`}
+                className="text-sm text-blue-600 hover:text-blue-700"
+              >
+                View all applications →
+              </Link>
+            </div>
           )}
 
           <Card>
@@ -224,18 +300,18 @@ export function CompanyDetail() {
                   required
                 />
                 <Textarea
-                  label="Domains (comma-separated)"
+                  label="Email Domains (comma-separated)"
                   value={formData.domains}
                   onChange={(e) => setFormData({ ...formData, domains: e.target.value })}
                   disabled={!isAdmin()}
                   placeholder="example.com, subdomain.example.com"
-                  helperText="Email domains that will automatically assign users to this company"
+                  helperText="Email domains that will automatically assign users to this company (different from hosting domains where applications are hosted)"
                 />
                 <Input
                   label="Engineering Manager"
                   value={formData.engManager}
                   onChange={(e) => setFormData({ ...formData, engManager: e.target.value })}
-                  disabled={!isAdmin()}
+                  disabled={!canEditCompany()}
                 />
               </div>
             </CardContent>
@@ -254,50 +330,60 @@ export function CompanyDetail() {
                   label="Language"
                   value={formData.language}
                   onChange={(e) => setFormData({ ...formData, language: e.target.value })}
-                  disabled={!isAdmin()}
+                  disabled={!canEditCompany()}
                 />
                 <Input
                   label="Framework"
                   value={formData.framework}
                   onChange={(e) => setFormData({ ...formData, framework: e.target.value })}
-                  disabled={!isAdmin()}
+                  disabled={!canEditCompany()}
                 />
-                <Input
+                <Select
                   label="Server Environment"
-                  value={formData.serverEnvironment}
+                  value={formData.serverEnvironment || ''}
                   onChange={(e) => setFormData({ ...formData, serverEnvironment: e.target.value })}
-                  disabled={!isAdmin()}
+                  disabled={!canEditCompany()}
+                  options={[
+                    { value: '', label: 'Select environment' },
+                    { value: 'Cloud', label: 'Cloud' },
+                    { value: 'On-prem', label: 'On-prem' },
+                    { value: 'Both', label: 'Both' },
+                  ]}
                 />
-                <Input
+                <Select
                   label="Facing"
-                  value={formData.facing}
+                  value={formData.facing || ''}
                   onChange={(e) => setFormData({ ...formData, facing: e.target.value })}
-                  disabled={!isAdmin()}
-                  placeholder="e.g., Internal, External"
+                  disabled={!canEditCompany()}
+                  options={[
+                    { value: '', label: 'Select facing' },
+                    { value: 'Internal', label: 'Internal' },
+                    { value: 'External', label: 'External' },
+                  ]}
                 />
                 <Input
                   label="Deployment Type"
                   value={formData.deploymentType}
                   onChange={(e) => setFormData({ ...formData, deploymentType: e.target.value })}
-                  disabled={!isAdmin()}
+                  disabled={!canEditCompany()}
                 />
                 <Input
                   label="Auth Profiles"
                   value={formData.authProfiles}
                   onChange={(e) => setFormData({ ...formData, authProfiles: e.target.value })}
-                  disabled={!isAdmin()}
+                  disabled={!canEditCompany()}
                 />
                 <Input
                   label="Data Types"
                   value={formData.dataTypes}
                   onChange={(e) => setFormData({ ...formData, dataTypes: e.target.value })}
-                  disabled={!isAdmin()}
+                  disabled={!canEditCompany()}
                 />
               </div>
             </CardContent>
           </Card>
 
-          {isAdmin() && (
+          {canEditCompany() && (
             <div className="flex justify-end">
               <Button
                 variant="primary"
@@ -417,6 +503,43 @@ export function CompanyDetail() {
               ) : (
                 <div className="p-4 text-center text-gray-500">
                   No users assigned
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Hosting Domains */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Hosting Domains ({domains.length})</CardTitle>
+            </CardHeader>
+            <CardContent padding="none">
+              {domains.length > 0 ? (
+                <div className="divide-y divide-gray-200">
+                  {domains.map((domain) => (
+                    <div
+                      key={domain.id}
+                      className="p-4 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <Link
+                            to={`/domains/${domain.id}`}
+                            className="font-medium text-blue-600 hover:text-blue-700"
+                          >
+                            {domain.name}
+                          </Link>
+                          <p className="text-sm text-gray-500 mt-1">
+                            {domain._count?.applicationDomains || 0} application{domain._count?.applicationDomains !== 1 ? 's' : ''} hosted
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 text-center text-gray-500">
+                  No hosting domains associated with this company's applications
                 </div>
               )}
             </CardContent>

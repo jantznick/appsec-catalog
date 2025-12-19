@@ -318,19 +318,28 @@ export function OnboardApplication() {
                   value={formData.framework}
                   onChange={(e) => setFormData({ ...formData, framework: e.target.value })}
                 />
-                <Input
+                <Select
                   label="Server Environment"
-                  value={formData.serverEnvironment}
+                  value={formData.serverEnvironment || ''}
                   onChange={(e) => setFormData({ ...formData, serverEnvironment: e.target.value })}
-                  placeholder="e.g. AWS, On-prem"
+                  options={[
+                    { value: '', label: 'Select environment' },
+                    { value: 'Cloud', label: 'Cloud' },
+                    { value: 'On-prem', label: 'On-prem' },
+                    { value: 'Both', label: 'Both' },
+                  ]}
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                <Input
+                <Select
                   label="Facing"
-                  value={formData.facing}
+                  value={formData.facing || ''}
                   onChange={(e) => setFormData({ ...formData, facing: e.target.value })}
-                  placeholder="e.g. Internal, External"
+                  options={[
+                    { value: '', label: 'Select facing' },
+                    { value: 'Internal', label: 'Internal' },
+                    { value: 'External', label: 'External' },
+                  ]}
                 />
                 <Input
                   label="Deployment Type"

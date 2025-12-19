@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { Textarea } from '../components/ui/Textarea.jsx';
+import { Select } from '../components/ui/Select.jsx';
 import useAuthStore from '../store/authStore.js';
 
 export function CompanyNew() {
@@ -79,11 +80,11 @@ export function CompanyNew() {
                   required
                 />
                 <Textarea
-                  label="Domains (comma-separated)"
+                  label="Email Domains (comma-separated)"
                   value={formData.domains}
                   onChange={(e) => setFormData({ ...formData, domains: e.target.value })}
                   placeholder="example.com, subdomain.example.com"
-                  helperText="Email domains that will automatically assign users to this company"
+                  helperText="Email domains that will automatically assign users to this company (different from hosting domains where applications are hosted)"
                 />
                 <Input
                   label="Engineering Manager"
@@ -113,16 +114,26 @@ export function CompanyNew() {
                   value={formData.framework}
                   onChange={(e) => setFormData({ ...formData, framework: e.target.value })}
                 />
-                <Input
+                <Select
                   label="Server Environment"
-                  value={formData.serverEnvironment}
+                  value={formData.serverEnvironment || ''}
                   onChange={(e) => setFormData({ ...formData, serverEnvironment: e.target.value })}
+                  options={[
+                    { value: '', label: 'Select environment' },
+                    { value: 'Cloud', label: 'Cloud' },
+                    { value: 'On-prem', label: 'On-prem' },
+                    { value: 'Both', label: 'Both' },
+                  ]}
                 />
-                <Input
+                <Select
                   label="Facing"
-                  value={formData.facing}
+                  value={formData.facing || ''}
                   onChange={(e) => setFormData({ ...formData, facing: e.target.value })}
-                  placeholder="e.g., Internal, External"
+                  options={[
+                    { value: '', label: 'Select facing' },
+                    { value: 'Internal', label: 'Internal' },
+                    { value: 'External', label: 'External' },
+                  ]}
                 />
                 <Input
                   label="Deployment Type"

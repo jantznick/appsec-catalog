@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 
 const DOC_SECTIONS = [
   {
@@ -45,14 +45,78 @@ const DOC_SECTIONS = [
 const DOCS = DOC_SECTIONS.flatMap(section => section.docs);
 
 export function Docs() {
-  const { slug } = useParams();
+  const params = useParams();
+  const location = useLocation();
+  
+  // Get the path after /docs/ - useParams with wildcard returns { '*': 'path' }
+  // Fallback to extracting from location.pathname if params['*'] is not available
+  let slug = params['*'] || params.slug || '';
+  if (!slug && location.pathname.startsWith('/docs/')) {
+    slug = location.pathname.replace('/docs/', '');
+  }
+  
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [docTitle, setDocTitle] = useState('');
 
   const currentDoc = DOCS.find(d => d.slug === slug);
 
   useEffect(() => {
+    console.log('Docs component - slug:', slug, 'params:', params);
+    
+    // If no slug, redirect to docs list
+    if (!slug || slug === '') {
+      console.log('No slug found');
+      setError('Document not found');
+      setLoading(false);
+      return;
+    }
+
+    // Handle nested paths (like products/snyk)
+    if (slug.includes('/')) {
+      setLoading(true);
+      // For nested paths, construct the file path directly
+      const filePath = `${slug}.md`;
+      const fetchUrl = `/docs/${filePath}`;
+      console.log('Fetching nested doc:', fetchUrl);
+      fetch(fetchUrl)
+        .then(res => {
+          console.log('Response status:', res.status, res.statusText, 'URL:', res.url);
+          if (!res.ok) {
+            throw new Error(`Failed to load document: ${res.status} ${res.statusText}`);
+          }
+          return res.text();
+        })
+        .then(text => {
+          console.log('Document loaded successfully, length:', text.length);
+          // Strip frontmatter if present
+          let contentText = text;
+          if (text.startsWith('---')) {
+            const frontmatterEnd = text.indexOf('---', 3);
+            if (frontmatterEnd !== -1) {
+              contentText = text.substring(frontmatterEnd + 3).trim();
+            }
+          }
+          
+          // Try to extract title from frontmatter or use slug
+          const titleMatch = text.match(/^title:\s*["'](.+?)["']/m);
+          const title = titleMatch ? titleMatch[1] : slug.split('/').pop().replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          setDocTitle(title);
+          setContent(contentText);
+          setError(null);
+        })
+        .catch(err => {
+          console.error('Error loading nested doc:', err);
+          setError(err.message || 'Failed to load document');
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+      return;
+    }
+
+    // Handle regular docs from DOCS array
     if (!currentDoc) {
       setError('Document not found');
       setLoading(false);
@@ -174,7 +238,24 @@ export function Docs() {
     );
   }
 
-  if (error || !currentDoc) {
+  // Show error only if there's an actual error AND we're not loading
+  // For nested paths (products/...), currentDoc will be undefined, which is fine
+  if (error && !loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Document Not Found</h1>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Link to="/docs" className="text-blue-600 hover:text-blue-700">
+            ← Back to Documentation
+          </Link>
+        </div>
+      </div>
+    );
+  }
+  
+  // For regular docs, check if currentDoc exists
+  if (!slug.includes('/') && !currentDoc && !loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -232,7 +313,7 @@ export function Docs() {
                 >
                   ← Back to Documentation
                 </Link>
-                <h1 className="text-3xl font-bold text-gray-900 mt-2">{currentDoc.title}</h1>
+                <h1 className="text-3xl font-bold text-gray-900 mt-2">{currentDoc ? currentDoc.title : docTitle}</h1>
               </div>
               <div
                 className="prose max-w-none"

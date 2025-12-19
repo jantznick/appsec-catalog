@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { Textarea } from '../components/ui/Textarea.jsx';
+import { Select } from '../components/ui/Select.jsx';
 import { LoadingPage } from '../components/ui/Loading.jsx';
 import { Alert } from '../components/ui/Alert.jsx';
 
@@ -389,20 +390,29 @@ export function OnboardManager() {
                   value={currentForm.framework}
                   onChange={(e) => setCurrentForm({ ...currentForm, framework: e.target.value })}
                 />
-                <Input
+                <Select
                   label="Server Environment"
-                  value={currentForm.serverEnvironment}
+                  value={currentForm.serverEnvironment || ''}
                   onChange={(e) => setCurrentForm({ ...currentForm, serverEnvironment: e.target.value })}
-                  placeholder="e.g. AWS, On-prem"
+                  options={[
+                    { value: '', label: 'Select environment' },
+                    { value: 'Cloud', label: 'Cloud' },
+                    { value: 'On-prem', label: 'On-prem' },
+                    { value: 'Both', label: 'Both' },
+                  ]}
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
+                <Select
                   label="Facing"
-                  value={currentForm.facing}
+                  value={currentForm.facing || ''}
                   onChange={(e) => setCurrentForm({ ...currentForm, facing: e.target.value })}
-                  placeholder="e.g. Internal, External"
+                  options={[
+                    { value: '', label: 'Select facing' },
+                    { value: 'Internal', label: 'Internal' },
+                    { value: 'External', label: 'External' },
+                  ]}
                 />
                 <Input
                   label="Deployment Type"

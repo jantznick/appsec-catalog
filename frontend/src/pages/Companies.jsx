@@ -76,7 +76,7 @@ export function Companies() {
     },
     {
       accessorKey: 'domains',
-      header: 'Domains',
+      header: 'Email Domains',
       cell: ({ row }) => row.original.domains || <span className="text-gray-400">—</span>,
     },
     {

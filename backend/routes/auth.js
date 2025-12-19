@@ -1,7 +1,7 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { hashPassword, comparePassword } from '../utils/password.js';
-import { createMagicCode, validateMagicCode } from '../utils/magicCode.js';
+import { createMagicCode, validateMagicCode, cleanupExpiredMagicCodes } from '../utils/magicCode.js';
 import { extractDomain, findCompanyByDomain } from '../utils/domain.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -165,6 +165,7 @@ router.post('/login', async (req, res) => {
         email: user.email,
         verifiedAccount: user.verifiedAccount,
         isAdmin: user.isAdmin,
+        companyId: user.companyId,
         company: user.company,
       },
     });
@@ -224,6 +225,9 @@ router.post('/request-magic-code', async (req, res) => {
         },
       });
     }
+
+    // Clean up expired magic codes before creating a new one
+    await cleanupExpiredMagicCodes();
 
     // Create magic code
     const { code, expiresAt } = await createMagicCode(user.id);
@@ -306,6 +310,7 @@ router.post('/login-magic', async (req, res) => {
         email: user.email,
         verifiedAccount: user.verifiedAccount,
         isAdmin: user.isAdmin,
+        companyId: user.companyId,
         company: user.company,
       },
     });

@@ -21,6 +21,8 @@ import { OnboardManager } from './pages/OnboardManager.jsx';
 import { OnboardApplication } from './pages/OnboardApplication.jsx';
 import { Users } from './pages/Users.jsx';
 import { AcceptInvitation } from './pages/AcceptInvitation.jsx';
+import { Domains } from './pages/Domains.jsx';
+import { DomainDetail } from './pages/DomainDetail.jsx';
 
 function CatchAllRedirect() {
   const { isAuthenticated, isVerified, loading } = useAuthStore();
@@ -71,7 +73,7 @@ function App() {
           }
         />
         <Route
-          path="/docs/:slug"
+          path="/docs/*"
           element={
             <Layout>
               <Docs />
@@ -190,6 +192,26 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <Users />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/domains"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Domains />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/domains/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <DomainDetail />
               </Layout>
             </ProtectedRoute>
           }

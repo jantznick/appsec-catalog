@@ -38,6 +38,22 @@ export async function createMagicCode(userId) {
 }
 
 /**
+ * Clean up expired magic codes
+ * @returns {Promise<number>} Number of deleted codes
+ */
+export async function cleanupExpiredMagicCodes() {
+  const now = new Date();
+  const result = await prisma.magicCode.deleteMany({
+    where: {
+      expiresAt: {
+        lt: now, // Expired
+      },
+    },
+  });
+  return result.count;
+}
+
+/**
  * Validate and use a magic code
  * @param {string} code - Magic code to validate
  * @returns {Promise<{valid: boolean, userId?: string, error?: string}>}

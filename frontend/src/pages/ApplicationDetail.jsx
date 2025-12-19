@@ -9,7 +9,9 @@ import { Input } from '../components/ui/Input.jsx';
 import { Textarea } from '../components/ui/Textarea.jsx';
 import { Select } from '../components/ui/Select.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
+import { Modal } from '../components/ui/Modal.jsx';
 import { ScoreCard } from '../components/scoring/ScoreCard.jsx';
+import { DomainPills } from '../components/domains/DomainPills.jsx';
 import useAuthStore from '../store/authStore.js';
 
 export function ApplicationDetail() {
@@ -24,6 +26,10 @@ export function ApplicationDetail() {
   const [scores, setScores] = useState(null);
   const [loadingScore, setLoadingScore] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
+  const [domains, setDomains] = useState([]);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [originalFormData, setOriginalFormData] = useState(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -104,11 +110,35 @@ export function ApplicationDetail() {
     }
   };
 
+  const handleAddDomain = async (domainName) => {
+    try {
+      const result = await api.addDomainToApplication(id, domainName);
+      setDomains(result.domains);
+      toast.success('Hosting domain added successfully');
+    } catch (error) {
+      toast.error(error.message || 'Failed to add hosting domain');
+      throw error;
+    }
+  };
+
+  const handleRemoveDomain = async (domainId) => {
+    try {
+      const result = await api.removeDomainFromApplication(id, domainId);
+      setDomains(result.domains);
+      toast.success('Hosting domain removed successfully');
+    } catch (error) {
+      toast.error(error.message || 'Failed to remove hosting domain');
+    }
+  };
+
   const loadApplication = async () => {
     try {
       setLoading(true);
       const data = await api.getApplication(id);
       setApplication(data);
+      
+      // Set domains from application data
+      setDomains(data.domains || []);
       
       // Parse interfaces if they exist
       let interfaces = [];
@@ -121,7 +151,7 @@ export function ApplicationDetail() {
         }
       }
 
-      setFormData({
+      const newFormData = {
         name: data.name || '',
         description: data.description || '',
         owner: data.owner || '',
@@ -143,7 +173,12 @@ export function ApplicationDetail() {
         apiSecurityIntegrationLevel: data.apiSecurityIntegrationLevel?.toString() || '',
         apiSecurityNA: data.apiSecurityNA || false,
         status: data.status || 'onboarded',
-      });
+      };
+      setFormData(newFormData);
+      if (!isEditing) {
+        setOriginalFormData(JSON.parse(JSON.stringify(newFormData)));
+        setHasUnsavedChanges(false);
+      }
     } catch (error) {
       toast.error('Failed to load application');
       console.error(error);
@@ -159,6 +194,7 @@ export function ApplicationDetail() {
       await api.updateApplication(id, formData);
       toast.success('Application updated successfully');
       setIsEditing(false);
+      setHasUnsavedChanges(false);
       // Reload both application data and score
       await loadApplication();
       await loadScore();
@@ -167,6 +203,40 @@ export function ApplicationDetail() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleCancel = () => {
+    if (hasUnsavedChanges) {
+      setShowCancelModal(true);
+      return;
+    }
+    cancelEditing();
+  };
+
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setHasUnsavedChanges(false);
+    setShowCancelModal(false);
+    if (originalFormData) {
+      setFormData(JSON.parse(JSON.stringify(originalFormData)));
+    } else {
+      loadApplication();
+    }
+  };
+
+  const handleFieldChange = (field, value) => {
+    const newFormData = { ...formData, [field]: value };
+    setFormData(newFormData);
+    if (isEditing && originalFormData) {
+      const hasChanges = JSON.stringify(newFormData) !== JSON.stringify(originalFormData);
+      setHasUnsavedChanges(hasChanges);
+    }
+  };
+
+  const handleEditClick = () => {
+    setIsEditing(true);
+    setOriginalFormData(JSON.parse(JSON.stringify(formData)));
+    setHasUnsavedChanges(false);
   };
 
   const canEdit = () => {
@@ -184,7 +254,7 @@ export function ApplicationDetail() {
   }
 
   return (
-    <div>
+    <div className={isEditing ? 'pb-24' : ''}>
       <div className="mb-8">
         <button
           onClick={() => navigate('/applications')}
@@ -200,42 +270,39 @@ export function ApplicationDetail() {
             </p>
           </div>
           <div className="flex gap-3 items-center">
-            {canEdit() && (
-              <div className="flex gap-3">
-                {isEditing ? (
-                  <>
-                    <Button variant="secondary" onClick={() => {
-                      setIsEditing(false);
-                      loadApplication();
-                    }}>
-                      Cancel
-                    </Button>
-                    <Button variant="primary" onClick={handleSave} loading={saving}>
-                      Save Changes
-                    </Button>
-                  </>
-                ) : (
-                  <Button variant="primary" onClick={() => setIsEditing(true)}>
-                    Edit
-                  </Button>
-                )}
-              </div>
+            {canEdit() && !isEditing && (
+              <Button variant="primary" onClick={handleEditClick}>
+                Edit Application
+              </Button>
             )}
-            {canEdit() && (
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">Status:</label>
-                <select
-                  value={application.status || 'onboarded'}
-                  onChange={(e) => handleStatusChange(e.target.value)}
-                  disabled={changingStatus}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                >
-                  <option value="pending_executive">Pending Executive</option>
-                  <option value="pending_technical">Pending Technical</option>
-                  <option value="onboarded">Onboarded</option>
-                </select>
-              </div>
-            )}
+            <div className="flex items-center gap-4">
+              {canEdit() ? (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700">Status:</label>
+                  <select
+                    value={application.status || 'onboarded'}
+                    onChange={(e) => handleStatusChange(e.target.value)}
+                    disabled={changingStatus}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="pending_executive">Pending Executive</option>
+                    <option value="pending_technical">Pending Technical</option>
+                    <option value="onboarded">Onboarded</option>
+                  </select>
+                </div>
+              ) : (
+                <div className="text-sm text-gray-600">
+                  <span className="font-medium text-gray-700">Status:</span>{' '}
+                  <span className="capitalize">{application.status?.replace('_', ' ') || 'Onboarded'}</span>
+                </div>
+              )}
+              {application.metadataLastReviewed && (
+                <div className="text-sm text-gray-600">
+                  <span className="font-medium text-gray-700">Last Reviewed:</span>{' '}
+                  {new Date(application.metadataLastReviewed).toLocaleDateString()}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -268,14 +335,14 @@ export function ApplicationDetail() {
               <Input
                 label="Application Name"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => handleFieldChange('name', e.target.value)}
                 disabled={!isEditing}
                 required
               />
               <Textarea
                 label="Description / Use Case"
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onChange={(e) => handleFieldChange('description', e.target.value)}
                 disabled={!isEditing}
                 rows={3}
               />
@@ -283,17 +350,23 @@ export function ApplicationDetail() {
                 <Input
                   label="Owner / Eng. Lead"
                   value={formData.owner}
-                  onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
+                  onChange={(e) => handleFieldChange('owner', e.target.value)}
                   disabled={!isEditing}
                 />
                 <Input
                   label="Repository URL"
                   type="url"
                   value={formData.repoUrl}
-                  onChange={(e) => setFormData({ ...formData, repoUrl: e.target.value })}
+                  onChange={(e) => handleFieldChange('repoUrl', e.target.value)}
                   disabled={!isEditing}
                 />
               </div>
+              <DomainPills
+                domains={domains}
+                onAdd={handleAddDomain}
+                onRemove={handleRemoveDomain}
+                disabled={!canEdit()}
+              />
             </div>
           </CardContent>
         </Card>
@@ -308,46 +381,57 @@ export function ApplicationDetail() {
                 <Input
                   label="Language"
                   value={formData.language}
-                  onChange={(e) => setFormData({ ...formData, language: e.target.value })}
+                  onChange={(e) => handleFieldChange('language', e.target.value)}
                   disabled={!isEditing}
                 />
                 <Input
                   label="Framework"
                   value={formData.framework}
-                  onChange={(e) => setFormData({ ...formData, framework: e.target.value })}
+                  onChange={(e) => handleFieldChange('framework', e.target.value)}
                   disabled={!isEditing}
                 />
-                <Input
+                <Select
                   label="Server Environment"
-                  value={formData.serverEnvironment}
-                  onChange={(e) => setFormData({ ...formData, serverEnvironment: e.target.value })}
+                  value={formData.serverEnvironment || ''}
+                  onChange={(e) => handleFieldChange('serverEnvironment', e.target.value)}
                   disabled={!isEditing}
+                  options={[
+                    { value: '', label: 'Select environment' },
+                    { value: 'Cloud', label: 'Cloud' },
+                    { value: 'On-prem', label: 'On-prem' },
+                    { value: 'Both', label: 'Both' },
+                  ]}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <Input
+                <Select
                   label="Facing"
-                  value={formData.facing}
-                  onChange={(e) => setFormData({ ...formData, facing: e.target.value })}
+                  value={formData.facing || ''}
+                  onChange={(e) => handleFieldChange('facing', e.target.value)}
                   disabled={!isEditing}
+                  options={[
+                    { value: '', label: 'Select facing' },
+                    { value: 'Internal', label: 'Internal' },
+                    { value: 'External', label: 'External' },
+                  ]}
                 />
                 <Input
                   label="Deployment Type"
                   value={formData.deploymentType}
-                  onChange={(e) => setFormData({ ...formData, deploymentType: e.target.value })}
+                  onChange={(e) => handleFieldChange('deploymentType', e.target.value)}
                   disabled={!isEditing}
                 />
               </div>
               <Input
                 label="Auth Profiles"
                 value={formData.authProfiles}
-                onChange={(e) => setFormData({ ...formData, authProfiles: e.target.value })}
+                onChange={(e) => handleFieldChange('authProfiles', e.target.value)}
                 disabled={!isEditing}
               />
               <Input
                 label="Data Types"
                 value={formData.dataTypes}
-                onChange={(e) => setFormData({ ...formData, dataTypes: e.target.value })}
+                onChange={(e) => handleFieldChange('dataTypes', e.target.value)}
                 disabled={!isEditing}
               />
             </div>
@@ -364,13 +448,13 @@ export function ApplicationDetail() {
                 <Input
                   label="SAST Tool"
                   value={formData.sastTool}
-                  onChange={(e) => setFormData({ ...formData, sastTool: e.target.value })}
+                  onChange={(e) => handleFieldChange('sastTool', e.target.value)}
                   disabled={!isEditing}
                 />
                 <Select
                   label="SAST Integration Level"
                   value={formData.sastIntegrationLevel}
-                  onChange={(e) => setFormData({ ...formData, sastIntegrationLevel: e.target.value })}
+                  onChange={(e) => handleFieldChange('sastIntegrationLevel', e.target.value)}
                   disabled={!isEditing}
                   options={[
                     { value: '', label: 'Select level' },
@@ -382,13 +466,13 @@ export function ApplicationDetail() {
                 <Input
                   label="DAST Tool"
                   value={formData.dastTool}
-                  onChange={(e) => setFormData({ ...formData, dastTool: e.target.value })}
+                  onChange={(e) => handleFieldChange('dastTool', e.target.value)}
                   disabled={!isEditing}
                 />
                 <Select
                   label="DAST Integration Level"
                   value={formData.dastIntegrationLevel}
-                  onChange={(e) => setFormData({ ...formData, dastIntegrationLevel: e.target.value })}
+                  onChange={(e) => handleFieldChange('dastIntegrationLevel', e.target.value)}
                   disabled={!isEditing}
                   options={[
                     { value: '', label: 'Select level' },
@@ -400,13 +484,13 @@ export function ApplicationDetail() {
                 <Input
                   label="App Firewall Tool"
                   value={formData.appFirewallTool}
-                  onChange={(e) => setFormData({ ...formData, appFirewallTool: e.target.value })}
+                  onChange={(e) => handleFieldChange('appFirewallTool', e.target.value)}
                   disabled={!isEditing}
                 />
                 <Select
                   label="App Firewall Integration Level"
                   value={formData.appFirewallIntegrationLevel}
-                  onChange={(e) => setFormData({ ...formData, appFirewallIntegrationLevel: e.target.value })}
+                  onChange={(e) => handleFieldChange('appFirewallIntegrationLevel', e.target.value)}
                   disabled={!isEditing}
                   options={[
                     { value: '', label: 'Select level' },
@@ -418,13 +502,13 @@ export function ApplicationDetail() {
                 <Input
                   label="API Security Tool"
                   value={formData.apiSecurityTool}
-                  onChange={(e) => setFormData({ ...formData, apiSecurityTool: e.target.value })}
+                  onChange={(e) => handleFieldChange('apiSecurityTool', e.target.value)}
                   disabled={!isEditing}
                 />
                 <Select
                   label="API Security Integration Level"
                   value={formData.apiSecurityIntegrationLevel}
-                  onChange={(e) => setFormData({ ...formData, apiSecurityIntegrationLevel: e.target.value })}
+                  onChange={(e) => handleFieldChange('apiSecurityIntegrationLevel', e.target.value)}
                   disabled={!isEditing}
                   options={[
                     { value: '', label: 'Select level' },
@@ -436,47 +520,86 @@ export function ApplicationDetail() {
                 id="apiSecurityNA"
                 label="API Security Not Applicable"
                 checked={formData.apiSecurityNA}
-                onChange={(e) => setFormData({ ...formData, apiSecurityNA: e.target.checked })}
+                onChange={(e) => handleFieldChange('apiSecurityNA', e.target.checked)}
                 disabled={!isEditing}
               />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  disabled={!isEditing}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
-                >
-                  <option value="pending_executive">Pending Executive</option>
-                  <option value="pending_technical">Pending Technical</option>
-                  <option value="onboarded">Onboarded</option>
-                </select>
-                <p className="mt-1 text-xs text-gray-500">
-                  Note: You can also change status using the dropdown in the header above.
-                </p>
-              </div>
-              {application.metadataLastReviewed && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Reviewed</label>
-                  <p className="text-sm text-gray-600">
-                    {new Date(application.metadataLastReviewed).toLocaleDateString()}
-                  </p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
       </div>
+
+      {/* Sticky Save Bar - Only show when editing */}
+      {isEditing && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {hasUnsavedChanges && (
+                  <div className="flex items-center gap-2 text-sm text-amber-600">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span>You have unsaved changes</span>
+                  </div>
+                )}
+                {!hasUnsavedChanges && (
+                  <div className="text-sm text-gray-500">
+                    No changes made
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <Button variant="secondary" onClick={handleCancel}>
+                  Cancel
+                </Button>
+                <Button 
+                  variant="primary" 
+                  onClick={handleSave} 
+                  loading={saving}
+                  disabled={!hasUnsavedChanges}
+                >
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Confirmation Modal */}
+      <Modal
+        isOpen={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        title="Discard Changes?"
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setShowCancelModal(false)}
+            >
+              Keep Editing
+            </Button>
+            <Button
+              variant="primary"
+              onClick={cancelEditing}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Discard Changes
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-gray-700">
+            You have unsaved changes. Are you sure you want to discard them?
+          </p>
+          <p className="text-sm text-red-600">
+            This action cannot be undone. All your changes will be lost.
+          </p>
+        </div>
+      </Modal>
     </div>
   );
 }

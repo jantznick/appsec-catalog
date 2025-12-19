@@ -15,6 +15,7 @@ router.get('/stats', async (req, res) => {
       totalCompanies,
       totalApplications,
       totalUsers,
+      totalDomains,
       applicationsByStatus,
       verifiedUsers,
       unverifiedUsers,
@@ -22,6 +23,7 @@ router.get('/stats', async (req, res) => {
       prisma.company.count(),
       prisma.application.count(),
       prisma.user.count(),
+      prisma.domain.count(),
       prisma.application.groupBy({
         by: ['status'],
         _count: {
@@ -54,6 +56,9 @@ router.get('/stats', async (req, res) => {
         total: totalUsers,
         verified: verifiedUsers,
         unverified: unverifiedUsers,
+      },
+      domains: {
+        total: totalDomains,
       },
     });
   } catch (error) {

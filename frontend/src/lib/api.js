@@ -115,6 +115,8 @@ export const api = {
     apiRequest(`/api/companies/${id}`),
   getCompanyAverageScore: (id) =>
     apiRequest(`/api/companies/${id}/average-score`),
+  getCompanyDomains: (id) =>
+    apiRequest(`/api/companies/${id}/domains`),
   getCompanyBySlug: (slug) =>
     apiRequest(`/api/companies/slug/${slug}`),
   createApplicationOnboardExecutive: (data) =>
@@ -186,6 +188,25 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+
+  // Domain management
+  addDomainToApplication: (applicationId, domainName) =>
+    apiRequest(`/api/applications/${applicationId}/domains`, {
+      method: 'POST',
+      body: JSON.stringify({ domainName }),
+    }),
+
+  removeDomainFromApplication: (applicationId, domainId) =>
+    apiRequest(`/api/applications/${applicationId}/domains/${domainId}`, {
+      method: 'DELETE',
+    }),
+
+  // Domain management
+  getDomains: () =>
+    apiRequest('/api/domains'),
+
+  getDomain: (id) =>
+    apiRequest(`/api/domains/${id}`),
 
   searchApplications: (query, companyId) => {
     const params = new URLSearchParams({ q: query });

@@ -104,7 +104,7 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
     clearError();
     setMagicCodeLoading(true);
 
-    const result = await loginWithMagicCode(magicCode.toUpperCase());
+    const result = await loginWithMagicCode(magicCode.trim().toUpperCase());
     setMagicCodeLoading(false);
 
     if (result.success) {
@@ -305,10 +305,13 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
               type="text"
               id="magicCode"
               value={magicCode}
-              onChange={(e) => setMagicCode(e.target.value.toUpperCase())}
+              onChange={(e) => {
+                const trimmed = e.target.value.trimStart().toUpperCase();
+                setMagicCode(trimmed.slice(0, 6));
+              }}
               placeholder="ABC123"
               required
-              maxLength={6}
+              maxLength={7}
               className="text-center text-2xl font-mono tracking-widest"
               helperText="Enter the 6-character code"
             />

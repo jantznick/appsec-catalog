@@ -2,6 +2,7 @@ import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { calculateApplicationScore } from '../services/scoring.js';
+import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 
 const router = express.Router();
 
@@ -269,8 +270,19 @@ router.get('/:id', requireAuth, async (req, res) => {
           },
         },
         contacts: true,
+        applicationDomains: {
+          include: {
+            domain: true,
+          },
+        },
       },
     });
+
+    // Transform domains to a simpler format
+    if (application) {
+      application.domains = application.applicationDomains.map(ad => ad.domain);
+      delete application.applicationDomains;
+    }
 
     if (!application) {
       return res.status(404).json({ error: 'Application not found' });
@@ -737,6 +749,178 @@ router.get('/search/name', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error searching applications:', error);
     res.status(500).json({ error: 'Failed to search applications' });
+  }
+});
+
+// Add domain to application
+router.post('/:id/domains', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { domainName } = req.body;
+
+    if (!domainName || typeof domainName !== 'string') {
+      return res.status(400).json({ error: 'Domain name is required' });
+    }
+
+    // Validate domain format
+    if (!isValidDomain(domainName)) {
+      return res.status(400).json({ 
+        error: 'Invalid domain format. Domain must be in format example.com or subdomain.example.com (no http:// or https://)' 
+      });
+    }
+
+    // Get application and check access
+    const application = await prisma.application.findUnique({
+      where: { id },
+      include: {
+        company: true,
+      },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if user has access (admin or member of same company)
+    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only modify applications in your company',
+      });
+    }
+
+    // Normalize domain name
+    const normalizedDomain = normalizeDomain(domainName);
+
+    // Find or create domain within the company
+    let domain = await prisma.domain.findUnique({
+      where: {
+        name_companyId: {
+          name: normalizedDomain,
+          companyId: application.companyId,
+        },
+      },
+    });
+
+    if (!domain) {
+      // Create new domain
+      domain = await prisma.domain.create({
+        data: {
+          name: normalizedDomain,
+          companyId: application.companyId,
+        },
+      });
+    }
+
+    // Check if association already exists
+    const existingAssociation = await prisma.applicationDomain.findUnique({
+      where: {
+        applicationId_domainId: {
+          applicationId: id,
+          domainId: domain.id,
+        },
+      },
+    });
+
+    if (existingAssociation) {
+      return res.status(400).json({ error: 'Domain is already associated with this application' });
+    }
+
+    // Create association
+    await prisma.applicationDomain.create({
+      data: {
+        applicationId: id,
+        domainId: domain.id,
+      },
+    });
+
+    // Return updated application with domains
+    const updatedApplication = await prisma.application.findUnique({
+      where: { id },
+      include: {
+        applicationDomains: {
+          include: {
+            domain: true,
+          },
+        },
+      },
+    });
+
+    const domains = updatedApplication.applicationDomains.map(ad => ad.domain);
+
+    res.json({ domain, domains });
+  } catch (error) {
+    console.error('Error adding domain to application:', error);
+    res.status(500).json({ error: 'Failed to add domain to application' });
+  }
+});
+
+// Remove domain from application
+router.delete('/:id/domains/:domainId', requireAuth, async (req, res) => {
+  try {
+    const { id, domainId } = req.params;
+
+    // Get application and check access
+    const application = await prisma.application.findUnique({
+      where: { id },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if user has access (admin or member of same company)
+    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only modify applications in your company',
+      });
+    }
+
+    // Verify domain exists and belongs to the same company
+    const domain = await prisma.domain.findUnique({
+      where: { id: domainId },
+    });
+
+    if (!domain) {
+      return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    if (domain.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'Domain does not belong to the same company as the application',
+      });
+    }
+
+    // Delete the association
+    await prisma.applicationDomain.delete({
+      where: {
+        applicationId_domainId: {
+          applicationId: id,
+          domainId: domainId,
+        },
+      },
+    });
+
+    // Return updated domains list
+    const updatedApplication = await prisma.application.findUnique({
+      where: { id },
+      include: {
+        applicationDomains: {
+          include: {
+            domain: true,
+          },
+        },
+      },
+    });
+
+    const domains = updatedApplication.applicationDomains.map(ad => ad.domain);
+
+    res.json({ domains, message: 'Domain removed from application' });
+  } catch (error) {
+    console.error('Error removing domain from application:', error);
+    res.status(500).json({ error: 'Failed to remove domain from application' });
   }
 });
 

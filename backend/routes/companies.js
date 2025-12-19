@@ -111,18 +111,25 @@ router.get('/:id/average-score', requireAuth, async (req, res) => {
 
     const applicationIds = applications.map(app => app.id);
 
-    // Get the most recent score for each application
-    const latestScores = await prisma.score.findMany({
+    // Get all scores for these applications, ordered by date
+    const allScores = await prisma.score.findMany({
       where: {
         applicationId: { in: applicationIds },
       },
       orderBy: {
         calculatedAt: 'desc',
       },
-      distinct: ['applicationId'],
+      include: {
+        application: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
     });
 
-    if (latestScores.length === 0) {
+    if (allScores.length === 0) {
       return res.json({
         averageScore: null,
         applicationCount: applications.length,
@@ -130,13 +137,45 @@ router.get('/:id/average-score', requireAuth, async (req, res) => {
       });
     }
 
+    // Get the most recent score for each application
+    const latestScoresMap = new Map();
+    for (const score of allScores) {
+      if (!latestScoresMap.has(score.applicationId)) {
+        latestScoresMap.set(score.applicationId, score);
+      }
+    }
+    const latestScores = Array.from(latestScoresMap.values());
+
     const totalScore = latestScores.reduce((sum, score) => sum + score.totalScore, 0);
     const averageScore = Math.round(totalScore / latestScores.length);
+
+    // Find highest and lowest scoring applications
+    let highestScore = latestScores[0];
+    let lowestScore = latestScores[0];
+    
+    for (const score of latestScores) {
+      if (score.totalScore > highestScore.totalScore) {
+        highestScore = score;
+      }
+      if (score.totalScore < lowestScore.totalScore) {
+        lowestScore = score;
+      }
+    }
 
     res.json({
       averageScore,
       applicationCount: applications.length,
       scoredApplicationCount: latestScores.length,
+      highestApplication: {
+        id: highestScore.application.id,
+        name: highestScore.application.name,
+        score: highestScore.totalScore,
+      },
+      lowestApplication: {
+        id: lowestScore.application.id,
+        name: lowestScore.application.name,
+        score: lowestScore.totalScore,
+      },
     });
   } catch (error) {
     console.error('Error calculating company average score:', error);
@@ -202,6 +241,41 @@ router.get('/:id', requireAuth, async (req, res) => {
   }
 });
 
+// Get domains for a company
+router.get('/:id/domains', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if user has access (admin or member of company)
+    if (!req.session.isAdmin && req.session.companyId !== id) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only access your own company',
+      });
+    }
+
+    // Get all domains for this company
+    const domains = await prisma.domain.findMany({
+      where: { companyId: id },
+      include: {
+        _count: {
+          select: {
+            applicationDomains: true,
+          },
+        },
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+
+    res.json(domains);
+  } catch (error) {
+    console.error('Error fetching company domains:', error);
+    res.status(500).json({ error: 'Failed to fetch company domains' });
+  }
+});
+
 // COMP-3: Create company (Admin only)
 router.post('/', requireAuth, requireAdmin, async (req, res) => {
   try {
@@ -260,7 +334,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
 });
 
 // COMP-4: Update company (Admin only)
-router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -285,9 +359,24 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Company not found' });
     }
 
-    // If name is being changed, check for duplicates and regenerate slug
+    // Check if user has access (admin or member of company)
+    if (!req.session.isAdmin && req.session.companyId !== id) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only update your own company',
+      });
+    }
+
+    // Only admins can change name and domains
     let updateData = {};
     if (name && name.trim() !== existing.name) {
+      if (!req.session.isAdmin) {
+        return res.status(403).json({
+          error: 'Permission denied',
+          message: 'Only admins can change company name',
+        });
+      }
+
       const duplicate = await prisma.company.findUnique({
         where: { name: name.trim() },
       });
@@ -303,11 +392,18 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       updateData.slug = slug;
     }
 
+    if (domains !== undefined && !req.session.isAdmin) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'Only admins can change company domains',
+      });
+    }
+
     const company = await prisma.company.update({
       where: { id },
       data: {
         ...updateData,
-        ...(domains !== undefined && { domains: domains?.trim() || null }),
+        ...(domains !== undefined && req.session.isAdmin && { domains: domains?.trim() || null }),
         ...(engManager !== undefined && { engManager: engManager?.trim() || null }),
         ...(language !== undefined && { language: language?.trim() || null }),
         ...(framework !== undefined && { framework: framework?.trim() || null }),

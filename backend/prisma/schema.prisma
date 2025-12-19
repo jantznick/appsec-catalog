@@ -25,10 +25,11 @@ model Company {
   id          String    @id @default(cuid())
   name        String    @unique
   slug        String?   @unique
-  domains     String?
+  domains     String?  // Email domains (comma-separated) - used for auto-assigning users to company based on email domain (e.g., "example.com, subdomain.example.com")
   users       User[]
   applications Application[]
   invitations Invitation[]
+  domainList  Domain[] // Application hosting domains - domains where this company's applications are hosted (see Domain model)
   engManager  String?
   language            String?
   framework           String?
@@ -68,6 +69,7 @@ model Application {
   company         Company   @relation(fields: [companyId], references: [id])
   requests        Request[]
   scores          Score[]
+  applicationDomains ApplicationDomain[]
   description     String?
   owner           String?
   repoUrl         String?
@@ -186,4 +188,35 @@ model Invitation {
   @@index([token])
   @@index([email])
   @@index([expiresAt])
+}
+
+// Application hosting domains - represents domains where applications are hosted
+// This is different from Company.domains which are email domains for user auto-assignment
+// Example: If an application is hosted at "api.example.com", that would be a Domain record
+model Domain {
+  id              String              @id @default(cuid())
+  name            String              // Hosting domain name (e.g., example.com, subdomain.example.com) - where applications are hosted
+  companyId       String              // Domains are company-specific
+  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  applicationDomains ApplicationDomain[] // Many-to-many: applications hosted on this domain
+  createdAt       DateTime            @default(now())
+  
+  @@unique([name, companyId]) // Domain name must be unique within a company
+  @@index([companyId])
+  @@index([name])
+}
+
+// Join table: Associates applications with hosting domains (many-to-many)
+// An application can be hosted on multiple domains, and a domain can host multiple applications
+model ApplicationDomain {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  domainId      String
+  domain        Domain      @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+  
+  @@unique([applicationId, domainId]) // Prevent duplicate associations
+  @@index([applicationId])
+  @@index([domainId])
 }
