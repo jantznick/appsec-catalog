@@ -97,6 +97,10 @@ function App() {
           element={<OnboardManager />}
         />
         <Route
+          path="/onboard"
+          element={<OnboardManager />}
+        />
+        <Route
           path="/onboard/:slug/application/:applicationId"
           element={<OnboardApplication />}
         />
