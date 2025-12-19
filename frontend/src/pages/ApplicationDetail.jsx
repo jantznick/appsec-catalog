@@ -23,6 +23,7 @@ export function ApplicationDetail() {
   const [integrationLevels, setIntegrationLevels] = useState([]);
   const [scores, setScores] = useState(null);
   const [loadingScore, setLoadingScore] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -87,6 +88,19 @@ export function ApplicationDetail() {
     } catch (error) {
       toast.error(error.message || 'Failed to mark as reviewed');
       throw error;
+    }
+  };
+
+  const handleStatusChange = async (newStatus) => {
+    try {
+      setChangingStatus(true);
+      await api.updateApplication(id, { status: newStatus });
+      toast.success('Application status updated successfully');
+      await loadApplication();
+    } catch (error) {
+      toast.error(error.message || 'Failed to update status');
+    } finally {
+      setChangingStatus(false);
     }
   };
 
@@ -185,27 +199,44 @@ export function ApplicationDetail() {
               {application.company?.name && `Company: ${application.company.name}`}
             </p>
           </div>
-          {canEdit() && (
-            <div className="flex gap-3">
-              {isEditing ? (
-                <>
-                  <Button variant="secondary" onClick={() => {
-                    setIsEditing(false);
-                    loadApplication();
-                  }}>
-                    Cancel
+          <div className="flex gap-3 items-center">
+            {canEdit() && (
+              <div className="flex gap-3">
+                {isEditing ? (
+                  <>
+                    <Button variant="secondary" onClick={() => {
+                      setIsEditing(false);
+                      loadApplication();
+                    }}>
+                      Cancel
+                    </Button>
+                    <Button variant="primary" onClick={handleSave} loading={saving}>
+                      Save Changes
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="primary" onClick={() => setIsEditing(true)}>
+                    Edit
                   </Button>
-                  <Button variant="primary" onClick={handleSave} loading={saving}>
-                    Save Changes
-                  </Button>
-                </>
-              ) : (
-                <Button variant="primary" onClick={() => setIsEditing(true)}>
-                  Edit
-                </Button>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+            {canEdit() && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Status:</label>
+                <select
+                  value={application.status || 'onboarded'}
+                  onChange={(e) => handleStatusChange(e.target.value)}
+                  disabled={changingStatus}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  <option value="pending_executive">Pending Executive</option>
+                  <option value="pending_technical">Pending Technical</option>
+                  <option value="onboarded">Onboarded</option>
+                </select>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -423,13 +454,16 @@ export function ApplicationDetail() {
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  disabled={!isEditing || !isAdmin()}
+                  disabled={!isEditing}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
                 >
                   <option value="pending_executive">Pending Executive</option>
                   <option value="pending_technical">Pending Technical</option>
                   <option value="onboarded">Onboarded</option>
                 </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  Note: You can also change status using the dropdown in the header above.
+                </p>
               </div>
               {application.metadataLastReviewed && (
                 <div>

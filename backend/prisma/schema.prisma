@@ -28,6 +28,7 @@ model Company {
   domains     String?
   users       User[]
   applications Application[]
+  invitations Invitation[]
   engManager  String?
   language            String?
   framework           String?
@@ -168,4 +169,21 @@ model Score {
   @@index([applicationId])
   @@index([calculatedAt])
   @@index([totalScore])
+}
+
+model Invitation {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  email     String
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  isAdmin   Boolean  @default(false)
+  invitedBy String?  // User ID who sent the invitation
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  
+  @@index([token])
+  @@index([email])
+  @@index([expiresAt])
 }

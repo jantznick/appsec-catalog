@@ -36,19 +36,48 @@ export function UserStats() {
         </p>
       </div>
 
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Documentation</h2>
-        <p className="text-gray-600 mb-4">
-          Access comprehensive guides and resources for application security.
-        </p>
-        <Link
-          to="/docs"
-          className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          View Documentation
-        </Link>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Applications</h2>
+          <p className="text-gray-600 mb-4">
+            View and manage applications in your company.
+          </p>
+          <Link
+            to="/applications"
+            className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            View Applications
+          </Link>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Users</h2>
+          <p className="text-gray-600 mb-4">
+            View and manage users in your company.
+          </p>
+          <Link
+            to="/users"
+            className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Manage Users
+          </Link>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Documentation</h2>
+          <p className="text-gray-600 mb-4">
+            Access comprehensive guides and resources for application security.
+          </p>
+          <Link
+            to="/docs"
+            className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            View Documentation
+          </Link>
+        </div>
       </div>
     </>
   );
 }
+
 

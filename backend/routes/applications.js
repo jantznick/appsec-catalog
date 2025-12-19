@@ -5,29 +5,35 @@ import { calculateApplicationScore } from '../services/scoring.js';
 
 const router = express.Router();
 
-// Public: Create application with executive info only (no auth required)
+// Public: Create application(s) with executive info only (no auth required)
+// Accepts either a single application object or an array of applications
 router.post('/onboard/executive', async (req, res) => {
   try {
-    const {
-      companySlug,
-      name,
-      description,
-      owner,
-      repoUrl,
-      language,
-      framework,
-      serverEnvironment,
-      facing,
-      deploymentType,
-      authProfiles,
-      dataTypes,
-    } = req.body;
+    const { companySlug, applications } = req.body;
 
     // Validate required fields
-    if (!companySlug || !name || name.trim() === '') {
+    if (!companySlug) {
       return res.status(400).json({ 
-        error: 'Company slug and application name are required' 
+        error: 'Company slug is required' 
       });
+    }
+
+    // Support both single application (backward compatibility) and array of applications
+    const appsToCreate = Array.isArray(applications) ? applications : [req.body];
+    
+    if (appsToCreate.length === 0) {
+      return res.status(400).json({ 
+        error: 'At least one application is required' 
+      });
+    }
+
+    // Validate all applications have required fields
+    for (const app of appsToCreate) {
+      if (!app.name || app.name.trim() === '') {
+        return res.status(400).json({ 
+          error: 'Application name is required for all applications' 
+        });
+      }
     }
 
     // Find company by slug
@@ -39,34 +45,46 @@ router.post('/onboard/executive', async (req, res) => {
       return res.status(404).json({ error: 'Company not found' });
     }
 
-    // Create application with executive info only (status: pending_technical)
-    const application = await prisma.application.create({
-      data: {
-        name: name.trim(),
-        companyId: company.id,
-        description: description?.trim() || null,
-        owner: owner?.trim() || null,
-        repoUrl: repoUrl?.trim() || null,
-        language: language?.trim() || null,
-        framework: framework?.trim() || null,
-        serverEnvironment: serverEnvironment?.trim() || null,
-        facing: facing?.trim() || null,
-        deploymentType: deploymentType?.trim() || null,
-        authProfiles: authProfiles?.trim() || null,
-        dataTypes: dataTypes?.trim() || null,
-        status: 'pending_technical', // Needs technical form completion
-      },
-    });
+    // Create all applications
+    const createdApplications = await Promise.all(
+      appsToCreate.map(app => 
+        prisma.application.create({
+          data: {
+            name: app.name.trim(),
+            companyId: company.id,
+            description: app.description?.trim() || null,
+            owner: app.owner?.trim() || null,
+            repoUrl: app.repoUrl?.trim() || null,
+            language: app.language?.trim() || null,
+            framework: app.framework?.trim() || null,
+            serverEnvironment: app.serverEnvironment?.trim() || null,
+            facing: app.facing?.trim() || null,
+            deploymentType: app.deploymentType?.trim() || null,
+            authProfiles: app.authProfiles?.trim() || null,
+            dataTypes: app.dataTypes?.trim() || null,
+            status: 'pending_technical', // Needs technical form completion
+          },
+        })
+      )
+    );
 
-    res.status(201).json({
-      application,
-      message: 'Application submitted successfully. Please complete the technical form.',
-    });
+    // Return single application for backward compatibility, or array for multiple
+    if (appsToCreate.length === 1) {
+      res.status(201).json({
+        application: createdApplications[0],
+        message: 'Application submitted successfully. Please complete the technical form.',
+      });
+    } else {
+      res.status(201).json({
+        applications: createdApplications,
+        message: `${createdApplications.length} applications submitted successfully. Please complete the technical forms.`,
+      });
+    }
   } catch (error) {
-    console.error('Error creating application via executive form:', error);
+    console.error('Error creating application(s) via executive form:', error);
     res.status(500).json({ 
-      error: 'Failed to submit application',
-      message: 'An error occurred while submitting your application'
+      error: 'Failed to submit application(s)',
+      message: 'An error occurred while submitting your application(s)'
     });
   }
 });
@@ -646,7 +664,7 @@ router.put('/:id', requireAuth, async (req, res) => {
         ...(apiSecurityTool !== undefined && { apiSecurityTool: apiSecurityTool?.trim() || null }),
         ...(apiSecurityIntegrationLevel !== undefined && { apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null }),
         ...(apiSecurityNA !== undefined && { apiSecurityNA: apiSecurityNA }),
-        ...(status && { status }),
+        ...(status !== undefined && { status }),
       },
       include: {
         company: true,

@@ -178,7 +178,7 @@ export function AdminStats() {
             <p className="text-gray-600 mb-4">
               View all users, verify accounts, and manage permissions.
             </p>
-            <Link to="/must-verify">
+            <Link to="/users">
               <Button variant="primary" className="w-full">
                 Manage Users
               </Button>

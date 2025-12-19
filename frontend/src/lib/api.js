@@ -69,9 +69,42 @@ export const api = {
     return data.users || [];
   },
 
-  verifyUser: (userId) =>
+  verifyUser: (userId, options = {}) =>
     apiRequest(`/api/users/${userId}/verify`, {
       method: 'POST',
+      body: JSON.stringify(options),
+    }),
+
+  updateUser: (userId, data) =>
+    apiRequest(`/api/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteUser: (userId) =>
+    apiRequest(`/api/users/${userId}`, {
+      method: 'DELETE',
+    }),
+
+  inviteUser: (data) =>
+    apiRequest('/api/users/invite', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getInvitation: (token) =>
+    apiRequest(`/api/invitations/${token}`),
+
+  acceptInvitation: (token, password) =>
+    apiRequest(`/api/invitations/${token}/accept`, {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    }),
+
+  changePassword: (data) =>
+    apiRequest('/api/users/me/password', {
+      method: 'PUT',
+      body: JSON.stringify(data),
     }),
 
   // Company management

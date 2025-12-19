@@ -1,44 +1,9 @@
-import { useEffect, useState } from 'react';
 import useAuthStore from '../store/authStore.js';
-import { api } from '../lib/api.js';
+import { Link } from 'react-router-dom';
+import { Button } from '../components/ui/Button.jsx';
 
 export function MustVerify() {
   const { user, logout } = useAuthStore();
-  const [pendingUsers, setPendingUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Only admins and company members can see pending users
-    if (user?.isAdmin || user?.companyId) {
-      loadPendingUsers();
-    } else {
-      setLoading(false);
-    }
-  }, [user]);
-
-  const loadPendingUsers = async () => {
-    try {
-      const users = await api.getPendingUsers();
-      setPendingUsers(users || []);
-    } catch (error) {
-      console.error('Failed to load pending users:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerify = async (userId) => {
-    try {
-      await api.verifyUser(userId);
-      // Reload pending users
-      await loadPendingUsers();
-      // Refresh current user to check if they're now verified
-      const authStore = useAuthStore.getState();
-      await authStore.init();
-    } catch (error) {
-      alert(error.message || 'Failed to verify user');
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -78,50 +43,27 @@ export function MustVerify() {
           )}
         </div>
 
-        {(user?.isAdmin || user?.companyId) && (
-          <div className="mt-8">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              Pending Users in Your Company
-            </h2>
-            {loading ? (
-              <div className="text-center py-8 text-gray-600">Loading...</div>
-            ) : pendingUsers.length === 0 ? (
-              <p className="text-gray-600 text-center py-4">
-                No pending users in your company.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {pendingUsers.map((pendingUser) => (
-                  <div
-                    key={pendingUser.id}
-                    className="flex items-center justify-between bg-gray-50 rounded-lg p-4"
-                  >
-                    <div>
-                      <p className="font-medium text-gray-900">{pendingUser.email}</p>
-                      {pendingUser.company && (
-                        <p className="text-sm text-gray-600">{pendingUser.company.name}</p>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => handleVerify(pendingUser.id)}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                    >
-                      Verify
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+        {user?.isAdmin && (
+          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+            <p className="text-sm text-green-800 mb-3">
+              <strong>Admin Access:</strong> As an administrator, you can verify users from the Users management page.
+            </p>
+            <Link to="/users">
+              <Button variant="primary" className="w-full">
+                Go to Users Management
+              </Button>
+            </Link>
           </div>
         )}
 
-        <div className="mt-8 pt-6 border-t border-gray-200">
-          <button
+        <div className="pt-6 border-t border-gray-200">
+          <Button
+            variant="outline"
             onClick={logout}
-            className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+            className="w-full"
           >
             Logout
-          </button>
+          </Button>
         </div>
       </div>
     </div>

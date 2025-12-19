@@ -33,6 +33,7 @@ export async function initializeAdminUsers() {
 
       if (existingUser) {
         // Update existing user to be admin
+        // Only update if they're not already admin to preserve manually set admins
         if (!existingUser.isAdmin) {
           await prisma.user.update({
             where: { email },
@@ -42,6 +43,8 @@ export async function initializeAdminUsers() {
         } else {
           console.log(`  ✓ ${email} is already an admin`);
         }
+        // Note: We never remove admin status from users not in ADMIN_EMAILS
+        // This preserves manually set admins even if they're not in the env var
       } else {
         // Create new admin user (without password - they'll need to use magic code or set password)
         await prisma.user.create({
@@ -60,4 +63,5 @@ export async function initializeAdminUsers() {
 
   console.log('✅ Admin user initialization complete');
 }
+
 
