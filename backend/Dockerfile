@@ -3,11 +3,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files
+# Install dependencies (including dev dependencies for Prisma CLI)
 COPY package*.json ./
-
-# Install dependencies
-RUN npm ci --only=production
+RUN npm ci
 
 # Copy Prisma schema and config
 COPY prisma ./prisma/
@@ -18,9 +16,13 @@ RUN npx prisma generate
 # Copy application code
 COPY . .
 
-# Expose port
-EXPOSE 5000
+# Copy and make entrypoint script executable
+COPY docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
 
-# Start the server
-CMD ["node", "server.js"]
+# Expose port
+EXPOSE 3001
+
+# Run migrations and start server
+ENTRYPOINT ["./docker-entrypoint.sh"]
 
