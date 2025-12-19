@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { Textarea } from '../components/ui/Textarea.jsx';
+import { Select } from '../components/ui/Select.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
 import useAuthStore from '../store/authStore.js';
 
@@ -18,6 +19,7 @@ export function ApplicationDetail() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [integrationLevels, setIntegrationLevels] = useState([]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -44,10 +46,20 @@ export function ApplicationDetail() {
   });
 
   useEffect(() => {
+    loadIntegrationLevels();
     if (id) {
       loadApplication();
     }
   }, [id]);
+
+  const loadIntegrationLevels = async () => {
+    try {
+      const levels = await api.getIntegrationLevels();
+      setIntegrationLevels(levels);
+    } catch (error) {
+      console.error('Failed to load integration levels:', error);
+    }
+  };
 
   const loadApplication = async () => {
     try {
@@ -79,13 +91,13 @@ export function ApplicationDetail() {
         authProfiles: data.authProfiles || '',
         dataTypes: data.dataTypes || '',
         sastTool: data.sastTool || '',
-        sastIntegrationLevel: data.sastIntegrationLevel || '',
+        sastIntegrationLevel: data.sastIntegrationLevel?.toString() || '',
         dastTool: data.dastTool || '',
-        dastIntegrationLevel: data.dastIntegrationLevel || '',
+        dastIntegrationLevel: data.dastIntegrationLevel?.toString() || '',
         appFirewallTool: data.appFirewallTool || '',
-        appFirewallIntegrationLevel: data.appFirewallIntegrationLevel || '',
+        appFirewallIntegrationLevel: data.appFirewallIntegrationLevel?.toString() || '',
         apiSecurityTool: data.apiSecurityTool || '',
-        apiSecurityIntegrationLevel: data.apiSecurityIntegrationLevel || '',
+        apiSecurityIntegrationLevel: data.apiSecurityIntegrationLevel?.toString() || '',
         apiSecurityNA: data.apiSecurityNA || false,
         status: data.status || 'onboarded',
       });
@@ -275,14 +287,15 @@ export function ApplicationDetail() {
                   onChange={(e) => setFormData({ ...formData, sastTool: e.target.value })}
                   disabled={!isEditing}
                 />
-                <Input
+                <Select
                   label="SAST Integration Level"
-                  type="number"
-                  min="0"
-                  max="4"
                   value={formData.sastIntegrationLevel}
                   onChange={(e) => setFormData({ ...formData, sastIntegrationLevel: e.target.value })}
                   disabled={!isEditing}
+                  options={[
+                    { value: '', label: 'Select level' },
+                    ...integrationLevels,
+                  ]}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -292,14 +305,15 @@ export function ApplicationDetail() {
                   onChange={(e) => setFormData({ ...formData, dastTool: e.target.value })}
                   disabled={!isEditing}
                 />
-                <Input
+                <Select
                   label="DAST Integration Level"
-                  type="number"
-                  min="0"
-                  max="4"
                   value={formData.dastIntegrationLevel}
                   onChange={(e) => setFormData({ ...formData, dastIntegrationLevel: e.target.value })}
                   disabled={!isEditing}
+                  options={[
+                    { value: '', label: 'Select level' },
+                    ...integrationLevels,
+                  ]}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -309,14 +323,15 @@ export function ApplicationDetail() {
                   onChange={(e) => setFormData({ ...formData, appFirewallTool: e.target.value })}
                   disabled={!isEditing}
                 />
-                <Input
+                <Select
                   label="App Firewall Integration Level"
-                  type="number"
-                  min="0"
-                  max="4"
                   value={formData.appFirewallIntegrationLevel}
                   onChange={(e) => setFormData({ ...formData, appFirewallIntegrationLevel: e.target.value })}
                   disabled={!isEditing}
+                  options={[
+                    { value: '', label: 'Select level' },
+                    ...integrationLevels,
+                  ]}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -326,14 +341,15 @@ export function ApplicationDetail() {
                   onChange={(e) => setFormData({ ...formData, apiSecurityTool: e.target.value })}
                   disabled={!isEditing}
                 />
-                <Input
+                <Select
                   label="API Security Integration Level"
-                  type="number"
-                  min="0"
-                  max="4"
                   value={formData.apiSecurityIntegrationLevel}
                   onChange={(e) => setFormData({ ...formData, apiSecurityIntegrationLevel: e.target.value })}
                   disabled={!isEditing}
+                  options={[
+                    { value: '', label: 'Select level' },
+                    ...integrationLevels,
+                  ]}
                 />
               </div>
               <Checkbox

@@ -1,8 +1,42 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { generateSlug, ensureUniqueSlug } from '../utils/slug.js';
 
 const router = express.Router();
+
+// Public: Get company by slug (for onboarding forms)
+router.get('/slug/:slug', async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const company = await prisma.company.findFirst({
+      where: { slug },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        language: true,
+        framework: true,
+        serverEnvironment: true,
+        facing: true,
+        deploymentType: true,
+        authProfiles: true,
+        dataTypes: true,
+        engManager: true,
+      },
+    });
+
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    res.json(company);
+  } catch (error) {
+    console.error('Error fetching company by slug:', error);
+    res.status(500).json({ error: 'Failed to fetch company' });
+  }
+});
+
 
 // COMP-1: Get company list
 // Admin: all companies, Regular user: only their company
@@ -63,7 +97,19 @@ router.get('/:id', requireAuth, async (req, res) => {
 
     const company = await prisma.company.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        domains: true,
+        engManager: true,
+        language: true,
+        framework: true,
+        serverEnvironment: true,
+        facing: true,
+        deploymentType: true,
+        authProfiles: true,
+        dataTypes: true,
         users: {
           select: {
             id: true,
@@ -124,9 +170,14 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Company name already exists' });
     }
 
+    // Generate unique slug (required for new companies)
+    const baseSlug = generateSlug(name.trim());
+    const slug = await ensureUniqueSlug(baseSlug);
+
     const company = await prisma.company.create({
       data: {
         name: name.trim(),
+        slug, // Required for new companies
         domains: domains?.trim() || null,
         engManager: engManager?.trim() || null,
         language: language?.trim() || null,
@@ -172,7 +223,8 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Company not found' });
     }
 
-    // If name is being changed, check for duplicates
+    // If name is being changed, check for duplicates and regenerate slug
+    let updateData = {};
     if (name && name.trim() !== existing.name) {
       const duplicate = await prisma.company.findUnique({
         where: { name: name.trim() },
@@ -181,12 +233,18 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       if (duplicate) {
         return res.status(400).json({ error: 'Company name already exists' });
       }
+
+      // Regenerate slug when name changes
+      const baseSlug = generateSlug(name.trim());
+      const slug = await ensureUniqueSlug(baseSlug, id);
+      updateData.name = name.trim();
+      updateData.slug = slug;
     }
 
     const company = await prisma.company.update({
       where: { id },
       data: {
-        ...(name && { name: name.trim() }),
+        ...updateData,
         ...(domains !== undefined && { domains: domains?.trim() || null }),
         ...(engManager !== undefined && { engManager: engManager?.trim() || null }),
         ...(language !== undefined && { language: language?.trim() || null }),

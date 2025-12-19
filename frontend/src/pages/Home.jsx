@@ -53,12 +53,12 @@ export function Home() {
   const { isAuthenticated, isVerified } = useAuthStore();
 
   useEffect(() => {
-    // Redirect authenticated and verified users to dashboard
-    // But not if they're on login/register routes (modal will handle it)
-    if (isAuthenticated() && isVerified() && location.pathname !== '/login' && location.pathname !== '/register') {
+    // Only redirect if we're actually on the home page
+    // Don't redirect from other pages
+    if (location.pathname === '/' && isAuthenticated() && isVerified()) {
       navigate('/dashboard');
     }
-  }, [navigate, location.pathname, isAuthenticated, isVerified]);
+  }, [navigate, location.pathname]); // Remove function dependencies, call them inside
 
   return (
     <div className="min-h-screen bg-gray-50">

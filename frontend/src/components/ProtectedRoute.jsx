@@ -1,7 +1,8 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../store/authStore.js';
 
 export function ProtectedRoute({ children }) {
+  const location = useLocation();
   const { user, loading, isAuthenticated, isVerified } = useAuthStore();
 
   if (loading) {
@@ -19,7 +20,7 @@ export function ProtectedRoute({ children }) {
   if (!isVerified()) {
     return <Navigate to="/must-verify" replace />;
   }
-
-  return children;
+  // User is authenticated and verified - render the protected content
+  return <>{children}</>;
 }
 

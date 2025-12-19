@@ -33,11 +33,12 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
 
   // Close modal if user becomes authenticated
   useEffect(() => {
-    if (isAuthenticated() && isVerified()) {
+    // Only redirect if modal is open and user becomes authenticated
+    if (isOpen && isAuthenticated() && isVerified()) {
       onClose();
       navigate('/dashboard');
     }
-  }, [isAuthenticated, isVerified, navigate, onClose]);
+  }, [isOpen, navigate, onClose]); // Remove function dependencies, call them inside
 
   // Reset form when modal opens/closes
   useEffect(() => {

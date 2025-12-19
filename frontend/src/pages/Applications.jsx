@@ -4,27 +4,37 @@ import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
 import { LoadingPage } from '../components/ui/Loading.jsx';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.jsx';
+import { Input } from '../components/ui/Input.jsx';
+import { Select } from '../components/ui/Select.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table.jsx';
 import useAuthStore from '../store/authStore.js';
+import { calculateCompleteness } from '../utils/applicationCompleteness.js';
 
 export function Applications() {
   const { isAdmin } = useAuthStore();
   const [applications, setApplications] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filterCompany, setFilterCompany] = useState('');
   const [companies, setCompanies] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({
+    companyId: '',
+    status: '',
+    search: '',
+  });
 
   useEffect(() => {
-    loadApplications();
     if (isAdmin()) {
       loadCompanies();
     }
+    loadApplications();
   }, []);
 
   useEffect(() => {
-    loadApplications();
-  }, [filterCompany]);
+    // Only reload when filters change if admin (regular users don't have filters)
+    if (isAdmin()) {
+      loadApplications();
+    }
+  }, [filters]);
 
   const loadCompanies = async () => {
     try {
@@ -38,21 +48,27 @@ export function Applications() {
   const loadApplications = async () => {
     try {
       setLoading(true);
-      const data = await api.getApplications();
-      let filtered = Array.isArray(data) ? data : [];
+      let data;
       
-      // Filter by company if selected (admin only)
-      if (filterCompany && isAdmin()) {
-        filtered = filtered.filter(app => app.companyId === filterCompany);
+      if (isAdmin()) {
+        // Use admin endpoint with server-side filtering
+        data = await api.getAdminApplications(filters);
+      } else {
+        // Use regular endpoint (backend filters by user's company)
+        data = await api.getApplications();
       }
       
-      setApplications(filtered);
+      setApplications(Array.isArray(data) ? data : []);
     } catch (error) {
       toast.error('Failed to load applications');
       console.error(error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleFilterChange = (key, value) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
   };
 
   if (loading) {
@@ -65,7 +81,7 @@ export function Applications() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Applications</h1>
           <p className="text-gray-600">
-            {isAdmin() ? 'Manage all applications' : 'View your company applications'}
+            {isAdmin() ? 'Manage applications across all companies' : 'View your company applications'}
           </p>
         </div>
         <Link to="/applications/new">
@@ -73,26 +89,46 @@ export function Applications() {
         </Link>
       </div>
 
-      {isAdmin() && companies.length > 0 && (
+      {/* Admin Filters */}
+      {isAdmin() && (
         <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Filters</CardTitle>
+          </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-4">
-              <label className="text-sm font-medium text-gray-700">Filter by Company:</label>
-              <select
-                value={filterCompany}
-                onChange={(e) => setFilterCompany(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">All Companies</option>
-                {companies.map(company => (
-                  <option key={company.id} value={company.id}>{company.name}</option>
-                ))}
-              </select>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Input
+                label="Search"
+                value={filters.search}
+                onChange={(e) => handleFilterChange('search', e.target.value)}
+                placeholder="Search by name or description..."
+              />
+              <Select
+                label="Company"
+                value={filters.companyId}
+                onChange={(e) => handleFilterChange('companyId', e.target.value)}
+                options={[
+                  { value: '', label: 'All Companies' },
+                  ...companies.map(c => ({ value: c.id, label: c.name })),
+                ]}
+              />
+              <Select
+                label="Status"
+                value={filters.status}
+                onChange={(e) => handleFilterChange('status', e.target.value)}
+                options={[
+                  { value: '', label: 'All Statuses' },
+                  { value: 'onboarded', label: 'Onboarded' },
+                  { value: 'pending_technical', label: 'Pending Technical' },
+                  { value: 'pending_executive', label: 'Pending Executive' },
+                ]}
+              />
             </div>
           </CardContent>
         </Card>
       )}
 
+      {/* Applications Table */}
       {applications.length === 0 ? (
         <Card>
           <CardContent>
@@ -132,18 +168,39 @@ export function Applications() {
                         {app.name}
                       </Link>
                     </TableCell>
-                    <TableCell>{app.company?.name || '—'}</TableCell>
+                    <TableCell>
+                      {isAdmin() && app.companyId ? (
+                        <Link
+                          to={`/companies/${app.companyId}`}
+                          className="text-gray-700 hover:text-blue-600"
+                        >
+                          {app.company?.name || '—'}
+                        </Link>
+                      ) : (
+                        <span>{app.company?.name || '—'}</span>
+                      )}
+                    </TableCell>
                     <TableCell>{app.owner || '—'}</TableCell>
                     <TableCell>
-                      <span className={`px-2 py-1 text-xs font-medium rounded ${
-                        app.status === 'onboarded' 
-                          ? 'bg-green-100 text-green-800'
-                          : app.status === 'pending_technical'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {app.status || 'onboarded'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${
+                          app.status === 'onboarded' 
+                            ? 'bg-green-100 text-green-800'
+                            : app.status === 'pending_technical'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {app.status || 'onboarded'}
+                        </span>
+                        {(() => {
+                          const completeness = calculateCompleteness(app);
+                          return (
+                            <span className="text-xs text-gray-500">
+                              {completeness.filled}/{completeness.total} ({completeness.percentage}%)
+                            </span>
+                          );
+                        })()}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Link to={`/applications/${app.id}`}>

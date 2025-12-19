@@ -1,21 +1,17 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../lib/api.js';
-import { toast } from '../components/ui/Toast.jsx';
-import { LoadingPage } from '../components/ui/Loading.jsx';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.jsx';
-import { Button } from '../components/ui/Button.jsx';
-import useAuthStore from '../store/authStore.js';
+import { api } from '../../lib/api.js';
+import { toast } from '../ui/Toast.jsx';
+import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card.jsx';
+import { Button } from '../ui/Button.jsx';
+import { LoadingPage } from '../ui/Loading.jsx';
 
-export function AdminDashboard() {
-  const { isAdmin } = useAuthStore();
+export function AdminStats() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (isAdmin()) {
-      loadStats();
-    }
+    loadStats();
   }, []);
 
   const loadStats = async () => {
@@ -31,14 +27,6 @@ export function AdminDashboard() {
     }
   };
 
-  if (!isAdmin()) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-gray-600">You must be an administrator to access this page.</p>
-      </div>
-    );
-  }
-
   if (loading) {
     return <LoadingPage message="Loading dashboard..." />;
   }
@@ -48,12 +36,7 @@ export function AdminDashboard() {
   }
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
-        <p className="text-gray-600">Overview of the entire system</p>
-      </div>
-
+    <>
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <Card>
@@ -179,7 +162,7 @@ export function AdminDashboard() {
             <p className="text-gray-600 mb-4">
               View and manage all applications across all companies.
             </p>
-            <Link to="/admin/applications">
+            <Link to="/applications">
               <Button variant="primary" className="w-full">
                 Manage Applications
               </Button>
@@ -203,7 +186,7 @@ export function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </>
   );
 }
 

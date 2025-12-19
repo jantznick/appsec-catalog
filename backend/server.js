@@ -9,6 +9,7 @@ import userRoutes from './routes/users.js';
 import companyRoutes from './routes/companies.js';
 import applicationRoutes from './routes/applications.js';
 import adminRoutes from './routes/admin.js';
+import configRoutes from './routes/config.js';
 
 dotenv.config();
 
@@ -41,6 +42,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/companies', companyRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/config', configRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

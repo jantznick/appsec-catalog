@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
 import { LoadingPage } from '../components/ui/Loading.jsx';
@@ -254,8 +254,55 @@ export function CompanyDetail() {
           )}
         </div>
 
-        {/* Users Sidebar */}
-        <div>
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Public Onboarding Form */}
+          {company.slug && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Public Onboarding Form</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-600 mb-4">
+                  Share this link with executives to submit basic application information.
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 mb-1 block">Onboarding URL</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={`${window.location.origin}/onboard/${company.slug}/manager`}
+                        readOnly
+                        className="font-mono text-sm"
+                        onClick={(e) => e.target.select()}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${window.location.origin}/onboard/${company.slug}/manager`);
+                          toast.success('Link copied to clipboard');
+                        }}
+                      >
+                        Copy
+                      </Button>
+                    </div>
+                  </div>
+                  <Link
+                    to={`/onboard/${company.slug}/manager`}
+                    target="_blank"
+                    className="block"
+                  >
+                    <Button variant="primary" className="w-full">
+                      View Onboarding Form
+                    </Button>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Users */}
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">

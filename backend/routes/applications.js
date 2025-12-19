@@ -4,6 +4,72 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Public: Create application with executive info only (no auth required)
+router.post('/onboard/executive', async (req, res) => {
+  try {
+    const {
+      companySlug,
+      name,
+      description,
+      owner,
+      repoUrl,
+      language,
+      framework,
+      serverEnvironment,
+      facing,
+      deploymentType,
+      authProfiles,
+      dataTypes,
+    } = req.body;
+
+    // Validate required fields
+    if (!companySlug || !name || name.trim() === '') {
+      return res.status(400).json({ 
+        error: 'Company slug and application name are required' 
+      });
+    }
+
+    // Find company by slug
+    const company = await prisma.company.findFirst({
+      where: { slug: companySlug },
+    });
+
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    // Create application with executive info only (status: pending_technical)
+    const application = await prisma.application.create({
+      data: {
+        name: name.trim(),
+        companyId: company.id,
+        description: description?.trim() || null,
+        owner: owner?.trim() || null,
+        repoUrl: repoUrl?.trim() || null,
+        language: language?.trim() || null,
+        framework: framework?.trim() || null,
+        serverEnvironment: serverEnvironment?.trim() || null,
+        facing: facing?.trim() || null,
+        deploymentType: deploymentType?.trim() || null,
+        authProfiles: authProfiles?.trim() || null,
+        dataTypes: dataTypes?.trim() || null,
+        status: 'pending_technical', // Needs technical form completion
+      },
+    });
+
+    res.status(201).json({
+      application,
+      message: 'Application submitted successfully. Please complete the technical form.',
+    });
+  } catch (error) {
+    console.error('Error creating application via executive form:', error);
+    res.status(500).json({ 
+      error: 'Failed to submit application',
+      message: 'An error occurred while submitting your application'
+    });
+  }
+});
+
 // APP-3: Get application list
 router.get('/', requireAuth, async (req, res) => {
   try {
@@ -36,6 +102,121 @@ router.get('/', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error fetching applications:', error);
     res.status(500).json({ error: 'Failed to fetch applications' });
+  }
+});
+
+// Public: Get application by ID (for technical form)
+router.get('/public/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const application = await prisma.application.findUnique({
+      where: { id },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+      },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    res.json(application);
+  } catch (error) {
+    console.error('Error fetching application:', error);
+    res.status(500).json({ error: 'Failed to fetch application' });
+  }
+});
+
+// Public: Update application with technical details (for technical form)
+router.put('/public/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      interfaces,
+      sastTool,
+      sastIntegrationLevel,
+      dastTool,
+      dastIntegrationLevel,
+      appFirewallTool,
+      appFirewallIntegrationLevel,
+      apiSecurityTool,
+      apiSecurityIntegrationLevel,
+      apiSecurityNA,
+    } = req.body;
+
+    // Find application
+    const existing = await prisma.application.findUnique({
+      where: { id },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Process interfaces
+    let interfacesJson = null;
+    if (interfaces && Array.isArray(interfaces) && interfaces.length > 0) {
+      const interfaceAppIds = [];
+      
+      for (const interfaceName of interfaces) {
+        if (!interfaceName || !interfaceName.trim()) continue;
+        
+        let interfaceApp = await prisma.application.findFirst({
+          where: {
+            name: interfaceName.trim(),
+            companyId: existing.companyId,
+          },
+        });
+
+        if (!interfaceApp) {
+          interfaceApp = await prisma.application.create({
+            data: {
+              name: interfaceName.trim(),
+              companyId: existing.companyId,
+              description: `Auto-created interface application`,
+              status: 'onboarded',
+            },
+          });
+        }
+
+        interfaceAppIds.push(interfaceApp.id);
+      }
+
+      interfacesJson = JSON.stringify(interfaceAppIds);
+    }
+
+    // Update application with technical details
+    const application = await prisma.application.update({
+      where: { id },
+      data: {
+        interfaces: interfacesJson,
+        sastTool: sastTool?.trim() || null,
+        sastIntegrationLevel: sastIntegrationLevel ? parseInt(sastIntegrationLevel) : null,
+        dastTool: dastTool?.trim() || null,
+        dastIntegrationLevel: dastIntegrationLevel ? parseInt(dastIntegrationLevel) : null,
+        appFirewallTool: appFirewallTool?.trim() || null,
+        appFirewallIntegrationLevel: appFirewallIntegrationLevel ? parseInt(appFirewallIntegrationLevel) : null,
+        apiSecurityTool: apiSecurityTool?.trim() || null,
+        apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null,
+        apiSecurityNA: apiSecurityNA === true || apiSecurityNA === 'true',
+        status: 'onboarded', // Mark as fully onboarded
+      },
+    });
+
+    res.json({
+      application,
+      message: 'Application technical details updated successfully',
+    });
+  } catch (error) {
+    console.error('Error updating application:', error);
+    res.status(500).json({ error: 'Failed to update application' });
   }
 });
 

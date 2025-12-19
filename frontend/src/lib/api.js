@@ -80,6 +80,22 @@ export const api = {
 
   getCompany: (id) =>
     apiRequest(`/api/companies/${id}`),
+  getCompanyBySlug: (slug) =>
+    apiRequest(`/api/companies/slug/${slug}`),
+  createApplicationOnboardExecutive: (data) =>
+    apiRequest('/api/applications/onboard/executive', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getApplicationPublic: (id) =>
+    apiRequest(`/api/applications/public/${id}`),
+  updateApplicationPublic: (id, data) =>
+    apiRequest(`/api/applications/public/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  getIntegrationLevels: () =>
+    apiRequest('/api/config/integration-levels'),
 
   createCompany: (data) =>
     apiRequest('/api/companies', {
@@ -113,6 +129,11 @@ export const api = {
 
   createApplication: (data) =>
     apiRequest('/api/applications', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  createApplicationOnboard: (data) =>
+    apiRequest('/api/applications/onboard', {
       method: 'POST',
       body: JSON.stringify(data),
     }),

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.jsx';
@@ -8,14 +8,15 @@ import { Input } from '../components/ui/Input.jsx';
 import { Textarea } from '../components/ui/Textarea.jsx';
 import { Select } from '../components/ui/Select.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
-import useAuthStore from '../store/authStore.js';
+import { LoadingPage } from '../components/ui/Loading.jsx';
+import { Alert } from '../components/ui/Alert.jsx';
 
-export function ApplicationNew() {
-  const navigate = useNavigate();
-  const { isAdmin, user } = useAuthStore();
-  const [companies, setCompanies] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [companyDefaults, setCompanyDefaults] = useState(null);
+export function OnboardApplication() {
+  const { slug, applicationId } = useParams();
+  const [company, setCompany] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [useDefaults, setUseDefaults] = useState(true);
   const [interfaceSearch, setInterfaceSearch] = useState('');
   const [interfaceResults, setInterfaceResults] = useState([]);
@@ -24,7 +25,6 @@ export function ApplicationNew() {
   const [integrationLevels, setIntegrationLevels] = useState([]);
 
   const [formData, setFormData] = useState({
-    companyId: '',
     name: '',
     description: '',
     owner: '',
@@ -48,9 +48,13 @@ export function ApplicationNew() {
   });
 
   useEffect(() => {
-    loadCompanies();
     loadIntegrationLevels();
-  }, []);
+    if (applicationId) {
+      loadApplication();
+    } else {
+      loadCompany();
+    }
+  }, [slug, applicationId]);
 
   const loadIntegrationLevels = async () => {
     try {
@@ -62,10 +66,20 @@ export function ApplicationNew() {
   };
 
   useEffect(() => {
-    if (formData.companyId && useDefaults) {
-      loadCompanyDefaults();
+    if (company && useDefaults) {
+      setFormData(prev => ({
+        ...prev,
+        language: company.language || prev.language,
+        framework: company.framework || prev.framework,
+        serverEnvironment: company.serverEnvironment || prev.serverEnvironment,
+        facing: company.facing || prev.facing,
+        deploymentType: company.deploymentType || prev.deploymentType,
+        authProfiles: company.authProfiles || prev.authProfiles,
+        dataTypes: company.dataTypes || prev.dataTypes,
+        owner: company.engManager || prev.owner,
+      }));
     }
-  }, [formData.companyId, useDefaults]);
+  }, [company, useDefaults]);
 
   // Debounced search for interfaces
   useEffect(() => {
@@ -80,58 +94,91 @@ export function ApplicationNew() {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [interfaceSearch]);
+  }, [interfaceSearch, company]);
 
-  const loadCompanies = async () => {
+  const loadCompany = async () => {
     try {
-      const data = await api.getCompanies();
-      setCompanies(Array.isArray(data) ? data : []);
-      
-      // Auto-select user's company if they have one
-      if (user?.companyId && !isAdmin()) {
-        setFormData(prev => ({ ...prev, companyId: user.companyId }));
-      }
+      setLoading(true);
+      const data = await api.getCompanyBySlug(slug);
+      setCompany(data);
     } catch (error) {
-      toast.error('Failed to load companies');
+      toast.error('Company not found');
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadCompanyDefaults = async () => {
+  const loadApplication = async () => {
     try {
-      const company = await api.getCompany(formData.companyId);
-      setCompanyDefaults(company);
+      setLoading(true);
+      const app = await api.getApplicationPublic(applicationId);
+      const companyData = await api.getCompanyBySlug(slug);
+      setCompany(companyData);
       
-      if (useDefaults) {
-        setFormData(prev => ({
-          ...prev,
-          language: company.language || prev.language,
-          framework: company.framework || prev.framework,
-          serverEnvironment: company.serverEnvironment || prev.serverEnvironment,
-          facing: company.facing || prev.facing,
-          deploymentType: company.deploymentType || prev.deploymentType,
-          authProfiles: company.authProfiles || prev.authProfiles,
-          dataTypes: company.dataTypes || prev.dataTypes,
-          owner: company.engManager || prev.owner,
-        }));
+      // Pre-fill form with existing application data
+      setFormData(prev => ({
+        ...prev,
+        name: app.name || '',
+        description: app.description || '',
+        owner: app.owner || '',
+        repoUrl: app.repoUrl || '',
+        language: app.language || '',
+        framework: app.framework || '',
+        serverEnvironment: app.serverEnvironment || '',
+        facing: app.facing || '',
+        deploymentType: app.deploymentType || '',
+        authProfiles: app.authProfiles || '',
+        dataTypes: app.dataTypes || '',
+        sastTool: app.sastTool || '',
+        sastIntegrationLevel: app.sastIntegrationLevel?.toString() || '',
+        dastTool: app.dastTool || '',
+        dastIntegrationLevel: app.dastIntegrationLevel?.toString() || '',
+        appFirewallTool: app.appFirewallTool || '',
+        appFirewallIntegrationLevel: app.appFirewallIntegrationLevel?.toString() || '',
+        apiSecurityTool: app.apiSecurityTool || '',
+        apiSecurityIntegrationLevel: app.apiSecurityIntegrationLevel?.toString() || '',
+        apiSecurityNA: app.apiSecurityNA || false,
+      }));
+      
+      // Load interfaces if they exist
+      if (app.interfaces) {
+        try {
+          const interfaceIds = JSON.parse(app.interfaces);
+          // Fetch interface applications to get names
+          const interfaceApps = await Promise.all(
+            interfaceIds.map(id => api.getApplicationPublic(id))
+          );
+          setInterfaces(interfaceApps.map(app => app.name));
+        } catch (e) {
+          console.error('Error parsing interfaces:', e);
+        }
       }
     } catch (error) {
-      console.error('Failed to load company defaults:', error);
+      toast.error('Failed to load application');
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const searchInterfaces = async (query) => {
+    if (!company) return;
+    
     try {
-      const results = await api.searchApplications(query, formData.companyId);
-      setInterfaceResults(results);
+      const results = await api.searchApplicationsByName(query);
+      setInterfaceResults(results.filter(app => app.companyId === company.id));
       setShowInterfaceResults(true);
     } catch (error) {
-      console.error('Failed to search applications:', error);
+      console.error('Search error:', error);
+      setInterfaceResults([]);
     }
   };
 
   const addInterface = (app) => {
-    if (!interfaces.find(i => i === app.name)) {
-      setInterfaces([...interfaces, app.name]);
+    const name = typeof app === 'string' ? app : app.name;
+    if (name && !interfaces.includes(name)) {
+      setInterfaces([...interfaces, name]);
     }
     setInterfaceSearch('');
     setShowInterfaceResults(false);
@@ -144,112 +191,122 @@ export function ApplicationNew() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.name.trim()) {
-      toast.error('Application name is required');
-      return;
-    }
-
-    if (!formData.companyId) {
-      toast.error('Company is required');
-      return;
-    }
-
     try {
-      setLoading(true);
-      const application = await api.createApplication({
-        ...formData,
-        interfaces: interfaces,
-      });
-      toast.success('Application created successfully');
-      navigate(`/applications/${application.id}`);
+      setSubmitting(true);
+      
+      if (applicationId) {
+        // Update existing application with technical details
+        await api.updateApplicationPublic(applicationId, {
+          interfaces: interfaces,
+          sastTool: formData.sastTool,
+          sastIntegrationLevel: formData.sastIntegrationLevel,
+          dastTool: formData.dastTool,
+          dastIntegrationLevel: formData.dastIntegrationLevel,
+          appFirewallTool: formData.appFirewallTool,
+          appFirewallIntegrationLevel: formData.appFirewallIntegrationLevel,
+          apiSecurityTool: formData.apiSecurityTool,
+          apiSecurityIntegrationLevel: formData.apiSecurityIntegrationLevel,
+          apiSecurityNA: formData.apiSecurityNA,
+        });
+        toast.success('Application technical details updated successfully!');
+      } else {
+        toast.error('Application ID is required');
+        return;
+      }
+      
+      setSubmitted(true);
     } catch (error) {
-      toast.error(error.message || 'Failed to create application');
+      toast.error(error.message || 'Failed to submit application');
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
-  return (
-    <div>
-      <div className="mb-8">
-        <button
-          onClick={() => navigate('/applications')}
-          className="text-blue-600 hover:text-blue-700 mb-4"
-        >
-          ← Back to Applications
-        </button>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">New Application Intake</h1>
-        <p className="text-gray-600">Provide detailed information about your application.</p>
+  if (loading) {
+    return <LoadingPage message="Loading company information..." />;
+  }
+
+  if (!company) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Alert variant="error">Company not found</Alert>
       </div>
+    );
+  }
 
-      <form onSubmit={handleSubmit}>
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Basic Information</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Select
-                  label="Company / Team"
-                  value={formData.companyId}
-                  onChange={(e) => setFormData({ ...formData, companyId: e.target.value })}
-                  options={companies.map(c => ({ value: c.id, label: c.name }))}
-                  placeholder="Select a company..."
-                  required
-                  disabled={!isAdmin() && user?.companyId}
-                />
-                <Input
-                  label="Application Name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
+  if (submitted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="max-w-2xl w-full">
+          <CardContent>
+            <div className="text-center py-12">
+              <div className="mb-4">
+                <svg className="w-16 h-16 text-green-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
               </div>
-              <div className="mt-4">
-                <Textarea
-                  label="Description / Use Case"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows={3}
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                <Input
-                  label="Owner / Eng. Lead"
-                  value={formData.owner}
-                  onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
-                />
-                <Input
-                  label="Repository URL"
-                  type="url"
-                  value={formData.repoUrl}
-                  onChange={(e) => setFormData({ ...formData, repoUrl: e.target.value })}
-                />
-              </div>
-            </CardContent>
-          </Card>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Application Submitted!</h2>
+              <p className="text-gray-600 mb-6">
+                Your application has been submitted successfully. It will be reviewed by the security team.
+              </p>
+              <Button onClick={() => {
+                setSubmitted(false);
+                setFormData({
+                  name: '',
+                  description: '',
+                  owner: '',
+                  repoUrl: '',
+                  language: '',
+                  framework: '',
+                  serverEnvironment: '',
+                  facing: '',
+                  deploymentType: '',
+                  authProfiles: '',
+                  dataTypes: '',
+                  sastTool: '',
+                  sastIntegrationLevel: '',
+                  dastTool: '',
+                  dastIntegrationLevel: '',
+                  appFirewallTool: '',
+                  appFirewallIntegrationLevel: '',
+                  apiSecurityTool: '',
+                  apiSecurityIntegrationLevel: '',
+                  apiSecurityNA: false,
+                });
+                setInterfaces([]);
+              }} variant="primary">
+                Submit Another Application
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
+  return (
+    <div className="min-h-screen bg-gray-50 py-12">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-8 text-center">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Application Technical Details
+          </h1>
+          {formData.name && (
+            <h2 className="text-2xl font-semibold text-gray-700 mb-2">
+              {formData.name}
+            </h2>
+          )}
+          <p className="text-gray-600">
+            Complete the technical information for this application.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Application Details</CardTitle>
             </CardHeader>
             <CardContent>
-              {formData.companyId && (
-                <div className="mb-4">
-                  <Checkbox
-                    id="useDefaults"
-                    label="Use company defaults"
-                    checked={useDefaults}
-                    onChange={(e) => {
-                      setUseDefaults(e.target.checked);
-                      if (e.target.checked) {
-                        loadCompanyDefaults();
-                      }
-                    }}
-                  />
-                </div>
-              )}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Input
                   label="Language"
@@ -313,7 +370,7 @@ export function ApplicationNew() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && interfaceSearch.trim().length >= 2) {
                       e.preventDefault();
-                      addInterface({ name: interfaceSearch.trim() });
+                      addInterface(interfaceSearch.trim());
                     }
                   }}
                   placeholder="Start typing to search..."
@@ -329,7 +386,6 @@ export function ApplicationNew() {
                         className="w-full text-left px-4 py-2 hover:bg-gray-100"
                       >
                         <div className="font-medium">{app.name}</div>
-                        <div className="text-sm text-gray-500">{app.company.name}</div>
                       </button>
                     ))}
                   </div>
@@ -348,7 +404,7 @@ export function ApplicationNew() {
                   className="mt-2"
                   onClick={() => {
                     if (interfaceSearch.trim()) {
-                      addInterface({ name: interfaceSearch.trim() });
+                      addInterface(interfaceSearch.trim());
                     }
                   }}
                 >
@@ -382,7 +438,7 @@ export function ApplicationNew() {
               <CardTitle>Security Tools</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
                     label="SAST Tool"
@@ -417,12 +473,12 @@ export function ApplicationNew() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
-                    label="App Firewall Tool"
+                    label="WAF Tool"
                     value={formData.appFirewallTool}
                     onChange={(e) => setFormData({ ...formData, appFirewallTool: e.target.value })}
                   />
                   <Select
-                    label="App Firewall Integration Level"
+                    label="WAF Integration Level"
                     value={formData.appFirewallIntegrationLevel}
                     onChange={(e) => setFormData({ ...formData, appFirewallIntegrationLevel: e.target.value })}
                     options={[
@@ -437,44 +493,41 @@ export function ApplicationNew() {
                     value={formData.apiSecurityTool}
                     onChange={(e) => setFormData({ ...formData, apiSecurityTool: e.target.value })}
                   />
-                  <Select
-                    label="API Security Integration Level"
-                    value={formData.apiSecurityIntegrationLevel}
-                    onChange={(e) => setFormData({ ...formData, apiSecurityIntegrationLevel: e.target.value })}
-                    options={[
-                      { value: '', label: 'Select level' },
-                      ...integrationLevels,
-                    ]}
-                  />
+                  <div>
+                    <Select
+                      label="API Security Integration Level"
+                      value={formData.apiSecurityIntegrationLevel}
+                      onChange={(e) => setFormData({ ...formData, apiSecurityIntegrationLevel: e.target.value })}
+                      options={[
+                        { value: '', label: 'Select level' },
+                        ...integrationLevels,
+                      ]}
+                    />
+                    <div className="mt-2">
+                      <Checkbox
+                        id="apiSecurityNA"
+                        label="N/A"
+                        checked={formData.apiSecurityNA}
+                        onChange={(e) => setFormData({ ...formData, apiSecurityNA: e.target.checked })}
+                      />
+                    </div>
+                  </div>
                 </div>
-                <Checkbox
-                  id="apiSecurityNA"
-                  label="API Security Not Applicable"
-                  checked={formData.apiSecurityNA}
-                  onChange={(e) => setFormData({ ...formData, apiSecurityNA: e.target.checked })}
-                />
               </div>
             </CardContent>
           </Card>
 
-          <div className="flex justify-end gap-3">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => navigate('/applications')}
-            >
-              Cancel
-            </Button>
+          <div className="flex justify-end gap-4">
             <Button
               type="submit"
               variant="primary"
-              loading={loading}
+              disabled={submitting}
             >
-              Submit Application
+              {submitting ? 'Submitting...' : 'Submit Application'}
             </Button>
           </div>
-        </div>
-      </form>
+        </form>
+      </div>
     </div>
   );
 }

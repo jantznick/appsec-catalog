@@ -17,10 +17,25 @@ import { CompanyNew } from './pages/CompanyNew.jsx';
 import { Applications } from './pages/Applications.jsx';
 import { ApplicationNew } from './pages/ApplicationNew.jsx';
 import { ApplicationDetail } from './pages/ApplicationDetail.jsx';
-import { AdminApplications } from './pages/AdminApplications.jsx';
+import { OnboardManager } from './pages/OnboardManager.jsx';
+import { OnboardApplication } from './pages/OnboardApplication.jsx';
+
+function CatchAllRedirect() {
+  const { isAuthenticated, isVerified, loading } = useAuthStore();
+  
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+  
+  if (isAuthenticated() && isVerified()) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return <Navigate to="/" replace />;
+}
 
 function App() {
-  const { init, isAuthenticated } = useAuthStore();
+  const { init, isAuthenticated, isVerified } = useAuthStore();
 
   useEffect(() => {
     // Initialize auth state on app load
@@ -70,6 +85,16 @@ function App() {
               <Home />
             </Layout>
           }
+        />
+
+        {/* Public onboarding forms - no auth required */}
+        <Route
+          path="/onboard/:slug/manager"
+          element={<OnboardManager />}
+        />
+        <Route
+          path="/onboard/:slug/application/:applicationId"
+          element={<OnboardApplication />}
         />
 
         {/* Protected routes */}
@@ -153,22 +178,20 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        {/* Legacy route redirect - backward compatibility */}
         <Route
           path="/admin/applications"
           element={
-            <ProtectedRoute>
-              <Layout>
-                <AdminApplications />
-              </Layout>
-            </ProtectedRoute>
+            <Navigate to="/applications" replace />
           }
         />
 
-        {/* Redirect authenticated users to dashboard */}
+        {/* Catch-all route - redirect authenticated users to dashboard, others to home */}
         <Route
           path="*"
           element={
-            isAuthenticated() ? <Navigate to="/dashboard" replace /> : <Navigate to="/" replace />
+            <CatchAllRedirect />
           }
         />
       </Routes>
