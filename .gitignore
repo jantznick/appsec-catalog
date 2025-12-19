@@ -37,7 +37,9 @@ lerna-debug.log*
 *.sw?
 
 # Prisma
-backend/prisma/migrations/
+# Note: migrations/ should be committed for production deployments
+# Only ignore migration backups
+backend/prisma/migrations_backup_*/
 
 # Docker
 docker-compose.override.yml

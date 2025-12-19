@@ -13,7 +13,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-appsec}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-appsec} -d ${POSTGRES_DB:-appsec_catalog}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -41,10 +41,12 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "3001:3001"
+      - "3001:3001"  # Keep for development, remove in production
     environment:
       - PORT=3001
       - DATABASE_URL=postgresql://${POSTGRES_USER:-appsec}:${POSTGRES_PASSWORD:-appsec_password}@postgres:5432/${POSTGRES_DB:-appsec_catalog}
+      - FRONTEND_URL=${FRONTEND_URL:-https://yourdomain.com}
+      - NODE_ENV=production
     volumes:
       - ./backend:/app
       - node_modules_backend:/app/node_modules
@@ -54,10 +56,31 @@ services:
     networks:
       - appsec-network
 
+  # Caddy reverse proxy with automatic HTTPS
+  caddy:
+    image: caddy:2-alpine
+    container_name: appsec-catalog-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"      # HTTP (redirects to HTTPS)
+      - "443:443"    # HTTPS
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - appsec-network
+
 volumes:
   postgres_data:
   node_modules_frontend:
   node_modules_backend:
+  caddy_data:      # Persists Let's Encrypt certificates
+  caddy_config:    # Persists Caddy configuration
 
 networks:
   appsec-network:

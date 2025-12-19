@@ -1,0 +1,39 @@
+# Caddyfile for AppSec Catalog
+# 
+# PRODUCTION: Replace 'yourdomain.com' with your actual domain
+# Caddy will automatically obtain Let's Encrypt certificates
+#
+# LOCAL DEVELOPMENT: Comment out the domain block and uncomment the :80 block below
+
+# Production configuration (HTTPS with Let's Encrypt)
+yourdomain.com {
+    # Reverse proxy to frontend
+    handle / {
+        reverse_proxy frontend:3000
+    }
+
+    # Reverse proxy API requests to backend
+    handle /api/* {
+        reverse_proxy backend:3001
+    }
+
+    # Reverse proxy health check
+    handle /health {
+        reverse_proxy backend:3001
+    }
+}
+
+# Local development configuration (HTTP only)
+# Uncomment this block and comment out the domain block above for local testing
+# :80 {
+#     handle / {
+#         reverse_proxy frontend:3000
+#     }
+#     handle /api/* {
+#         reverse_proxy backend:3001
+#     }
+#     handle /health {
+#         reverse_proxy backend:3001
+#     }
+# }
+
