@@ -82,6 +82,68 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
+// Get company average score
+router.get('/:id/average-score', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if user has access (admin or member of company)
+    if (!req.session.isAdmin && req.session.companyId !== id) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only access your own company',
+      });
+    }
+
+    // Get all applications for this company
+    const applications = await prisma.application.findMany({
+      where: { companyId: id },
+      select: { id: true },
+    });
+
+    if (applications.length === 0) {
+      return res.json({
+        averageScore: null,
+        applicationCount: 0,
+        message: 'No applications found for this company',
+      });
+    }
+
+    const applicationIds = applications.map(app => app.id);
+
+    // Get the most recent score for each application
+    const latestScores = await prisma.score.findMany({
+      where: {
+        applicationId: { in: applicationIds },
+      },
+      orderBy: {
+        calculatedAt: 'desc',
+      },
+      distinct: ['applicationId'],
+    });
+
+    if (latestScores.length === 0) {
+      return res.json({
+        averageScore: null,
+        applicationCount: applications.length,
+        message: 'No scores found for applications in this company',
+      });
+    }
+
+    const totalScore = latestScores.reduce((sum, score) => sum + score.totalScore, 0);
+    const averageScore = Math.round(totalScore / latestScores.length);
+
+    res.json({
+      averageScore,
+      applicationCount: applications.length,
+      scoredApplicationCount: latestScores.length,
+    });
+  } catch (error) {
+    console.error('Error calculating company average score:', error);
+    res.status(500).json({ error: 'Failed to calculate average score' });
+  }
+});
+
 // COMP-2: Get company detail
 router.get('/:id', requireAuth, async (req, res) => {
   try {

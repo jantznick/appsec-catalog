@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useReactTable, getCoreRowModel, getPaginationRowModel, getSortedRowModel, getFilteredRowModel, flexRender } from '@tanstack/react-table';
 import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
@@ -13,13 +13,14 @@ import { calculateCompleteness } from '../utils/applicationCompleteness.js';
 
 export function Applications() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { isAdmin } = useAuthStore();
   const [applications, setApplications] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [scores, setScores] = useState({}); // Cache scores by application ID
   const [filters, setFilters] = useState({
-    companyId: '',
+    companyId: searchParams.get('companyId') || '',
     status: '',
     search: '',
   });
@@ -41,6 +42,14 @@ export function Applications() {
       loadApplications();
     }
   }, [filters]);
+
+  // Update filter when companyId changes in URL
+  useEffect(() => {
+    const companyIdFromUrl = searchParams.get('companyId');
+    if (companyIdFromUrl && isAdmin()) {
+      setFilters(prev => ({ ...prev, companyId: companyIdFromUrl }));
+    }
+  }, [searchParams, isAdmin]);
 
   const loadCompanies = async () => {
     try {
@@ -180,7 +189,7 @@ export function Applications() {
               score >= 51 ? 'text-yellow-600' :
               'text-red-600'
             }`}>
-              {score}
+              {score}/100
             </span>
           );
         }

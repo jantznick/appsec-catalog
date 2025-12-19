@@ -22,6 +22,7 @@ export function CompanyDetail() {
   const [newUserEmail, setNewUserEmail] = useState('');
   const [allUsers, setAllUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [averageScore, setAverageScore] = useState(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -40,8 +41,18 @@ export function CompanyDetail() {
   useEffect(() => {
     if (id) {
       loadCompany();
+      loadAverageScore();
     }
   }, [id]);
+
+  const loadAverageScore = async () => {
+    try {
+      const data = await api.getCompanyAverageScore(id);
+      setAverageScore(data.averageScore);
+    } catch (error) {
+      console.error('Failed to load average score:', error);
+    }
+  };
 
   const loadCompany = async () => {
     try {
@@ -154,6 +165,51 @@ export function CompanyDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Form */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Average Score Card */}
+          {averageScore !== null && (
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle>Average Application Score</CardTitle>
+                  <Link
+                    to="/docs/scoring-methodology"
+                    className="text-xs text-blue-600 hover:text-blue-700"
+                    target="_blank"
+                  >
+                    How is this calculated? →
+                  </Link>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center">
+                  <div className={`text-4xl font-bold mb-2 ${
+                    averageScore >= 76 ? 'text-green-600' :
+                    averageScore >= 51 ? 'text-yellow-600' :
+                    'text-red-600'
+                  }`}>
+                    {averageScore}
+                  </div>
+                  <div className="text-sm text-gray-600">out of 100</div>
+                  <div className={`inline-block px-3 py-1 rounded-full text-xs font-medium mt-2 ${
+                    averageScore >= 76 ? 'bg-green-100 text-green-800' :
+                    averageScore >= 51 ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                    {averageScore >= 76 ? 'Excellent' : averageScore >= 51 ? 'Good' : 'Needs Improvement'}
+                  </div>
+                  <div className="mt-4">
+                    <Link
+                      to={`/applications?companyId=${id}`}
+                      className="text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      View all applications →
+                    </Link>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>Company Information</CardTitle>

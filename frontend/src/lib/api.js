@@ -80,6 +80,8 @@ export const api = {
 
   getCompany: (id) =>
     apiRequest(`/api/companies/${id}`),
+  getCompanyAverageScore: (id) =>
+    apiRequest(`/api/companies/${id}/average-score`),
   getCompanyBySlug: (slug) =>
     apiRequest(`/api/companies/slug/${slug}`),
   createApplicationOnboardExecutive: (data) =>

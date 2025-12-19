@@ -211,6 +211,21 @@ router.put('/public/:id', async (req, res) => {
       },
     });
 
+    // Recalculate and save score after update
+    try {
+      const scores = calculateApplicationScore(application);
+      await prisma.score.create({
+        data: {
+          applicationId: application.id,
+          knowledgeScore: scores.knowledgeScore,
+          toolScore: scores.toolScore,
+          totalScore: scores.totalScore,
+        },
+      });
+    } catch (error) {
+      console.error('Error saving score after update:', error);
+    }
+
     res.json({
       application,
       message: 'Application technical details updated successfully',
@@ -290,6 +305,21 @@ router.get('/:id/score', requireAuth, async (req, res) => {
     // Calculate score
     const scores = calculateApplicationScore(application);
 
+    // Save score to database
+    try {
+      await prisma.score.create({
+        data: {
+          applicationId: application.id,
+          knowledgeScore: scores.knowledgeScore,
+          toolScore: scores.toolScore,
+          totalScore: scores.totalScore,
+        },
+      });
+    } catch (error) {
+      // Log but don't fail the request if score saving fails
+      console.error('Error saving score to database:', error);
+    }
+
     // Calculate breakdown for knowledge sharing
     const knowledgeFields = [
       'description',
@@ -344,6 +374,20 @@ router.post('/:id/review', requireAuth, requireAdmin, async (req, res) => {
 
     // Recalculate score
     const scores = calculateApplicationScore(updated);
+
+    // Save updated score to database
+    try {
+      await prisma.score.create({
+        data: {
+          applicationId: updated.id,
+          knowledgeScore: scores.knowledgeScore,
+          toolScore: scores.toolScore,
+          totalScore: scores.totalScore,
+        },
+      });
+    } catch (error) {
+      console.error('Error saving score to database:', error);
+    }
 
     res.json({
       application: updated,
@@ -605,14 +649,24 @@ router.put('/:id', requireAuth, async (req, res) => {
         ...(status && { status }),
       },
       include: {
-        company: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        company: true,
       },
     });
+
+    // Recalculate and save score after update
+    try {
+      const scores = calculateApplicationScore(application);
+      await prisma.score.create({
+        data: {
+          applicationId: application.id,
+          knowledgeScore: scores.knowledgeScore,
+          toolScore: scores.toolScore,
+          totalScore: scores.totalScore,
+        },
+      });
+    } catch (error) {
+      console.error('Error saving score after update:', error);
+    }
 
     res.json(application);
   } catch (error) {

@@ -66,6 +66,7 @@ model Application {
   companyId       String
   company         Company   @relation(fields: [companyId], references: [id])
   requests        Request[]
+  scores          Score[]
   description     String?
   owner           String?
   repoUrl         String?
@@ -153,4 +154,18 @@ model MagicCode {
   
   @@index([code])
   @@index([userId])
+}
+
+model Score {
+  id                String      @id @default(cuid())
+  applicationId     String
+  application       Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  knowledgeScore    Int
+  toolScore         Int
+  totalScore        Int
+  calculatedAt      DateTime    @default(now())
+  
+  @@index([applicationId])
+  @@index([calculatedAt])
+  @@index([totalScore])
 }
