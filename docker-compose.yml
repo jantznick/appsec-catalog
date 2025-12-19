@@ -22,36 +22,36 @@ services:
 
   # Frontend and backend are typically run via npm run dev
   # Uncomment these if you want to run them in Docker too
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - "3000:3000"
-  #   volumes:
-  #     - ./frontend:/app
-  #     - /app/node_modules
-  #   depends_on:
-  #     - postgres
-  #   networks:
-  #     - appsec-network
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - postgres
+    networks:
+      - appsec-network
 
-  # backend:
-  #   build:
-  #     context: ./backend
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - "5000:5000"
-  #   environment:
-  #     - DATABASE_URL=postgresql://${POSTGRES_USER:-appsec}:${POSTGRES_PASSWORD:-appsec_password}@postgres:5432/${POSTGRES_DB:-appsec_catalog}
-  #   volumes:
-  #     - ./backend:/app
-  #     - /app/node_modules
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   networks:
-  #     - appsec-network
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-appsec}:${POSTGRES_PASSWORD:-appsec_password}@postgres:5432/${POSTGRES_DB:-appsec_catalog}
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - appsec-network
 
 volumes:
   postgres_data:
