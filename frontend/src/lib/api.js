@@ -127,6 +127,14 @@ export const api = {
   getApplication: (id) =>
     apiRequest(`/api/applications/${id}`),
 
+  getApplicationScore: (id) =>
+    apiRequest(`/api/applications/${id}/score`),
+
+  markApplicationReviewed: (id) =>
+    apiRequest(`/api/applications/${id}/review`, {
+      method: 'POST',
+    }),
+
   createApplication: (data) =>
     apiRequest('/api/applications', {
       method: 'POST',

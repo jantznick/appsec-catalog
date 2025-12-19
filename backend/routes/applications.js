@@ -1,6 +1,7 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { calculateApplicationScore } from '../services/scoring.js';
 
 const router = express.Router();
 
@@ -254,6 +255,104 @@ router.get('/:id', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error fetching application:', error);
     res.status(500).json({ error: 'Failed to fetch application' });
+  }
+});
+
+// Get application score
+router.get('/:id/score', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const application = await prisma.application.findUnique({
+      where: { id },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if user has access (admin or member of same company)
+    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only access applications in your company',
+      });
+    }
+
+    // Calculate score
+    const scores = calculateApplicationScore(application);
+
+    // Calculate breakdown for knowledge sharing
+    const knowledgeFields = [
+      'description',
+      'owner',
+      'repoUrl',
+      'language',
+      'framework',
+      'serverEnvironment',
+      'authProfiles',
+      'dataTypes',
+    ];
+    const fieldsFilled = knowledgeFields.filter(field => application[field]).length;
+
+    res.json({
+      ...scores,
+      breakdown: {
+        knowledgeSharing: {
+          fieldsFilled,
+          totalFields: knowledgeFields.length,
+          completenessScore: Math.round((fieldsFilled / knowledgeFields.length) * 40),
+          reviewScore: scores.knowledgeScore - Math.round((fieldsFilled / knowledgeFields.length) * 40),
+          lastReviewed: application.metadataLastReviewed,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Error calculating application score:', error);
+    res.status(500).json({ error: 'Failed to calculate score' });
+  }
+});
+
+// Mark application metadata as reviewed (Admin only)
+router.post('/:id/review', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const application = await prisma.application.findUnique({
+      where: { id },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Update metadataLastReviewed
+    const updated = await prisma.application.update({
+      where: { id },
+      data: {
+        metadataLastReviewed: new Date(),
+      },
+    });
+
+    // Recalculate score
+    const scores = calculateApplicationScore(updated);
+
+    res.json({
+      application: updated,
+      scores,
+      message: 'Application metadata marked as reviewed',
+    });
+  } catch (error) {
+    console.error('Error marking application as reviewed:', error);
+    res.status(500).json({ error: 'Failed to mark application as reviewed' });
   }
 });
 

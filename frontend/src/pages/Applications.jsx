@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useReactTable, getCoreRowModel, getPaginationRowModel, getSortedRowModel, getFilteredRowModel, flexRender } from '@tanstack/react-table';
 import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
 import { LoadingPage } from '../components/ui/Loading.jsx';
@@ -7,20 +8,25 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.
 import { Input } from '../components/ui/Input.jsx';
 import { Select } from '../components/ui/Select.jsx';
 import { Button } from '../components/ui/Button.jsx';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table.jsx';
 import useAuthStore from '../store/authStore.js';
 import { calculateCompleteness } from '../utils/applicationCompleteness.js';
 
 export function Applications() {
+  const navigate = useNavigate();
   const { isAdmin } = useAuthStore();
   const [applications, setApplications] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [scores, setScores] = useState({}); // Cache scores by application ID
   const [filters, setFilters] = useState({
     companyId: '',
     status: '',
     search: '',
   });
+
+  // Table state
+  const [sorting, setSorting] = useState([]);
+  const [globalFilter, setGlobalFilter] = useState('');
 
   useEffect(() => {
     if (isAdmin()) {
@@ -59,6 +65,11 @@ export function Applications() {
       }
       
       setApplications(Array.isArray(data) ? data : []);
+      
+      // Load scores for all applications
+      if (data && Array.isArray(data) && data.length > 0) {
+        loadScoresForApplications(data);
+      }
     } catch (error) {
       toast.error('Failed to load applications');
       console.error(error);
@@ -67,9 +78,176 @@ export function Applications() {
     }
   };
 
+  const loadScoresForApplications = async (apps) => {
+    // Load scores in parallel for better performance
+    const scorePromises = apps.map(async (app) => {
+      try {
+        const scoreData = await api.getApplicationScore(app.id);
+        return { id: app.id, score: scoreData.totalScore };
+      } catch (error) {
+        console.error(`Failed to load score for app ${app.id}:`, error);
+        return { id: app.id, score: null };
+      }
+    });
+
+    const scoreResults = await Promise.all(scorePromises);
+    const scoresMap = {};
+    scoreResults.forEach(({ id, score }) => {
+      scoresMap[id] = score;
+    });
+    setScores(scoresMap);
+  };
+
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
+
+  // Define columns
+  const columns = useMemo(() => [
+    {
+      accessorKey: 'name',
+      header: 'Name',
+      cell: ({ row }) => (
+        <span className="font-medium text-blue-600 hover:text-blue-700">
+          {row.original.name}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'company',
+      header: 'Company',
+      cell: ({ row }) => {
+        const app = row.original;
+        if (isAdmin() && app.companyId) {
+          return (
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/companies/${app.companyId}`);
+              }}
+              className="text-gray-700 hover:text-blue-600 cursor-pointer"
+            >
+              {app.company?.name || '—'}
+            </span>
+          );
+        }
+        return <span>{app.company?.name || '—'}</span>;
+      },
+      enableSorting: isAdmin(),
+    },
+    {
+      accessorKey: 'owner',
+      header: 'Owner',
+      cell: ({ row }) => row.original.owner || '—',
+    },
+    {
+      accessorKey: 'status',
+      header: 'Status',
+      cell: ({ row }) => {
+        const app = row.original;
+        const completeness = calculateCompleteness(app);
+        return (
+          <div className="flex items-center gap-2">
+            <span className={`px-2 py-1 text-xs font-medium rounded ${
+              app.status === 'onboarded' 
+                ? 'bg-green-100 text-green-800'
+                : app.status === 'pending_technical'
+                ? 'bg-yellow-100 text-yellow-800'
+                : 'bg-gray-100 text-gray-800'
+            }`}>
+              {app.status || 'onboarded'}
+            </span>
+            <span className="text-xs text-gray-500">
+              {completeness.filled}/{completeness.total} ({completeness.percentage}%)
+            </span>
+          </div>
+        );
+      },
+      filterFn: (row, id, value) => {
+        if (!value || value === '') return true;
+        return row.original.status === value;
+      },
+    },
+    {
+      accessorKey: 'score',
+      header: 'Score',
+      cell: ({ row }) => {
+        const score = scores[row.original.id];
+        if (score !== undefined) {
+          return (
+            <span className={`text-sm font-medium ${
+              score >= 76 ? 'text-green-600' :
+              score >= 51 ? 'text-yellow-600' :
+              'text-red-600'
+            }`}>
+              {score}
+            </span>
+          );
+        }
+        return <span className="text-xs text-gray-400">—</span>;
+      },
+      enableSorting: true,
+      sortingFn: (rowA, rowB) => {
+        const scoreA = scores[rowA.original.id] ?? -1;
+        const scoreB = scores[rowB.original.id] ?? -1;
+        return scoreA - scoreB;
+      },
+    },
+  ], [isAdmin, scores, navigate]);
+
+  // Filter data based on admin filters and global filter
+  const filteredData = useMemo(() => {
+    let data = [...applications];
+
+    // Apply admin filters (server-side already applied, but we can filter client-side too for consistency)
+    if (isAdmin()) {
+      if (filters.status) {
+        data = data.filter(app => app.status === filters.status);
+      }
+      if (filters.companyId) {
+        data = data.filter(app => app.companyId === filters.companyId);
+      }
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        data = data.filter(app => 
+          app.name?.toLowerCase().includes(searchLower) ||
+          app.description?.toLowerCase().includes(searchLower)
+        );
+      }
+    }
+
+    // Apply global filter (for client-side search)
+    if (globalFilter) {
+      const filterLower = globalFilter.toLowerCase();
+      data = data.filter(app =>
+        app.name?.toLowerCase().includes(filterLower) ||
+        app.description?.toLowerCase().includes(filterLower) ||
+        app.owner?.toLowerCase().includes(filterLower)
+      );
+    }
+
+    return data;
+  }, [applications, filters, globalFilter, isAdmin]);
+
+  const table = useReactTable({
+    data: filteredData,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    state: {
+      sorting,
+      globalFilter,
+    },
+    onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
+    initialState: {
+      pagination: {
+        pageSize: 10,
+      },
+    },
+  });
 
   if (loading) {
     return <LoadingPage message="Loading applications..." />;
@@ -129,7 +307,7 @@ export function Applications() {
       )}
 
       {/* Applications Table */}
-      {applications.length === 0 ? (
+      {filteredData.length === 0 ? (
         <Card>
           <CardContent>
             <div className="text-center py-12">
@@ -147,74 +325,133 @@ export function Applications() {
       ) : (
         <Card>
           <CardContent padding="none">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Owner</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {applications.map((app) => (
-                  <TableRow key={app.id}>
-                    <TableCell>
-                      <Link
-                        to={`/applications/${app.id}`}
-                        className="font-medium text-blue-600 hover:text-blue-700"
-                      >
-                        {app.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      {isAdmin() && app.companyId ? (
-                        <Link
-                          to={`/companies/${app.companyId}`}
-                          className="text-gray-700 hover:text-blue-600"
+            {/* Global Search (if not using admin filters) */}
+            {!isAdmin() && (
+              <div className="p-4 border-b">
+                <Input
+                  label="Search"
+                  value={globalFilter}
+                  onChange={(e) => setGlobalFilter(e.target.value)}
+                  placeholder="Search applications..."
+                />
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  {table.getHeaderGroups().map(headerGroup => (
+                    <tr key={headerGroup.id}>
+                      {headerGroup.headers.map(header => (
+                        <th
+                          key={header.id}
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                         >
-                          {app.company?.name || '—'}
-                        </Link>
-                      ) : (
-                        <span>{app.company?.name || '—'}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>{app.owner || '—'}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-1 text-xs font-medium rounded ${
-                          app.status === 'onboarded' 
-                            ? 'bg-green-100 text-green-800'
-                            : app.status === 'pending_technical'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {app.status || 'onboarded'}
-                        </span>
-                        {(() => {
-                          const completeness = calculateCompleteness(app);
-                          return (
-                            <span className="text-xs text-gray-500">
-                              {completeness.filled}/{completeness.total} ({completeness.percentage}%)
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Link to={`/applications/${app.id}`}>
-                        <Button variant="ghost" size="sm">View</Button>
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                          {header.isPlaceholder ? null : (
+                            <div
+                              className={`flex items-center gap-2 ${
+                                header.column.getCanSort() ? 'cursor-pointer select-none' : ''
+                              }`}
+                              onClick={header.column.getToggleSortingHandler()}
+                            >
+                              {flexRender(
+                                header.column.columnDef.header,
+                                header.getContext()
+                              )}
+                              {header.column.getCanSort() && (
+                                <span className="text-gray-400">
+                                  {{
+                                    asc: ' ↑',
+                                    desc: ' ↓',
+                                  }[header.column.getIsSorted()] ?? ' ⇅'}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </th>
+                      ))}
+                    </tr>
+                  ))}
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {table.getRowModel().rows.map(row => (
+                    <tr
+                      key={row.id}
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => navigate(`/applications/${row.original.id}`)}
+                    >
+                      {row.getVisibleCells().map(cell => (
+                        <td key={cell.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            <div className="px-6 py-4 border-t flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => table.setPageIndex(0)}
+                  disabled={!table.getCanPreviousPage()}
+                >
+                  {'<<'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => table.previousPage()}
+                  disabled={!table.getCanPreviousPage()}
+                >
+                  {'<'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => table.nextPage()}
+                  disabled={!table.getCanNextPage()}
+                >
+                  {'>'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+                  disabled={!table.getCanNextPage()}
+                >
+                  {'>>'}
+                </Button>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-gray-700">
+                  Page{' '}
+                  <strong>
+                    {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+                  </strong>
+                </span>
+                <span className="text-sm text-gray-700">
+                  Showing {table.getRowModel().rows.length} of {filteredData.length} results
+                </span>
+                <select
+                  value={table.getState().pagination.pageSize}
+                  onChange={(e) => table.setPageSize(Number(e.target.value))}
+                  className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value={10}>10 per page</option>
+                  <option value={25}>25 per page</option>
+                  <option value={50}>50 per page</option>
+                  <option value={100}>100 per page</option>
+                </select>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
     </div>
   );
 }
-

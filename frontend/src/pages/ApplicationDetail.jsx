@@ -9,6 +9,7 @@ import { Input } from '../components/ui/Input.jsx';
 import { Textarea } from '../components/ui/Textarea.jsx';
 import { Select } from '../components/ui/Select.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
+import { ScoreCard } from '../components/scoring/ScoreCard.jsx';
 import useAuthStore from '../store/authStore.js';
 
 export function ApplicationDetail() {
@@ -20,6 +21,8 @@ export function ApplicationDetail() {
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [integrationLevels, setIntegrationLevels] = useState([]);
+  const [scores, setScores] = useState(null);
+  const [loadingScore, setLoadingScore] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -49,6 +52,7 @@ export function ApplicationDetail() {
     loadIntegrationLevels();
     if (id) {
       loadApplication();
+      loadScore();
     }
   }, [id]);
 
@@ -58,6 +62,31 @@ export function ApplicationDetail() {
       setIntegrationLevels(levels);
     } catch (error) {
       console.error('Failed to load integration levels:', error);
+    }
+  };
+
+  const loadScore = async () => {
+    try {
+      setLoadingScore(true);
+      const scoreData = await api.getApplicationScore(id);
+      setScores(scoreData);
+    } catch (error) {
+      console.error('Failed to load score:', error);
+    } finally {
+      setLoadingScore(false);
+    }
+  };
+
+  const handleMarkReviewed = async () => {
+    try {
+      await api.markApplicationReviewed(id);
+      toast.success('Application marked as reviewed');
+      // Reload application and score
+      await loadApplication();
+      await loadScore();
+    } catch (error) {
+      toast.error(error.message || 'Failed to mark as reviewed');
+      throw error;
     }
   };
 
@@ -116,7 +145,9 @@ export function ApplicationDetail() {
       await api.updateApplication(id, formData);
       toast.success('Application updated successfully');
       setIsEditing(false);
-      loadApplication();
+      // Reload both application data and score
+      await loadApplication();
+      await loadScore();
     } catch (error) {
       toast.error(error.message || 'Failed to update application');
     } finally {
@@ -178,7 +209,25 @@ export function ApplicationDetail() {
         </div>
       </div>
 
+      {/* Score Card - Full Width */}
+      {scores && (
+        <div className="mb-6">
+          <ScoreCard
+            knowledgeScore={scores.knowledgeScore}
+            toolScore={scores.toolScore}
+            totalScore={scores.totalScore}
+            breakdown={scores.breakdown}
+            onMarkReviewed={handleMarkReviewed}
+            isAdmin={isAdmin()}
+            lastReviewed={application.metadataLastReviewed}
+            showBreakdownByDefault={true}
+          />
+        </div>
+      )}
+
+      {/* Application Details */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Basic Information */}
         <Card>
           <CardHeader>
             <CardTitle>Basic Information</CardTitle>
