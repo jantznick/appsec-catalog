@@ -27,7 +27,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "3000:80"
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -41,8 +41,9 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "5000:5000"
+      - "3001:3001"
     environment:
+      - PORT=3001
       - DATABASE_URL=postgresql://${POSTGRES_USER:-appsec}:${POSTGRES_PASSWORD:-appsec_password}@postgres:5432/${POSTGRES_DB:-appsec_catalog}
     volumes:
       - ./backend:/app
