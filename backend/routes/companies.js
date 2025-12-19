@@ -37,6 +37,68 @@ router.get('/slug/:slug', async (req, res) => {
   }
 });
 
+// Public: List all companies (for onboarding company selection)
+router.get('/public', async (req, res) => {
+  try {
+    const companies = await prisma.company.findMany({
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+    res.json(companies);
+  } catch (error) {
+    console.error('Error fetching public companies:', error);
+    res.status(500).json({ error: 'Failed to fetch companies' });
+  }
+});
+
+// Public: Create company (for onboarding - minimal data)
+router.post('/public', async (req, res) => {
+  try {
+    const { name } = req.body;
+
+    // Validate required fields
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ error: 'Company name is required' });
+    }
+
+    // Check if company name already exists
+    const existing = await prisma.company.findUnique({
+      where: { name: name.trim() },
+    });
+
+    if (existing) {
+      return res.status(400).json({ error: 'Company name already exists' });
+    }
+
+    // Generate unique slug (required for new companies)
+    const baseSlug = generateSlug(name.trim());
+    const slug = await ensureUniqueSlug(baseSlug);
+
+    const company = await prisma.company.create({
+      data: {
+        name: name.trim(),
+        slug, // Required for new companies
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+      },
+    });
+
+    res.status(201).json(company);
+  } catch (error) {
+    console.error('Error creating public company:', error);
+    res.status(500).json({ error: 'Failed to create company' });
+  }
+});
+
 
 // COMP-1: Get company list
 // Admin: all companies, Regular user: only their company

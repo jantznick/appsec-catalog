@@ -124,6 +124,13 @@ export const api = {
     apiRequest(`/api/companies/${id}/domains`),
   getCompanyBySlug: (slug) =>
     apiRequest(`/api/companies/slug/${slug}`),
+  getPublicCompanies: () =>
+    apiRequest('/api/companies/public'),
+  createPublicCompany: (data) =>
+    apiRequest('/api/companies/public', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   createApplicationOnboardExecutive: (data) =>
     apiRequest('/api/applications/onboard/executive', {
       method: 'POST',

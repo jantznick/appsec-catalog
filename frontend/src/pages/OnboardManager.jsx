@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.jsx';
@@ -14,10 +14,19 @@ import { Alert } from '../components/ui/Alert.jsx';
 
 export function OnboardManager() {
   const { slug } = useParams();
+  const navigate = useNavigate();
   const [company, setCompany] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submittedApplications, setSubmittedApplications] = useState(null); // Array of created applications
+  
+  // Company selection state (when no slug provided)
+  const [companies, setCompanies] = useState([]);
+  const [loadingCompanies, setLoadingCompanies] = useState(false);
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [newCompanyName, setNewCompanyName] = useState('');
+  const [creatingCompany, setCreatingCompany] = useState(false);
+  const [showCreateCompany, setShowCreateCompany] = useState(false);
 
   const [applications, setApplications] = useState([]); // Array of applications being prepared
   const [currentForm, setCurrentForm] = useState({
@@ -32,7 +41,11 @@ export function OnboardManager() {
   });
 
   useEffect(() => {
-    loadCompany();
+    if (slug) {
+      loadCompany();
+    } else {
+      loadCompanies();
+    }
   }, [slug]);
 
   const loadCompany = async () => {
@@ -45,6 +58,50 @@ export function OnboardManager() {
       console.error(error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCompanies = async () => {
+    try {
+      setLoadingCompanies(true);
+      const data = await api.getPublicCompanies();
+      setCompanies(data);
+    } catch (error) {
+      toast.error('Failed to load companies');
+      console.error(error);
+    } finally {
+      setLoadingCompanies(false);
+      setLoading(false);
+    }
+  };
+
+  const handleCompanySelect = () => {
+    if (!selectedCompanyId) {
+      toast.error('Please select a company');
+      return;
+    }
+    const selectedCompany = companies.find(c => c.id === selectedCompanyId);
+    if (selectedCompany) {
+      navigate(`/onboard/${selectedCompany.slug}/manager`);
+    }
+  };
+
+  const handleCreateCompany = async () => {
+    if (!newCompanyName.trim()) {
+      toast.error('Company name is required');
+      return;
+    }
+
+    try {
+      setCreatingCompany(true);
+      const newCompany = await api.createPublicCompany({ name: newCompanyName.trim() });
+      toast.success('Company created successfully');
+      navigate(`/onboard/${newCompany.slug}/manager`);
+    } catch (error) {
+      toast.error(error.message || 'Failed to create company');
+      console.error(error);
+    } finally {
+      setCreatingCompany(false);
     }
   };
 
@@ -196,6 +253,109 @@ export function OnboardManager() {
     toast.success('CSV downloaded successfully');
   };
 
+  // Show company selection if no slug provided
+  if (!slug) {
+    if (loading || loadingCompanies) {
+      return <LoadingPage message="Loading companies..." />;
+    }
+
+    return (
+      <div className="min-h-screen bg-gray-50 py-12">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-8 text-center">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              New Application Intake
+            </h1>
+            <p className="text-gray-600">
+              Select your company or create a new one to get started.
+            </p>
+          </div>
+
+          <Card>
+            <CardContent>
+              {!showCreateCompany ? (
+                <div className="space-y-6">
+                  <div>
+                    <Select
+                      label="Select Company *"
+                      value={selectedCompanyId}
+                      onChange={(e) => setSelectedCompanyId(e.target.value)}
+                      options={[
+                        { value: '', label: 'Choose a company...' },
+                        ...companies.map(c => ({ value: c.id, label: c.name }))
+                      ]}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1 border-t border-gray-300"></div>
+                    <span className="text-sm text-gray-500">OR</span>
+                    <div className="flex-1 border-t border-gray-300"></div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowCreateCompany(true)}
+                    className="w-full"
+                  >
+                    Create New Company
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={handleCompanySelect}
+                    disabled={!selectedCompanyId}
+                    className="w-full"
+                  >
+                    Continue
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div>
+                    <Input
+                      label="Company Name *"
+                      value={newCompanyName}
+                      onChange={(e) => setNewCompanyName(e.target.value)}
+                      placeholder="e.g. Acme Corporation"
+                      required
+                    />
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setShowCreateCompany(false);
+                        setNewCompanyName('');
+                      }}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={handleCreateCompany}
+                      disabled={!newCompanyName.trim() || creatingCompany}
+                      className="flex-1"
+                    >
+                      {creatingCompany ? 'Creating...' : 'Create & Continue'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Existing flow when slug is provided
   if (loading) {
     return <LoadingPage message="Loading company information..." />;
   }
