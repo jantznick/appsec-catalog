@@ -33,6 +33,14 @@ export function ApplicationDetail() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [technicalFormUrl, setTechnicalFormUrl] = useState('');
   const [generatingLink, setGeneratingLink] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [interfaces, setInterfaces] = useState([]);
+  const [originalInterfaces, setOriginalInterfaces] = useState([]);
+  const [availableApplications, setAvailableApplications] = useState([]);
+  const [loadingApplications, setLoadingApplications] = useState(false);
+  const [newInterfaceName, setNewInterfaceName] = useState('');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -67,12 +75,80 @@ export function ApplicationDetail() {
     }
   }, [id]);
 
+  useEffect(() => {
+    if (application && isEditing) {
+      loadAvailableApplications();
+    }
+  }, [application, isEditing]);
+
   const loadIntegrationLevels = async () => {
     try {
       const levels = await api.getIntegrationLevels();
       setIntegrationLevels(levels);
     } catch (error) {
       console.error('Failed to load integration levels:', error);
+    }
+  };
+
+  const loadAvailableApplications = async () => {
+    if (!application) return;
+    
+    setLoadingApplications(true);
+    try {
+      const apps = await api.getApplications();
+      // For non-admin users, API already filters by company, so we just need to exclude current app
+      // For admin users, we filter to same company in frontend
+      const filtered = apps.filter(app => 
+        app.id !== application.id &&
+        (isAdmin() ? app.companyId === application.companyId : true)
+      );
+      setAvailableApplications(filtered);
+    } catch (error) {
+      console.error('Failed to load applications:', error);
+      toast.error('Failed to load available applications');
+    } finally {
+      setLoadingApplications(false);
+    }
+  };
+
+  const toggleInterface = (appName) => {
+    if (interfaces.includes(appName)) {
+      removeInterface(appName);
+    } else {
+      addInterface(appName);
+    }
+  };
+
+  const addInterface = (name) => {
+    if (name && name.trim() && !interfaces.includes(name.trim())) {
+      const newInterfaces = [...interfaces, name.trim()];
+      setInterfaces(newInterfaces);
+      if (isEditing && originalFormData) {
+        const hasFormChanges = JSON.stringify(formData) !== JSON.stringify(originalFormData);
+        const hasInterfaceChanges = JSON.stringify(newInterfaces.sort()) !== JSON.stringify(originalInterfaces.sort());
+        setHasUnsavedChanges(hasFormChanges || hasInterfaceChanges);
+      } else {
+        setHasUnsavedChanges(true);
+      }
+    }
+  };
+
+  const removeInterface = (name) => {
+    const newInterfaces = interfaces.filter(i => i !== name);
+    setInterfaces(newInterfaces);
+    if (isEditing && originalFormData) {
+      const hasFormChanges = JSON.stringify(formData) !== JSON.stringify(originalFormData);
+      const hasInterfaceChanges = JSON.stringify(newInterfaces.sort()) !== JSON.stringify(originalInterfaces.sort());
+      setHasUnsavedChanges(hasFormChanges || hasInterfaceChanges);
+    } else {
+      setHasUnsavedChanges(true);
+    }
+  };
+
+  const handleAddNewInterface = () => {
+    if (newInterfaceName.trim()) {
+      addInterface(newInterfaceName.trim());
+      setNewInterfaceName('');
     }
   };
 
@@ -145,15 +221,29 @@ export function ApplicationDetail() {
       setDomains(data.domains || []);
       
       // Parse interfaces if they exist
-      let interfaces = [];
+      let interfaceNames = [];
       if (data.interfaces) {
         try {
           const interfaceIds = JSON.parse(data.interfaces);
-          // Could load interface names here if needed
+          // Load interface application names
+          if (Array.isArray(interfaceIds) && interfaceIds.length > 0) {
+            const interfaceApps = await Promise.all(
+              interfaceIds.map(async (appId) => {
+                try {
+                  const app = await api.getApplication(appId);
+                  return app.name;
+                } catch (e) {
+                  return null;
+                }
+              })
+            );
+            interfaceNames = interfaceApps.filter(name => name !== null);
+          }
         } catch (e) {
           // If not JSON, treat as string
         }
       }
+      setInterfaces(interfaceNames);
 
       const newFormData = {
         name: data.name || '',
@@ -180,8 +270,10 @@ export function ApplicationDetail() {
         status: data.status || 'onboarded',
       };
       setFormData(newFormData);
+      setInterfaces(interfaceNames);
       if (!isEditing) {
         setOriginalFormData(JSON.parse(JSON.stringify(newFormData)));
+        setOriginalInterfaces([...interfaceNames]);
         setHasUnsavedChanges(false);
       }
     } catch (error) {
@@ -196,7 +288,10 @@ export function ApplicationDetail() {
   const handleSave = async () => {
     try {
       setSaving(true);
-      await api.updateApplication(id, formData);
+      await api.updateApplication(id, {
+        ...formData,
+        interfaces: interfaces, // Include interfaces in the update
+      });
       toast.success('Application updated successfully');
       setIsEditing(false);
       setHasUnsavedChanges(false);
@@ -224,6 +319,7 @@ export function ApplicationDetail() {
     setShowCancelModal(false);
     if (originalFormData) {
       setFormData(JSON.parse(JSON.stringify(originalFormData)));
+      setInterfaces([...originalInterfaces]);
     } else {
       loadApplication();
     }
@@ -233,14 +329,16 @@ export function ApplicationDetail() {
     const newFormData = { ...formData, [field]: value };
     setFormData(newFormData);
     if (isEditing && originalFormData) {
-      const hasChanges = JSON.stringify(newFormData) !== JSON.stringify(originalFormData);
-      setHasUnsavedChanges(hasChanges);
+      const hasFormChanges = JSON.stringify(newFormData) !== JSON.stringify(originalFormData);
+      const hasInterfaceChanges = JSON.stringify(interfaces.sort()) !== JSON.stringify(originalInterfaces.sort());
+      setHasUnsavedChanges(hasFormChanges || hasInterfaceChanges);
     }
   };
 
   const handleEditClick = () => {
     setIsEditing(true);
     setOriginalFormData(JSON.parse(JSON.stringify(formData)));
+    setOriginalInterfaces([...interfaces]);
     setHasUnsavedChanges(false);
   };
 
@@ -281,6 +379,25 @@ export function ApplicationDetail() {
       return `${window.location.origin}/onboard/${application.company.slug}/application/${application.id}`;
     }
     return null;
+  };
+
+  const handleDeleteApplication = async () => {
+    if (!application) return;
+    if (deleteConfirmText !== `delete ${application.name}`) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      await api.deleteApplication(application.id);
+      toast.success(`Application "${application.name}" deleted successfully`);
+      navigate('/applications');
+    } catch (error) {
+      toast.error(error.message || 'Failed to delete application');
+      console.error('Error deleting application:', error);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   if (loading) {
@@ -355,6 +472,17 @@ export function ApplicationDetail() {
             {canEdit() && !isEditing && (
               <Button variant="primary" onClick={handleEditClick}>
                 Edit Application
+              </Button>
+            )}
+            {isAdmin() && (
+              <Button
+                variant="danger"
+                onClick={() => {
+                  setDeleteModalOpen(true);
+                  setDeleteConfirmText('');
+                }}
+              >
+                Delete Application
               </Button>
             )}
             <div className="flex items-center gap-4">
@@ -521,6 +649,123 @@ export function ApplicationDetail() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Interfaces with Other Applications */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Interfaces with Other Applications</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isEditing ? (
+            <div className="space-y-4">
+              {/* Available Applications Pills */}
+              {loadingApplications ? (
+                <p className="text-sm text-gray-500">Loading applications...</p>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select from existing applications:
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {availableApplications.map((app) => {
+                      const isSelected = interfaces.includes(app.name);
+                      return (
+                        <button
+                          key={app.id}
+                          type="button"
+                          onClick={() => toggleInterface(app.name)}
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                            isSelected
+                              ? 'bg-blue-600 text-white hover:bg-blue-700'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {app.name}
+                        </button>
+                      );
+                    })}
+                    {availableApplications.length === 0 && (
+                      <p className="text-sm text-gray-500">No other applications available</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Add New Interface */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Or add a new application name:
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    value={newInterfaceName}
+                    onChange={(e) => setNewInterfaceName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newInterfaceName.trim()) {
+                        e.preventDefault();
+                        handleAddNewInterface();
+                      }
+                    }}
+                    placeholder="Type application name and press Enter"
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleAddNewInterface}
+                    disabled={!newInterfaceName.trim()}
+                  >
+                    Add
+                  </Button>
+                </div>
+              </div>
+
+              {/* Selected Interfaces */}
+              {interfaces.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Selected interfaces:
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {interfaces.map((name, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-800"
+                      >
+                        {name}
+                        <button
+                          type="button"
+                          onClick={() => removeInterface(name)}
+                          className="ml-2 text-blue-600 hover:text-blue-800 font-bold"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              {interfaces.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {interfaces.map((name, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-800"
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No interfaces configured</p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Security Tools - Full Width */}
       <Card className="mt-6">
@@ -698,6 +943,62 @@ export function ApplicationDetail() {
             This action cannot be undone. All your changes will be lost.
           </p>
         </div>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setDeleteConfirmText('');
+        }}
+        title="Delete Application"
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDeleteModalOpen(false);
+                setDeleteConfirmText('');
+              }}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleDeleteApplication}
+              disabled={deleteConfirmText !== `delete ${application?.name || ''}` || deleting}
+              loading={deleting}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      >
+        {application && (
+          <div className="space-y-4">
+            <p className="text-gray-700">
+              Are you sure you want to delete <strong>{application.name}</strong>?
+            </p>
+            <p className="text-sm text-red-600">
+              This action cannot be undone. All data associated with this application will be permanently deleted.
+            </p>
+            <div className="mt-4">
+              <Input
+                label={`Type "delete ${application.name}" to confirm`}
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={`delete ${application.name}`}
+                className="font-mono"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                You must type the exact text above to confirm deletion
+              </p>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

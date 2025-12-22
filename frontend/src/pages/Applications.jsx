@@ -36,6 +36,10 @@ export function Applications() {
   const [technicalFormUrl, setTechnicalFormUrl] = useState('');
   const [generatingLink, setGeneratingLink] = useState(false);
   const [bulkImportModalOpen, setBulkImportModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [applicationToDelete, setApplicationToDelete] = useState(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (isAdmin()) {
@@ -189,6 +193,29 @@ export function Applications() {
     }
   };
 
+  const handleDeleteApplication = async () => {
+    if (!applicationToDelete) return;
+    if (deleteConfirmText !== `delete ${applicationToDelete.name}`) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      await api.deleteApplication(applicationToDelete.id);
+      toast.success(`Application "${applicationToDelete.name}" deleted successfully`);
+      setDeleteModalOpen(false);
+      setApplicationToDelete(null);
+      setDeleteConfirmText('');
+      // Reload applications list
+      loadApplications();
+    } catch (error) {
+      toast.error(error.message || 'Failed to delete application');
+      console.error('Error deleting application:', error);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const getTechnicalFormUrl = (app) => {
     if (!app.company?.slug || !app.id) return null;
     return `${window.location.origin}/onboard/${app.company.slug}/application/${app.id}`;
@@ -322,6 +349,27 @@ export function Applications() {
         return dateA - dateB;
       },
     },
+    ...(isAdmin() ? [{
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              setApplicationToDelete(row.original);
+              setDeleteModalOpen(true);
+              setDeleteConfirmText('');
+            }}
+            className="text-xs"
+          >
+            Delete
+          </Button>
+        </div>
+      ),
+    }] : []),
   ], [isAdmin, scores, navigate]);
 
   // Filter data based on admin filters and global filter
@@ -685,6 +733,64 @@ export function Applications() {
           loadApplications();
         }}
       />
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setApplicationToDelete(null);
+          setDeleteConfirmText('');
+        }}
+        title="Delete Application"
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDeleteModalOpen(false);
+                setApplicationToDelete(null);
+                setDeleteConfirmText('');
+              }}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleDeleteApplication}
+              disabled={deleteConfirmText !== `delete ${applicationToDelete?.name || ''}` || deleting}
+              loading={deleting}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      >
+        {applicationToDelete && (
+          <div className="space-y-4">
+            <p className="text-gray-700">
+              Are you sure you want to delete <strong>{applicationToDelete.name}</strong>?
+            </p>
+            <p className="text-sm text-red-600">
+              This action cannot be undone. All data associated with this application will be permanently deleted.
+            </p>
+            <div className="mt-4">
+              <Input
+                label={`Type "delete ${applicationToDelete.name}" to confirm`}
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={`delete ${applicationToDelete.name}`}
+                className="font-mono"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                You must type the exact text above to confirm deletion
+              </p>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -131,6 +131,42 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
+// Public: Get applications by company slug (for technical onboarding form interface selection)
+// NOTE: Must come BEFORE /public/:id because Express matches routes in order
+// More specific routes must come before more general ones
+router.get('/public/company/:slug', async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    // Find company by slug
+    const company = await prisma.company.findFirst({
+      where: { slug },
+      select: { id: true, name: true },
+    });
+
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    // Get all applications for this company (only name and id for interface selection)
+    const applications = await prisma.application.findMany({
+      where: { companyId: company.id },
+      select: {
+        id: true,
+        name: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+
+    res.json(applications);
+  } catch (error) {
+    console.error('Error fetching company applications:', error);
+    res.status(500).json({ error: 'Failed to fetch applications' });
+  }
+});
+
 // Public: Get application by ID (for technical form)
 router.get('/public/:id', async (req, res) => {
   try {
@@ -253,10 +289,9 @@ router.put('/public/:id', async (req, res) => {
 
     // Process interfaces
     let interfacesJson = null;
+    let interfaceAppIds = [];
     if (hasInterfaces === 'Yes' || hasInterfaces === true) {
       if (interfaces && Array.isArray(interfaces) && interfaces.length > 0) {
-        const interfaceAppIds = [];
-        
         for (const interfaceName of interfaces) {
           if (!interfaceName || !interfaceName.trim()) continue;
           
@@ -320,6 +355,124 @@ router.put('/public/:id', async (req, res) => {
       where: { id },
       data: updateData,
     });
+
+    // Update reciprocal interfaces if interfaces were changed
+    if (hasInterfaces === 'Yes' || hasInterfaces === true) {
+      if (interfaceAppIds.length > 0) {
+        try {
+          const currentAppId = application.id;
+          
+          // For each interface application, add this application to their interfaces
+          for (const interfaceAppId of interfaceAppIds) {
+            const interfaceApp = await prisma.application.findUnique({
+              where: { id: interfaceAppId },
+            });
+            
+            if (interfaceApp && interfaceApp.interfaces) {
+              try {
+                const existingInterfaces = JSON.parse(interfaceApp.interfaces);
+                if (!Array.isArray(existingInterfaces)) {
+                  await prisma.application.update({
+                    where: { id: interfaceAppId },
+                    data: {
+                      interfaces: JSON.stringify([currentAppId]),
+                    },
+                  });
+                } else if (!existingInterfaces.includes(currentAppId)) {
+                  existingInterfaces.push(currentAppId);
+                  await prisma.application.update({
+                    where: { id: interfaceAppId },
+                    data: {
+                      interfaces: JSON.stringify(existingInterfaces),
+                    },
+                  });
+                }
+              } catch (e) {
+                await prisma.application.update({
+                  where: { id: interfaceAppId },
+                  data: {
+                    interfaces: JSON.stringify([currentAppId]),
+                  },
+                });
+              }
+            } else if (interfaceApp) {
+              await prisma.application.update({
+                where: { id: interfaceAppId },
+                data: {
+                  interfaces: JSON.stringify([currentAppId]),
+                },
+              });
+            }
+          }
+          
+          // Remove this app from interfaces that are no longer in the list
+          if (existing.interfaces) {
+            try {
+              const oldInterfaceIds = JSON.parse(existing.interfaces);
+              if (Array.isArray(oldInterfaceIds)) {
+                const removedIds = oldInterfaceIds.filter(id => !interfaceAppIds.includes(id));
+                for (const removedId of removedIds) {
+                  const removedApp = await prisma.application.findUnique({
+                    where: { id: removedId },
+                  });
+                  if (removedApp && removedApp.interfaces) {
+                    try {
+                      const removedAppInterfaces = JSON.parse(removedApp.interfaces);
+                      if (Array.isArray(removedAppInterfaces)) {
+                        const updated = removedAppInterfaces.filter(id => id !== currentAppId);
+                        await prisma.application.update({
+                          where: { id: removedId },
+                          data: {
+                            interfaces: updated.length > 0 ? JSON.stringify(updated) : null,
+                          },
+                        });
+                      }
+                    } catch (e) {
+                      // Ignore parse errors
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              // Ignore parse errors
+            }
+          }
+        } catch (error) {
+          console.error('Error updating reciprocal interfaces:', error);
+          // Don't fail the request if reciprocal update fails
+        }
+      } else if (existing.interfaces) {
+        // If interfaces were cleared, remove this app from all interface apps
+        try {
+          const oldInterfaceIds = JSON.parse(existing.interfaces);
+          if (Array.isArray(oldInterfaceIds)) {
+            for (const oldInterfaceId of oldInterfaceIds) {
+              const oldInterfaceApp = await prisma.application.findUnique({
+                where: { id: oldInterfaceId },
+              });
+              if (oldInterfaceApp && oldInterfaceApp.interfaces) {
+                try {
+                  const oldInterfaces = JSON.parse(oldInterfaceApp.interfaces);
+                  if (Array.isArray(oldInterfaces)) {
+                    const updated = oldInterfaces.filter(id => id !== application.id);
+                    await prisma.application.update({
+                      where: { id: oldInterfaceId },
+                      data: {
+                        interfaces: updated.length > 0 ? JSON.stringify(updated) : null,
+                      },
+                    });
+                  }
+                } catch (e) {
+                  // Ignore parse errors
+                }
+              }
+            }
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      }
+    }
 
     // Recalculate and save score after update
     try {
@@ -731,10 +884,9 @@ router.put('/:id', requireAuth, async (req, res) => {
 
     // Process interfaces if provided
     let interfacesJson = existing.interfaces;
+    let interfaceAppIds = [];
     if (interfaces !== undefined) {
       if (interfaces && Array.isArray(interfaces) && interfaces.length > 0) {
-        const interfaceAppIds = [];
-        
         for (const interfaceName of interfaces) {
           if (!interfaceName || !interfaceName.trim()) continue;
           
@@ -811,6 +963,127 @@ router.put('/:id', requireAuth, async (req, res) => {
         company: true,
       },
     });
+
+    // Update reciprocal interfaces if interfaces were changed
+    if (interfaces !== undefined && interfaceAppIds.length > 0) {
+      try {
+        // Get current application's ID
+        const currentAppId = application.id;
+        
+        // For each interface application, add this application to their interfaces
+        for (const interfaceAppId of interfaceAppIds) {
+          const interfaceApp = await prisma.application.findUnique({
+            where: { id: interfaceAppId },
+          });
+          
+          if (interfaceApp && interfaceApp.interfaces) {
+            try {
+              const existingInterfaces = JSON.parse(interfaceApp.interfaces);
+              if (!Array.isArray(existingInterfaces)) {
+                // If not an array, initialize it
+                await prisma.application.update({
+                  where: { id: interfaceAppId },
+                  data: {
+                    interfaces: JSON.stringify([currentAppId]),
+                  },
+                });
+              } else if (!existingInterfaces.includes(currentAppId)) {
+                // Add current app to interface app's interfaces
+                existingInterfaces.push(currentAppId);
+                await prisma.application.update({
+                  where: { id: interfaceAppId },
+                  data: {
+                    interfaces: JSON.stringify(existingInterfaces),
+                  },
+                });
+              }
+            } catch (e) {
+              // If parsing fails, create new array
+              await prisma.application.update({
+                where: { id: interfaceAppId },
+                data: {
+                  interfaces: JSON.stringify([currentAppId]),
+                },
+              });
+            }
+          } else if (interfaceApp) {
+            // No interfaces yet, create new
+            await prisma.application.update({
+              where: { id: interfaceAppId },
+              data: {
+                interfaces: JSON.stringify([currentAppId]),
+              },
+            });
+          }
+        }
+        
+        // Also remove this app from interfaces that are no longer in the list
+        if (existing.interfaces) {
+          try {
+            const oldInterfaceIds = JSON.parse(existing.interfaces);
+            if (Array.isArray(oldInterfaceIds)) {
+              const removedIds = oldInterfaceIds.filter(id => !interfaceAppIds.includes(id));
+              for (const removedId of removedIds) {
+                const removedApp = await prisma.application.findUnique({
+                  where: { id: removedId },
+                });
+                if (removedApp && removedApp.interfaces) {
+                  try {
+                    const removedAppInterfaces = JSON.parse(removedApp.interfaces);
+                    if (Array.isArray(removedAppInterfaces)) {
+                      const updated = removedAppInterfaces.filter(id => id !== currentAppId);
+                      await prisma.application.update({
+                        where: { id: removedId },
+                        data: {
+                          interfaces: updated.length > 0 ? JSON.stringify(updated) : null,
+                        },
+                      });
+                    }
+                  } catch (e) {
+                    // Ignore parse errors
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+      } catch (error) {
+        console.error('Error updating reciprocal interfaces:', error);
+        // Don't fail the request if reciprocal update fails
+      }
+    } else if (interfaces !== undefined && interfaces.length === 0 && existing.interfaces) {
+      // If interfaces were cleared, remove this app from all interface apps
+      try {
+        const oldInterfaceIds = JSON.parse(existing.interfaces);
+        if (Array.isArray(oldInterfaceIds)) {
+          for (const oldInterfaceId of oldInterfaceIds) {
+            const oldInterfaceApp = await prisma.application.findUnique({
+              where: { id: oldInterfaceId },
+            });
+            if (oldInterfaceApp && oldInterfaceApp.interfaces) {
+              try {
+                const oldInterfaces = JSON.parse(oldInterfaceApp.interfaces);
+                if (Array.isArray(oldInterfaces)) {
+                  const updated = oldInterfaces.filter(id => id !== application.id);
+                  await prisma.application.update({
+                    where: { id: oldInterfaceId },
+                    data: {
+                      interfaces: updated.length > 0 ? JSON.stringify(updated) : null,
+                    },
+                  });
+                }
+              } catch (e) {
+                // Ignore parse errors
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+    }
 
     // Recalculate and save score after update
     try {
@@ -1182,6 +1455,54 @@ router.post('/:id/generate-technical-link', requireAuth, async (req, res) => {
     res.status(500).json({ 
       error: 'Failed to generate technical form link',
       message: error.message 
+    });
+  }
+});
+
+// Delete application (Admin only)
+router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if application exists
+    const application = await prisma.application.findUnique({
+      where: { id },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Delete the application (cascade will handle related records)
+    await prisma.application.delete({
+      where: { id },
+    });
+
+    res.json({
+      message: `Application "${application.name}" deleted successfully`,
+    });
+  } catch (error) {
+    console.error('Error deleting application:', error);
+    
+    // Handle foreign key constraint errors
+    if (error.code === 'P2003') {
+      return res.status(400).json({
+        error: 'Cannot delete application',
+        message: 'This application has related records that prevent deletion. Please remove all related data first.',
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to delete application',
+      message: error.message,
     });
   }
 });

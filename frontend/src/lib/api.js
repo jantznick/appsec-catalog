@@ -138,6 +138,9 @@ export const api = {
     }),
   getApplicationPublic: (id) =>
     apiRequest(`/api/applications/public/${id}`),
+
+  getCompanyApplicationsPublic: (companySlug) =>
+    apiRequest(`/api/applications/public/company/${companySlug}`),
   updateApplicationPublic: (id, data) =>
     apiRequest(`/api/applications/public/${id}`, {
       method: 'PUT',
@@ -210,6 +213,11 @@ export const api = {
     apiRequest(`/api/applications/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
+    }),
+
+  deleteApplication: (id) =>
+    apiRequest(`/api/applications/${id}`, {
+      method: 'DELETE',
     }),
 
   // Domain management
