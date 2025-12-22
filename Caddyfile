@@ -39,17 +39,7 @@ appsec.companynet.org {
     # Use self-signed certificate for local network
     tls internal
 
-    # Reverse proxy to frontend
-    handle / {
-        reverse_proxy frontend:3000 {
-            header_up Host {host}
-            header_up X-Real-IP {remote}
-            header_up X-Forwarded-For {remote}
-            header_up X-Forwarded-Proto {scheme}
-        }
-    }
-
-    # Reverse proxy API requests to backend
+    # Reverse proxy API requests to backend (must come before /)
     handle /api/* {
         reverse_proxy backend:3001 {
             header_up Host {host}
@@ -62,6 +52,26 @@ appsec.companynet.org {
     # Reverse proxy health check
     handle /health {
         reverse_proxy backend:3001
+    }
+
+    # Explicitly handle static assets (JS, CSS, images, etc.)
+    handle /assets/* {
+        reverse_proxy frontend:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Reverse proxy all other requests to frontend (must come last)
+    handle {
+        reverse_proxy frontend:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
+            header_up X-Forwarded-Proto {scheme}
+        }
     }
 }
 
