@@ -18,13 +18,34 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Determine if we're using HTTPS based on FRONTEND_URL
+const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+const isHttps = frontendUrl.startsWith('https://');
+
+// Extract domain from FRONTEND_URL for cookie domain setting
+// e.g., "https://appsec.example.com" -> "appsec.example.com"
+// or "http://appsec.local" -> "appsec.local"
+let cookieDomain = undefined;
+try {
+  const url = new URL(frontendUrl);
+  cookieDomain = url.hostname;
+  // Don't set domain for localhost (causes issues)
+  if (cookieDomain === 'localhost' || cookieDomain === '127.0.0.1') {
+    cookieDomain = undefined;
+  }
+} catch (e) {
+  // Invalid URL, leave cookieDomain undefined
+}
+
+console.log('🔧 Cookie Configuration:');
+console.log(`   FRONTEND_URL: ${frontendUrl}`);
+console.log(`   HTTPS: ${isHttps}`);
+console.log(`   Cookie Domain: ${cookieDomain || 'not set (default)'}`);
+console.log(`   Secure Cookies: ${isHttps}`);
+
 // Middleware - CORS configuration
-// Allow all origins for now (you can restrict this later with FRONTEND_URL)
 app.use(cors({
-  origin: (origin, callback) => {
-    // Allow all origins - you can restrict this later
-    callback(null, true);
-  },
+  origin: frontendUrl, // Use FRONTEND_URL for CORS
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -32,17 +53,24 @@ app.use(cors({
 app.use(express.json());
 
 // Session configuration
-app.use(session({
+const sessionConfig = {
   secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
-  resave: false,
+  resave: true, // Save session even if not modified
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+    secure: isHttps, // Only secure cookies over HTTPS
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
     sameSite: 'lax',
   },
-}));
+};
+
+// Set cookie domain if we have a domain (not localhost)
+if (cookieDomain) {
+  sessionConfig.cookie.domain = cookieDomain;
+}
+
+app.use(session(sessionConfig));
 
 // Routes
 app.use('/api/auth', authRoutes);

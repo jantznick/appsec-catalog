@@ -47,8 +47,8 @@ services:
     environment:
       - PORT=3001
       - DATABASE_URL=postgresql://${POSTGRES_USER:-appsec}:${POSTGRES_PASSWORD:-appsec_password}@postgres:5432/${POSTGRES_DB:-appsec_catalog}
-      - FRONTEND_URL=${FRONTEND_URL:-https://yourdomain.com}
-      - NODE_ENV=production
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - NODE_ENV=${NODE_ENV:-production}
     volumes:
       - ./backend:/app
       - node_modules_backend:/app/node_modules

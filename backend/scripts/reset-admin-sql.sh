@@ -32,3 +32,4 @@ echo "   2. Restart your backend: docker-compose restart backend"
 echo "   3. Check backend logs for the invitation link: docker-compose logs backend | grep 'Admin Invitation Link'"
 
 
+

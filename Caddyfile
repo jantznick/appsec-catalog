@@ -35,8 +35,7 @@
 # }
 
 # Local network configuration (HTTPS with self-signed certificates)
-# Replace 'appsec.local' with your local domain name
-appsec.local {
+appsec.companynet.org {
     # Use self-signed certificate for local network
     tls internal
 
