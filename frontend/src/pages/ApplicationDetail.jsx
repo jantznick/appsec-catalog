@@ -31,6 +31,8 @@ export function ApplicationDetail() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [originalFormData, setOriginalFormData] = useState(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [technicalFormUrl, setTechnicalFormUrl] = useState('');
+  const [generatingLink, setGeneratingLink] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -248,6 +250,39 @@ export function ApplicationDetail() {
     return false;
   };
 
+  const handleGenerateTechnicalFormLink = async () => {
+    if (!application) return;
+
+    setGeneratingLink(true);
+    try {
+      const result = await api.generateTechnicalFormLink(application.id);
+      setTechnicalFormUrl(result.technicalFormUrl);
+      
+      // Update the application with the new company slug if it was generated
+      if (result.companySlug && application.company) {
+        setApplication(prev => ({
+          ...prev,
+          company: { ...prev.company, slug: result.companySlug }
+        }));
+      }
+      
+      toast.success('Technical form link generated successfully');
+    } catch (error) {
+      toast.error(error.message || 'Failed to generate technical form link');
+      console.error('Error generating link:', error);
+    } finally {
+      setGeneratingLink(false);
+    }
+  };
+
+  const getTechnicalFormUrl = () => {
+    if (technicalFormUrl) return technicalFormUrl;
+    if (application?.company?.slug && application?.id) {
+      return `${window.location.origin}/onboard/${application.company.slug}/application/${application.id}`;
+    }
+    return null;
+  };
+
   if (loading) {
     return <LoadingPage message="Loading application..." />;
   }
@@ -269,35 +304,48 @@ export function ApplicationDetail() {
           <div className="flex-1">
             <div className="flex items-center gap-4 mb-2 flex-wrap">
               <h1 className="text-3xl font-bold text-gray-900">{application.name}</h1>
-              {application.company?.slug && application.id && (
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-gray-600 font-medium">Technical Onboarding Form:</span>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={`${window.location.origin}/onboard/${application.company.slug}/application/${application.id}`}
-                      readOnly
-                      className="font-mono text-sm w-96"
-                      onClick={(e) => e.target.select()}
-                    />
-                    {isClipboardAvailable() && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          const url = `${window.location.origin}/onboard/${application.company.slug}/application/${application.id}`;
-                          copyToClipboard(
-                            url,
-                            () => toast.success('Link copied to clipboard'),
-                            (error) => toast.error(error)
-                          );
-                        }}
-                      >
-                        Copy
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              )}
+              <div className="flex items-center gap-2 text-sm">
+                {getTechnicalFormUrl() ? (
+                  <>
+                    <span className="text-gray-600 font-medium">Technical Onboarding Form:</span>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={getTechnicalFormUrl()}
+                        readOnly
+                        className="font-mono text-sm w-96"
+                        onClick={(e) => e.target.select()}
+                      />
+                      {isClipboardAvailable() && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const url = getTechnicalFormUrl();
+                            if (url) {
+                              copyToClipboard(
+                                url,
+                                () => toast.success('Link copied to clipboard'),
+                                (error) => toast.error(error)
+                              );
+                            }
+                          }}
+                        >
+                          Copy
+                        </Button>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGenerateTechnicalFormLink}
+                    disabled={generatingLink}
+                  >
+                    {generatingLink ? 'Generating...' : 'Generate Technical Form Link'}
+                  </Button>
+                )}
+              </div>
             </div>
             <p className="text-gray-600">
               {application.company?.name && `Company: ${application.company.name}`}

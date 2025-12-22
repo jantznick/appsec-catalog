@@ -189,6 +189,17 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  bulkImportApplications: (companyId, applications) =>
+    apiRequest('/api/applications/bulk-import', {
+      method: 'POST',
+      body: JSON.stringify({ companyId, applications }),
+    }),
+
+  generateTechnicalFormLink: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/generate-technical-link`, {
+      method: 'POST',
+    }),
   createApplicationOnboard: (data) =>
     apiRequest('/api/applications/onboard', {
       method: 'POST',

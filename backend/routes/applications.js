@@ -984,6 +984,208 @@ router.post('/:id/domains', requireAuth, async (req, res) => {
   }
 });
 
+// Bulk import applications
+router.post('/bulk-import', requireAuth, async (req, res) => {
+  try {
+    const { companyId, applications } = req.body;
+
+    console.log('=== BULK IMPORT REQUEST ===');
+    console.log('Company ID:', companyId);
+    console.log('Number of applications:', applications?.length || 0);
+    console.log('Raw applications data:', JSON.stringify(applications, null, 2));
+
+    // Validate required fields
+    if (!companyId) {
+      return res.status(400).json({ error: 'Company ID is required' });
+    }
+
+    if (!applications || !Array.isArray(applications) || applications.length === 0) {
+      return res.status(400).json({ error: 'Applications array is required and must not be empty' });
+    }
+
+    // Check if user has access to this company
+    if (!req.session.isAdmin && req.session.companyId !== companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only import applications for your company',
+      });
+    }
+
+    // Verify company exists
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+    });
+
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    console.log('Company found:', company.name);
+
+    // Validate all applications have required fields
+    for (let i = 0; i < applications.length; i++) {
+      const app = applications[i];
+      if (!app.name || app.name.trim() === '') {
+        return res.status(400).json({ 
+          error: `Application at row ${i + 1} is missing required field: name` 
+        });
+      }
+    }
+
+    // Create all applications
+    const createdApplications = await Promise.all(
+      applications.map(async (app, index) => {
+        console.log(`\n--- Processing Application ${index + 1} ---`);
+        console.log('Raw app data:', JSON.stringify(app, null, 2));
+        // Process criticalAspects - convert array to comma-separated string if needed
+        let criticalAspects = null;
+        if (app.criticalAspects) {
+          if (Array.isArray(app.criticalAspects)) {
+            criticalAspects = app.criticalAspects.filter(a => a && a.trim()).join(', ');
+          } else {
+            criticalAspects = app.criticalAspects.trim() || null;
+          }
+        }
+
+        // Process interfaces if provided
+        let interfacesJson = null;
+        if (app.interfaces) {
+          if (Array.isArray(app.interfaces)) {
+            interfacesJson = JSON.stringify(app.interfaces);
+          } else if (typeof app.interfaces === 'string') {
+            interfacesJson = app.interfaces;
+          }
+        }
+
+        // Prepare database insert data
+        const dbData = {
+          name: app.name.trim(),
+          companyId: companyId,
+          description: app.description?.trim() || null,
+          owner: app.owner?.trim() || null,
+          repoUrl: app.repoUrl?.trim() || null,
+          language: app.language?.trim() || null,
+          framework: app.framework?.trim() || null,
+          serverEnvironment: app.serverEnvironment?.trim() || null,
+          facing: app.facing?.trim() || null,
+          deploymentType: app.deploymentType?.trim() || null,
+          authProfiles: app.authProfiles?.trim() || null,
+          dataTypes: app.dataTypes?.trim() || null,
+          interfaces: interfacesJson,
+          businessCriticality: app.businessCriticality ? parseInt(app.businessCriticality) : null,
+          criticalAspects: criticalAspects,
+          devTeamContact: app.devTeamContact?.trim() || null,
+          securityTestingDescription: app.securityTestingDescription?.trim() || null,
+          additionalNotes: app.additionalNotes?.trim() || null,
+          sastTool: app.sastTool?.trim() || null,
+          sastIntegrationLevel: app.sastIntegrationLevel ? parseInt(app.sastIntegrationLevel) : null,
+          dastTool: app.dastTool?.trim() || null,
+          dastIntegrationLevel: app.dastIntegrationLevel ? parseInt(app.dastIntegrationLevel) : null,
+          appFirewallTool: app.appFirewallTool?.trim() || null,
+          appFirewallIntegrationLevel: app.appFirewallIntegrationLevel ? parseInt(app.appFirewallIntegrationLevel) : null,
+          apiSecurityTool: app.apiSecurityTool?.trim() || null,
+          apiSecurityIntegrationLevel: app.apiSecurityIntegrationLevel ? parseInt(app.apiSecurityIntegrationLevel) : null,
+          apiSecurityNA: app.apiSecurityNA || false,
+          status: 'onboarded',
+        };
+
+        console.log('Processed DB insert data:', JSON.stringify(dbData, null, 2));
+        console.log('DB Command: prisma.application.create({ data: <above> })');
+
+        const created = await prisma.application.create({
+          data: dbData,
+        });
+
+        console.log('Successfully created application:', created.id, created.name);
+        return created;
+      })
+    );
+
+    console.log('\n=== BULK IMPORT COMPLETE ===');
+    console.log(`Successfully created ${createdApplications.length} application(s)`);
+    console.log('Created application IDs:', createdApplications.map(a => a.id));
+
+    res.status(201).json({
+      count: createdApplications.length,
+      applications: createdApplications,
+      message: `Successfully imported ${createdApplications.length} application(s)`,
+    });
+  } catch (error) {
+    console.error('\n=== BULK IMPORT ERROR ===');
+    console.error('Error details:', error);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      error: 'Failed to import applications',
+      message: error.message || 'An error occurred while importing applications'
+    });
+  }
+});
+
+// Generate technical onboarding form link
+router.post('/:id/generate-technical-link', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get application with company
+    const application = await prisma.application.findUnique({
+      where: { id },
+      include: {
+        company: true,
+      },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if user has access
+    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only generate links for applications in your company',
+      });
+    }
+
+    // Ensure company has a slug
+    let company = application.company;
+    if (!company.slug) {
+      const { generateSlug, ensureUniqueSlug } = await import('../utils/slug.js');
+      const baseSlug = generateSlug(company.name);
+      const slug = await ensureUniqueSlug(baseSlug, company.id);
+      
+      company = await prisma.company.update({
+        where: { id: company.id },
+        data: { slug },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+      });
+    }
+
+    // Generate the technical form link
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const technicalFormUrl = `${frontendUrl}/onboard/${company.slug}/application/${application.id}`;
+
+    res.json({
+      applicationId: application.id,
+      applicationName: application.name,
+      companyId: company.id,
+      companyName: company.name,
+      companySlug: company.slug,
+      technicalFormUrl,
+    });
+  } catch (error) {
+    console.error('Error generating technical form link:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate technical form link',
+      message: error.message 
+    });
+  }
+});
+
 // Remove domain from application
 router.delete('/:id/domains/:domainId', requireAuth, async (req, res) => {
   try {
