@@ -13,6 +13,7 @@ import { InviteUserModal } from '../components/users/InviteUserModal.jsx';
 import { ChangePasswordModal } from '../components/users/ChangePasswordModal.jsx';
 import { Modal } from '../components/ui/index.js';
 import useAuthStore from '../store/authStore.js';
+import { isClipboardAvailable, copyToClipboard } from '../utils/clipboard.js';
 
 export function Users() {
   const { isAdmin, user: currentUser, isAuthenticated } = useAuthStore();
@@ -120,8 +121,11 @@ export function Users() {
   };
 
   const handleCopyRegeneratedInvite = () => {
-    navigator.clipboard.writeText(regeneratedInviteUrl);
-    toast.success('Invitation URL copied to clipboard');
+    copyToClipboard(
+      regeneratedInviteUrl,
+      () => toast.success('Invitation URL copied to clipboard'),
+      (error) => toast.error(error)
+    );
   };
 
   // Define columns
@@ -572,12 +576,14 @@ export function Users() {
               >
                 Close
               </Button>
-              <Button
-                variant="primary"
-                onClick={handleCopyRegeneratedInvite}
-              >
-                Copy Link
-              </Button>
+              {isClipboardAvailable() && (
+                <Button
+                  variant="primary"
+                  onClick={handleCopyRegeneratedInvite}
+                >
+                  Copy Link
+                </Button>
+              )}
             </>
           }
         >
@@ -612,14 +618,16 @@ export function Users() {
                   className="flex-1 px-4 py-3 text-sm font-mono border-2 border-blue-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   onClick={(e) => e.target.select()}
                 />
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleCopyRegeneratedInvite}
-                  className="whitespace-nowrap"
-                >
-                  Copy Link
-                </Button>
+                {isClipboardAvailable() && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleCopyRegeneratedInvite}
+                    className="whitespace-nowrap"
+                  >
+                    Copy Link
+                  </Button>
+                )}
               </div>
               <p className="text-xs text-blue-700">
                 Click the input field to select all, or use the copy button. Share this link with the user so they can set their password and complete their account setup.

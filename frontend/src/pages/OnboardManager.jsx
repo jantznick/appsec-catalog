@@ -11,6 +11,7 @@ import { RadioGroup, Radio } from '../components/ui/Radio.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
 import { LoadingPage } from '../components/ui/Loading.jsx';
 import { Alert } from '../components/ui/Alert.jsx';
+import { isClipboardAvailable, copyToClipboard } from '../utils/clipboard.js';
 
 export function OnboardManager() {
   const { slug } = useParams();
@@ -415,16 +416,21 @@ export function OnboardManager() {
                         className="font-mono text-sm flex-1"
                         onClick={(e) => e.target.select()}
                       />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          navigator.clipboard.writeText(`${window.location.origin}/onboard/${slug}/application/${app.id}`);
-                          toast.success('Link copied to clipboard');
-                        }}
-                      >
-                        Copy
-                      </Button>
+                      {isClipboardAvailable() && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            copyToClipboard(
+                              `${window.location.origin}/onboard/${slug}/application/${app.id}`,
+                              () => toast.success('Link copied to clipboard'),
+                              (error) => toast.error(error)
+                            );
+                          }}
+                        >
+                          Copy
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}

@@ -6,6 +6,7 @@ import { Select } from '../ui/Select.jsx';
 import { api } from '../../lib/api.js';
 import { toast } from '../ui/Toast.jsx';
 import useAuthStore from '../../store/authStore.js';
+import { isClipboardAvailable, copyToClipboard } from '../../utils/clipboard.js';
 
 export function InviteUserModal({ isOpen, onClose, onInvited }) {
   const { isAdmin, user: currentUser } = useAuthStore();
@@ -123,8 +124,11 @@ export function InviteUserModal({ isOpen, onClose, onInvited }) {
   };
 
   const handleCopyUrl = () => {
-    navigator.clipboard.writeText(invitationUrl);
-    toast.success('Invitation URL copied to clipboard');
+    copyToClipboard(
+      invitationUrl,
+      () => toast.success('Invitation URL copied to clipboard'),
+      (error) => toast.error(error)
+    );
   };
 
   const handleClose = () => {
@@ -153,12 +157,14 @@ export function InviteUserModal({ isOpen, onClose, onInvited }) {
             >
               Close
             </Button>
-            <Button
-              variant="primary"
-              onClick={handleCopyUrl}
-            >
-              Copy Link
-            </Button>
+            {isClipboardAvailable() && (
+              <Button
+                variant="primary"
+                onClick={handleCopyUrl}
+              >
+                Copy Link
+              </Button>
+            )}
           </>
         ) : (
           <>
@@ -217,14 +223,16 @@ export function InviteUserModal({ isOpen, onClose, onInvited }) {
                 className="flex-1 px-4 py-3 text-sm font-mono border-2 border-blue-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 onClick={(e) => e.target.select()}
               />
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleCopyUrl}
-                className="whitespace-nowrap"
-              >
-                Copy Link
-              </Button>
+              {isClipboardAvailable() && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleCopyUrl}
+                  className="whitespace-nowrap"
+                >
+                  Copy Link
+                </Button>
+              )}
             </div>
             <p className="text-xs text-blue-700">
               Click the input field to select all, or use the copy button. Share this link with the user so they can set their password and complete their account setup.

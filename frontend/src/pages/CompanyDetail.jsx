@@ -11,6 +11,7 @@ import { Select } from '../components/ui/Select.jsx';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import useAuthStore from '../store/authStore.js';
+import { isClipboardAvailable, copyToClipboard } from '../utils/clipboard.js';
 
 export function CompanyDetail() {
   const { id } = useParams();
@@ -418,16 +419,21 @@ export function CompanyDetail() {
                         className="font-mono text-sm"
                         onClick={(e) => e.target.select()}
                       />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          navigator.clipboard.writeText(`${window.location.origin}/onboard/${company.slug}/manager`);
-                          toast.success('Link copied to clipboard');
-                        }}
-                      >
-                        Copy
-                      </Button>
+                      {isClipboardAvailable() && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            copyToClipboard(
+                              `${window.location.origin}/onboard/${company.slug}/manager`,
+                              () => toast.success('Link copied to clipboard'),
+                              (error) => toast.error(error)
+                            );
+                          }}
+                        >
+                          Copy
+                        </Button>
+                      )}
                     </div>
                   </div>
                   <Link
