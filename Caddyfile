@@ -64,6 +64,26 @@ appsec.companynet.org {
         }
     }
 
+    # Handle markdown files in docs directory (serve as static files)
+    handle /docs/*.md {
+        reverse_proxy frontend:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Handle /docs routes (let React Router handle them - for the Docs component)
+    handle /docs* {
+        reverse_proxy frontend:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
     # Reverse proxy all other requests to frontend (must come last)
     handle {
         reverse_proxy frontend:3000 {
