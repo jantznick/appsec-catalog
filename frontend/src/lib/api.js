@@ -1,14 +1,10 @@
-// Use relative URLs when VITE_API_URL is not set (for nginx proxy)
-// Otherwise use the explicit API URL (for development)
-const API_URL = import.meta.env.VITE_API_URL || '';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 /**
  * Make an API request with automatic session handling
  */
 async function apiRequest(endpoint, options = {}) {
-  // If API_URL is empty, use relative URL (goes through nginx proxy)
-  // Otherwise, use full URL (direct connection for development)
-  const url = API_URL ? `${API_URL}${endpoint}` : endpoint;
+  const url = `${API_URL}${endpoint}`;
   const config = {
     ...options,
     credentials: 'include', // Include cookies for session

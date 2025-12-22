@@ -18,23 +18,16 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
+// Middleware - CORS configuration
+// Allow all origins for now (you can restrict this later with FRONTEND_URL)
 app.use(cors({
   origin: (origin, callback) => {
-    // If FRONTEND_URL is set, only allow that origin
-    if (process.env.FRONTEND_URL) {
-      if (origin === process.env.FRONTEND_URL) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    } else {
-      // If FRONTEND_URL is not set, allow any origin (for development/nginx proxy)
-      // This allows requests from nginx on any IP/domain
-      callback(null, true);
-    }
+    // Allow all origins - you can restrict this later
+    callback(null, true);
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 app.use(express.json());
 
