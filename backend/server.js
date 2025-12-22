@@ -20,7 +20,20 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: (origin, callback) => {
+    // If FRONTEND_URL is set, only allow that origin
+    if (process.env.FRONTEND_URL) {
+      if (origin === process.env.FRONTEND_URL) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    } else {
+      // If FRONTEND_URL is not set, allow any origin (for development/nginx proxy)
+      // This allows requests from nginx on any IP/domain
+      callback(null, true);
+    }
+  },
   credentials: true
 }));
 app.use(express.json());
