@@ -43,9 +43,41 @@ console.log(`   HTTPS: ${isHttps}`);
 console.log(`   Cookie Domain: ${cookieDomain || 'not set (default)'}`);
 console.log(`   Secure Cookies: ${isHttps}`);
 
+// Trust proxy - this allows Express to correctly detect HTTPS from X-Forwarded-Proto header
+// This is critical when behind a reverse proxy like Caddy
+app.set('trust proxy', true);
+
 // Middleware - CORS configuration
+// Allow requests from FRONTEND_URL or dynamically from the request origin
 app.use(cors({
-  origin: frontendUrl, // Use FRONTEND_URL for CORS
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    // Extract the origin domain for comparison
+    let allowedOrigin = frontendUrl;
+    try {
+      const frontendUrlObj = new URL(frontendUrl);
+      const originUrlObj = new URL(origin);
+      
+      // Allow if origin matches FRONTEND_URL (same domain)
+      if (originUrlObj.hostname === frontendUrlObj.hostname) {
+        return callback(null, true);
+      }
+      
+      // Allow if origin is exactly FRONTEND_URL
+      if (origin === frontendUrl) {
+        return callback(null, true);
+      }
+    } catch (e) {
+      // Invalid URL, deny
+    }
+    
+    // Default: allow FRONTEND_URL
+    callback(null, allowedOrigin);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -53,15 +85,22 @@ app.use(cors({
 app.use(express.json());
 
 // Session configuration
+// NOTE: secure is set to false because browsers don't trust self-signed certificates
+// even when accepted, so they won't send secure cookies. For production, you should:
+// 1. Install the certificate in your corporate CA/trust store, OR
+// 2. Use a corporate-signed certificate, OR  
+// 3. Use Let's Encrypt if the domain is publicly accessible
 const sessionConfig = {
   secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
   resave: true, // Save session even if not modified
   saveUninitialized: false,
   cookie: {
-    secure: isHttps, // Only secure cookies over HTTPS
+    // Set to false because browsers won't send secure cookies for untrusted self-signed certs
+    // This is a temporary workaround - proper fix is to install cert in trust store
+    secure: false, // Must be false for self-signed certs that browsers don't fully trust
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: 'lax',
+    sameSite: 'lax', // 'lax' works for same-site requests (which this is through Caddy proxy)
   },
 };
 
