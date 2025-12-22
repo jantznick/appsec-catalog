@@ -47,7 +47,8 @@ services:
     environment:
       - PORT=3001
       - DATABASE_URL=postgresql://${POSTGRES_USER:-appsec}:${POSTGRES_PASSWORD:-appsec_password}@postgres:5432/${POSTGRES_DB:-appsec_catalog}
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost}
+      - FRONTEND_URL=${FRONTEND_URL:-https://yourdomain.com}
+      - NODE_ENV=production
     volumes:
       - ./backend:/app
       - node_modules_backend:/app/node_modules
@@ -57,15 +58,19 @@ services:
     networks:
       - appsec-network
 
-  # Nginx reverse proxy
-  nginx:
-    image: nginx:alpine
-    container_name: appsec-catalog-nginx
+  # Caddy reverse proxy with automatic HTTPS
+  caddy:
+    image: caddy:2-alpine
+    container_name: appsec-catalog-caddy
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "80:80"      # HTTP (redirects to HTTPS)
+      - "443:443"    # HTTPS
+      - "443:443/udp" # HTTP/3
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       - frontend
       - backend
@@ -76,6 +81,8 @@ volumes:
   postgres_data:
   node_modules_frontend:
   node_modules_backend:
+  caddy_data:      # Persists Let's Encrypt certificates
+  caddy_config:    # Persists Caddy configuration
 
 networks:
   appsec-network:
