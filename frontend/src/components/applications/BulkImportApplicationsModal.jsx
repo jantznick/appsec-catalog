@@ -12,6 +12,7 @@ const APPLICATION_FIELDS = [
   { key: 'description', label: 'Description', required: false, dataType: 'string' },
   { key: 'owner', label: 'Owner', required: false, dataType: 'string' },
   { key: 'repoUrl', label: 'Repository URL', required: false, dataType: 'string' },
+  { key: 'hostingDomains', label: 'Hosting Domains', required: false, dataType: 'string' },
   { key: 'language', label: 'Language', required: false, dataType: 'string' },
   { key: 'framework', label: 'Framework', required: false, dataType: 'string' },
   { key: 'serverEnvironment', label: 'Server Environment', required: false, dataType: 'string' },

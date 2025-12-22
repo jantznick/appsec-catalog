@@ -1330,6 +1330,44 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
           }
         }
 
+        // Process hosting domains - accept multiple domains (comma, semicolon, or newline separated)
+        const domainNames = [];
+        console.log(`Checking for hosting domains in app ${index + 1}:`, app.hostingDomains, app.domains);
+        if (app.hostingDomains || app.domains) {
+          const domainString = String(app.hostingDomains || app.domains).trim();
+          console.log(`Processing hosting domains for app ${index + 1}: "${domainString}"`);
+          if (domainString) {
+            // Split by comma, semicolon, or newline, then clean up each domain
+            const domains = domainString
+              .split(/[,;\n]/)
+              .map(domain => domain.trim())
+              .filter(domain => domain.length > 0);
+            
+            console.log(`Split into ${domains.length} domain(s):`, domains);
+            
+            // Validate and normalize each domain
+            for (const domain of domains) {
+              // Remove http://, https://, and www. if present
+              let cleanDomain = domain
+                .replace(/^https?:\/\//, '')
+                .replace(/^www\./, '')
+                .split('/')[0] // Remove path if present
+                .trim();
+              
+              console.log(`Cleaned domain: "${domain}" -> "${cleanDomain}"`);
+              
+              if (cleanDomain && isValidDomain(cleanDomain)) {
+                const normalized = normalizeDomain(cleanDomain);
+                domainNames.push(normalized);
+                console.log(`Valid domain added: "${normalized}"`);
+              } else {
+                console.log(`Invalid domain skipped: "${cleanDomain}"`);
+              }
+            }
+          }
+        }
+        console.log(`Total valid domains for app ${index + 1}: ${domainNames.length}`, domainNames);
+
         // Prepare database insert data
         const dbData = {
           name: app.name.trim(),
@@ -1368,6 +1406,50 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
         const created = await prisma.application.create({
           data: dbData,
         });
+
+        // Associate hosting domains with the application
+        if (domainNames.length > 0) {
+          for (const domainName of domainNames) {
+            try {
+              // Find or create domain within the company
+              let domain = await prisma.domain.findUnique({
+                where: {
+                  name_companyId: {
+                    name: domainName,
+                    companyId: companyId,
+                  },
+                },
+              });
+
+              if (!domain) {
+                domain = await prisma.domain.create({
+                  data: {
+                    name: domainName,
+                    companyId: companyId,
+                  },
+                });
+              }
+
+              // Create association if it doesn't exist
+              await prisma.applicationDomain.upsert({
+                where: {
+                  applicationId_domainId: {
+                    applicationId: created.id,
+                    domainId: domain.id,
+                  },
+                },
+                update: {},
+                create: {
+                  applicationId: created.id,
+                  domainId: domain.id,
+                },
+              });
+            } catch (error) {
+              console.error(`Error associating domain ${domainName} with application ${created.id}:`, error);
+              // Continue with other domains even if one fails
+            }
+          }
+        }
 
         console.log('Successfully created application:', created.id, created.name);
         return created;
