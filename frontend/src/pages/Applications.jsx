@@ -8,8 +8,10 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.
 import { Input } from '../components/ui/Input.jsx';
 import { Select } from '../components/ui/Select.jsx';
 import { Button } from '../components/ui/Button.jsx';
+import { Modal } from '../components/ui/Modal.jsx';
 import useAuthStore from '../store/authStore.js';
 import { calculateCompleteness } from '../utils/applicationCompleteness.js';
+import { copyToClipboard, isClipboardAvailable } from '../utils/clipboard.js';
 
 export function Applications() {
   const navigate = useNavigate();
@@ -28,6 +30,8 @@ export function Applications() {
   // Table state
   const [sorting, setSorting] = useState([]);
   const [globalFilter, setGlobalFilter] = useState('');
+  const [technicalFormModalOpen, setTechnicalFormModalOpen] = useState(false);
+  const [selectedApplication, setSelectedApplication] = useState(null);
 
   useEffect(() => {
     if (isAdmin()) {
@@ -111,15 +115,38 @@ export function Applications() {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 
+  const handleShowTechnicalForm = (app, e) => {
+    e.stopPropagation(); // Prevent row click
+    setSelectedApplication(app);
+    setTechnicalFormModalOpen(true);
+  };
+
+  const getTechnicalFormUrl = (app) => {
+    if (!app.company?.slug || !app.id) return null;
+    return `${window.location.origin}/onboard/${app.company.slug}/application/${app.id}`;
+  };
+
   // Define columns
   const columns = useMemo(() => [
     {
       accessorKey: 'name',
       header: 'Name',
       cell: ({ row }) => (
-        <span className="font-medium text-blue-600 hover:text-blue-700">
-          {row.original.name}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-blue-600 hover:text-blue-700">
+            {row.original.name}
+          </span>
+          {row.original.company?.slug && row.original.id && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => handleShowTechnicalForm(row.original, e)}
+              className="text-xs"
+            >
+              Technical Form
+            </Button>
+          )}
+        </div>
       ),
     },
     {
@@ -461,6 +488,55 @@ export function Applications() {
           </CardContent>
         </Card>
       )}
+
+      {/* Technical Form Link Modal */}
+      <Modal
+        isOpen={technicalFormModalOpen}
+        onClose={() => {
+          setTechnicalFormModalOpen(false);
+          setSelectedApplication(null);
+        }}
+        title="Technical Onboarding Form Link"
+      >
+        {selectedApplication && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Share this link with the technical team to complete the onboarding form for <strong>{selectedApplication.name}</strong>.
+            </p>
+            <div className="flex items-center gap-2">
+              <Input
+                value={getTechnicalFormUrl(selectedApplication) || ''}
+                readOnly
+                className="font-mono text-sm flex-1"
+                onClick={(e) => e.target.select()}
+              />
+              {isClipboardAvailable() && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const url = getTechnicalFormUrl(selectedApplication);
+                    if (url) {
+                      copyToClipboard(
+                        url,
+                        () => toast.success('Link copied to clipboard'),
+                        (error) => toast.error(error)
+                      );
+                    }
+                  }}
+                >
+                  Copy
+                </Button>
+              )}
+            </div>
+            {!getTechnicalFormUrl(selectedApplication) && (
+              <p className="text-sm text-red-600">
+                Unable to generate link: Company slug or application ID is missing.
+              </p>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
