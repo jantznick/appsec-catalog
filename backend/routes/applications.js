@@ -519,6 +519,10 @@ router.get('/:id', requireAuth, async (req, res) => {
             domain: true,
           },
         },
+        deployments: {
+          orderBy: { deployedAt: 'desc' },
+          take: 10, // Get last 10 deployments for the detail view
+        },
       },
     });
 
@@ -538,6 +542,21 @@ router.get('/:id', requireAuth, async (req, res) => {
         error: 'Permission denied',
         message: 'You can only access applications in your company',
       });
+    }
+
+    // Auto-populate current deployment info from most recent deployment
+    if (application.deployments && application.deployments.length > 0) {
+      const latestDeployment = application.deployments[0]; // Already sorted by deployedAt desc
+      // Only override if the fields are not manually set (null/empty means use latest deployment)
+      if (!application.currentVersion && latestDeployment.version) {
+        application.currentVersion = latestDeployment.version;
+      }
+      if (!application.deploymentEnvironment && latestDeployment.environment) {
+        application.deploymentEnvironment = latestDeployment.environment;
+      }
+      if (!application.gitBranch && latestDeployment.gitBranch) {
+        application.gitBranch = latestDeployment.gitBranch;
+      }
     }
 
     res.json(application);
@@ -704,6 +723,11 @@ router.post('/', requireAuth, async (req, res) => {
       apiSecurityTool,
       apiSecurityIntegrationLevel,
       apiSecurityNA,
+      currentVersion,
+      deploymentEnvironment,
+      gitBranch,
+      lastDastScanDate,
+      lastSastScanDate,
     } = req.body;
 
     // Validate required fields
@@ -810,6 +834,11 @@ router.post('/', requireAuth, async (req, res) => {
         apiSecurityTool: apiSecurityTool?.trim() || null,
         apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null,
         apiSecurityNA: apiSecurityNA || false,
+        currentVersion: currentVersion?.trim() || null,
+        deploymentEnvironment: deploymentEnvironment?.trim() || null,
+        gitBranch: gitBranch?.trim() || null,
+        lastDastScanDate: lastDastScanDate ? new Date(lastDastScanDate) : null,
+        lastSastScanDate: lastSastScanDate ? new Date(lastSastScanDate) : null,
         status: 'onboarded',
       },
       include: {
@@ -860,6 +889,11 @@ router.put('/:id', requireAuth, async (req, res) => {
       apiSecurityIntegrationLevel,
       apiSecurityNA,
       status,
+      currentVersion,
+      deploymentEnvironment,
+      gitBranch,
+      lastDastScanDate,
+      lastSastScanDate,
     } = req.body;
 
     // Check if application exists
@@ -957,6 +991,11 @@ router.put('/:id', requireAuth, async (req, res) => {
         ...(apiSecurityTool !== undefined && { apiSecurityTool: apiSecurityTool?.trim() || null }),
         ...(apiSecurityIntegrationLevel !== undefined && { apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null }),
         ...(apiSecurityNA !== undefined && { apiSecurityNA: apiSecurityNA }),
+        ...(currentVersion !== undefined && { currentVersion: currentVersion?.trim() || null }),
+        ...(deploymentEnvironment !== undefined && { deploymentEnvironment: deploymentEnvironment?.trim() || null }),
+        ...(gitBranch !== undefined && { gitBranch: gitBranch?.trim() || null }),
+        ...(lastDastScanDate !== undefined && { lastDastScanDate: lastDastScanDate ? new Date(lastDastScanDate) : null }),
+        ...(lastSastScanDate !== undefined && { lastSastScanDate: lastSastScanDate ? new Date(lastSastScanDate) : null }),
         ...(status !== undefined && { status }),
       },
       include: {
@@ -1655,6 +1694,156 @@ router.delete('/:id/domains/:domainId', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error removing domain from application:', error);
     res.status(500).json({ error: 'Failed to remove domain from application' });
+  }
+});
+
+// Get all deployments for an application
+router.get('/:id/deployments', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if application exists and user has access
+    const application = await prisma.application.findUnique({
+      where: { id },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if user has access (admin or member of same company)
+    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only access deployments for applications in your company',
+      });
+    }
+
+    // Get deployments ordered by most recent first
+    const deployments = await prisma.deployment.findMany({
+      where: { applicationId: id },
+      orderBy: { deployedAt: 'desc' },
+    });
+
+    res.json(deployments);
+  } catch (error) {
+    console.error('Error fetching deployments:', error);
+    res.status(500).json({ error: 'Failed to fetch deployments' });
+  }
+});
+
+// Create a new deployment
+router.post('/:id/deployments', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { deployedAt, environment, version, gitBranch, deployedBy, notes } = req.body;
+
+    // Validate required fields
+    if (!environment || !environment.trim()) {
+      return res.status(400).json({ error: 'Environment is required' });
+    }
+
+    // Check if application exists and user has access
+    const application = await prisma.application.findUnique({
+      where: { id },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if user has access (admin or member of same company)
+    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only create deployments for applications in your company',
+      });
+    }
+
+    // Create deployment
+    const deployment = await prisma.deployment.create({
+      data: {
+        applicationId: id,
+        deployedAt: deployedAt ? new Date(deployedAt) : new Date(),
+        environment: environment.trim(),
+        version: version?.trim() || null,
+        gitBranch: gitBranch?.trim() || null,
+        deployedBy: deployedBy?.trim() || null,
+        notes: notes?.trim() || null,
+      },
+    });
+
+    // Auto-update application's current deployment info from this new deployment
+    // Only update if the fields are currently null/empty (meaning they should be auto-populated)
+    const currentApp = await prisma.application.findUnique({
+      where: { id },
+      select: { currentVersion: true, deploymentEnvironment: true, gitBranch: true },
+    });
+
+    const updateData = {};
+    if (!currentApp.currentVersion && deployment.version) {
+      updateData.currentVersion = deployment.version;
+    }
+    if (!currentApp.deploymentEnvironment && deployment.environment) {
+      updateData.deploymentEnvironment = deployment.environment;
+    }
+    if (!currentApp.gitBranch && deployment.gitBranch) {
+      updateData.gitBranch = deployment.gitBranch;
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await prisma.application.update({
+        where: { id },
+        data: updateData,
+      });
+    }
+
+    res.status(201).json(deployment);
+  } catch (error) {
+    console.error('Error creating deployment:', error);
+    res.status(500).json({ error: 'Failed to create deployment' });
+  }
+});
+
+// Delete a deployment
+router.delete('/:id/deployments/:deploymentId', requireAuth, async (req, res) => {
+  try {
+    const { id, deploymentId } = req.params;
+
+    // Check if deployment exists
+    const deployment = await prisma.deployment.findUnique({
+      where: { id: deploymentId },
+      include: {
+        application: true,
+      },
+    });
+
+    if (!deployment) {
+      return res.status(404).json({ error: 'Deployment not found' });
+    }
+
+    // Verify deployment belongs to the application
+    if (deployment.applicationId !== id) {
+      return res.status(400).json({ error: 'Deployment does not belong to this application' });
+    }
+
+    // Check if user has access (admin or member of same company)
+    if (!req.session.isAdmin && req.session.companyId !== deployment.application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only delete deployments for applications in your company',
+      });
+    }
+
+    // Delete deployment
+    await prisma.deployment.delete({
+      where: { id: deploymentId },
+    });
+
+    res.json({ message: 'Deployment deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting deployment:', error);
+    res.status(500).json({ error: 'Failed to delete deployment' });
   }
 });
 

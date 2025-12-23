@@ -1,3 +1,5 @@
 Application Name,Description,Owner,Repository URL,Language,Framework,Server Environment,Facing,Deployment Type,Auth Profiles,Data Types,Dev Team Contact,Business Criticality,Critical Aspects,Security Testing Description,Additional Notes,SAST Tool,SAST Integration Level,DAST Tool,DAST Integration Level,App Firewall Tool,App Firewall Integration Level,API Security Tool,API Security Integration Level,API Security N/A
 Customer Portal,Web application for customer account management and order tracking,John Smith,https://github.com/company/customer-portal,JavaScript,React,Cloud (AWS),External,Continuous Deployment - Automated,Multi-factor authentication,PCI,dev-team@company.com,5,Availability Data Handling Confidentiality,Automated SAST/DAST scans in CI/CD pipeline,Production application handling sensitive customer data,CodeQL,3,OWASP ZAP,2,Cloudflare WAF,3,API Gateway Security,2,false
 
+
+

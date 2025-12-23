@@ -232,6 +232,21 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // Deployment management
+  getDeployments: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/deployments`),
+
+  createDeployment: (applicationId, data) =>
+    apiRequest(`/api/applications/${applicationId}/deployments`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  deleteDeployment: (applicationId, deploymentId) =>
+    apiRequest(`/api/applications/${applicationId}/deployments/${deploymentId}`, {
+      method: 'DELETE',
+    }),
+
   // Domain management
   getDomains: () =>
     apiRequest('/api/domains'),

@@ -39,7 +39,7 @@ export function ScoreCard({ knowledgeScore, toolScore, totalScore, breakdown, on
         <CardHeader>
           <div className="flex justify-between items-center">
             <div>
-              <CardTitle>Security Score</CardTitle>
+              <CardTitle>Application Security Score</CardTitle>
               <Link
                 to="/docs/scoring-methodology"
                 className="text-xs text-blue-600 hover:text-blue-700 mt-1 block"

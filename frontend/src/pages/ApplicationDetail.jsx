@@ -65,6 +65,27 @@ export function ApplicationDetail() {
     apiSecurityIntegrationLevel: '',
     apiSecurityNA: false,
     status: 'onboarded',
+    currentVersion: '',
+    deploymentEnvironment: '',
+    gitBranch: '',
+    lastDastScanDate: '',
+    lastSastScanDate: '',
+  });
+
+  const [allDeployments, setAllDeployments] = useState([]);
+  const [loadingDeployments, setLoadingDeployments] = useState(false);
+  const [showDeploymentForm, setShowDeploymentForm] = useState(false);
+  const [deploymentHistoryExpanded, setDeploymentHistoryExpanded] = useState(true);
+  const [deploymentPage, setDeploymentPage] = useState(1);
+  const deploymentsPerPage = 5;
+  const [deploymentEnvironmentFilter, setDeploymentEnvironmentFilter] = useState('');
+  const [newDeployment, setNewDeployment] = useState({
+    deployedAt: new Date().toISOString().split('T')[0],
+    environment: '',
+    version: '',
+    gitBranch: '',
+    deployedBy: '',
+    notes: '',
   });
 
   useEffect(() => {
@@ -72,6 +93,7 @@ export function ApplicationDetail() {
     if (id) {
       loadApplication();
       loadScore();
+      loadDeployments();
     }
   }, [id]);
 
@@ -149,6 +171,88 @@ export function ApplicationDetail() {
     if (newInterfaceName.trim()) {
       addInterface(newInterfaceName.trim());
       setNewInterfaceName('');
+    }
+  };
+
+  const loadDeployments = async () => {
+    if (!id) return;
+    try {
+      setLoadingDeployments(true);
+      const data = await api.getDeployments(id);
+      setAllDeployments(data);
+      // Reset to first page and clear filter when loading new data
+      setDeploymentPage(1);
+      setDeploymentEnvironmentFilter('');
+    } catch (error) {
+      console.error('Failed to load deployments:', error);
+      toast.error('Failed to load deployments');
+    } finally {
+      setLoadingDeployments(false);
+    }
+  };
+
+  // Filter deployments by environment
+  const filteredDeployments = deploymentEnvironmentFilter
+    ? allDeployments.filter(d => d.environment === deploymentEnvironmentFilter)
+    : allDeployments;
+
+  // Get unique environments from all deployments
+  const availableEnvironments = [...new Set(allDeployments.map(d => d.environment))].sort();
+
+  // Format environment label for display
+  const formatEnvironmentLabel = (env) => {
+    if (!env) return '';
+    // Capitalize first letter, handle special cases
+    const formatted = env.charAt(0).toUpperCase() + env.slice(1).toLowerCase();
+    // Handle special cases like "qa" -> "QA"
+    if (env.toLowerCase() === 'qa') return 'QA';
+    return formatted;
+  };
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredDeployments.length / deploymentsPerPage);
+  const startIndex = (deploymentPage - 1) * deploymentsPerPage;
+  const endIndex = startIndex + deploymentsPerPage;
+  const deployments = filteredDeployments.slice(startIndex, endIndex);
+
+  const handleCreateDeployment = async () => {
+    if (!newDeployment.environment || !newDeployment.environment.trim()) {
+      toast.error('Environment is required');
+      return;
+    }
+
+    try {
+      await api.createDeployment(id, {
+        ...newDeployment,
+        deployedAt: newDeployment.deployedAt || new Date().toISOString(),
+      });
+      toast.success('Deployment added successfully');
+      setShowDeploymentForm(false);
+      setNewDeployment({
+        deployedAt: new Date().toISOString().split('T')[0],
+        environment: '',
+        version: '',
+        gitBranch: '',
+        deployedBy: '',
+        notes: '',
+      });
+      await loadDeployments();
+    } catch (error) {
+      toast.error(error.message || 'Failed to create deployment');
+    }
+  };
+
+  const handleDeleteDeployment = async (deploymentId) => {
+    if (!confirm('Are you sure you want to delete this deployment?')) {
+      return;
+    }
+
+    try {
+      await api.deleteDeployment(id, deploymentId);
+      toast.success('Deployment deleted successfully');
+      await loadDeployments();
+    } catch (error) {
+      toast.error(error.message || 'Failed to delete deployment');
     }
   };
 
@@ -268,6 +372,11 @@ export function ApplicationDetail() {
         apiSecurityIntegrationLevel: data.apiSecurityIntegrationLevel?.toString() || '',
         apiSecurityNA: data.apiSecurityNA || false,
         status: data.status || 'onboarded',
+        currentVersion: data.currentVersion || '',
+        deploymentEnvironment: data.deploymentEnvironment || '',
+        gitBranch: data.gitBranch || '',
+        lastDastScanDate: data.lastDastScanDate ? new Date(data.lastDastScanDate).toISOString().split('T')[0] : '',
+        lastSastScanDate: data.lastSastScanDate ? new Date(data.lastSastScanDate).toISOString().split('T')[0] : '',
       };
       setFormData(newFormData);
       setInterfaces(interfaceNames);
@@ -609,6 +718,17 @@ export function ApplicationDetail() {
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Current Version"
+                  value={formData.currentVersion}
+                  onChange={(e) => handleFieldChange('currentVersion', e.target.value)}
+                  disabled={!isEditing}
+                  placeholder="e.g., 1.2.3, v2.1.0"
+                  helperText="Auto-populated from most recent deployment (can be overridden)"
+                />
+                <div></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <Select
                   label="Facing"
                   value={formData.facing || ''}
@@ -649,6 +769,242 @@ export function ApplicationDetail() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Deployment History */}
+      <Card className="mt-6">
+        <CardContent>
+          <div className="flex items-center justify-between mb-4">
+            <button
+              type="button"
+              onClick={() => setDeploymentHistoryExpanded(!deploymentHistoryExpanded)}
+              className="flex items-center justify-between text-left flex-1"
+            >
+              <h3 className="text-lg font-semibold text-gray-900">Last 5 Deployments</h3>
+              <div className="flex items-center gap-2">
+                {canEdit() && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowDeploymentForm(true);
+                    }}
+                    className="p-2"
+                    title="Add Deployment"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </Button>
+                )}
+                {availableEnvironments.length > 0 && (
+                  <select
+                    value={deploymentEnvironmentFilter}
+                    onChange={(e) => {
+                      setDeploymentEnvironmentFilter(e.target.value);
+                      setDeploymentPage(1); // Reset to first page when filter changes
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-sm border border-gray-300 rounded px-2 py-1 bg-white"
+                    title="Filter by environment"
+                  >
+                    <option value="">All Environments</option>
+                    {availableEnvironments.map(env => (
+                      <option key={env} value={env}>{formatEnvironmentLabel(env)}</option>
+                    ))}
+                  </select>
+                )}
+                <svg
+                  className={`w-5 h-5 text-gray-500 transition-transform ${deploymentHistoryExpanded ? 'transform rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+          </div>
+          {deploymentHistoryExpanded && (
+            <>
+              {loadingDeployments ? (
+                <p className="text-sm text-gray-500">Loading deployments...</p>
+              ) : allDeployments.length === 0 ? (
+                <p className="text-sm text-gray-500">No deployments recorded yet.</p>
+              ) : filteredDeployments.length === 0 ? (
+                <p className="text-sm text-gray-500">No deployments found for the selected environment.</p>
+              ) : (
+                <>
+                  <div className="space-y-3">
+                    {deployments.map((deployment) => (
+                    <div
+                      key={deployment.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3">
+                          <span className="font-medium text-gray-900">
+                            {new Date(deployment.deployedAt).toLocaleDateString()}
+                          </span>
+                          <span className="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">
+                            {deployment.environment}
+                          </span>
+                          {deployment.version && (
+                            <span className="text-sm text-gray-600">v{deployment.version}</span>
+                          )}
+                          {deployment.gitBranch && (
+                            <span className="text-sm text-gray-500">({deployment.gitBranch})</span>
+                          )}
+                        </div>
+                        {deployment.deployedBy && (
+                          <p className="text-xs text-gray-500 mt-1">Deployed by: {deployment.deployedBy}</p>
+                        )}
+                        {deployment.notes && (
+                          <p className="text-sm text-gray-600 mt-1">{deployment.notes}</p>
+                        )}
+                      </div>
+                      {canEdit() && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDeleteDeployment(deployment.id)}
+                          className="ml-4"
+                        >
+                          Delete
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  </div>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
+                      <div className="text-sm text-gray-600">
+                        Showing {startIndex + 1}-{Math.min(endIndex, filteredDeployments.length)} of {filteredDeployments.length} deployments
+                        {deploymentEnvironmentFilter && ` (${allDeployments.length} total)`}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setDeploymentPage(prev => Math.max(1, prev - 1))}
+                          disabled={deploymentPage === 1}
+                        >
+                          Previous
+                        </Button>
+                        <span className="text-sm text-gray-600">
+                          Page {deploymentPage} of {totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setDeploymentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={deploymentPage === totalPages}
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add Deployment Modal */}
+      <Modal
+        isOpen={showDeploymentForm}
+        onClose={() => {
+          setShowDeploymentForm(false);
+          setNewDeployment({
+            deployedAt: new Date().toISOString().split('T')[0],
+            environment: '',
+            version: '',
+            gitBranch: '',
+            deployedBy: '',
+            notes: '',
+          });
+        }}
+        title="Add New Deployment"
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Deployment Date"
+              type="date"
+              value={newDeployment.deployedAt}
+              onChange={(e) => setNewDeployment({ ...newDeployment, deployedAt: e.target.value })}
+              required
+            />
+            <Select
+              label="Environment"
+              value={newDeployment.environment}
+              onChange={(e) => setNewDeployment({ ...newDeployment, environment: e.target.value })}
+              options={[
+                { value: '', label: 'Select environment' },
+                { value: 'dev', label: 'Development' },
+                { value: 'staging', label: 'Staging' },
+                { value: 'qa', label: 'QA' },
+                { value: 'prod', label: 'Production' },
+                { value: 'other', label: 'Other' },
+              ]}
+              required
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Version"
+              value={newDeployment.version}
+              onChange={(e) => setNewDeployment({ ...newDeployment, version: e.target.value })}
+              placeholder="e.g., 1.2.3"
+            />
+            <Input
+              label="Git Branch/Tag"
+              value={newDeployment.gitBranch}
+              onChange={(e) => setNewDeployment({ ...newDeployment, gitBranch: e.target.value })}
+              placeholder="e.g., main, v1.2.3"
+            />
+          </div>
+          <Input
+            label="Deployed By"
+            value={newDeployment.deployedBy}
+            onChange={(e) => setNewDeployment({ ...newDeployment, deployedBy: e.target.value })}
+            placeholder="Name or email"
+          />
+          <Textarea
+            label="Notes"
+            value={newDeployment.notes}
+            onChange={(e) => setNewDeployment({ ...newDeployment, notes: e.target.value })}
+            rows={3}
+            placeholder="Optional notes about this deployment"
+          />
+          <div className="flex gap-2 justify-end pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeploymentForm(false);
+                setNewDeployment({
+                  deployedAt: new Date().toISOString().split('T')[0],
+                  environment: '',
+                  version: '',
+                  gitBranch: '',
+                  deployedBy: '',
+                  notes: '',
+                });
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleCreateDeployment}>Add Deployment</Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Interfaces with Other Applications */}
       <Card className="mt-6">
@@ -807,6 +1163,14 @@ export function ApplicationDetail() {
                     ]}
                   />
                 </div>
+                <Input
+                  label="Last SAST Scan Date"
+                  type="date"
+                  value={formData.lastSastScanDate}
+                  onChange={(e) => handleFieldChange('lastSastScanDate', e.target.value)}
+                  disabled={!isEditing}
+                  helperText="Date of last Static Application Security Testing scan"
+                />
                 <div className="grid grid-cols-2 gap-4">
                   <Input
                     label="DAST Tool"
@@ -825,6 +1189,14 @@ export function ApplicationDetail() {
                     ]}
                   />
                 </div>
+                <Input
+                  label="Last DAST Scan Date"
+                  type="date"
+                  value={formData.lastDastScanDate}
+                  onChange={(e) => handleFieldChange('lastDastScanDate', e.target.value)}
+                  disabled={!isEditing}
+                  helperText="Date of last Dynamic Application Security Testing scan"
+                />
                 <div className="grid grid-cols-2 gap-4">
                   <Input
                     label="App Firewall Tool"

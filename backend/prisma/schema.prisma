@@ -70,6 +70,7 @@ model Application {
   requests        Request[]
   scores          Score[]
   applicationDomains ApplicationDomain[]
+  deployments     Deployment[]
   description     String?
   owner           String?
   repoUrl         String?
@@ -96,6 +97,13 @@ model Application {
   apiSecurityNA         Boolean? @default(false)
 
   metadataLastReviewed  DateTime?
+  
+  // Deployment metadata (editable in main form, not onboarding)
+  currentVersion        String? // Current application version (e.g., "1.2.3", "v2.1.0")
+  deploymentEnvironment String? // Primary deployment environment (e.g., "dev", "staging", "prod", "qa")
+  gitBranch             String? // Current git branch or tag (e.g., "main", "v1.2.3", "release/2024-01")
+  lastDastScanDate      DateTime? // Date/time of last DAST (Dynamic Application Security Testing) scan
+  lastSastScanDate      DateTime? // Date/time of last SAST (Static Application Security Testing) scan
   
   // Interfaces with other applications (stored as JSON array of application IDs/names)
   interfaces            String? // JSON array of application names/IDs
@@ -228,4 +236,22 @@ model ApplicationDomain {
   @@unique([applicationId, domainId]) // Prevent duplicate associations
   @@index([applicationId])
   @@index([domainId])
+}
+
+// Deployment history - tracks all deployments for an application
+model Deployment {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  deployedAt    DateTime    @default(now())
+  environment   String      // dev, staging, qa, prod, etc.
+  version       String?     // Version that was deployed (e.g., "1.2.3", "v2.1.0")
+  gitBranch     String?     // Git branch or tag that was deployed (e.g., "main", "v1.2.3")
+  deployedBy    String?     // Who deployed it (user email or name)
+  notes         String?     // Optional notes about the deployment
+  createdAt     DateTime    @default(now())
+  
+  @@index([applicationId])
+  @@index([deployedAt])
+  @@index([environment])
 }

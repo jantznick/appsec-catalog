@@ -33,3 +33,5 @@ echo "   3. Check backend logs for the invitation link: docker-compose logs back
 
 
 
+
+
