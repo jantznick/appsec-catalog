@@ -34,11 +34,16 @@
 #     }
 # }
 
-# Local network configuration (HTTPS with self-signed certificates)
-appsec.companynet.org {
-    # Use self-signed certificate for local network
-    tls internal
+# Local network configuration (HTTP only - no certificate issues)
+# Commented out: HTTPS with self-signed certificates (causes browser trust issues)
+# appsec.companynet.org {
+#     tls internal
+#     ...
+# }
 
+# HTTP only for local network (no HTTPS, no certificate warnings)
+# Using :80 to serve HTTP only (works with any hostname)
+:80 {
     # Reverse proxy API requests to backend (must come before /)
     handle /api/* {
         reverse_proxy backend:3001 {
@@ -94,28 +99,4 @@ appsec.companynet.org {
         }
     }
 }
-
-# Alternative: HTTP only for local development (no HTTPS)
-# Uncomment this block if you want HTTP only (no certificate warnings)
-# :80 {
-#     handle / {
-#         reverse_proxy frontend:3000 {
-#             header_up Host {host}
-#             header_up X-Real-IP {remote}
-#             header_up X-Forwarded-For {remote}
-#             header_up X-Forwarded-Proto {scheme}
-#         }
-#     }
-#     handle /api/* {
-#         reverse_proxy backend:3001 {
-#             header_up Host {host}
-#             header_up X-Real-IP {remote}
-#             header_up X-Forwarded-For {remote}
-#             header_up X-Forwarded-Proto {scheme}
-#         }
-#     }
-#     handle /health {
-#         reverse_proxy backend:3001
-#     }
-# }
 
