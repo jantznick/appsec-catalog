@@ -1,5 +1,6 @@
 import express from 'express';
 import session from 'express-session';
+import { PrismaSessionStore } from '@quixo3/prisma-session-store';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { prisma, disconnectPrisma } from './prisma/client.js';
@@ -85,19 +86,22 @@ app.use(cors({
 app.use(express.json());
 
 // Session configuration
-// NOTE: secure is set to false because browsers don't trust self-signed certificates
-// even when accepted, so they won't send secure cookies. For production, you should:
-// 1. Install the certificate in your corporate CA/trust store, OR
-// 2. Use a corporate-signed certificate, OR  
-// 3. Use Let's Encrypt if the domain is publicly accessible
+// Using PrismaSessionStore to store sessions in the database (scalable, survives restarts)
+// NOTE: secure is set to false for HTTP. For HTTPS in production, set secure: true
 const sessionConfig = {
   secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
-  resave: true, // Save session even if not modified
+  resave: false, // Don't save session if unmodified (PrismaSessionStore handles this)
   saveUninitialized: false,
+  store: new PrismaSessionStore(
+    prisma,
+    {
+      checkPeriod: 2 * 60 * 1000, // Check for expired sessions every 2 minutes
+      dbRecordIdIsSessionId: true, // Use session ID as the database record ID
+      dbRecordIdFunction: undefined, // Use default ID generation
+    }
+  ),
   cookie: {
-    // Set to false because browsers won't send secure cookies for untrusted self-signed certs
-    // This is a temporary workaround - proper fix is to install cert in trust store
-    secure: false, // Must be false for self-signed certs that browsers don't fully trust
+    secure: false, // Set to true for HTTPS in production
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
     sameSite: 'lax', // 'lax' works for same-site requests (which this is through Caddy proxy)
