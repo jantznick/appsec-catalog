@@ -14,6 +14,7 @@ import { ScoreCard } from '../components/scoring/ScoreCard.jsx';
 import { DomainPills } from '../components/domains/DomainPills.jsx';
 import useAuthStore from '../store/authStore.js';
 import { copyToClipboard, isClipboardAvailable } from '../utils/clipboard.js';
+import { CICDDeploymentView } from '../components/deployments/CICDDeploymentView.jsx';
 
 export function ApplicationDetail() {
   const { id } = useParams();
@@ -75,10 +76,17 @@ export function ApplicationDetail() {
   const [allDeployments, setAllDeployments] = useState([]);
   const [loadingDeployments, setLoadingDeployments] = useState(false);
   const [showDeploymentForm, setShowDeploymentForm] = useState(false);
+  const [deploymentFormView, setDeploymentFormView] = useState('manual'); // 'manual' or 'cicd'
   const [deploymentHistoryExpanded, setDeploymentHistoryExpanded] = useState(true);
   const [deploymentPage, setDeploymentPage] = useState(1);
   const deploymentsPerPage = 5;
   const [deploymentEnvironmentFilter, setDeploymentEnvironmentFilter] = useState('');
+  const [deploymentTokens, setDeploymentTokens] = useState([]);
+  const [loadingTokens, setLoadingTokens] = useState(false);
+  const [newTokenName, setNewTokenName] = useState('');
+  const [creatingToken, setCreatingToken] = useState(false);
+  const [selectedTokenForApp, setSelectedTokenForApp] = useState('');
+  const [addingToToken, setAddingToToken] = useState(false);
   const [newDeployment, setNewDeployment] = useState({
     deployedAt: new Date().toISOString().split('T')[0],
     environment: '',
@@ -94,6 +102,7 @@ export function ApplicationDetail() {
       loadApplication();
       loadScore();
       loadDeployments();
+      loadDeploymentTokens();
     }
   }, [id]);
 
@@ -253,6 +262,78 @@ export function ApplicationDetail() {
       await loadDeployments();
     } catch (error) {
       toast.error(error.message || 'Failed to delete deployment');
+    }
+  };
+
+  const loadDeploymentTokens = async () => {
+    if (!id) return;
+    try {
+      setLoadingTokens(true);
+      const tokens = await api.getDeploymentTokensForApplication(id);
+      setDeploymentTokens(tokens);
+    } catch (error) {
+      console.error('Failed to load deployment tokens:', error);
+    } finally {
+      setLoadingTokens(false);
+    }
+  };
+
+  const loadAllDeploymentTokens = async () => {
+    try {
+      const tokens = await api.getDeploymentTokens();
+      return tokens.filter(t => !t.revokedAt); // Only active tokens
+    } catch (error) {
+      console.error('Failed to load all deployment tokens:', error);
+      return [];
+    }
+  };
+
+  const handleCreateToken = async () => {
+    if (!newTokenName || !newTokenName.trim()) {
+      toast.error('Token name is required');
+      return null;
+    }
+
+    try {
+      setCreatingToken(true);
+      const token = await api.createDeploymentToken(id, newTokenName.trim());
+      toast.success('Deployment token created successfully');
+      setNewTokenName('');
+      await loadDeploymentTokens();
+      // Return the token with plaintextToken for display
+      return { ...token, plaintextToken: token.token };
+    } catch (error) {
+      toast.error(error.message || 'Failed to create deployment token');
+      return null;
+    } finally {
+      setCreatingToken(false);
+    }
+  };
+
+  const handleAddToExistingToken = async () => {
+    if (!selectedTokenForApp) {
+      toast.error('Please select a token');
+      return;
+    }
+
+    try {
+      setAddingToToken(true);
+      const token = await api.getDeploymentToken(selectedTokenForApp);
+      const currentAppIds = token.applications.map(a => a.application.id);
+      if (!currentAppIds.includes(id)) {
+        await api.updateDeploymentToken(selectedTokenForApp, {
+          applicationIds: [...currentAppIds, id],
+        });
+        toast.success('Application added to token successfully');
+        await loadDeploymentTokens();
+      } else {
+        toast.info('Application is already associated with this token');
+      }
+      setSelectedTokenForApp('');
+    } catch (error) {
+      toast.error(error.message || 'Failed to add application to token');
+    } finally {
+      setAddingToToken(false);
     }
   };
 
@@ -922,6 +1003,7 @@ export function ApplicationDetail() {
         isOpen={showDeploymentForm}
         onClose={() => {
           setShowDeploymentForm(false);
+          setDeploymentFormView('manual');
           setNewDeployment({
             deployedAt: new Date().toISOString().split('T')[0],
             environment: '',
@@ -930,80 +1012,128 @@ export function ApplicationDetail() {
             deployedBy: '',
             notes: '',
           });
+          setNewTokenName('');
+          setSelectedTokenForApp('');
         }}
         title="Add New Deployment"
+        size="xl"
       >
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Deployment Date"
-              type="date"
-              value={newDeployment.deployedAt}
-              onChange={(e) => setNewDeployment({ ...newDeployment, deployedAt: e.target.value })}
-              required
-            />
-            <Select
-              label="Environment"
-              value={newDeployment.environment}
-              onChange={(e) => setNewDeployment({ ...newDeployment, environment: e.target.value })}
-              options={[
-                { value: '', label: 'Select environment' },
-                { value: 'dev', label: 'Development' },
-                { value: 'staging', label: 'Staging' },
-                { value: 'qa', label: 'QA' },
-                { value: 'prod', label: 'Production' },
-                { value: 'other', label: 'Other' },
-              ]}
-              required
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Version"
-              value={newDeployment.version}
-              onChange={(e) => setNewDeployment({ ...newDeployment, version: e.target.value })}
-              placeholder="e.g., 1.2.3"
-            />
-            <Input
-              label="Git Branch/Tag"
-              value={newDeployment.gitBranch}
-              onChange={(e) => setNewDeployment({ ...newDeployment, gitBranch: e.target.value })}
-              placeholder="e.g., main, v1.2.3"
-            />
-          </div>
-          <Input
-            label="Deployed By"
-            value={newDeployment.deployedBy}
-            onChange={(e) => setNewDeployment({ ...newDeployment, deployedBy: e.target.value })}
-            placeholder="Name or email"
-          />
-          <Textarea
-            label="Notes"
-            value={newDeployment.notes}
-            onChange={(e) => setNewDeployment({ ...newDeployment, notes: e.target.value })}
-            rows={3}
-            placeholder="Optional notes about this deployment"
-          />
-          <div className="flex gap-2 justify-end pt-4">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowDeploymentForm(false);
-                setNewDeployment({
-                  deployedAt: new Date().toISOString().split('T')[0],
-                  environment: '',
-                  version: '',
-                  gitBranch: '',
-                  deployedBy: '',
-                  notes: '',
-                });
-              }}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleCreateDeployment}>Add Deployment</Button>
-          </div>
+        {/* View Toggle */}
+        <div className="flex gap-2 mb-4 border-b border-gray-200">
+          <button
+            onClick={() => setDeploymentFormView('manual')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              deploymentFormView === 'manual'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Manual Entry
+          </button>
+          <button
+            onClick={() => setDeploymentFormView('cicd')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              deploymentFormView === 'cicd'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            CI/CD Pipeline
+          </button>
         </div>
+
+        {deploymentFormView === 'manual' ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Deployment Date"
+                type="date"
+                value={newDeployment.deployedAt}
+                onChange={(e) => setNewDeployment({ ...newDeployment, deployedAt: e.target.value })}
+                required
+              />
+              <Select
+                label="Environment"
+                value={newDeployment.environment}
+                onChange={(e) => setNewDeployment({ ...newDeployment, environment: e.target.value })}
+                options={[
+                  { value: '', label: 'Select environment' },
+                  { value: 'dev', label: 'Development' },
+                  { value: 'staging', label: 'Staging' },
+                  { value: 'qa', label: 'QA' },
+                  { value: 'prod', label: 'Production' },
+                  { value: 'other', label: 'Other' },
+                ]}
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Version"
+                value={newDeployment.version}
+                onChange={(e) => setNewDeployment({ ...newDeployment, version: e.target.value })}
+                placeholder="e.g., 1.2.3"
+              />
+              <Input
+                label="Git Branch/Tag"
+                value={newDeployment.gitBranch}
+                onChange={(e) => setNewDeployment({ ...newDeployment, gitBranch: e.target.value })}
+                placeholder="e.g., main, v1.2.3"
+              />
+            </div>
+            <Input
+              label="Deployed By"
+              value={newDeployment.deployedBy}
+              onChange={(e) => setNewDeployment({ ...newDeployment, deployedBy: e.target.value })}
+              placeholder="Name or email"
+            />
+            <Textarea
+              label="Notes"
+              value={newDeployment.notes}
+              onChange={(e) => setNewDeployment({ ...newDeployment, notes: e.target.value })}
+              rows={3}
+              placeholder="Optional notes about this deployment"
+            />
+            <div className="flex gap-2 justify-end pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDeploymentForm(false);
+                  setDeploymentFormView('manual');
+                  setNewDeployment({
+                    deployedAt: new Date().toISOString().split('T')[0],
+                    environment: '',
+                    version: '',
+                    gitBranch: '',
+                    deployedBy: '',
+                    notes: '',
+                  });
+                }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleCreateDeployment}>Add Deployment</Button>
+            </div>
+          </div>
+        ) : (
+          <CICDDeploymentView
+            applicationId={id}
+            applicationName={application?.name}
+            applicationCompanyId={application?.companyId}
+            deploymentTokens={deploymentTokens}
+            loadingTokens={loadingTokens}
+            newTokenName={newTokenName}
+            setNewTokenName={setNewTokenName}
+            creatingToken={creatingToken}
+            selectedTokenForApp={selectedTokenForApp}
+            setSelectedTokenForApp={setSelectedTokenForApp}
+            addingToToken={addingToToken}
+            onLoadAllTokens={loadAllDeploymentTokens}
+            onCreateToken={handleCreateToken}
+            onAddToToken={handleAddToExistingToken}
+            onRefreshTokens={loadDeploymentTokens}
+          />
+        )}
       </Modal>
 
       {/* Interfaces with Other Applications */}

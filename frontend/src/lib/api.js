@@ -247,6 +247,33 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // Deployment token management
+  createDeploymentToken: (applicationId, name) =>
+    apiRequest(`/api/applications/${applicationId}/deployment-tokens`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+
+  getDeploymentTokensForApplication: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/deployment-tokens`),
+
+  getDeploymentTokens: () =>
+    apiRequest('/api/deployment-tokens'),
+
+  getDeploymentToken: (tokenId) =>
+    apiRequest(`/api/deployment-tokens/${tokenId}`),
+
+  updateDeploymentToken: (tokenId, data) =>
+    apiRequest(`/api/deployment-tokens/${tokenId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  revokeDeploymentToken: (tokenId) =>
+    apiRequest(`/api/deployment-tokens/${tokenId}`, {
+      method: 'DELETE',
+    }),
+
   // Domain management
   getDomains: () =>
     apiRequest('/api/domains'),

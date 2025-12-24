@@ -30,6 +30,7 @@ model Company {
   applications Application[]
   invitations Invitation[]
   domainList  Domain[] // Application hosting domains - domains where this company's applications are hosted (see Domain model)
+  deploymentTokens DeploymentToken[] // Deployment tokens for CI/CD integration
   engManager  String?
   language            String?
   framework           String?
@@ -71,6 +72,7 @@ model Application {
   scores          Score[]
   applicationDomains ApplicationDomain[]
   deployments     Deployment[]
+  deploymentTokens ApplicationDeploymentToken[]
   description     String?
   owner           String?
   repoUrl         String?
@@ -254,4 +256,39 @@ model Deployment {
   @@index([applicationId])
   @@index([deployedAt])
   @@index([environment])
+}
+
+// Deployment tokens for CI/CD pipeline integration
+// Tokens can be associated with multiple applications
+model DeploymentToken {
+  id            String   @id @default(cuid())
+  token         String   @unique // Plaintext token (stored for display, used for API auth)
+  tokenHash     String   @unique // Hashed version for secure verification
+  name          String?  // Optional name/description (e.g., "Production Pipeline")
+  createdBy     String?  // User ID who created it
+  companyId     String   // Company that owns this token (for access control)
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  revokedAt     DateTime? // When token was revoked (null = active)
+  lastUsedAt    DateTime? // Track last usage for monitoring
+  applications  ApplicationDeploymentToken[] // Many-to-many with applications
+  
+  @@index([companyId])
+  @@index([tokenHash])
+  @@index([revokedAt])
+}
+
+// Join table: Associates deployment tokens with applications (many-to-many)
+// A token can be used for multiple applications, and an application can have multiple tokens
+model ApplicationDeploymentToken {
+  id              String          @id @default(cuid())
+  tokenId         String
+  token           DeploymentToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  applicationId   String
+  application     Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  createdAt       DateTime        @default(now())
+  
+  @@unique([tokenId, applicationId]) // Prevent duplicate associations
+  @@index([tokenId])
+  @@index([applicationId])
 }

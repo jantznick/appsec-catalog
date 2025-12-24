@@ -180,6 +180,34 @@ export function UserStats() {
 
         <div className="bg-white rounded-lg shadow p-6 flex flex-col h-full">
           <div className="flex-grow">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Deployment Tokens</h2>
+            <p className="text-gray-600 mb-4">
+              Manage API tokens for CI/CD pipeline integrations.
+            </p>
+          </div>
+          <Link to="/deployment-tokens" className="mt-auto">
+            <Button variant="primary" className="w-full">
+              Manage Tokens
+            </Button>
+          </Link>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6 flex flex-col h-full">
+          <div className="flex-grow">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Deployment Tokens</h2>
+            <p className="text-gray-600 mb-4">
+              Manage API tokens for CI/CD pipeline integrations.
+            </p>
+          </div>
+          <Link to="/deployment-tokens" className="mt-auto">
+            <Button variant="primary" className="w-full">
+              Manage Tokens
+            </Button>
+          </Link>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6 flex flex-col h-full">
+          <div className="flex-grow">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Documentation</h2>
             <p className="text-gray-600 mb-4">
               Access comprehensive guides and resources for application security.

@@ -3,6 +3,7 @@ import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { calculateApplicationScore } from '../services/scoring.js';
 import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
+import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
 
 const router = express.Router();
 
@@ -1844,6 +1845,132 @@ router.delete('/:id/deployments/:deploymentId', requireAuth, async (req, res) =>
   } catch (error) {
     console.error('Error deleting deployment:', error);
     res.status(500).json({ error: 'Failed to delete deployment' });
+  }
+});
+
+// ============================================================================
+// DEPLOYMENT TOKEN MANAGEMENT
+// ============================================================================
+
+// Create a deployment token for an application
+// POST /api/applications/:id/deployment-tokens
+router.post('/:id/deployment-tokens', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name } = req.body;
+
+    // Check if application exists
+    const application = await prisma.application.findUnique({
+      where: { id },
+      include: { company: true },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if user has access (admin or member of same company)
+    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only create deployment tokens for applications in your company',
+      });
+    }
+
+    // Generate token
+    const plaintextToken = generateDeploymentToken();
+    const tokenHash = await hashDeploymentToken(plaintextToken);
+
+    // Create token
+    const token = await prisma.deploymentToken.create({
+      data: {
+        token: plaintextToken, // Store plaintext for display (as per schema)
+        tokenHash: tokenHash, // Store hash for verification
+        name: name?.trim() || null,
+        createdBy: req.session.userId || null,
+        companyId: application.companyId,
+        applications: {
+          create: {
+            applicationId: id,
+          },
+        },
+      },
+      include: {
+        applications: {
+          include: {
+            application: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    res.status(201).json({
+      ...token,
+      // Token is already in the response from the create
+    });
+  } catch (error) {
+    console.error('Error creating deployment token:', error);
+    res.status(500).json({ error: 'Failed to create deployment token' });
+  }
+});
+
+// List deployment tokens for an application
+// GET /api/applications/:id/deployment-tokens
+router.get('/:id/deployment-tokens', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if application exists
+    const application = await prisma.application.findUnique({
+      where: { id },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if user has access (admin or member of same company)
+    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only view deployment tokens for applications in your company',
+      });
+    }
+
+    // Get tokens for this application
+    const tokens = await prisma.deploymentToken.findMany({
+      where: {
+        applications: {
+          some: {
+            applicationId: id,
+          },
+        },
+        companyId: application.companyId,
+      },
+      include: {
+        applications: {
+          include: {
+            application: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(tokens);
+  } catch (error) {
+    console.error('Error fetching deployment tokens:', error);
+    res.status(500).json({ error: 'Failed to fetch deployment tokens' });
   }
 });
 

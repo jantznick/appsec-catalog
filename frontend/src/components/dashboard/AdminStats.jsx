@@ -235,6 +235,24 @@ export function AdminStats() {
             </Link>
           </CardContent>
         </Card>
+
+        <Card className="flex flex-col">
+          <CardHeader>
+            <CardTitle>Deployment Tokens</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col h-full">
+            <div className="flex-grow">
+              <p className="text-gray-600 mb-4">
+                Manage API tokens for CI/CD pipeline integrations across all companies.
+              </p>
+            </div>
+            <Link to="/deployment-tokens" className="mt-auto">
+              <Button variant="primary" className="w-full">
+                Manage Tokens
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
       </div>
     </>
   );

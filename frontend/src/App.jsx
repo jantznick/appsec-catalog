@@ -23,6 +23,7 @@ import { Users } from './pages/Users.jsx';
 import { AcceptInvitation } from './pages/AcceptInvitation.jsx';
 import { Domains } from './pages/Domains.jsx';
 import { DomainDetail } from './pages/DomainDetail.jsx';
+import { DeploymentTokens } from './pages/DeploymentTokens.jsx';
 
 function CatchAllRedirect() {
   const { isAuthenticated, isVerified, loading } = useAuthStore();
@@ -216,6 +217,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <DomainDetail />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/deployment-tokens"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <DeploymentTokens />
               </Layout>
             </ProtectedRoute>
           }
