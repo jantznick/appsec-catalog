@@ -299,5 +299,35 @@ export const api = {
     const queryString = params.toString();
     return apiRequest(`/api/admin/applications${queryString ? `?${queryString}` : ''}`);
   },
+
+  // Notes endpoints
+  getCompanyNotes: (companyId) =>
+    apiRequest(`/api/notes/company/${companyId}`),
+
+  getApplicationNotes: (applicationId) =>
+    apiRequest(`/api/notes/application/${applicationId}`),
+
+  createCompanyNote: (companyId, content) =>
+    apiRequest(`/api/notes/company/${companyId}`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
+
+  createApplicationNote: (applicationId, content) =>
+    apiRequest(`/api/notes/application/${applicationId}`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
+
+  updateNote: (noteId, content) =>
+    apiRequest(`/api/notes/${noteId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    }),
+
+  deleteNote: (noteId) =>
+    apiRequest(`/api/notes/${noteId}`, {
+      method: 'DELETE',
+    }),
 };
 

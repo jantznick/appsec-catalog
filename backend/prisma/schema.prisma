@@ -19,6 +19,7 @@ model User {
   companyId String?
   company   Company?  @relation(fields: [companyId], references: [id])
   magicCodes MagicCode[]
+  notes     Note[]    // Notes created by this user
 }
 
 model Company {
@@ -31,6 +32,7 @@ model Company {
   invitations Invitation[]
   domainList  Domain[] // Application hosting domains - domains where this company's applications are hosted (see Domain model)
   deploymentTokens DeploymentToken[] // Deployment tokens for CI/CD integration
+  notes       Note[]    // Notes associated with this company
   engManager  String?
   language            String?
   framework           String?
@@ -73,6 +75,7 @@ model Application {
   applicationDomains ApplicationDomain[]
   deployments     Deployment[]
   deploymentTokens ApplicationDeploymentToken[]
+  notes           Note[]    // Notes associated with this application
   description     String?
   owner           String?
   repoUrl         String?
@@ -291,4 +294,26 @@ model ApplicationDeploymentToken {
   @@unique([tokenId, applicationId]) // Prevent duplicate associations
   @@index([tokenId])
   @@index([applicationId])
+}
+
+// Notes/Timeline feature - Admin-only notes for companies and applications
+model Note {
+  id            String    @id @default(cuid())
+  content       String    // The note text content (max 5000 chars)
+  createdBy     String    // User ID who created the note
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Polymorphic associations - one of these will be set
+  companyId     String?
+  company       Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  applicationId String?
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  
+  // User relation for easy access to creator info
+  user          User      @relation(fields: [createdBy], references: [id])
+  
+  @@index([companyId])
+  @@index([applicationId])
+  @@index([createdAt])
 }

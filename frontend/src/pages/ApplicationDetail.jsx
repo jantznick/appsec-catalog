@@ -15,6 +15,7 @@ import { DomainPills } from '../components/domains/DomainPills.jsx';
 import useAuthStore from '../store/authStore.js';
 import { copyToClipboard, isClipboardAvailable } from '../utils/clipboard.js';
 import { CICDDeploymentView } from '../components/deployments/CICDDeploymentView.jsx';
+import { NotesSection } from '../components/notes/NotesSection.jsx';
 
 export function ApplicationDetail() {
   const { id } = useParams();
@@ -1252,6 +1253,17 @@ export function ApplicationDetail() {
           )}
         </CardContent>
       </Card>
+
+      {/* Notes & Timeline - Admin Only */}
+      {isAdmin() && (
+        <div className="mt-6">
+          <NotesSection
+            entityType="application"
+            entityId={id}
+            showApplicationLabels={false}
+          />
+        </div>
+      )}
 
       {/* Security Tools - Full Width */}
       <Card className="mt-6">

@@ -12,6 +12,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { Modal } from '../components/ui/Modal.jsx';
 import useAuthStore from '../store/authStore.js';
 import { isClipboardAvailable, copyToClipboard } from '../utils/clipboard.js';
+import { NotesSection } from '../components/notes/NotesSection.jsx';
 
 export function CompanyDetail() {
   const { id } = useParams();
@@ -552,6 +553,17 @@ export function CompanyDetail() {
           </Card>
         </div>
       </div>
+
+      {/* Notes & Timeline - Admin Only */}
+      {isAdmin() && (
+        <div className="mt-6">
+          <NotesSection
+            entityType="company"
+            entityId={id}
+            showApplicationLabels={true}
+          />
+        </div>
+      )}
 
       {/* Add User Modal */}
       <Modal
