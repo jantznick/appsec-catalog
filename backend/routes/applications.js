@@ -5,6 +5,82 @@ import { calculateApplicationScore } from '../services/scoring.js';
 import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
 
+/**
+ * Get or create system user for automated notes
+ */
+async function getSystemUser() {
+  const systemEmail = 'system@appsec-catalog.local';
+  try {
+    let systemUser = await prisma.user.findUnique({
+      where: { email: systemEmail },
+    });
+
+    if (!systemUser) {
+      // Create system user if it doesn't exist
+      systemUser = await prisma.user.create({
+        data: {
+          email: systemEmail,
+          isAdmin: false,
+          verifiedAccount: true,
+        },
+      });
+    }
+
+    return systemUser;
+  } catch (error) {
+    console.error('Error getting system user:', error);
+    return null;
+  }
+}
+
+/**
+ * Helper function to create a note
+ * @param {string|null} userId - User ID who created the note (null for system user)
+ * @param {string} content - Note content
+ * @param {string} companyId - Optional company ID
+ * @param {string} applicationId - Optional application ID
+ */
+async function createNote(userId, content, companyId = null, applicationId = null) {
+  try {
+    // If no user ID provided, use system user
+    let finalUserId = userId;
+    if (!finalUserId) {
+      const systemUser = await getSystemUser();
+      if (!systemUser) {
+        console.error('Cannot create note: system user not available');
+        return;
+      }
+      finalUserId = systemUser.id;
+    }
+
+    await prisma.note.create({
+      data: {
+        content: content.trim(),
+        createdBy: finalUserId,
+        companyId: companyId,
+        applicationId: applicationId,
+      },
+    });
+  } catch (error) {
+    console.error('Error creating automatic note:', error);
+    // Don't throw - notes are supplementary, don't fail the main operation
+  }
+}
+
+/**
+ * Get field names that were provided in a request
+ */
+function getProvidedFields(data, fieldMapping = {}) {
+  const providedFields = [];
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== null && value !== undefined && value !== '') {
+      const fieldName = fieldMapping[key] || key;
+      providedFields.push(fieldName);
+    }
+  }
+  return providedFields;
+}
+
 const router = express.Router();
 
 // Public: Create application(s) with executive info only (no auth required)
@@ -75,6 +151,32 @@ router.post('/onboard/executive', async (req, res) => {
         });
       })
     );
+
+    // Create automatic note for executive form submission
+    try {
+      const appNames = createdApplications.map(app => app.name).join(', ');
+      const fieldMapping = {
+        name: 'Name',
+        description: 'Description',
+        facing: 'Facing',
+        serverEnvironment: 'Server Environment',
+        businessCriticality: 'Business Criticality',
+        criticalAspects: 'Critical Aspects',
+        devTeamContact: 'Dev Team Contact',
+      };
+      
+      // Get fields that were provided in the first application (representative sample)
+      const firstApp = appsToCreate[0];
+      const providedFields = getProvidedFields(firstApp, fieldMapping);
+      
+      const userId = req.session?.userId || null; // Use system user if no session
+      const noteContent = `Executive form submitted. Created ${createdApplications.length} application(s): ${appNames}. Fields provided: ${providedFields.join(', ')}.`;
+      
+      await createNote(userId, noteContent, company.id, null);
+    } catch (error) {
+      console.error('Error creating note for executive form:', error);
+      // Don't fail the request if note creation fails
+    }
 
     // Return single application for backward compatibility, or array for multiple
     if (appsToCreate.length === 1) {
@@ -490,6 +592,48 @@ router.put('/public/:id', async (req, res) => {
       console.error('Error saving score after update:', error);
     }
 
+    // Create automatic note for technical form submission
+    try {
+      const fieldMapping = {
+        repoUrl: 'Repository URL',
+        deploymentFrequency: 'Deployment Frequency',
+        deploymentMethod: 'Deployment Method',
+        requiresSpecialAccess: 'Requires Special Access',
+        authInfo: 'Auth Info',
+        handlesUserData: 'Handles User Data',
+        userDataTypes: 'User Data Types',
+        userDataStorage: 'User Data Storage',
+        hasInterfaces: 'Has Interfaces',
+        interfaces: 'Interfaces',
+        pciData: 'PCI Data',
+        piiData: 'PII Data',
+        phiData: 'PHI Data',
+        hasSecurityTesting: 'Has Security Testing',
+        securityTestingDescription: 'Security Testing Description',
+        additionalNotes: 'Additional Notes',
+        sastTool: 'SAST Tool',
+        sastIntegrationLevel: 'SAST Integration Level',
+        dastTool: 'DAST Tool',
+        dastIntegrationLevel: 'DAST Integration Level',
+        appFirewallTool: 'App Firewall Tool',
+        appFirewallIntegrationLevel: 'App Firewall Integration Level',
+        apiSecurityTool: 'API Security Tool',
+        apiSecurityIntegrationLevel: 'API Security Integration Level',
+        apiSecurityNA: 'API Security N/A',
+      };
+      
+      const providedFields = getProvidedFields(req.body, fieldMapping);
+      
+      if (providedFields.length > 0) {
+        const userId = req.session?.userId || null; // Use system user if no session
+        const noteContent = `Technical form submitted for application "${application.name}". Fields provided: ${providedFields.join(', ')}.`;
+        await createNote(userId, noteContent, null, application.id);
+      }
+    } catch (error) {
+      console.error('Error creating note for technical form:', error);
+      // Don't fail the request if note creation fails
+    }
+
     res.json({
       application,
       message: 'Application technical details updated successfully',
@@ -681,6 +825,22 @@ router.post('/:id/review', requireAuth, requireAdmin, async (req, res) => {
       });
     } catch (error) {
       console.error('Error saving score to database:', error);
+    }
+
+    // Create automatic note for review
+    try {
+      const reviewer = await prisma.user.findUnique({
+        where: { id: req.session.userId },
+        select: { email: true },
+      });
+      
+      const reviewerEmail = reviewer?.email || 'Unknown';
+      const noteContent = `Application "${updated.name}" was reviewed by ${reviewerEmail}.`;
+      
+      await createNote(req.session.userId, noteContent, null, updated.id);
+    } catch (error) {
+      console.error('Error creating note for review:', error);
+      // Don't fail the request if note creation fails
     }
 
     res.json({
@@ -1499,6 +1659,54 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
     console.log('\n=== BULK IMPORT COMPLETE ===');
     console.log(`Successfully created ${createdApplications.length} application(s)`);
     console.log('Created application IDs:', createdApplications.map(a => a.id));
+
+    // Create automatic note for bulk import
+    try {
+      const appNames = createdApplications.map(app => app.name).join(', ');
+      
+      // Get field names that were provided in the bulk import
+      // Check the first application as a representative sample
+      const firstApp = applications[0];
+      const fieldMapping = {
+        name: 'Name',
+        description: 'Description',
+        owner: 'Owner',
+        repoUrl: 'Repository URL',
+        language: 'Language',
+        framework: 'Framework',
+        serverEnvironment: 'Server Environment',
+        facing: 'Facing',
+        deploymentType: 'Deployment Type',
+        authProfiles: 'Auth Profiles',
+        dataTypes: 'Data Types',
+        interfaces: 'Interfaces',
+        businessCriticality: 'Business Criticality',
+        criticalAspects: 'Critical Aspects',
+        devTeamContact: 'Dev Team Contact',
+        securityTestingDescription: 'Security Testing Description',
+        additionalNotes: 'Additional Notes',
+        sastTool: 'SAST Tool',
+        sastIntegrationLevel: 'SAST Integration Level',
+        dastTool: 'DAST Tool',
+        dastIntegrationLevel: 'DAST Integration Level',
+        appFirewallTool: 'App Firewall Tool',
+        appFirewallIntegrationLevel: 'App Firewall Integration Level',
+        apiSecurityTool: 'API Security Tool',
+        apiSecurityIntegrationLevel: 'API Security Integration Level',
+        apiSecurityNA: 'API Security N/A',
+        hostingDomains: 'Hosting Domains',
+        domains: 'Domains',
+      };
+      
+      const providedFields = getProvidedFields(firstApp, fieldMapping);
+      
+      const noteContent = `Bulk application upload completed. Created ${createdApplications.length} application(s): ${appNames}. Fields provided in upload: ${providedFields.join(', ')}.`;
+      
+      await createNote(req.session.userId, noteContent, companyId, null);
+    } catch (error) {
+      console.error('Error creating note for bulk import:', error);
+      // Don't fail the request if note creation fails
+    }
 
     res.status(201).json({
       count: createdApplications.length,

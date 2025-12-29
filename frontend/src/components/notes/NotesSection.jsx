@@ -6,19 +6,21 @@ import { NoteInput } from './NoteInput.jsx';
 import { NotesTimeline } from './NotesTimeline.jsx';
 import { LoadingPage } from '../ui/Loading.jsx';
 import { Button } from '../ui/Button.jsx';
+import { Checkbox } from '../ui/Checkbox.jsx';
 
-export function NotesSection({ entityType, entityId, showApplicationLabels = false }) {
+export function NotesSection({ entityType, entityId, showApplicationLabels = false, refreshTrigger = 0 }) {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [editContent, setEditContent] = useState('');
+  const [showApplicationNotes, setShowApplicationNotes] = useState(true);
 
   useEffect(() => {
     if (entityId) {
       loadNotes();
     }
-  }, [entityId, entityType]);
+  }, [entityId, entityType, refreshTrigger]);
 
   const loadNotes = async () => {
     try {
@@ -110,6 +112,11 @@ export function NotesSection({ entityType, entityId, showApplicationLabels = fal
     );
   }
 
+  // Filter notes based on toggle
+  const filteredNotes = showApplicationLabels && !showApplicationNotes
+    ? notes.filter(note => !note.applicationId) // Only company notes
+    : notes; // Show all notes
+
   return (
     <Card>
       <CardHeader>
@@ -126,15 +133,28 @@ export function NotesSection({ entityType, entityId, showApplicationLabels = fal
 
           {/* Notes Timeline - Horizontal Scroll */}
           <div>
-            <h4 className="text-sm font-semibold text-gray-700 mb-2">Timeline</h4>
-            {notes.length === 0 ? (
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-semibold text-gray-700">Timeline</h4>
+              {showApplicationLabels && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showApplicationNotes}
+                    onChange={(e) => setShowApplicationNotes(e.target.checked)}
+                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                  />
+                  <span className="text-xs text-gray-600">Show application notes</span>
+                </label>
+              )}
+            </div>
+            {filteredNotes.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <p>No notes yet. Add the first note above.</p>
               </div>
             ) : (
               <div className="overflow-x-auto pb-4 -mx-2 px-2">
                 <div className="flex gap-4 min-w-max">
-                  {notes.map((note) => (
+                  {filteredNotes.map((note) => (
                     <div key={note.id} className="flex-shrink-0 w-80">
                       {editingNoteId === note.id ? (
                         <div className="border-t-4 border-blue-500 px-3 pt-2 pb-3 bg-gray-50 rounded-lg h-full flex flex-col">

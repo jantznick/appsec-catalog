@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
 import { LoadingPage } from '../components/ui/Loading.jsx';
@@ -43,6 +43,7 @@ export function ApplicationDetail() {
   const [availableApplications, setAvailableApplications] = useState([]);
   const [loadingApplications, setLoadingApplications] = useState(false);
   const [newInterfaceName, setNewInterfaceName] = useState('');
+  const [notesRefreshTrigger, setNotesRefreshTrigger] = useState(0);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -357,6 +358,8 @@ export function ApplicationDetail() {
       // Reload application and score
       await loadApplication();
       await loadScore();
+      // Refresh notes to show the new review note
+      setNotesRefreshTrigger(prev => prev + 1);
     } catch (error) {
       toast.error(error.message || 'Failed to mark as reviewed');
       throw error;
@@ -656,7 +659,17 @@ export function ApplicationDetail() {
               </div>
             </div>
             <p className="text-gray-600">
-              {application.company?.name && `Company: ${application.company.name}`}
+              {application.company?.name && (
+                <>
+                  Company:{' '}
+                  <Link
+                    to={`/companies/${application.company.id}`}
+                    className="text-blue-600 hover:text-blue-700"
+                  >
+                    {application.company.name}
+                  </Link>
+                </>
+              )}
             </p>
           </div>
           <div className="flex gap-3 items-center">
@@ -1261,6 +1274,7 @@ export function ApplicationDetail() {
             entityType="application"
             entityId={id}
             showApplicationLabels={false}
+            refreshTrigger={notesRefreshTrigger}
           />
         </div>
       )}

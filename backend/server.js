@@ -4,7 +4,7 @@ import { PrismaSessionStore } from '@quixo3/prisma-session-store';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { prisma, disconnectPrisma } from './prisma/client.js';
-import { initializeAdminUsers } from './utils/adminInit.js';
+import { initializeAdminUsers, initializeSystemUser } from './utils/adminInit.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import companyRoutes from './routes/companies.js';
@@ -161,6 +161,11 @@ app.get('/api/db-test', async (req, res) => {
 // Initialize admin users on startup
 initializeAdminUsers().catch(error => {
   console.error('Failed to initialize admin users:', error);
+});
+
+// Initialize system user on startup
+initializeSystemUser().catch(error => {
+  console.error('Failed to initialize system user:', error);
 });
 
 app.listen(PORT, '0.0.0.0', () => {
