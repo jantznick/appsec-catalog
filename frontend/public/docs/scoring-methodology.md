@@ -1,43 +1,87 @@
-# Scoring Methodology
+Your application security score shows how well your app is protected and how well we understand it. The score is out of **100 points** and combines two things:
 
-Our application security score is a holistic measure designed to quantify the partnership between application teams and the corporate security program. It provides a clear, data-driven understanding of an application's risk profile by combining its inherent security posture with the level of visibility and collaboration shared with Corporate.
+1. **Knowledge Sharing** (how much we know about your app)
+2. **Tool Usage** (what security tools you're using)
 
-The goal is to bridge information gaps and enable a proactive security partnership. A high score indicates not only that an application is well-secured, but also that Corporate has the necessary insight to provide effective support, respond to incidents, and accurately assess enterprise-wide risk.
+The balance between these two depends on your application's importance. More important apps need better security tools. Less important apps need better documentation.
 
-The total score is calculated out of **100 points** and is composed of two equally weighted categories:
+- **Low Importance** (internal, low criticality, infrequent deployments) - Focus on filling out your information
+- **Medium Importance** (moderate criticality) - Balanced approach
 
-1.  **Corporate Knowledge-Sharing (50 points)**
-2.  **Technical Security Posture (50 points)**
+- **High Importance** (external-facing, high criticality, frequent deployments, many interfaces) - Focus on security tools
 
----
+**Note:** If you don't provide information about your app's criticality, deployment frequency, or facing status, we assume high importance.
 
-### 1. Corporate Knowledge-Sharing (up to 50 points)
 
-This score directly measures the level of insight the corporate security team has into an application. Even a well-secured application can present a risk to the enterprise if its architecture, data handling practices, and ownership are not clearly documented and shared. This score quantifies that shared knowledge.
+## Knowledge Sharing (up to 60 points)
 
-The score is based on two factors:
+This measures how well you've documented your application for the security team.
 
-*   **Metadata Completeness (40 points):** Points are awarded for providing a comprehensive operational picture of the application by filling out these eight fields:
-    *   `Description`
-    *   `Owner`
-    *   `Repository URL`
-    *   `Language`
-    *   `Framework`
-    *   `Server Environment`
-    *   `Authentication Profiles`
-    *   `Data Types`
-*   **Metadata Attestation (10 points):** The full 10 points are awarded if the AppSec team has reviewed and attested to the accuracy of the application's metadata within the last 6 months.
+### Metadata Completeness (80% of Knowledge Sharing score)
 
----
+Fill out these 8 fields to earn points:
 
-### 2. Technical Security Posture (up to 50 points)
+- Description
+- Development Team Contact
+- Repository URL
+- Language
+- Framework
+- Server Environment
+- Authentication Profiles
+- Data Types
 
-This score measures the implementation and integration of key security tools across four critical areas: SAST, DAST, App Firewall, and API Security. It reflects the application's technical defenses against common threats.
+Each field you fill adds points. Fill out all 8 fields to get the full 80%.
 
-The score for each tool is determined by a weighted formula that considers three main factors:
+### Metadata Review (20% of Knowledge Sharing score)
 
-*   **Integration Level:** How deeply the tool is integrated into the development lifecycle and the degree of visibility shared with Corporate. This is measured on a 0-4 scale, from "Tool Implemented with no data sharing" to "Corporate is a full-service partner."
-*   **Tool Quality:** The specific tool being used. Centrally managed and approved tools (like Snyk, Tenable WAS) contribute more to the score, reflecting their effectiveness and the level of corporate support available.
-*   **Application Risk Factors:** The score is adjusted based on the application's inherent risk. An `External` facing application or one that handles `PII`/`PCI` data is higher risk, and thus the value of implemented security controls is weighted more heavily.
+The AppSec team needs to review and verify your information. Points decrease over time:
 
-By combining these factors, the score accurately reflects not just whether a tool is present, but how effectively it's implemented in the context of the application's specific risk profile.
+- Reviewed today: Full 20%
+- Reviewed 1 month ago: ~17%
+- Reviewed 3 months ago: ~10%
+- Reviewed 6 months ago: 0%
+
+If it's been more than 6 months since review, you get 0%.
+
+
+## Tool Usage (up to 60 points)
+
+This measures what security tools you have set up and how well they're integrated.
+
+We score four types of tools:
+
+1. **SAST** (Static Application Security Testing)
+2. **DAST** (Dynamic Application Security Testing)
+3. **Application Firewall**
+4. **API Security**
+
+### How Tool Points Are Calculated
+
+Each tool's score depends on:
+
+**Integration Level (0-4 scale)**
+- How deeply the tool is integrated
+- How much visibility Corporate has
+- Higher integration = more points
+
+**Tool Quality**
+- Managed tools (like Snyk, Tenable) = more points
+- Approved unmanaged tools = medium points
+- Other tools = fewer points
+
+**Risk Factors**
+- External-facing apps get more points for tools
+- Apps handling PII, PCI, or PHI data get more points
+- Higher risk = tools are worth more
+
+**Active Usage (SAST/DAST only)**
+- Scans should happen within 1 day of deployment
+- Stale scans (more than 1 day before your last deployment) get fewer points
+
+## What's a Good Score?
+
+- **76-100:** Excellent - You're doing great
+- **51-75:** Good - Room for improvement
+- **0-50:** Needs work - Focus on the quick wins shown in your score breakdown
+
+The score breakdown shows exactly what you need to improve. Start with the "Quick Wins" section for the easiest improvements.

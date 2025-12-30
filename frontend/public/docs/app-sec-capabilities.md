@@ -1,4 +1,3 @@
-# Our Capabilities & Tools
 
 ## A Suite of Tools to Secure the SDLC
 

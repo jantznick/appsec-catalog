@@ -1,4 +1,3 @@
-# Application Onboarding Questionnaire
 
 ## Registering Your Application with the AppSec Program
 

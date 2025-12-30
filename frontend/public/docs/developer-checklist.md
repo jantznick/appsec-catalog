@@ -1,4 +1,3 @@
-# Developer Security Checklist
 
 ## Key Security Practices for Every Developer
 

@@ -26,6 +26,104 @@ const riskFactors = JSON.parse(
 );
 
 const MAX_SCORE_PER_CATEGORY = 50;
+const SCAN_GRACE_PERIOD_DAYS = 1; // Grace period after deployment before scan is required
+const METADATA_REVIEW_MAX_DAYS = 180; // 6 months in days
+const METADATA_REVIEW_MAX_POINTS = 10; // Maximum points for metadata review
+
+/**
+ * Calculate application importance score (0-1 scale)
+ * Based on: businessCriticality, criticalAspects, deploymentType/frequency, interfaces, facing
+ * Higher importance means more focus on tool usage vs knowledge sharing
+ * 
+ * IMPORTANT: Missing data defaults to high importance to encourage teams to provide information.
+ * This creates an incentive to fill out forms - if they don't provide data, we assume worst-case.
+ */
+function calculateImportanceScore(app) {
+  let importance = 0;
+  let hasDataProvided = false;
+  
+  // Business Criticality (1-5 scale) → contributes 0-0.3
+  if (app.businessCriticality) {
+    importance += (app.businessCriticality / 5) * 0.3;
+    hasDataProvided = true;
+  } else {
+    // Missing data: assume high criticality (4 out of 5) to encourage disclosure
+    importance += (4 / 5) * 0.3;
+  }
+  
+  // Critical Aspects (count aspects) → contributes 0-0.2
+  if (app.criticalAspects) {
+    const aspects = app.criticalAspects.split(',').map(a => a.trim()).filter(a => a);
+    if (aspects.length > 0) {
+      importance += Math.min(aspects.length * 0.05, 0.2);
+      hasDataProvided = true;
+    } else {
+      // Missing data: assume 2 critical aspects (moderate importance)
+      importance += 2 * 0.05;
+    }
+  } else {
+    // Missing data: assume 2 critical aspects (moderate importance)
+    importance += 2 * 0.05;
+  }
+  
+  // Deployment Type/Frequency → contributes 0-0.2
+  if (app.deploymentType) {
+    const deploymentLower = app.deploymentType.toLowerCase();
+    // High frequency or automated deployments increase importance
+    if (deploymentLower.includes('multiple times per day') || 
+        deploymentLower.includes('daily') ||
+        deploymentLower.includes('automated')) {
+      importance += 0.2;
+      hasDataProvided = true;
+    } else if (deploymentLower.includes('weekly')) {
+      importance += 0.1;
+      hasDataProvided = true;
+    } else {
+      // Deployment type provided but not high frequency: assume moderate
+      importance += 0.1;
+      hasDataProvided = true;
+    }
+  } else {
+    // Missing data: assume high frequency/automated deployment (worst case)
+    importance += 0.2;
+  }
+  
+  // Interfaces (count) → contributes 0-0.15
+  if (app.interfaces) {
+    try {
+      const interfaceIds = JSON.parse(app.interfaces);
+      if (Array.isArray(interfaceIds) && interfaceIds.length > 0) {
+        importance += Math.min(interfaceIds.length * 0.03, 0.15);
+        hasDataProvided = true;
+      } else {
+        // Interfaces field exists but is empty: assume no interfaces (lower importance)
+        // Don't add anything
+      }
+    } catch (e) {
+      // Parse error: assume no interfaces
+    }
+  } else {
+    // Missing data: assume some interfaces exist (moderate importance)
+    // Assume 2 interfaces to encourage disclosure
+    importance += Math.min(2 * 0.03, 0.15);
+  }
+  
+  // Facing (External = more important) → contributes 0-0.15
+  if (app.facing === 'External') {
+    importance += 0.15;
+    hasDataProvided = true;
+  } else if (app.facing === 'Internal') {
+    // Internal is explicitly stated, so lower importance
+    hasDataProvided = true;
+    // Don't add anything (Internal = 0 contribution)
+  } else {
+    // Missing data: assume External (worst case, higher importance)
+    importance += 0.15;
+  }
+  
+  // Clamp to 0-1 range
+  return Math.min(Math.max(importance, 0), 1);
+}
 
 /**
  * Calculate Knowledge Sharing Score (0-50 points)
@@ -50,14 +148,19 @@ export function calculateKnowledgeSharingScore(app) {
   // Completeness is 80% of the score (40 points max)
   score = (fieldsFilled / totalFields) * (MAX_SCORE_PER_CATEGORY * 0.8);
 
-  // Freshness is 20% of the score (10 points max)
+  // Freshness is 20% of the score (10 points max) - sliding scale based on days since review
   if (app.metadataLastReviewed) {
     const reviewDate = new Date(app.metadataLastReviewed);
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    if (reviewDate > sixMonthsAgo) {
-      score += MAX_SCORE_PER_CATEGORY * 0.2;
+    const now = new Date();
+    const daysSinceReview = (now.getTime() - reviewDate.getTime()) / (1000 * 60 * 60 * 24);
+    
+    if (daysSinceReview <= METADATA_REVIEW_MAX_DAYS) {
+      // Calculate points: 10 points per day, decreasing linearly over 6 months
+      // Formula: max(0, 10 - (daysSinceReview / METADATA_REVIEW_MAX_DAYS) * 10)
+      const reviewPoints = Math.max(0, METADATA_REVIEW_MAX_POINTS - (daysSinceReview / METADATA_REVIEW_MAX_DAYS) * METADATA_REVIEW_MAX_POINTS);
+      score += reviewPoints;
     }
+    // If reviewed more than 6 months ago, no points awarded
   }
 
   return Math.round(score);
@@ -84,14 +187,44 @@ export function calculateToolUsageScore(app) {
       riskWeight = Math.max(riskWeight, riskFactors.facing[app.facing]);
     }
     
-    // Apply data type risk factors (use max of all applicable)
-    if (app.dataTypes) {
+    // Apply data type risk factors using boolean fields (more accurate)
+    // Check for PCI, PII, PHI data types
+    // Note: These are stored as boolean fields but may also be in dataTypes string
+    // We prioritize the boolean fields if available, otherwise fall back to string parsing
+    let hasPCI = false;
+    let hasPII = false;
+    let hasPHI = false;
+    
+    // Check boolean fields first (if they exist on the app object)
+    if (app.pciData === true || app.pciData === 'true') {
+      hasPCI = true;
+    }
+    if (app.piiData === true || app.piiData === 'true') {
+      hasPII = true;
+    }
+    if (app.phiData === true || app.phiData === 'true') {
+      hasPHI = true;
+    }
+    
+    // Fall back to parsing dataTypes string if boolean fields not available
+    if (!hasPCI && !hasPII && !hasPHI && app.dataTypes) {
       const dataTypesArray = app.dataTypes.split(',').map(dt => dt.trim());
       dataTypesArray.forEach(dt => {
-        if (riskFactors.dataTypes[dt]) {
-          riskWeight = Math.max(riskWeight, riskFactors.dataTypes[dt]);
-        }
+        if (dt.toUpperCase().includes('PCI')) hasPCI = true;
+        if (dt.toUpperCase().includes('PII')) hasPII = true;
+        if (dt.toUpperCase().includes('PHI')) hasPHI = true;
       });
+    }
+    
+    // Apply risk factors
+    if (hasPCI && riskFactors.dataTypes['PCI']) {
+      riskWeight = Math.max(riskWeight, riskFactors.dataTypes['PCI']);
+    }
+    if (hasPII && riskFactors.dataTypes['PII']) {
+      riskWeight = Math.max(riskWeight, riskFactors.dataTypes['PII']);
+    }
+    if (hasPHI && riskFactors.dataTypes['PHI']) {
+      riskWeight = Math.max(riskWeight, riskFactors.dataTypes['PHI']);
     }
     
     const categoryMaxPoints = BASE_POINTS_PER_CATEGORY * riskWeight;
@@ -129,8 +262,63 @@ export function calculateToolUsageScore(app) {
       toolWeight = toolQuality.approvedUnmanaged[tool];
     }
 
+    // Check scan date freshness for SAST and DAST tools based on last deployment
+    let scanDateWeight = 1.0; // Default: full points
+    if (category === 'sast' || category === 'dast') {
+      const scanDateField = category === 'sast' ? 'lastSastScanDate' : 'lastDastScanDate';
+      const scanDate = app[scanDateField] ? new Date(app[scanDateField]) : null;
+      
+      // Get last deployment date
+      let lastDeploymentDate = null;
+      if (app.deployments && Array.isArray(app.deployments) && app.deployments.length > 0) {
+        // Find most recent deployment
+        const sortedDeployments = [...app.deployments].sort((a, b) => {
+          const dateA = new Date(a.deployedAt);
+          const dateB = new Date(b.deployedAt);
+          return dateB - dateA; // Descending order
+        });
+        lastDeploymentDate = new Date(sortedDeployments[0].deployedAt);
+      }
+      
+      if (scanDate) {
+        if (lastDeploymentDate) {
+          // Check if scan was done within grace period relative to last deployment
+          // Scan should be done 1 day before deployment or more recent (within 1 day after)
+          const daysAfterDeployment = (scanDate.getTime() - lastDeploymentDate.getTime()) / (1000 * 60 * 60 * 24);
+          
+          if (daysAfterDeployment < -SCAN_GRACE_PERIOD_DAYS) {
+            // Scan is more than 1 day BEFORE last deployment - penalty
+            // The further before, the larger the penalty
+            const daysBefore = Math.abs(daysAfterDeployment) - SCAN_GRACE_PERIOD_DAYS;
+            scanDateWeight = Math.max(0.3, 1.0 - (daysBefore * 0.1)); // Decreasing weight based on days before
+          } else if (daysAfterDeployment > SCAN_GRACE_PERIOD_DAYS) {
+            // Scan is more than 1 day AFTER last deployment - also penalty
+            // The further after, the larger the penalty
+            const daysAfter = daysAfterDeployment - SCAN_GRACE_PERIOD_DAYS;
+            scanDateWeight = Math.max(0.3, 1.0 - (daysAfter * 0.1)); // Decreasing weight based on days after
+          }
+          // If scan is within grace period (1 day before to 1 day after deployment), full points
+        } else {
+          // No deployments recorded, use absolute date check as fallback
+          const daysSinceScan = (Date.now() - scanDate.getTime()) / (1000 * 60 * 60 * 24);
+          if (daysSinceScan > 90) {
+            scanDateWeight = 0.5; // 50% penalty for very old scans when no deployment data
+          }
+        }
+      } else {
+        // If tool is configured but no scan date, apply a penalty
+        if (lastDeploymentDate) {
+          // If there are deployments but no scan, significant penalty
+          scanDateWeight = 0.3; // 70% penalty for missing scan dates when deployments exist
+        } else {
+          // No deployments and no scan date - smaller penalty
+          scanDateWeight = 0.8; // 20% penalty for missing scan dates
+        }
+      }
+    }
+
     // Calculate achieved points for this tool
-    const achievedPointsForTool = categoryMaxPoints * integrationWeight * toolWeight;
+    const achievedPointsForTool = categoryMaxPoints * integrationWeight * toolWeight * scanDateWeight;
     totalAchievedPoints += achievedPointsForTool;
   }
 
@@ -143,19 +331,51 @@ export function calculateToolUsageScore(app) {
 }
 
 /**
- * Calculate total application score
+ * Calculate total application score with importance-based weighting
  * @param {Object} app - Application object from database
- * @returns {Object} - { knowledgeScore, toolScore, totalScore }
+ * @returns {Object} - { knowledgeScore, toolScore, totalScore, importanceScore, knowledgeWeight, toolWeight }
  */
 export function calculateApplicationScore(app) {
-  const knowledgeScore = calculateKnowledgeSharingScore(app);
-  const toolScore = calculateToolUsageScore(app);
+  // Calculate raw scores (0-50 each)
+  const rawKnowledgeScore = calculateKnowledgeSharingScore(app);
+  const rawToolScore = calculateToolUsageScore(app);
+  
+  // Calculate importance score (0-1 scale)
+  const importanceScore = calculateImportanceScore(app);
+  
+  // Determine weighting based on importance
+  // Low importance (0-0.33): More weight on Knowledge Sharing (60/40)
+  // Medium importance (0.33-0.67): Balanced (50/50)
+  // High importance (0.67-1.0): More weight on Tool Usage (40/60)
+  let knowledgeWeight, toolWeight;
+  if (importanceScore < 0.33) {
+    // Low importance: 60/40 split
+    knowledgeWeight = 0.6;
+    toolWeight = 0.4;
+  } else if (importanceScore < 0.67) {
+    // Medium importance: 50/50 split
+    knowledgeWeight = 0.5;
+    toolWeight = 0.5;
+  } else {
+    // High importance: 40/60 split
+    knowledgeWeight = 0.4;
+    toolWeight = 0.6;
+  }
+  
+  // Apply weights and scale to maintain 100 point total
+  const knowledgeScore = Math.round(rawKnowledgeScore * knowledgeWeight * 2);
+  const toolScore = Math.round(rawToolScore * toolWeight * 2);
   const totalScore = knowledgeScore + toolScore;
 
   return {
     knowledgeScore,
     toolScore,
     totalScore,
+    importanceScore: Math.round(importanceScore * 100) / 100, // Round to 2 decimal places
+    knowledgeWeight,
+    toolWeight,
+    rawKnowledgeScore, // Include raw scores for transparency
+    rawToolScore,
   };
 }
 

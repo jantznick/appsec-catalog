@@ -869,61 +869,60 @@ export function ApplicationDetail() {
       <Card className="mt-6">
         <CardContent>
           <div className="flex items-center justify-between mb-4">
-            <button
-              type="button"
+            <div
               onClick={() => setDeploymentHistoryExpanded(!deploymentHistoryExpanded)}
-              className="flex items-center justify-between text-left flex-1"
+              className="flex items-center gap-2 text-left flex-1 cursor-pointer"
             >
               <h3 className="text-lg font-semibold text-gray-900">Last 5 Deployments</h3>
-              <div className="flex items-center gap-2">
-                {canEdit() && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowDeploymentForm(true);
-                    }}
-                    className="p-2"
-                    title="Add Deployment"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                  </Button>
-                )}
-                {availableEnvironments.length > 0 && (
-                  <select
-                    value={deploymentEnvironmentFilter}
-                    onChange={(e) => {
-                      setDeploymentEnvironmentFilter(e.target.value);
-                      setDeploymentPage(1); // Reset to first page when filter changes
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-sm border border-gray-300 rounded px-2 py-1 bg-white"
-                    title="Filter by environment"
-                  >
-                    <option value="">All Environments</option>
-                    {availableEnvironments.map(env => (
-                      <option key={env} value={env}>{formatEnvironmentLabel(env)}</option>
-                    ))}
-                  </select>
-                )}
-                <svg
-                  className={`w-5 h-5 text-gray-500 transition-transform ${deploymentHistoryExpanded ? 'transform rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+              <svg
+                className={`w-5 h-5 text-gray-500 transition-transform ${deploymentHistoryExpanded ? 'transform rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+            <div className="flex items-center gap-2">
+              {canEdit() && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDeploymentForm(true);
+                  }}
+                  className="p-2"
+                  title="Add Deployment"
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </button>
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </Button>
+              )}
+              {availableEnvironments.length > 0 && (
+                <select
+                  value={deploymentEnvironmentFilter}
+                  onChange={(e) => {
+                    setDeploymentEnvironmentFilter(e.target.value);
+                    setDeploymentPage(1); // Reset to first page when filter changes
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-sm border border-gray-300 rounded px-2 py-1 bg-white"
+                  title="Filter by environment"
+                >
+                  <option value="">All Environments</option>
+                  {availableEnvironments.map(env => (
+                    <option key={env} value={env}>{formatEnvironmentLabel(env)}</option>
+                  ))}
+                </select>
+              )}
+            </div>
           </div>
           {deploymentHistoryExpanded && (
             <>

@@ -579,7 +579,17 @@ router.put('/public/:id', async (req, res) => {
 
     // Recalculate and save score after update
     try {
-      const scores = calculateApplicationScore(application);
+      // Fetch application with deployments for scoring
+      const appWithDeployments = await prisma.application.findUnique({
+        where: { id: application.id },
+        include: {
+          deployments: {
+            orderBy: { deployedAt: 'desc' },
+            take: 1,
+          },
+        },
+      });
+      const scores = calculateApplicationScore(appWithDeployments);
       await prisma.score.create({
         data: {
           applicationId: application.id,
@@ -644,74 +654,7 @@ router.put('/public/:id', async (req, res) => {
   }
 });
 
-// APP-4: Get application detail
-router.get('/:id', requireAuth, async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const application = await prisma.application.findUnique({
-      where: { id },
-      include: {
-        company: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        contacts: true,
-        applicationDomains: {
-          include: {
-            domain: true,
-          },
-        },
-        deployments: {
-          orderBy: { deployedAt: 'desc' },
-          take: 10, // Get last 10 deployments for the detail view
-        },
-      },
-    });
-
-    // Transform domains to a simpler format
-    if (application) {
-      application.domains = application.applicationDomains.map(ad => ad.domain);
-      delete application.applicationDomains;
-    }
-
-    if (!application) {
-      return res.status(404).json({ error: 'Application not found' });
-    }
-
-    // Check if user has access (admin or member of same company)
-    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
-      return res.status(403).json({
-        error: 'Permission denied',
-        message: 'You can only access applications in your company',
-      });
-    }
-
-    // Auto-populate current deployment info from most recent deployment
-    if (application.deployments && application.deployments.length > 0) {
-      const latestDeployment = application.deployments[0]; // Already sorted by deployedAt desc
-      // Only override if the fields are not manually set (null/empty means use latest deployment)
-      if (!application.currentVersion && latestDeployment.version) {
-        application.currentVersion = latestDeployment.version;
-      }
-      if (!application.deploymentEnvironment && latestDeployment.environment) {
-        application.deploymentEnvironment = latestDeployment.environment;
-      }
-      if (!application.gitBranch && latestDeployment.gitBranch) {
-        application.gitBranch = latestDeployment.gitBranch;
-      }
-    }
-
-    res.json(application);
-  } catch (error) {
-    console.error('Error fetching application:', error);
-    res.status(500).json({ error: 'Failed to fetch application' });
-  }
-});
-
-// Get application score
+// Get application score - MUST come before /:id route
 router.get('/:id/score', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -724,6 +667,10 @@ router.get('/:id/score', requireAuth, async (req, res) => {
             id: true,
             name: true,
           },
+        },
+        deployments: {
+          orderBy: { deployedAt: 'desc' },
+          take: 1, // Only need the most recent deployment for scoring
         },
       },
     });
@@ -760,16 +707,100 @@ router.get('/:id/score', requireAuth, async (req, res) => {
 
     // Calculate breakdown for knowledge sharing
     const knowledgeFields = [
-      'description',
-      'devTeamContact',
-      'repoUrl',
-      'language',
-      'framework',
-      'serverEnvironment',
-      'authProfiles',
-      'dataTypes',
+      { key: 'description', label: 'Description' },
+      { key: 'devTeamContact', label: 'Development Team Contact' },
+      { key: 'repoUrl', label: 'Repository URL' },
+      { key: 'language', label: 'Language' },
+      { key: 'framework', label: 'Framework' },
+      { key: 'serverEnvironment', label: 'Server Environment' },
+      { key: 'authProfiles', label: 'Authentication Profiles' },
+      { key: 'dataTypes', label: 'Data Types' },
     ];
-    const fieldsFilled = knowledgeFields.filter(field => application[field]).length;
+    const fieldsFilled = knowledgeFields.filter(field => application[field.key]).length;
+    const missingFields = knowledgeFields.filter(field => !application[field.key]).map(f => f.label);
+
+    // Calculate tool recommendations
+    const toolCategories = [
+      { key: 'sast', label: 'SAST', toolField: 'sastTool', levelField: 'sastIntegrationLevel', scanField: 'lastSastScanDate' },
+      { key: 'dast', label: 'DAST', toolField: 'dastTool', levelField: 'dastIntegrationLevel', scanField: 'lastDastScanDate' },
+      { key: 'appFirewall', label: 'Application Firewall', toolField: 'appFirewallTool', levelField: 'appFirewallIntegrationLevel', scanField: null },
+      { key: 'apiSecurity', label: 'API Security', toolField: 'apiSecurityTool', levelField: 'apiSecurityIntegrationLevel', scanField: null },
+    ];
+
+    const toolRecommendations = toolCategories.map(category => {
+      const tool = application[category.toolField];
+      const level = application[category.levelField];
+      const scanDate = category.scanField ? application[category.scanField] : null;
+      const isNA = category.key === 'apiSecurity' && application.apiSecurityNA;
+
+      // Determine if tool is configured
+      const isConfigured = isNA || (tool && typeof tool === 'string' && tool.trim() !== '' && level !== null && level !== undefined);
+
+      let status = 'complete';
+      let recommendation = null;
+
+      if (isNA) {
+        status = 'complete';
+      } else if (!tool || level === null || level === undefined) {
+        status = 'missing';
+        recommendation = `Add ${category.label} tool and integration level`;
+      } else if (level < 2) {
+        status = 'low';
+        recommendation = `Increase ${category.label} integration level (currently level ${level})`;
+      } else if (category.scanField && scanDate) {
+        // Check if scan is recent relative to deployments
+        if (application.deployments && application.deployments.length > 0) {
+          const lastDeployment = application.deployments[0];
+          const scanDateObj = new Date(scanDate);
+          const deployDateObj = new Date(lastDeployment.deployedAt);
+          const daysDiff = (scanDateObj.getTime() - deployDateObj.getTime()) / (1000 * 60 * 60 * 24);
+          
+          if (daysDiff < -1 || daysDiff > 1) {
+            status = 'stale';
+            recommendation = `Update ${category.label} scan date (should be within 1 day of last deployment)`;
+          }
+        }
+      } else if (category.scanField && !scanDate) {
+        status = 'missing-scan';
+        recommendation = `Add ${category.label} scan date`;
+      }
+
+      return {
+        category: category.label,
+        tool,
+        level,
+        status,
+        recommendation,
+        isConfigured,
+      };
+    });
+
+    // Extract list of configured tools for easy frontend display
+    const configuredTools = toolRecommendations
+      .filter(t => t.isConfigured)
+      .map(t => t.category);
+
+    // Check metadata review status
+    let reviewRecommendation = null;
+    if (!application.metadataLastReviewed) {
+      reviewRecommendation = 'Request metadata review from AppSec team';
+    } else {
+      const reviewDate = new Date(application.metadataLastReviewed);
+      const daysSinceReview = (Date.now() - reviewDate.getTime()) / (1000 * 60 * 60 * 24);
+      // Show recommendation if it's been more than 5 months (approximately 150 days)
+      if (daysSinceReview > 150) {
+        reviewRecommendation = 'Request metadata review (last reviewed more than 5 months ago)';
+      }
+    }
+
+    // Check importance data completeness
+    const importanceFields = [
+      { key: 'businessCriticality', label: 'Business Criticality' },
+      { key: 'criticalAspects', label: 'Critical Aspects' },
+      { key: 'deploymentType', label: 'Deployment Type' },
+      { key: 'facing', label: 'Facing (Internal/External)' },
+    ];
+    const missingImportanceFields = importanceFields.filter(field => !application[field.key]).map(f => f.label);
 
     res.json({
       ...scores,
@@ -780,12 +811,93 @@ router.get('/:id/score', requireAuth, async (req, res) => {
           completenessScore: Math.round((fieldsFilled / knowledgeFields.length) * 40),
           reviewScore: scores.knowledgeScore - Math.round((fieldsFilled / knowledgeFields.length) * 40),
           lastReviewed: application.metadataLastReviewed,
+          missingFields,
+        },
+        tools: toolRecommendations,
+        configuredTools: configuredTools || [], // Always return an array
+        reviewRecommendation,
+        missingImportanceFields: missingImportanceFields.length > 0 ? missingImportanceFields : null,
+        importance: {
+          importanceScore: scores.importanceScore,
+          knowledgeWeight: scores.knowledgeWeight,
+          toolWeight: scores.toolWeight,
+          rawKnowledgeScore: scores.rawKnowledgeScore,
+          rawToolScore: scores.rawToolScore,
         },
       },
     });
   } catch (error) {
     console.error('Error calculating application score:', error);
     res.status(500).json({ error: 'Failed to calculate score' });
+  }
+});
+
+// APP-4: Get application detail
+router.get('/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const application = await prisma.application.findUnique({
+      where: { id },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        contacts: true,
+        applicationDomains: {
+          include: {
+            domain: true,
+          },
+        },
+        deployments: {
+          orderBy: { deployedAt: 'desc' },
+          take: 10, // Get last 10 deployments for the detail view
+        },
+      },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Transform domains to a simpler format
+    if (application.applicationDomains) {
+      application.domains = application.applicationDomains.map(ad => ad.domain);
+      delete application.applicationDomains;
+    } else {
+      application.domains = [];
+    }
+
+    // Check if user has access (admin or member of same company)
+    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only access applications in your company',
+      });
+    }
+
+    // Auto-populate current deployment info from most recent deployment
+    if (application.deployments && application.deployments.length > 0) {
+      const latestDeployment = application.deployments[0]; // Already sorted by deployedAt desc
+      // Only override if the fields are not manually set (null/empty means use latest deployment)
+      if (!application.currentVersion && latestDeployment.version) {
+        application.currentVersion = latestDeployment.version;
+      }
+      if (!application.deploymentEnvironment && latestDeployment.environment) {
+        application.deploymentEnvironment = latestDeployment.environment;
+      }
+      if (!application.gitBranch && latestDeployment.gitBranch) {
+        application.gitBranch = latestDeployment.gitBranch;
+      }
+    }
+
+    res.json(application);
+  } catch (error) {
+    console.error('Error fetching application:', error);
+    res.status(500).json({ error: 'Failed to fetch application' });
   }
 });
 
@@ -807,6 +919,12 @@ router.post('/:id/review', requireAuth, requireAdmin, async (req, res) => {
       where: { id },
       data: {
         metadataLastReviewed: new Date(),
+      },
+      include: {
+        deployments: {
+          orderBy: { deployedAt: 'desc' },
+          take: 1,
+        },
       },
     });
 
@@ -1287,7 +1405,17 @@ router.put('/:id', requireAuth, async (req, res) => {
 
     // Recalculate and save score after update
     try {
-      const scores = calculateApplicationScore(application);
+      // Fetch application with deployments for scoring
+      const appWithDeployments = await prisma.application.findUnique({
+        where: { id: application.id },
+        include: {
+          deployments: {
+            orderBy: { deployedAt: 'desc' },
+            take: 1,
+          },
+        },
+      });
+      const scores = calculateApplicationScore(appWithDeployments);
       await prisma.score.create({
         data: {
           applicationId: application.id,

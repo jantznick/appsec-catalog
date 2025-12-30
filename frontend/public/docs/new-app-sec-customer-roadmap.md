@@ -1,4 +1,3 @@
-# New Customer Roadmap
 
 ## Your Journey to Enhanced Application Security
 

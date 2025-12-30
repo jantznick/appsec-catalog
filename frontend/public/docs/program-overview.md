@@ -1,4 +1,3 @@
-# AppSec Program Overview
 
 ## Your Partner in Building Secure Software
 
