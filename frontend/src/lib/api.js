@@ -138,6 +138,9 @@ export const api = {
     }),
   getApplicationPublic: (id) =>
     apiRequest(`/api/applications/public/${id}`),
+
+  getCompanyApplicationsPublic: (companySlug) =>
+    apiRequest(`/api/applications/public/company/${companySlug}`),
   updateApplicationPublic: (id, data) =>
     apiRequest(`/api/applications/public/${id}`, {
       method: 'PUT',
@@ -189,6 +192,17 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  bulkImportApplications: (companyId, applications) =>
+    apiRequest('/api/applications/bulk-import', {
+      method: 'POST',
+      body: JSON.stringify({ companyId, applications }),
+    }),
+
+  generateTechnicalFormLink: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/generate-technical-link`, {
+      method: 'POST',
+    }),
   createApplicationOnboard: (data) =>
     apiRequest('/api/applications/onboard', {
       method: 'POST',
@@ -201,6 +215,11 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  deleteApplication: (id) =>
+    apiRequest(`/api/applications/${id}`, {
+      method: 'DELETE',
+    }),
+
   // Domain management
   addDomainToApplication: (applicationId, domainName) =>
     apiRequest(`/api/applications/${applicationId}/domains`, {
@@ -210,6 +229,48 @@ export const api = {
 
   removeDomainFromApplication: (applicationId, domainId) =>
     apiRequest(`/api/applications/${applicationId}/domains/${domainId}`, {
+      method: 'DELETE',
+    }),
+
+  // Deployment management
+  getDeployments: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/deployments`),
+
+  createDeployment: (applicationId, data) =>
+    apiRequest(`/api/applications/${applicationId}/deployments`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  deleteDeployment: (applicationId, deploymentId) =>
+    apiRequest(`/api/applications/${applicationId}/deployments/${deploymentId}`, {
+      method: 'DELETE',
+    }),
+
+  // Deployment token management
+  createDeploymentToken: (applicationId, name) =>
+    apiRequest(`/api/applications/${applicationId}/deployment-tokens`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+
+  getDeploymentTokensForApplication: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/deployment-tokens`),
+
+  getDeploymentTokens: () =>
+    apiRequest('/api/deployment-tokens'),
+
+  getDeploymentToken: (tokenId) =>
+    apiRequest(`/api/deployment-tokens/${tokenId}`),
+
+  updateDeploymentToken: (tokenId, data) =>
+    apiRequest(`/api/deployment-tokens/${tokenId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  revokeDeploymentToken: (tokenId) =>
+    apiRequest(`/api/deployment-tokens/${tokenId}`, {
       method: 'DELETE',
     }),
 
@@ -238,5 +299,35 @@ export const api = {
     const queryString = params.toString();
     return apiRequest(`/api/admin/applications${queryString ? `?${queryString}` : ''}`);
   },
+
+  // Notes endpoints
+  getCompanyNotes: (companyId) =>
+    apiRequest(`/api/notes/company/${companyId}`),
+
+  getApplicationNotes: (applicationId) =>
+    apiRequest(`/api/notes/application/${applicationId}`),
+
+  createCompanyNote: (companyId, content) =>
+    apiRequest(`/api/notes/company/${companyId}`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
+
+  createApplicationNote: (applicationId, content) =>
+    apiRequest(`/api/notes/application/${applicationId}`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
+
+  updateNote: (noteId, content) =>
+    apiRequest(`/api/notes/${noteId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    }),
+
+  deleteNote: (noteId) =>
+    apiRequest(`/api/notes/${noteId}`, {
+      method: 'DELETE',
+    }),
 };
 

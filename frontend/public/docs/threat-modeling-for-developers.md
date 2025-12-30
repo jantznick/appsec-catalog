@@ -1,4 +1,3 @@
-# Threat Modeling for Developers
 
 ## Thinking Like an Attacker to Build Better Defenses
 

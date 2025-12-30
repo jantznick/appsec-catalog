@@ -19,10 +19,10 @@ export function OnboardApplication() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [useDefaults, setUseDefaults] = useState(true);
-  const [interfaceSearch, setInterfaceSearch] = useState('');
-  const [interfaceResults, setInterfaceResults] = useState([]);
   const [interfaces, setInterfaces] = useState([]);
-  const [showInterfaceResults, setShowInterfaceResults] = useState(false);
+  const [availableApplications, setAvailableApplications] = useState([]);
+  const [loadingApplications, setLoadingApplications] = useState(false);
+  const [newInterfaceName, setNewInterfaceName] = useState('');
   const [integrationLevels, setIntegrationLevels] = useState([]);
 
   const [formData, setFormData] = useState({
@@ -64,6 +64,12 @@ export function OnboardApplication() {
     }
   }, [slug, applicationId]);
 
+  useEffect(() => {
+    if (company && (formData.hasInterfaces === 'Yes' || interfaces.length > 0)) {
+      loadAvailableApplications();
+    }
+  }, [company, formData.hasInterfaces, interfaces.length]);
+
   const loadIntegrationLevels = async () => {
     try {
       const levels = await api.getIntegrationLevels();
@@ -73,22 +79,25 @@ export function OnboardApplication() {
     }
   };
 
-  // Removed company defaults pre-fill for technical form
-
-  // Debounced search for interfaces
-  useEffect(() => {
-    if (interfaceSearch.trim().length < 2) {
-      setInterfaceResults([]);
-      setShowInterfaceResults(false);
-      return;
+  const loadAvailableApplications = async () => {
+    if (!company || !slug) return;
+    
+    setLoadingApplications(true);
+    try {
+      // Use public endpoint to get company applications (no auth required)
+      const apps = await api.getCompanyApplicationsPublic(slug);
+      // Exclude current application if it exists
+      const filtered = apps.filter(app => 
+        (!applicationId || app.id !== applicationId)
+      );
+      setAvailableApplications(filtered);
+    } catch (error) {
+      console.error('Failed to load applications:', error);
+      toast.error('Failed to load available applications');
+    } finally {
+      setLoadingApplications(false);
     }
-
-    const timer = setTimeout(() => {
-      searchInterfaces(interfaceSearch);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [interfaceSearch, company]);
+  };
 
   const loadCompany = async () => {
     try {
@@ -133,11 +142,18 @@ export function OnboardApplication() {
       if (app.interfaces) {
         try {
           const interfaceIds = JSON.parse(app.interfaces);
-          // Fetch interface applications to get names
-          const interfaceApps = await Promise.all(
-            interfaceIds.map(id => api.getApplicationPublic(id))
-          );
-          setInterfaces(interfaceApps.map(app => app.name));
+          if (Array.isArray(interfaceIds) && interfaceIds.length > 0) {
+            // Fetch interface applications to get names
+            const interfaceApps = await Promise.all(
+              interfaceIds.map(id => api.getApplicationPublic(id))
+            );
+            setInterfaces(interfaceApps.map(app => app.name));
+            // Auto-select "Yes" if interfaces exist
+            setFormData(prev => ({
+              ...prev,
+              hasInterfaces: 'Yes',
+            }));
+          }
         } catch (e) {
           console.error('Error parsing interfaces:', e);
         }
@@ -150,30 +166,29 @@ export function OnboardApplication() {
     }
   };
 
-  const searchInterfaces = async (query) => {
-    if (!company) return;
-    
-    try {
-      const results = await api.searchApplicationsByName(query);
-      setInterfaceResults(results.filter(app => app.companyId === company.id));
-      setShowInterfaceResults(true);
-    } catch (error) {
-      console.error('Search error:', error);
-      setInterfaceResults([]);
+  const toggleInterface = (appName) => {
+    if (interfaces.includes(appName)) {
+      removeInterface(appName);
+    } else {
+      addInterface(appName);
     }
   };
 
-  const addInterface = (app) => {
-    const name = typeof app === 'string' ? app : app.name;
-    if (name && !interfaces.includes(name)) {
-      setInterfaces([...interfaces, name]);
+  const addInterface = (name) => {
+    if (name && name.trim() && !interfaces.includes(name.trim())) {
+      setInterfaces([...interfaces, name.trim()]);
     }
-    setInterfaceSearch('');
-    setShowInterfaceResults(false);
   };
 
   const removeInterface = (name) => {
     setInterfaces(interfaces.filter(i => i !== name));
+  };
+
+  const handleAddNewInterface = () => {
+    if (newInterfaceName.trim()) {
+      addInterface(newInterfaceName.trim());
+      setNewInterfaceName('');
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -480,71 +495,92 @@ export function OnboardApplication() {
                   />
                 </RadioGroup>
                 {formData.hasInterfaces === 'Yes' && (
-                  <div className="relative">
-                    <Input
-                      label="Which applications does it interact with?"
-                      value={interfaceSearch}
-                      onChange={(e) => setInterfaceSearch(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && interfaceSearch.trim().length >= 2) {
-                          e.preventDefault();
-                          addInterface(interfaceSearch.trim());
-                        }
-                      }}
-                      placeholder="Start typing to search..."
-                      helperText="Applications will be created automatically if they don't exist"
-                    />
-                    {showInterfaceResults && interfaceResults.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {interfaceResults.map((app) => (
-                          <button
-                            key={app.id}
-                            type="button"
-                            onClick={() => addInterface(app)}
-                            className="w-full text-left px-4 py-2 hover:bg-gray-100"
-                          >
-                            <div className="font-medium">{app.name}</div>
-                          </button>
-                        ))}
+                  <div className="space-y-4">
+                    {/* Available Applications Pills */}
+                    {loadingApplications ? (
+                      <p className="text-sm text-gray-500">Loading applications...</p>
+                    ) : (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Select from existing applications:
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {availableApplications.map((app) => {
+                            const isSelected = interfaces.includes(app.name);
+                            return (
+                              <button
+                                key={app.id}
+                                type="button"
+                                onClick={() => toggleInterface(app.name)}
+                                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                                  isSelected
+                                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                              >
+                                {app.name}
+                              </button>
+                            );
+                          })}
+                          {availableApplications.length === 0 && (
+                            <p className="text-sm text-gray-500">No other applications available</p>
+                          )}
+                        </div>
                       </div>
                     )}
-                    {interfaceSearch.trim().length >= 2 && interfaceResults.length === 0 && showInterfaceResults && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-4 text-sm text-gray-600">
-                        No applications found. Press Enter to create "{interfaceSearch}"
+
+                    {/* Add New Interface */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Or add a new application name:
+                      </label>
+                      <div className="flex gap-2">
+                        <Input
+                          value={newInterfaceName}
+                          onChange={(e) => setNewInterfaceName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && newInterfaceName.trim()) {
+                              e.preventDefault();
+                              handleAddNewInterface();
+                            }
+                          }}
+                          placeholder="Type application name and press Enter"
+                          className="flex-1"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleAddNewInterface}
+                          disabled={!newInterfaceName.trim()}
+                        >
+                          Add
+                        </Button>
                       </div>
-                    )}
-                    {interfaceSearch.trim().length >= 2 && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="mt-2"
-                        onClick={() => {
-                          if (interfaceSearch.trim()) {
-                            addInterface(interfaceSearch.trim());
-                          }
-                        }}
-                      >
-                        Add "{interfaceSearch}"
-                      </Button>
-                    )}
+                    </div>
+
+                    {/* Selected Interfaces */}
                     {interfaces.length > 0 && (
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {interfaces.map((name, idx) => (
-                          <span
-                            key={idx}
-                            className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800"
-                          >
-                            {name}
-                            <button
-                              type="button"
-                              onClick={() => removeInterface(name)}
-                              className="ml-2 text-blue-600 hover:text-blue-800"
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Selected interfaces:
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {interfaces.map((name, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-800"
                             >
-                              ×
-                            </button>
-                          </span>
-                        ))}
+                              {name}
+                              <button
+                                type="button"
+                                onClick={() => removeInterface(name)}
+                                className="ml-2 text-blue-600 hover:text-blue-800 font-bold"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>

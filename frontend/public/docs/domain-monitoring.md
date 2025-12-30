@@ -1,4 +1,3 @@
-# Domain Monitoring
 
 ## Proactive Defense for Your Online Presence
 

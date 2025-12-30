@@ -3,6 +3,83 @@ import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { calculateApplicationScore } from '../services/scoring.js';
 import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
+import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
+
+/**
+ * Get or create system user for automated notes
+ */
+async function getSystemUser() {
+  const systemEmail = 'system@appsec-catalog.local';
+  try {
+    let systemUser = await prisma.user.findUnique({
+      where: { email: systemEmail },
+    });
+
+    if (!systemUser) {
+      // Create system user if it doesn't exist
+      systemUser = await prisma.user.create({
+        data: {
+          email: systemEmail,
+          isAdmin: false,
+          verifiedAccount: true,
+        },
+      });
+    }
+
+    return systemUser;
+  } catch (error) {
+    console.error('Error getting system user:', error);
+    return null;
+  }
+}
+
+/**
+ * Helper function to create a note
+ * @param {string|null} userId - User ID who created the note (null for system user)
+ * @param {string} content - Note content
+ * @param {string} companyId - Optional company ID
+ * @param {string} applicationId - Optional application ID
+ */
+async function createNote(userId, content, companyId = null, applicationId = null) {
+  try {
+    // If no user ID provided, use system user
+    let finalUserId = userId;
+    if (!finalUserId) {
+      const systemUser = await getSystemUser();
+      if (!systemUser) {
+        console.error('Cannot create note: system user not available');
+        return;
+      }
+      finalUserId = systemUser.id;
+    }
+
+    await prisma.note.create({
+      data: {
+        content: content.trim(),
+        createdBy: finalUserId,
+        companyId: companyId,
+        applicationId: applicationId,
+      },
+    });
+  } catch (error) {
+    console.error('Error creating automatic note:', error);
+    // Don't throw - notes are supplementary, don't fail the main operation
+  }
+}
+
+/**
+ * Get field names that were provided in a request
+ */
+function getProvidedFields(data, fieldMapping = {}) {
+  const providedFields = [];
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== null && value !== undefined && value !== '') {
+      const fieldName = fieldMapping[key] || key;
+      providedFields.push(fieldName);
+    }
+  }
+  return providedFields;
+}
 
 const router = express.Router();
 
@@ -75,6 +152,32 @@ router.post('/onboard/executive', async (req, res) => {
       })
     );
 
+    // Create automatic note for executive form submission
+    try {
+      const appNames = createdApplications.map(app => app.name).join(', ');
+      const fieldMapping = {
+        name: 'Name',
+        description: 'Description',
+        facing: 'Facing',
+        serverEnvironment: 'Server Environment',
+        businessCriticality: 'Business Criticality',
+        criticalAspects: 'Critical Aspects',
+        devTeamContact: 'Dev Team Contact',
+      };
+      
+      // Get fields that were provided in the first application (representative sample)
+      const firstApp = appsToCreate[0];
+      const providedFields = getProvidedFields(firstApp, fieldMapping);
+      
+      const userId = req.session?.userId || null; // Use system user if no session
+      const noteContent = `Executive form submitted. Created ${createdApplications.length} application(s): ${appNames}. Fields provided: ${providedFields.join(', ')}.`;
+      
+      await createNote(userId, noteContent, company.id, null);
+    } catch (error) {
+      console.error('Error creating note for executive form:', error);
+      // Don't fail the request if note creation fails
+    }
+
     // Return single application for backward compatibility, or array for multiple
     if (appsToCreate.length === 1) {
       res.status(201).json({
@@ -127,6 +230,42 @@ router.get('/', requireAuth, async (req, res) => {
     res.json(applications);
   } catch (error) {
     console.error('Error fetching applications:', error);
+    res.status(500).json({ error: 'Failed to fetch applications' });
+  }
+});
+
+// Public: Get applications by company slug (for technical onboarding form interface selection)
+// NOTE: Must come BEFORE /public/:id because Express matches routes in order
+// More specific routes must come before more general ones
+router.get('/public/company/:slug', async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    // Find company by slug
+    const company = await prisma.company.findFirst({
+      where: { slug },
+      select: { id: true, name: true },
+    });
+
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    // Get all applications for this company (only name and id for interface selection)
+    const applications = await prisma.application.findMany({
+      where: { companyId: company.id },
+      select: {
+        id: true,
+        name: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+
+    res.json(applications);
+  } catch (error) {
+    console.error('Error fetching company applications:', error);
     res.status(500).json({ error: 'Failed to fetch applications' });
   }
 });
@@ -253,10 +392,9 @@ router.put('/public/:id', async (req, res) => {
 
     // Process interfaces
     let interfacesJson = null;
+    let interfaceAppIds = [];
     if (hasInterfaces === 'Yes' || hasInterfaces === true) {
       if (interfaces && Array.isArray(interfaces) && interfaces.length > 0) {
-        const interfaceAppIds = [];
-        
         for (const interfaceName of interfaces) {
           if (!interfaceName || !interfaceName.trim()) continue;
           
@@ -321,9 +459,137 @@ router.put('/public/:id', async (req, res) => {
       data: updateData,
     });
 
+    // Update reciprocal interfaces if interfaces were changed
+    if (hasInterfaces === 'Yes' || hasInterfaces === true) {
+      if (interfaceAppIds.length > 0) {
+        try {
+          const currentAppId = application.id;
+          
+          // For each interface application, add this application to their interfaces
+          for (const interfaceAppId of interfaceAppIds) {
+            const interfaceApp = await prisma.application.findUnique({
+              where: { id: interfaceAppId },
+            });
+            
+            if (interfaceApp && interfaceApp.interfaces) {
+              try {
+                const existingInterfaces = JSON.parse(interfaceApp.interfaces);
+                if (!Array.isArray(existingInterfaces)) {
+                  await prisma.application.update({
+                    where: { id: interfaceAppId },
+                    data: {
+                      interfaces: JSON.stringify([currentAppId]),
+                    },
+                  });
+                } else if (!existingInterfaces.includes(currentAppId)) {
+                  existingInterfaces.push(currentAppId);
+                  await prisma.application.update({
+                    where: { id: interfaceAppId },
+                    data: {
+                      interfaces: JSON.stringify(existingInterfaces),
+                    },
+                  });
+                }
+              } catch (e) {
+                await prisma.application.update({
+                  where: { id: interfaceAppId },
+                  data: {
+                    interfaces: JSON.stringify([currentAppId]),
+                  },
+                });
+              }
+            } else if (interfaceApp) {
+              await prisma.application.update({
+                where: { id: interfaceAppId },
+                data: {
+                  interfaces: JSON.stringify([currentAppId]),
+                },
+              });
+            }
+          }
+          
+          // Remove this app from interfaces that are no longer in the list
+          if (existing.interfaces) {
+            try {
+              const oldInterfaceIds = JSON.parse(existing.interfaces);
+              if (Array.isArray(oldInterfaceIds)) {
+                const removedIds = oldInterfaceIds.filter(id => !interfaceAppIds.includes(id));
+                for (const removedId of removedIds) {
+                  const removedApp = await prisma.application.findUnique({
+                    where: { id: removedId },
+                  });
+                  if (removedApp && removedApp.interfaces) {
+                    try {
+                      const removedAppInterfaces = JSON.parse(removedApp.interfaces);
+                      if (Array.isArray(removedAppInterfaces)) {
+                        const updated = removedAppInterfaces.filter(id => id !== currentAppId);
+                        await prisma.application.update({
+                          where: { id: removedId },
+                          data: {
+                            interfaces: updated.length > 0 ? JSON.stringify(updated) : null,
+                          },
+                        });
+                      }
+                    } catch (e) {
+                      // Ignore parse errors
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              // Ignore parse errors
+            }
+          }
+        } catch (error) {
+          console.error('Error updating reciprocal interfaces:', error);
+          // Don't fail the request if reciprocal update fails
+        }
+      } else if (existing.interfaces) {
+        // If interfaces were cleared, remove this app from all interface apps
+        try {
+          const oldInterfaceIds = JSON.parse(existing.interfaces);
+          if (Array.isArray(oldInterfaceIds)) {
+            for (const oldInterfaceId of oldInterfaceIds) {
+              const oldInterfaceApp = await prisma.application.findUnique({
+                where: { id: oldInterfaceId },
+              });
+              if (oldInterfaceApp && oldInterfaceApp.interfaces) {
+                try {
+                  const oldInterfaces = JSON.parse(oldInterfaceApp.interfaces);
+                  if (Array.isArray(oldInterfaces)) {
+                    const updated = oldInterfaces.filter(id => id !== application.id);
+                    await prisma.application.update({
+                      where: { id: oldInterfaceId },
+                      data: {
+                        interfaces: updated.length > 0 ? JSON.stringify(updated) : null,
+                      },
+                    });
+                  }
+                } catch (e) {
+                  // Ignore parse errors
+                }
+              }
+            }
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      }
+    }
+
     // Recalculate and save score after update
     try {
-      const scores = calculateApplicationScore(application);
+      // Fetch application with deployments for scoring
+      const appWithDeployments = await prisma.application.findUnique({
+        where: { id: application.id },
+        include: {
+          deployments: {
+            orderBy: { deployedAt: 'desc' },
+            take: 1,
+          },
+        },
+      });
+      const scores = calculateApplicationScore(appWithDeployments);
       await prisma.score.create({
         data: {
           applicationId: application.id,
@@ -336,6 +602,48 @@ router.put('/public/:id', async (req, res) => {
       console.error('Error saving score after update:', error);
     }
 
+    // Create automatic note for technical form submission
+    try {
+      const fieldMapping = {
+        repoUrl: 'Repository URL',
+        deploymentFrequency: 'Deployment Frequency',
+        deploymentMethod: 'Deployment Method',
+        requiresSpecialAccess: 'Requires Special Access',
+        authInfo: 'Auth Info',
+        handlesUserData: 'Handles User Data',
+        userDataTypes: 'User Data Types',
+        userDataStorage: 'User Data Storage',
+        hasInterfaces: 'Has Interfaces',
+        interfaces: 'Interfaces',
+        pciData: 'PCI Data',
+        piiData: 'PII Data',
+        phiData: 'PHI Data',
+        hasSecurityTesting: 'Has Security Testing',
+        securityTestingDescription: 'Security Testing Description',
+        additionalNotes: 'Additional Notes',
+        sastTool: 'SAST Tool',
+        sastIntegrationLevel: 'SAST Integration Level',
+        dastTool: 'DAST Tool',
+        dastIntegrationLevel: 'DAST Integration Level',
+        appFirewallTool: 'App Firewall Tool',
+        appFirewallIntegrationLevel: 'App Firewall Integration Level',
+        apiSecurityTool: 'API Security Tool',
+        apiSecurityIntegrationLevel: 'API Security Integration Level',
+        apiSecurityNA: 'API Security N/A',
+      };
+      
+      const providedFields = getProvidedFields(req.body, fieldMapping);
+      
+      if (providedFields.length > 0) {
+        const userId = req.session?.userId || null; // Use system user if no session
+        const noteContent = `Technical form submitted for application "${application.name}". Fields provided: ${providedFields.join(', ')}.`;
+        await createNote(userId, noteContent, null, application.id);
+      }
+    } catch (error) {
+      console.error('Error creating note for technical form:', error);
+      // Don't fail the request if note creation fails
+    }
+
     res.json({
       application,
       message: 'Application technical details updated successfully',
@@ -346,55 +654,7 @@ router.put('/public/:id', async (req, res) => {
   }
 });
 
-// APP-4: Get application detail
-router.get('/:id', requireAuth, async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const application = await prisma.application.findUnique({
-      where: { id },
-      include: {
-        company: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        contacts: true,
-        applicationDomains: {
-          include: {
-            domain: true,
-          },
-        },
-      },
-    });
-
-    // Transform domains to a simpler format
-    if (application) {
-      application.domains = application.applicationDomains.map(ad => ad.domain);
-      delete application.applicationDomains;
-    }
-
-    if (!application) {
-      return res.status(404).json({ error: 'Application not found' });
-    }
-
-    // Check if user has access (admin or member of same company)
-    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
-      return res.status(403).json({
-        error: 'Permission denied',
-        message: 'You can only access applications in your company',
-      });
-    }
-
-    res.json(application);
-  } catch (error) {
-    console.error('Error fetching application:', error);
-    res.status(500).json({ error: 'Failed to fetch application' });
-  }
-});
-
-// Get application score
+// Get application score - MUST come before /:id route
 router.get('/:id/score', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -407,6 +667,10 @@ router.get('/:id/score', requireAuth, async (req, res) => {
             id: true,
             name: true,
           },
+        },
+        deployments: {
+          orderBy: { deployedAt: 'desc' },
+          take: 1, // Only need the most recent deployment for scoring
         },
       },
     });
@@ -443,16 +707,100 @@ router.get('/:id/score', requireAuth, async (req, res) => {
 
     // Calculate breakdown for knowledge sharing
     const knowledgeFields = [
-      'description',
-      'devTeamContact',
-      'repoUrl',
-      'language',
-      'framework',
-      'serverEnvironment',
-      'authProfiles',
-      'dataTypes',
+      { key: 'description', label: 'Description' },
+      { key: 'devTeamContact', label: 'Development Team Contact' },
+      { key: 'repoUrl', label: 'Repository URL' },
+      { key: 'language', label: 'Language' },
+      { key: 'framework', label: 'Framework' },
+      { key: 'serverEnvironment', label: 'Server Environment' },
+      { key: 'authProfiles', label: 'Authentication Profiles' },
+      { key: 'dataTypes', label: 'Data Types' },
     ];
-    const fieldsFilled = knowledgeFields.filter(field => application[field]).length;
+    const fieldsFilled = knowledgeFields.filter(field => application[field.key]).length;
+    const missingFields = knowledgeFields.filter(field => !application[field.key]).map(f => f.label);
+
+    // Calculate tool recommendations
+    const toolCategories = [
+      { key: 'sast', label: 'SAST', toolField: 'sastTool', levelField: 'sastIntegrationLevel', scanField: 'lastSastScanDate' },
+      { key: 'dast', label: 'DAST', toolField: 'dastTool', levelField: 'dastIntegrationLevel', scanField: 'lastDastScanDate' },
+      { key: 'appFirewall', label: 'Application Firewall', toolField: 'appFirewallTool', levelField: 'appFirewallIntegrationLevel', scanField: null },
+      { key: 'apiSecurity', label: 'API Security', toolField: 'apiSecurityTool', levelField: 'apiSecurityIntegrationLevel', scanField: null },
+    ];
+
+    const toolRecommendations = toolCategories.map(category => {
+      const tool = application[category.toolField];
+      const level = application[category.levelField];
+      const scanDate = category.scanField ? application[category.scanField] : null;
+      const isNA = category.key === 'apiSecurity' && application.apiSecurityNA;
+
+      // Determine if tool is configured
+      const isConfigured = isNA || (tool && typeof tool === 'string' && tool.trim() !== '' && level !== null && level !== undefined);
+
+      let status = 'complete';
+      let recommendation = null;
+
+      if (isNA) {
+        status = 'complete';
+      } else if (!tool || level === null || level === undefined) {
+        status = 'missing';
+        recommendation = `Add ${category.label} tool and integration level`;
+      } else if (level < 2) {
+        status = 'low';
+        recommendation = `Increase ${category.label} integration level (currently level ${level})`;
+      } else if (category.scanField && scanDate) {
+        // Check if scan is recent relative to deployments
+        if (application.deployments && application.deployments.length > 0) {
+          const lastDeployment = application.deployments[0];
+          const scanDateObj = new Date(scanDate);
+          const deployDateObj = new Date(lastDeployment.deployedAt);
+          const daysDiff = (scanDateObj.getTime() - deployDateObj.getTime()) / (1000 * 60 * 60 * 24);
+          
+          if (daysDiff < -1 || daysDiff > 1) {
+            status = 'stale';
+            recommendation = `Update ${category.label} scan date (should be within 1 day of last deployment)`;
+          }
+        }
+      } else if (category.scanField && !scanDate) {
+        status = 'missing-scan';
+        recommendation = `Add ${category.label} scan date`;
+      }
+
+      return {
+        category: category.label,
+        tool,
+        level,
+        status,
+        recommendation,
+        isConfigured,
+      };
+    });
+
+    // Extract list of configured tools for easy frontend display
+    const configuredTools = toolRecommendations
+      .filter(t => t.isConfigured)
+      .map(t => t.category);
+
+    // Check metadata review status
+    let reviewRecommendation = null;
+    if (!application.metadataLastReviewed) {
+      reviewRecommendation = 'Request metadata review from AppSec team';
+    } else {
+      const reviewDate = new Date(application.metadataLastReviewed);
+      const daysSinceReview = (Date.now() - reviewDate.getTime()) / (1000 * 60 * 60 * 24);
+      // Show recommendation if it's been more than 5 months (approximately 150 days)
+      if (daysSinceReview > 150) {
+        reviewRecommendation = 'Request metadata review (last reviewed more than 5 months ago)';
+      }
+    }
+
+    // Check importance data completeness
+    const importanceFields = [
+      { key: 'businessCriticality', label: 'Business Criticality' },
+      { key: 'criticalAspects', label: 'Critical Aspects' },
+      { key: 'deploymentType', label: 'Deployment Type' },
+      { key: 'facing', label: 'Facing (Internal/External)' },
+    ];
+    const missingImportanceFields = importanceFields.filter(field => !application[field.key]).map(f => f.label);
 
     res.json({
       ...scores,
@@ -463,12 +811,93 @@ router.get('/:id/score', requireAuth, async (req, res) => {
           completenessScore: Math.round((fieldsFilled / knowledgeFields.length) * 40),
           reviewScore: scores.knowledgeScore - Math.round((fieldsFilled / knowledgeFields.length) * 40),
           lastReviewed: application.metadataLastReviewed,
+          missingFields,
+        },
+        tools: toolRecommendations,
+        configuredTools: configuredTools || [], // Always return an array
+        reviewRecommendation,
+        missingImportanceFields: missingImportanceFields.length > 0 ? missingImportanceFields : null,
+        importance: {
+          importanceScore: scores.importanceScore,
+          knowledgeWeight: scores.knowledgeWeight,
+          toolWeight: scores.toolWeight,
+          rawKnowledgeScore: scores.rawKnowledgeScore,
+          rawToolScore: scores.rawToolScore,
         },
       },
     });
   } catch (error) {
     console.error('Error calculating application score:', error);
     res.status(500).json({ error: 'Failed to calculate score' });
+  }
+});
+
+// APP-4: Get application detail
+router.get('/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const application = await prisma.application.findUnique({
+      where: { id },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        contacts: true,
+        applicationDomains: {
+          include: {
+            domain: true,
+          },
+        },
+        deployments: {
+          orderBy: { deployedAt: 'desc' },
+          take: 10, // Get last 10 deployments for the detail view
+        },
+      },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Transform domains to a simpler format
+    if (application.applicationDomains) {
+      application.domains = application.applicationDomains.map(ad => ad.domain);
+      delete application.applicationDomains;
+    } else {
+      application.domains = [];
+    }
+
+    // Check if user has access (admin or member of same company)
+    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only access applications in your company',
+      });
+    }
+
+    // Auto-populate current deployment info from most recent deployment
+    if (application.deployments && application.deployments.length > 0) {
+      const latestDeployment = application.deployments[0]; // Already sorted by deployedAt desc
+      // Only override if the fields are not manually set (null/empty means use latest deployment)
+      if (!application.currentVersion && latestDeployment.version) {
+        application.currentVersion = latestDeployment.version;
+      }
+      if (!application.deploymentEnvironment && latestDeployment.environment) {
+        application.deploymentEnvironment = latestDeployment.environment;
+      }
+      if (!application.gitBranch && latestDeployment.gitBranch) {
+        application.gitBranch = latestDeployment.gitBranch;
+      }
+    }
+
+    res.json(application);
+  } catch (error) {
+    console.error('Error fetching application:', error);
+    res.status(500).json({ error: 'Failed to fetch application' });
   }
 });
 
@@ -491,6 +920,12 @@ router.post('/:id/review', requireAuth, requireAdmin, async (req, res) => {
       data: {
         metadataLastReviewed: new Date(),
       },
+      include: {
+        deployments: {
+          orderBy: { deployedAt: 'desc' },
+          take: 1,
+        },
+      },
     });
 
     // Recalculate score
@@ -508,6 +943,22 @@ router.post('/:id/review', requireAuth, requireAdmin, async (req, res) => {
       });
     } catch (error) {
       console.error('Error saving score to database:', error);
+    }
+
+    // Create automatic note for review
+    try {
+      const reviewer = await prisma.user.findUnique({
+        where: { id: req.session.userId },
+        select: { email: true },
+      });
+      
+      const reviewerEmail = reviewer?.email || 'Unknown';
+      const noteContent = `Application "${updated.name}" was reviewed by ${reviewerEmail}.`;
+      
+      await createNote(req.session.userId, noteContent, null, updated.id);
+    } catch (error) {
+      console.error('Error creating note for review:', error);
+      // Don't fail the request if note creation fails
     }
 
     res.json({
@@ -551,6 +1002,11 @@ router.post('/', requireAuth, async (req, res) => {
       apiSecurityTool,
       apiSecurityIntegrationLevel,
       apiSecurityNA,
+      currentVersion,
+      deploymentEnvironment,
+      gitBranch,
+      lastDastScanDate,
+      lastSastScanDate,
     } = req.body;
 
     // Validate required fields
@@ -657,6 +1113,11 @@ router.post('/', requireAuth, async (req, res) => {
         apiSecurityTool: apiSecurityTool?.trim() || null,
         apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null,
         apiSecurityNA: apiSecurityNA || false,
+        currentVersion: currentVersion?.trim() || null,
+        deploymentEnvironment: deploymentEnvironment?.trim() || null,
+        gitBranch: gitBranch?.trim() || null,
+        lastDastScanDate: lastDastScanDate ? new Date(lastDastScanDate) : null,
+        lastSastScanDate: lastSastScanDate ? new Date(lastSastScanDate) : null,
         status: 'onboarded',
       },
       include: {
@@ -707,6 +1168,11 @@ router.put('/:id', requireAuth, async (req, res) => {
       apiSecurityIntegrationLevel,
       apiSecurityNA,
       status,
+      currentVersion,
+      deploymentEnvironment,
+      gitBranch,
+      lastDastScanDate,
+      lastSastScanDate,
     } = req.body;
 
     // Check if application exists
@@ -731,10 +1197,9 @@ router.put('/:id', requireAuth, async (req, res) => {
 
     // Process interfaces if provided
     let interfacesJson = existing.interfaces;
+    let interfaceAppIds = [];
     if (interfaces !== undefined) {
       if (interfaces && Array.isArray(interfaces) && interfaces.length > 0) {
-        const interfaceAppIds = [];
-        
         for (const interfaceName of interfaces) {
           if (!interfaceName || !interfaceName.trim()) continue;
           
@@ -805,6 +1270,11 @@ router.put('/:id', requireAuth, async (req, res) => {
         ...(apiSecurityTool !== undefined && { apiSecurityTool: apiSecurityTool?.trim() || null }),
         ...(apiSecurityIntegrationLevel !== undefined && { apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null }),
         ...(apiSecurityNA !== undefined && { apiSecurityNA: apiSecurityNA }),
+        ...(currentVersion !== undefined && { currentVersion: currentVersion?.trim() || null }),
+        ...(deploymentEnvironment !== undefined && { deploymentEnvironment: deploymentEnvironment?.trim() || null }),
+        ...(gitBranch !== undefined && { gitBranch: gitBranch?.trim() || null }),
+        ...(lastDastScanDate !== undefined && { lastDastScanDate: lastDastScanDate ? new Date(lastDastScanDate) : null }),
+        ...(lastSastScanDate !== undefined && { lastSastScanDate: lastSastScanDate ? new Date(lastSastScanDate) : null }),
         ...(status !== undefined && { status }),
       },
       include: {
@@ -812,9 +1282,140 @@ router.put('/:id', requireAuth, async (req, res) => {
       },
     });
 
+    // Update reciprocal interfaces if interfaces were changed
+    if (interfaces !== undefined && interfaceAppIds.length > 0) {
+      try {
+        // Get current application's ID
+        const currentAppId = application.id;
+        
+        // For each interface application, add this application to their interfaces
+        for (const interfaceAppId of interfaceAppIds) {
+          const interfaceApp = await prisma.application.findUnique({
+            where: { id: interfaceAppId },
+          });
+          
+          if (interfaceApp && interfaceApp.interfaces) {
+            try {
+              const existingInterfaces = JSON.parse(interfaceApp.interfaces);
+              if (!Array.isArray(existingInterfaces)) {
+                // If not an array, initialize it
+                await prisma.application.update({
+                  where: { id: interfaceAppId },
+                  data: {
+                    interfaces: JSON.stringify([currentAppId]),
+                  },
+                });
+              } else if (!existingInterfaces.includes(currentAppId)) {
+                // Add current app to interface app's interfaces
+                existingInterfaces.push(currentAppId);
+                await prisma.application.update({
+                  where: { id: interfaceAppId },
+                  data: {
+                    interfaces: JSON.stringify(existingInterfaces),
+                  },
+                });
+              }
+            } catch (e) {
+              // If parsing fails, create new array
+              await prisma.application.update({
+                where: { id: interfaceAppId },
+                data: {
+                  interfaces: JSON.stringify([currentAppId]),
+                },
+              });
+            }
+          } else if (interfaceApp) {
+            // No interfaces yet, create new
+            await prisma.application.update({
+              where: { id: interfaceAppId },
+              data: {
+                interfaces: JSON.stringify([currentAppId]),
+              },
+            });
+          }
+        }
+        
+        // Also remove this app from interfaces that are no longer in the list
+        if (existing.interfaces) {
+          try {
+            const oldInterfaceIds = JSON.parse(existing.interfaces);
+            if (Array.isArray(oldInterfaceIds)) {
+              const removedIds = oldInterfaceIds.filter(id => !interfaceAppIds.includes(id));
+              for (const removedId of removedIds) {
+                const removedApp = await prisma.application.findUnique({
+                  where: { id: removedId },
+                });
+                if (removedApp && removedApp.interfaces) {
+                  try {
+                    const removedAppInterfaces = JSON.parse(removedApp.interfaces);
+                    if (Array.isArray(removedAppInterfaces)) {
+                      const updated = removedAppInterfaces.filter(id => id !== currentAppId);
+                      await prisma.application.update({
+                        where: { id: removedId },
+                        data: {
+                          interfaces: updated.length > 0 ? JSON.stringify(updated) : null,
+                        },
+                      });
+                    }
+                  } catch (e) {
+                    // Ignore parse errors
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+      } catch (error) {
+        console.error('Error updating reciprocal interfaces:', error);
+        // Don't fail the request if reciprocal update fails
+      }
+    } else if (interfaces !== undefined && interfaces.length === 0 && existing.interfaces) {
+      // If interfaces were cleared, remove this app from all interface apps
+      try {
+        const oldInterfaceIds = JSON.parse(existing.interfaces);
+        if (Array.isArray(oldInterfaceIds)) {
+          for (const oldInterfaceId of oldInterfaceIds) {
+            const oldInterfaceApp = await prisma.application.findUnique({
+              where: { id: oldInterfaceId },
+            });
+            if (oldInterfaceApp && oldInterfaceApp.interfaces) {
+              try {
+                const oldInterfaces = JSON.parse(oldInterfaceApp.interfaces);
+                if (Array.isArray(oldInterfaces)) {
+                  const updated = oldInterfaces.filter(id => id !== application.id);
+                  await prisma.application.update({
+                    where: { id: oldInterfaceId },
+                    data: {
+                      interfaces: updated.length > 0 ? JSON.stringify(updated) : null,
+                    },
+                  });
+                }
+              } catch (e) {
+                // Ignore parse errors
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+    }
+
     // Recalculate and save score after update
     try {
-      const scores = calculateApplicationScore(application);
+      // Fetch application with deployments for scoring
+      const appWithDeployments = await prisma.application.findUnique({
+        where: { id: application.id },
+        include: {
+          deployments: {
+            orderBy: { deployedAt: 'desc' },
+            take: 1,
+          },
+        },
+      });
+      const scores = calculateApplicationScore(appWithDeployments);
       await prisma.score.create({
         data: {
           applicationId: application.id,
@@ -984,6 +1585,386 @@ router.post('/:id/domains', requireAuth, async (req, res) => {
   }
 });
 
+// Bulk import applications
+router.post('/bulk-import', requireAuth, async (req, res) => {
+  try {
+    const { companyId, applications } = req.body;
+
+    console.log('=== BULK IMPORT REQUEST ===');
+    console.log('Company ID:', companyId);
+    console.log('Number of applications:', applications?.length || 0);
+    console.log('Raw applications data:', JSON.stringify(applications, null, 2));
+
+    // Validate required fields
+    if (!companyId) {
+      return res.status(400).json({ error: 'Company ID is required' });
+    }
+
+    if (!applications || !Array.isArray(applications) || applications.length === 0) {
+      return res.status(400).json({ error: 'Applications array is required and must not be empty' });
+    }
+
+    // Check if user has access to this company
+    if (!req.session.isAdmin && req.session.companyId !== companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only import applications for your company',
+      });
+    }
+
+    // Verify company exists
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+    });
+
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    console.log('Company found:', company.name);
+
+    // Validate all applications have required fields
+    for (let i = 0; i < applications.length; i++) {
+      const app = applications[i];
+      if (!app.name || app.name.trim() === '') {
+        return res.status(400).json({ 
+          error: `Application at row ${i + 1} is missing required field: name` 
+        });
+      }
+    }
+
+    // Create all applications
+    const createdApplications = await Promise.all(
+      applications.map(async (app, index) => {
+        console.log(`\n--- Processing Application ${index + 1} ---`);
+        console.log('Raw app data:', JSON.stringify(app, null, 2));
+        // Process criticalAspects - convert array to comma-separated string if needed
+        let criticalAspects = null;
+        if (app.criticalAspects) {
+          if (Array.isArray(app.criticalAspects)) {
+            criticalAspects = app.criticalAspects.filter(a => a && a.trim()).join(', ');
+          } else {
+            criticalAspects = app.criticalAspects.trim() || null;
+          }
+        }
+
+        // Process interfaces if provided
+        let interfacesJson = null;
+        if (app.interfaces) {
+          if (Array.isArray(app.interfaces)) {
+            interfacesJson = JSON.stringify(app.interfaces);
+          } else if (typeof app.interfaces === 'string') {
+            interfacesJson = app.interfaces;
+          }
+        }
+
+        // Process hosting domains - accept multiple domains (comma, semicolon, or newline separated)
+        const domainNames = [];
+        console.log(`Checking for hosting domains in app ${index + 1}:`, app.hostingDomains, app.domains);
+        if (app.hostingDomains || app.domains) {
+          const domainString = String(app.hostingDomains || app.domains).trim();
+          console.log(`Processing hosting domains for app ${index + 1}: "${domainString}"`);
+          if (domainString) {
+            // Split by comma, semicolon, or newline, then clean up each domain
+            const domains = domainString
+              .split(/[,;\n]/)
+              .map(domain => domain.trim())
+              .filter(domain => domain.length > 0);
+            
+            console.log(`Split into ${domains.length} domain(s):`, domains);
+            
+            // Validate and normalize each domain
+            for (const domain of domains) {
+              // Remove http://, https://, and www. if present
+              let cleanDomain = domain
+                .replace(/^https?:\/\//, '')
+                .replace(/^www\./, '')
+                .split('/')[0] // Remove path if present
+                .trim();
+              
+              console.log(`Cleaned domain: "${domain}" -> "${cleanDomain}"`);
+              
+              if (cleanDomain && isValidDomain(cleanDomain)) {
+                const normalized = normalizeDomain(cleanDomain);
+                domainNames.push(normalized);
+                console.log(`Valid domain added: "${normalized}"`);
+              } else {
+                console.log(`Invalid domain skipped: "${cleanDomain}"`);
+              }
+            }
+          }
+        }
+        console.log(`Total valid domains for app ${index + 1}: ${domainNames.length}`, domainNames);
+
+        // Prepare database insert data
+        const dbData = {
+          name: app.name.trim(),
+          companyId: companyId,
+          description: app.description?.trim() || null,
+          owner: app.owner?.trim() || null,
+          repoUrl: app.repoUrl?.trim() || null,
+          language: app.language?.trim() || null,
+          framework: app.framework?.trim() || null,
+          serverEnvironment: app.serverEnvironment?.trim() || null,
+          facing: app.facing?.trim() || null,
+          deploymentType: app.deploymentType?.trim() || null,
+          authProfiles: app.authProfiles?.trim() || null,
+          dataTypes: app.dataTypes?.trim() || null,
+          interfaces: interfacesJson,
+          businessCriticality: app.businessCriticality ? parseInt(app.businessCriticality) : null,
+          criticalAspects: criticalAspects,
+          devTeamContact: app.devTeamContact?.trim() || null,
+          securityTestingDescription: app.securityTestingDescription?.trim() || null,
+          additionalNotes: app.additionalNotes?.trim() || null,
+          sastTool: app.sastTool?.trim() || null,
+          sastIntegrationLevel: app.sastIntegrationLevel ? parseInt(app.sastIntegrationLevel) : null,
+          dastTool: app.dastTool?.trim() || null,
+          dastIntegrationLevel: app.dastIntegrationLevel ? parseInt(app.dastIntegrationLevel) : null,
+          appFirewallTool: app.appFirewallTool?.trim() || null,
+          appFirewallIntegrationLevel: app.appFirewallIntegrationLevel ? parseInt(app.appFirewallIntegrationLevel) : null,
+          apiSecurityTool: app.apiSecurityTool?.trim() || null,
+          apiSecurityIntegrationLevel: app.apiSecurityIntegrationLevel ? parseInt(app.apiSecurityIntegrationLevel) : null,
+          apiSecurityNA: app.apiSecurityNA || false,
+          status: 'onboarded',
+        };
+
+        console.log('Processed DB insert data:', JSON.stringify(dbData, null, 2));
+        console.log('DB Command: prisma.application.create({ data: <above> })');
+
+        const created = await prisma.application.create({
+          data: dbData,
+        });
+
+        // Associate hosting domains with the application
+        if (domainNames.length > 0) {
+          for (const domainName of domainNames) {
+            try {
+              // Find or create domain within the company
+              let domain = await prisma.domain.findUnique({
+                where: {
+                  name_companyId: {
+                    name: domainName,
+                    companyId: companyId,
+                  },
+                },
+              });
+
+              if (!domain) {
+                domain = await prisma.domain.create({
+                  data: {
+                    name: domainName,
+                    companyId: companyId,
+                  },
+                });
+              }
+
+              // Create association if it doesn't exist
+              await prisma.applicationDomain.upsert({
+                where: {
+                  applicationId_domainId: {
+                    applicationId: created.id,
+                    domainId: domain.id,
+                  },
+                },
+                update: {},
+                create: {
+                  applicationId: created.id,
+                  domainId: domain.id,
+                },
+              });
+            } catch (error) {
+              console.error(`Error associating domain ${domainName} with application ${created.id}:`, error);
+              // Continue with other domains even if one fails
+            }
+          }
+        }
+
+        console.log('Successfully created application:', created.id, created.name);
+        return created;
+      })
+    );
+
+    console.log('\n=== BULK IMPORT COMPLETE ===');
+    console.log(`Successfully created ${createdApplications.length} application(s)`);
+    console.log('Created application IDs:', createdApplications.map(a => a.id));
+
+    // Create automatic note for bulk import
+    try {
+      const appNames = createdApplications.map(app => app.name).join(', ');
+      
+      // Get field names that were provided in the bulk import
+      // Check the first application as a representative sample
+      const firstApp = applications[0];
+      const fieldMapping = {
+        name: 'Name',
+        description: 'Description',
+        owner: 'Owner',
+        repoUrl: 'Repository URL',
+        language: 'Language',
+        framework: 'Framework',
+        serverEnvironment: 'Server Environment',
+        facing: 'Facing',
+        deploymentType: 'Deployment Type',
+        authProfiles: 'Auth Profiles',
+        dataTypes: 'Data Types',
+        interfaces: 'Interfaces',
+        businessCriticality: 'Business Criticality',
+        criticalAspects: 'Critical Aspects',
+        devTeamContact: 'Dev Team Contact',
+        securityTestingDescription: 'Security Testing Description',
+        additionalNotes: 'Additional Notes',
+        sastTool: 'SAST Tool',
+        sastIntegrationLevel: 'SAST Integration Level',
+        dastTool: 'DAST Tool',
+        dastIntegrationLevel: 'DAST Integration Level',
+        appFirewallTool: 'App Firewall Tool',
+        appFirewallIntegrationLevel: 'App Firewall Integration Level',
+        apiSecurityTool: 'API Security Tool',
+        apiSecurityIntegrationLevel: 'API Security Integration Level',
+        apiSecurityNA: 'API Security N/A',
+        hostingDomains: 'Hosting Domains',
+        domains: 'Domains',
+      };
+      
+      const providedFields = getProvidedFields(firstApp, fieldMapping);
+      
+      const noteContent = `Bulk application upload completed. Created ${createdApplications.length} application(s): ${appNames}. Fields provided in upload: ${providedFields.join(', ')}.`;
+      
+      await createNote(req.session.userId, noteContent, companyId, null);
+    } catch (error) {
+      console.error('Error creating note for bulk import:', error);
+      // Don't fail the request if note creation fails
+    }
+
+    res.status(201).json({
+      count: createdApplications.length,
+      applications: createdApplications,
+      message: `Successfully imported ${createdApplications.length} application(s)`,
+    });
+  } catch (error) {
+    console.error('\n=== BULK IMPORT ERROR ===');
+    console.error('Error details:', error);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      error: 'Failed to import applications',
+      message: error.message || 'An error occurred while importing applications'
+    });
+  }
+});
+
+// Generate technical onboarding form link
+router.post('/:id/generate-technical-link', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get application with company
+    const application = await prisma.application.findUnique({
+      where: { id },
+      include: {
+        company: true,
+      },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if user has access
+    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only generate links for applications in your company',
+      });
+    }
+
+    // Ensure company has a slug
+    let company = application.company;
+    if (!company.slug) {
+      const { generateSlug, ensureUniqueSlug } = await import('../utils/slug.js');
+      const baseSlug = generateSlug(company.name);
+      const slug = await ensureUniqueSlug(baseSlug, company.id);
+      
+      company = await prisma.company.update({
+        where: { id: company.id },
+        data: { slug },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+      });
+    }
+
+    // Generate the technical form link
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const technicalFormUrl = `${frontendUrl}/onboard/${company.slug}/application/${application.id}`;
+
+    res.json({
+      applicationId: application.id,
+      applicationName: application.name,
+      companyId: company.id,
+      companyName: company.name,
+      companySlug: company.slug,
+      technicalFormUrl,
+    });
+  } catch (error) {
+    console.error('Error generating technical form link:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate technical form link',
+      message: error.message 
+    });
+  }
+});
+
+// Delete application (Admin only)
+router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if application exists
+    const application = await prisma.application.findUnique({
+      where: { id },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Delete the application (cascade will handle related records)
+    await prisma.application.delete({
+      where: { id },
+    });
+
+    res.json({
+      message: `Application "${application.name}" deleted successfully`,
+    });
+  } catch (error) {
+    console.error('Error deleting application:', error);
+    
+    // Handle foreign key constraint errors
+    if (error.code === 'P2003') {
+      return res.status(400).json({
+        error: 'Cannot delete application',
+        message: 'This application has related records that prevent deletion. Please remove all related data first.',
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to delete application',
+      message: error.message,
+    });
+  }
+});
+
 // Remove domain from application
 router.delete('/:id/domains/:domainId', requireAuth, async (req, res) => {
   try {
@@ -1050,6 +2031,282 @@ router.delete('/:id/domains/:domainId', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error removing domain from application:', error);
     res.status(500).json({ error: 'Failed to remove domain from application' });
+  }
+});
+
+// Get all deployments for an application
+router.get('/:id/deployments', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if application exists and user has access
+    const application = await prisma.application.findUnique({
+      where: { id },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if user has access (admin or member of same company)
+    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only access deployments for applications in your company',
+      });
+    }
+
+    // Get deployments ordered by most recent first
+    const deployments = await prisma.deployment.findMany({
+      where: { applicationId: id },
+      orderBy: { deployedAt: 'desc' },
+    });
+
+    res.json(deployments);
+  } catch (error) {
+    console.error('Error fetching deployments:', error);
+    res.status(500).json({ error: 'Failed to fetch deployments' });
+  }
+});
+
+// Create a new deployment
+router.post('/:id/deployments', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { deployedAt, environment, version, gitBranch, deployedBy, notes } = req.body;
+
+    // Validate required fields
+    if (!environment || !environment.trim()) {
+      return res.status(400).json({ error: 'Environment is required' });
+    }
+
+    // Check if application exists and user has access
+    const application = await prisma.application.findUnique({
+      where: { id },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if user has access (admin or member of same company)
+    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only create deployments for applications in your company',
+      });
+    }
+
+    // Create deployment
+    const deployment = await prisma.deployment.create({
+      data: {
+        applicationId: id,
+        deployedAt: deployedAt ? new Date(deployedAt) : new Date(),
+        environment: environment.trim(),
+        version: version?.trim() || null,
+        gitBranch: gitBranch?.trim() || null,
+        deployedBy: deployedBy?.trim() || null,
+        notes: notes?.trim() || null,
+      },
+    });
+
+    // Auto-update application's current deployment info from this new deployment
+    // Only update if the fields are currently null/empty (meaning they should be auto-populated)
+    const currentApp = await prisma.application.findUnique({
+      where: { id },
+      select: { currentVersion: true, deploymentEnvironment: true, gitBranch: true },
+    });
+
+    const updateData = {};
+    if (!currentApp.currentVersion && deployment.version) {
+      updateData.currentVersion = deployment.version;
+    }
+    if (!currentApp.deploymentEnvironment && deployment.environment) {
+      updateData.deploymentEnvironment = deployment.environment;
+    }
+    if (!currentApp.gitBranch && deployment.gitBranch) {
+      updateData.gitBranch = deployment.gitBranch;
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await prisma.application.update({
+        where: { id },
+        data: updateData,
+      });
+    }
+
+    res.status(201).json(deployment);
+  } catch (error) {
+    console.error('Error creating deployment:', error);
+    res.status(500).json({ error: 'Failed to create deployment' });
+  }
+});
+
+// Delete a deployment
+router.delete('/:id/deployments/:deploymentId', requireAuth, async (req, res) => {
+  try {
+    const { id, deploymentId } = req.params;
+
+    // Check if deployment exists
+    const deployment = await prisma.deployment.findUnique({
+      where: { id: deploymentId },
+      include: {
+        application: true,
+      },
+    });
+
+    if (!deployment) {
+      return res.status(404).json({ error: 'Deployment not found' });
+    }
+
+    // Verify deployment belongs to the application
+    if (deployment.applicationId !== id) {
+      return res.status(400).json({ error: 'Deployment does not belong to this application' });
+    }
+
+    // Check if user has access (admin or member of same company)
+    if (!req.session.isAdmin && req.session.companyId !== deployment.application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only delete deployments for applications in your company',
+      });
+    }
+
+    // Delete deployment
+    await prisma.deployment.delete({
+      where: { id: deploymentId },
+    });
+
+    res.json({ message: 'Deployment deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting deployment:', error);
+    res.status(500).json({ error: 'Failed to delete deployment' });
+  }
+});
+
+// ============================================================================
+// DEPLOYMENT TOKEN MANAGEMENT
+// ============================================================================
+
+// Create a deployment token for an application
+// POST /api/applications/:id/deployment-tokens
+router.post('/:id/deployment-tokens', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name } = req.body;
+
+    // Check if application exists
+    const application = await prisma.application.findUnique({
+      where: { id },
+      include: { company: true },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if user has access (admin or member of same company)
+    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only create deployment tokens for applications in your company',
+      });
+    }
+
+    // Generate token
+    const plaintextToken = generateDeploymentToken();
+    const tokenHash = await hashDeploymentToken(plaintextToken);
+
+    // Create token
+    const token = await prisma.deploymentToken.create({
+      data: {
+        token: plaintextToken, // Store plaintext for display (as per schema)
+        tokenHash: tokenHash, // Store hash for verification
+        name: name?.trim() || null,
+        createdBy: req.session.userId || null,
+        companyId: application.companyId,
+        applications: {
+          create: {
+            applicationId: id,
+          },
+        },
+      },
+      include: {
+        applications: {
+          include: {
+            application: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    res.status(201).json({
+      ...token,
+      // Token is already in the response from the create
+    });
+  } catch (error) {
+    console.error('Error creating deployment token:', error);
+    res.status(500).json({ error: 'Failed to create deployment token' });
+  }
+});
+
+// List deployment tokens for an application
+// GET /api/applications/:id/deployment-tokens
+router.get('/:id/deployment-tokens', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if application exists
+    const application = await prisma.application.findUnique({
+      where: { id },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if user has access (admin or member of same company)
+    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only view deployment tokens for applications in your company',
+      });
+    }
+
+    // Get tokens for this application
+    const tokens = await prisma.deploymentToken.findMany({
+      where: {
+        applications: {
+          some: {
+            applicationId: id,
+          },
+        },
+        companyId: application.companyId,
+      },
+      include: {
+        applications: {
+          include: {
+            application: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(tokens);
+  } catch (error) {
+    console.error('Error fetching deployment tokens:', error);
+    res.status(500).json({ error: 'Failed to fetch deployment tokens' });
   }
 });
 

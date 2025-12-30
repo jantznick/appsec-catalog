@@ -1,4 +1,3 @@
-# SAMM Assessments
 
 ## Measuring and Improving Your Security Maturity
 

@@ -1,4 +1,3 @@
-# Glossary of AppSec Terms
 
 ## Common Terminology in Application Security
 

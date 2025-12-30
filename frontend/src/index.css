@@ -9,4 +9,32 @@
   --color-error: #ef4444;
 }
 
+/* Always visible scrollbar for note content */
+.note-content-scroll {
+  scrollbar-gutter: stable;
+  overflow-y: scroll; /* Use 'scroll' instead of 'auto' to always show scrollbar */
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: #d1d5db transparent; /* Firefox */
+}
+
+.note-content-scroll::-webkit-scrollbar {
+  width: 6px;
+  display: block !important;
+  -webkit-appearance: none;
+}
+
+.note-content-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.note-content-scroll::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+  border: 1px solid #f3f4f6;
+}
+
+.note-content-scroll::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
 

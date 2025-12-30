@@ -20,8 +20,13 @@ import {
   Modal,
   Alert,
   LoadingSpinner,
+  Dropdown,
+  DropdownItem,
   toast,
 } from '../components/ui/index.js';
+import { DomainPills } from '../components/domains/DomainPills.jsx';
+import { ScoreCard } from '../components/scoring/ScoreCard.jsx';
+import { NotesSectionDemo } from '../components/notes/NotesSectionDemo.jsx';
 
 export function ComponentsDemo() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -247,9 +252,103 @@ export function ComponentsDemo() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Domain Pills */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Domain Pills</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DomainPills
+            domains={[
+              { id: '1', name: 'example.com' },
+              { id: '2', name: 'api.example.com' },
+            ]}
+            onAdd={(domain) => {
+              toast.success(`Would add domain: ${domain}`);
+            }}
+            onRemove={(domainId) => {
+              toast.info(`Would remove domain: ${domainId}`);
+            }}
+            disabled={false}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Score Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Score Card</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ScoreCard
+            knowledgeScore={35}
+            toolScore={45}
+            totalScore={80}
+            breakdown={{
+              knowledgeSharing: {
+                fieldsFilled: 7,
+                totalFields: 8,
+                completenessScore: 35,
+                reviewScore: 0,
+                lastReviewed: null,
+              },
+            }}
+            onMarkReviewed={async () => {
+              toast.success('Application marked as reviewed');
+            }}
+            isAdmin={true}
+            lastReviewed={null}
+            showBreakdownByDefault={true}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Dropdown */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Dropdown</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-4">
+            <Dropdown
+              trigger={<Button variant="outline">Actions ▼</Button>}
+              align="left"
+            >
+              <DropdownItem onClick={() => toast.info('Edit clicked')}>
+                Edit
+              </DropdownItem>
+              <DropdownItem onClick={() => toast.info('Delete clicked')}>
+                Delete
+              </DropdownItem>
+              <DropdownItem divider />
+              <DropdownItem onClick={() => toast.info('Settings clicked')}>
+                Settings
+              </DropdownItem>
+            </Dropdown>
+            <Dropdown
+              trigger={<Button variant="primary">Menu ▼</Button>}
+              align="right"
+            >
+              <DropdownItem onClick={() => toast.success('Option 1')}>
+                Option 1
+              </DropdownItem>
+              <DropdownItem onClick={() => toast.success('Option 2')}>
+                Option 2
+              </DropdownItem>
+            </Dropdown>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Notes Section */}
+      <NotesSectionDemo />
     </div>
   );
 }
+
+
+
 
 
 

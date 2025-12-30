@@ -1,4 +1,3 @@
-# Penetration Testing Services
 
 ## Uncover and Remediate Vulnerabilities Before Attackers Do
 

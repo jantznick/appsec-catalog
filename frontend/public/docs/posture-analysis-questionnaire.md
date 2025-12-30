@@ -1,4 +1,3 @@
-# Posture Analysis Questionnaire
 
 ## Establishing Your Security Baseline
 

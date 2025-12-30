@@ -149,6 +149,13 @@ export function Layout({ children }) {
                     </DropdownItem>
                     <DropdownItem
                       onClick={() => {
+                        navigate('/deployment-tokens');
+                      }}
+                    >
+                      Deployment Tokens
+                    </DropdownItem>
+                    <DropdownItem
+                      onClick={() => {
                         navigate('/users');
                       }}
                     >

@@ -97,4 +97,39 @@ export async function initializeAdminUsers() {
   console.log('✅ Admin user initialization complete');
 }
 
+/**
+ * Initialize system user for automated notes and system actions
+ * This user is used when creating notes for public form submissions
+ */
+export async function initializeSystemUser() {
+  const systemEmail = 'system@appsec-catalog.local';
+  
+  try {
+    // Check if system user exists
+    let systemUser = await prisma.user.findUnique({
+      where: { email: systemEmail },
+    });
+
+    if (!systemUser) {
+      // Create system user
+      systemUser = await prisma.user.create({
+        data: {
+          email: systemEmail,
+          isAdmin: false,
+          verifiedAccount: true,
+          // No password - this user cannot log in
+        },
+      });
+      console.log('✓ Created system user for automated notes');
+    } else {
+      console.log('✓ System user already exists');
+    }
+
+    return systemUser;
+  } catch (error) {
+    console.error('Error initializing system user:', error);
+    return null;
+  }
+}
+
 

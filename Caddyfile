@@ -3,37 +3,100 @@
 # PRODUCTION: Replace 'yourdomain.com' with your actual domain
 # Caddy will automatically obtain Let's Encrypt certificates
 #
-# LOCAL DEVELOPMENT: Comment out the domain block and uncomment the :80 block below
+# LOCAL NETWORK: Use your local domain (e.g., appsec.local) with self-signed certificates
 
 # Production configuration (HTTPS with Let's Encrypt)
-yourdomain.com {
-    # Reverse proxy to frontend
-    handle / {
-        reverse_proxy frontend:3000
-    }
+# Uncomment and replace 'yourdomain.com' with your actual public domain
+# yourdomain.com {
+#     # Reverse proxy to frontend
+#     handle / {
+#         reverse_proxy frontend:3000 {
+#             header_up Host {host}
+#             header_up X-Real-IP {remote}
+#             header_up X-Forwarded-For {remote}
+#             header_up X-Forwarded-Proto {scheme}
+#         }
+#     }
+# 
+#     # Reverse proxy API requests to backend
+#     handle /api/* {
+#         reverse_proxy backend:3001 {
+#             header_up Host {host}
+#             header_up X-Real-IP {remote}
+#             header_up X-Forwarded-For {remote}
+#             header_up X-Forwarded-Proto {scheme}
+#         }
+#     }
+# 
+#     # Reverse proxy health check
+#     handle /health {
+#         reverse_proxy backend:3001
+#     }
+# }
 
-    # Reverse proxy API requests to backend
+# Local network configuration (HTTP only - no certificate issues)
+# Commented out: HTTPS with self-signed certificates (causes browser trust issues)
+# appsec.companynet.org {
+#     tls internal
+#     ...
+# }
+
+# HTTP only for local network (no HTTPS, no certificate warnings)
+# Using :80 to serve HTTP only (works with any hostname)
+:80 {
+    # Reverse proxy API requests to backend (must come before /)
     handle /api/* {
-        reverse_proxy backend:3001
+        reverse_proxy backend:3001 {
+            header_up Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
+            header_up X-Forwarded-Proto {scheme}
+        }
     }
 
     # Reverse proxy health check
     handle /health {
         reverse_proxy backend:3001
     }
-}
 
-# Local development configuration (HTTP only)
-# Uncomment this block and comment out the domain block above for local testing
-# :80 {
-#     handle / {
-#         reverse_proxy frontend:3000
-#     }
-#     handle /api/* {
-#         reverse_proxy backend:3001
-#     }
-#     handle /health {
-#         reverse_proxy backend:3001
-#     }
-# }
+    # Explicitly handle static assets (JS, CSS, images, etc.)
+    handle /assets/* {
+        reverse_proxy frontend:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Handle markdown files in docs directory (serve as static files)
+    handle /docs/*.md {
+        reverse_proxy frontend:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Handle /docs routes (let React Router handle them - for the Docs component)
+    handle /docs* {
+        reverse_proxy frontend:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Reverse proxy all other requests to frontend (must come last)
+    handle {
+        reverse_proxy frontend:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+}
 
