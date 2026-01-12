@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { calculateApplicationScore } from '../services/scoring.js';
 import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
+import { createApplicationVersion } from '../utils/applicationVersion.js';
 
 /**
  * Get or create system user for automated notes
@@ -176,6 +177,11 @@ router.post('/onboard/executive', async (req, res) => {
     } catch (error) {
       console.error('Error creating note for executive form:', error);
       // Don't fail the request if note creation fails
+    }
+
+    // Create initial versions for all created applications
+    for (const app of createdApplications) {
+      await createApplicationVersion(app.id, req.session?.userId || null, 'executive_form');
     }
 
     // Return single application for backward compatibility, or array for multiple
@@ -644,6 +650,9 @@ router.put('/public/:id', async (req, res) => {
       // Don't fail the request if note creation fails
     }
 
+    // Create version snapshot after technical form update
+    await createApplicationVersion(application.id, req.session?.userId || null, 'technical_form');
+
     res.json({
       application,
       message: 'Application technical details updated successfully',
@@ -945,6 +954,19 @@ router.post('/:id/review', requireAuth, requireAdmin, async (req, res) => {
       console.error('Error saving score to database:', error);
     }
 
+    // Create review log entry
+    try {
+      await prisma.applicationMetadataReview.create({
+        data: {
+          applicationId: updated.id,
+          reviewedBy: req.session.userId,
+        },
+      });
+    } catch (error) {
+      console.error('Error creating review log entry:', error);
+      // Don't fail the request if review log creation fails
+    }
+
     // Create automatic note for review
     try {
       const reviewer = await prisma.user.findUnique({
@@ -1129,6 +1151,9 @@ router.post('/', requireAuth, async (req, res) => {
         },
       },
     });
+
+    // Create initial version
+    await createApplicationVersion(application.id, req.session.userId || null, 'web_form');
 
     res.status(201).json(application);
   } catch (error) {
@@ -1427,6 +1452,9 @@ router.put('/:id', requireAuth, async (req, res) => {
     } catch (error) {
       console.error('Error saving score after update:', error);
     }
+
+    // Create version snapshot after update
+    await createApplicationVersion(application.id, req.session.userId || null, 'web_form');
 
     res.json(application);
   } catch (error) {
@@ -1834,6 +1862,11 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
     } catch (error) {
       console.error('Error creating note for bulk import:', error);
       // Don't fail the request if note creation fails
+    }
+
+    // Create initial versions for all bulk imported applications
+    for (const app of createdApplications) {
+      await createApplicationVersion(app.id, req.session.userId || null, 'bulk_import');
     }
 
     res.status(201).json({
@@ -2307,6 +2340,205 @@ router.get('/:id/deployment-tokens', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error fetching deployment tokens:', error);
     res.status(500).json({ error: 'Failed to fetch deployment tokens' });
+  }
+});
+
+// ============================================================================
+// VERSION HISTORY (Admin only)
+// ============================================================================
+
+// Get version history for an application
+router.get('/:id/versions', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Verify application exists
+    const application = await prisma.application.findUnique({
+      where: { id },
+      select: { id: true, name: true },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Get all versions ordered by version number (descending - newest first)
+    const versions = await prisma.applicationVersion.findMany({
+      where: { applicationId: id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: { versionNumber: 'desc' },
+    });
+
+    res.json(versions);
+  } catch (error) {
+    console.error('Error fetching application versions:', error);
+    res.status(500).json({ error: 'Failed to fetch application versions' });
+  }
+});
+
+// Get a specific version by version number
+router.get('/:id/versions/:versionNumber', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id, versionNumber } = req.params;
+    const versionNum = parseInt(versionNumber);
+
+    if (isNaN(versionNum)) {
+      return res.status(400).json({ error: 'Invalid version number' });
+    }
+
+    // Verify application exists
+    const application = await prisma.application.findUnique({
+      where: { id },
+      select: { id: true, name: true },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Get the specific version
+    const version = await prisma.applicationVersion.findFirst({
+      where: {
+        applicationId: id,
+        versionNumber: versionNum,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!version) {
+      return res.status(404).json({ error: 'Version not found' });
+    }
+
+    res.json(version);
+  } catch (error) {
+    console.error('Error fetching application version:', error);
+    res.status(500).json({ error: 'Failed to fetch application version' });
+  }
+});
+
+// Compare two versions
+router.get('/:id/versions/compare/:v1/:v2', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id, v1, v2 } = req.params;
+    const version1Num = parseInt(v1);
+    const version2Num = parseInt(v2);
+
+    if (isNaN(version1Num) || isNaN(version2Num)) {
+      return res.status(400).json({ error: 'Invalid version numbers' });
+    }
+
+    // Verify application exists
+    const application = await prisma.application.findUnique({
+      where: { id },
+      select: { id: true, name: true },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Get both versions
+    const [version1, version2] = await Promise.all([
+      prisma.applicationVersion.findFirst({
+        where: {
+          applicationId: id,
+          versionNumber: version1Num,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+            },
+          },
+        },
+      }),
+      prisma.applicationVersion.findFirst({
+        where: {
+          applicationId: id,
+          versionNumber: version2Num,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    if (!version1 || !version2) {
+      return res.status(404).json({ error: 'One or both versions not found' });
+    }
+
+    // Import compare function
+    const { compareVersions } = await import('../utils/applicationVersion.js');
+    const comparison = compareVersions(version1, version2);
+
+    res.json({
+      version1,
+      version2,
+      comparison,
+    });
+  } catch (error) {
+    console.error('Error comparing application versions:', error);
+    res.status(500).json({ error: 'Failed to compare application versions' });
+  }
+});
+
+// ============================================================================
+// REVIEW HISTORY (Admin only)
+// ============================================================================
+
+// Get review history for an application
+router.get('/:id/reviews', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Verify application exists
+    const application = await prisma.application.findUnique({
+      where: { id },
+      select: { id: true, name: true },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Get all reviews ordered by review date (newest first)
+    const reviews = await prisma.applicationMetadataReview.findMany({
+      where: { applicationId: id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: { reviewedAt: 'desc' },
+    });
+
+    res.json(reviews);
+  } catch (error) {
+    console.error('Error fetching application reviews:', error);
+    res.status(500).json({ error: 'Failed to fetch application reviews' });
   }
 });
 

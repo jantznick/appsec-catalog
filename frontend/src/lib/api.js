@@ -329,5 +329,19 @@ export const api = {
     apiRequest(`/api/notes/${noteId}`, {
       method: 'DELETE',
     }),
+
+  // Version history endpoints (Admin only)
+  getApplicationVersions: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/versions`),
+
+  getApplicationVersion: (applicationId, versionNumber) =>
+    apiRequest(`/api/applications/${applicationId}/versions/${versionNumber}`),
+
+  compareApplicationVersions: (applicationId, v1, v2) =>
+    apiRequest(`/api/applications/${applicationId}/versions/compare/${v1}/${v2}`),
+
+  // Review history endpoints (Admin only)
+  getApplicationReviews: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/reviews`),
 };
 
