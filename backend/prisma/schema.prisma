@@ -20,6 +20,8 @@ model User {
   company   Company?  @relation(fields: [companyId], references: [id])
   magicCodes MagicCode[]
   notes     Note[]    // Notes created by this user
+  applicationVersions ApplicationVersion[] // Versions created by this user
+  applicationReviews ApplicationMetadataReview[] // Reviews performed by this user
 }
 
 model Company {
@@ -76,6 +78,8 @@ model Application {
   deployments     Deployment[]
   deploymentTokens ApplicationDeploymentToken[]
   notes           Note[]    // Notes associated with this application
+  versions        ApplicationVersion[] // Version history of metadata changes
+  reviews         ApplicationMetadataReview[] // History of metadata reviews
   description     String?
   owner           String?
   repoUrl         String?
@@ -316,4 +320,69 @@ model Note {
   @@index([companyId])
   @@index([applicationId])
   @@index([createdAt])
+}
+
+// Application metadata version history - tracks all changes to application metadata
+model ApplicationVersion {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  versionNumber Int         // Sequential version number (1, 2, 3, ...)
+  createdBy     String?     // User ID who made the change (null for system/automated)
+  user          User?       @relation(fields: [createdBy], references: [id])
+  createdAt     DateTime    @default(now())
+  changeSource  String?     // e.g., "web_form", "technical_form", "api", "bulk_import", "deployment_token"
+  
+  // Store snapshot of all metadata fields at this version (excluding metadataLastReviewed)
+  name                  String?
+  description           String?
+  owner                 String?
+  repoUrl               String?
+  language              String?
+  framework             String?
+  serverEnvironment     String?
+  facing                String?
+  deploymentType        String?
+  authProfiles          String?
+  dataTypes             String?
+  status                String?
+  businessCriticality   Int?
+  criticalAspects       String?
+  devTeamContact        String?
+  securityTestingDescription String?
+  additionalNotes       String?
+  sastTool              String?
+  sastIntegrationLevel  Int?
+  dastTool              String?
+  dastIntegrationLevel  Int?
+  appFirewallTool       String?
+  appFirewallIntegrationLevel Int?
+  apiSecurityTool       String?
+  apiSecurityIntegrationLevel Int?
+  apiSecurityNA         Boolean?
+  currentVersion        String?
+  deploymentEnvironment String?
+  gitBranch             String?
+  lastDastScanDate      DateTime?
+  lastSastScanDate      DateTime?
+  interfaces            String? // JSON array
+  
+  @@index([applicationId])
+  @@index([applicationId, versionNumber])
+  @@index([createdAt])
+  @@index([createdBy])
+}
+
+// Application metadata review history - tracks when metadata was reviewed and by whom
+model ApplicationMetadataReview {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  reviewedBy    String      // User ID who performed the review
+  user          User        @relation(fields: [reviewedBy], references: [id])
+  reviewedAt    DateTime    @default(now())
+  
+  @@index([applicationId])
+  @@index([reviewedAt])
+  @@index([reviewedBy])
 }
