@@ -26,6 +26,7 @@ export function OnboardApplication() {
   const [integrationLevels, setIntegrationLevels] = useState([]);
 
   const [formData, setFormData] = useState({
+    requesterEmail: '',
     name: '',
     description: '',
     repoUrl: '',
@@ -194,6 +195,19 @@ export function OnboardApplication() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Validate required email field
+    if (!formData.requesterEmail || !formData.requesterEmail.trim()) {
+      toast.error('Email is required');
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.requesterEmail.trim())) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
     try {
       setSubmitting(true);
       
@@ -206,6 +220,7 @@ export function OnboardApplication() {
 
         // Update existing application with technical details
         await api.updateApplicationPublic(applicationId, {
+          requesterEmail: formData.requesterEmail.trim(),
           repoUrl: formData.repoUrl,
           deploymentFrequency: formData.deploymentFrequency,
           deploymentMethod: deploymentMethod,
@@ -298,6 +313,24 @@ export function OnboardApplication() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Contact Information</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <Input
+                  label="Your Email"
+                  type="email"
+                  required
+                  value={formData.requesterEmail}
+                  onChange={(e) => setFormData({ ...formData, requesterEmail: e.target.value })}
+                  placeholder="your.email@example.com"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Repository & Deployment</CardTitle>

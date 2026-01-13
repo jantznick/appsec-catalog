@@ -21,6 +21,7 @@ model User {
   magicCodes MagicCode[]
   notes     Note[]    // Notes created by this user
   applicationVersions ApplicationVersion[] // Versions created by this user
+  approvedVersions ApplicationVersion[] @relation("VersionApprover") // Versions approved by this user
   applicationReviews ApplicationMetadataReview[] // Reviews performed by this user
 }
 
@@ -330,8 +331,18 @@ model ApplicationVersion {
   versionNumber Int         // Sequential version number (1, 2, 3, ...)
   createdBy     String?     // User ID who made the change (null for system/automated)
   user          User?       @relation(fields: [createdBy], references: [id])
+  requesterEmail String?    // Email of the person who requested the change (for technical form submissions)
   createdAt     DateTime    @default(now())
   changeSource  String?     // e.g., "web_form", "technical_form", "api", "bulk_import", "deployment_token"
+  
+  // Approval workflow fields
+  approvalStatus String      @default("approved") // "pending", "approved", "rejected"
+  approvedBy    String?     // User ID who approved/rejected this version
+  approver      User?       @relation("VersionApprover", fields: [approvedBy], references: [id])
+  approvedAt    DateTime?   // When this version was approved/rejected
+  approvedFields String?    // Comma-separated list of field names that were approved (null = all fields)
+  approvalNotes String?     // Optional notes for approval
+  rejectionReason String?   // Optional reason for rejection
   
   // Store snapshot of all metadata fields at this version (excluding metadataLastReviewed)
   name                  String?
@@ -371,6 +382,8 @@ model ApplicationVersion {
   @@index([applicationId, versionNumber])
   @@index([createdAt])
   @@index([createdBy])
+  @@index([approvalStatus])
+  @@index([applicationId, approvalStatus])
 }
 
 // Application metadata review history - tracks when metadata was reviewed and by whom

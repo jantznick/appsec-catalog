@@ -343,5 +343,12 @@ export const api = {
   // Review history endpoints (Admin only)
   getApplicationReviews: (applicationId) =>
     apiRequest(`/api/applications/${applicationId}/reviews`),
+
+  // Version approval endpoints (Admin only)
+  approveVersion: (applicationId, versionId, action, approvedFields = null, rejectionReason = null, approvalNotes = null) =>
+    apiRequest(`/api/applications/${applicationId}/versions/${versionId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ action, approvedFields, rejectionReason, approvalNotes }),
+    }),
 };
 

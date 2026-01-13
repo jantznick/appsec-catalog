@@ -4,7 +4,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { calculateApplicationScore } from '../services/scoring.js';
 import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
-import { createApplicationVersion } from '../utils/applicationVersion.js';
+import { createApplicationVersion, createVersionFromData, applyApprovedVersion } from '../utils/applicationVersion.js';
 
 /**
  * Get or create system user for automated notes
@@ -310,6 +310,7 @@ router.put('/public/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const {
+      requesterEmail,
       repoUrl,
       deploymentFrequency,
       deploymentMethod,
@@ -336,6 +337,17 @@ router.put('/public/:id', async (req, res) => {
       apiSecurityIntegrationLevel,
       apiSecurityNA,
     } = req.body;
+
+    // Validate required email
+    if (!requesterEmail || !requesterEmail.trim()) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(requesterEmail.trim())) {
+      return res.status(400).json({ error: 'Invalid email address' });
+    }
 
     // Find application
     const existing = await prisma.application.findUnique({
@@ -439,174 +451,59 @@ router.put('/public/:id', async (req, res) => {
       }
     }
 
-    // Update application with technical details
-    const updateData = {
-      repoUrl: repoUrl?.trim() || null,
+    // Instead of updating the application directly, create a pending version
+    // Merge new data with existing data to create a complete snapshot
+    const versionData = {
+      name: existing.name,
+      description: description || existing.description,
+      owner: existing.owner,
+      repoUrl: repoUrl?.trim() || existing.repoUrl,
+      language: existing.language,
+      framework: existing.framework,
+      serverEnvironment: existing.serverEnvironment,
+      facing: existing.facing,
       deploymentType: deploymentType || existing.deploymentType,
       authProfiles: authProfiles || existing.authProfiles,
       dataTypes: dataTypes || existing.dataTypes,
       interfaces: interfacesJson || existing.interfaces,
-      description: description || null,
-      securityTestingDescription: securityTestingDescription?.trim() || null,
-      sastTool: sastTool?.trim() || null,
-      sastIntegrationLevel: sastIntegrationLevel ? parseInt(sastIntegrationLevel) : null,
-      dastTool: dastTool?.trim() || null,
-      dastIntegrationLevel: dastIntegrationLevel ? parseInt(dastIntegrationLevel) : null,
-      appFirewallTool: appFirewallTool?.trim() || null,
-      appFirewallIntegrationLevel: appFirewallIntegrationLevel ? parseInt(appFirewallIntegrationLevel) : null,
-      apiSecurityTool: apiSecurityTool?.trim() || null,
-      apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null,
-      apiSecurityNA: apiSecurityNA === true || apiSecurityNA === 'true',
       status: 'onboarded', // Mark as fully onboarded
+      businessCriticality: existing.businessCriticality,
+      criticalAspects: existing.criticalAspects,
+      devTeamContact: existing.devTeamContact,
+      securityTestingDescription: securityTestingDescription?.trim() || existing.securityTestingDescription,
+      additionalNotes: existing.additionalNotes,
+      sastTool: sastTool?.trim() || existing.sastTool,
+      sastIntegrationLevel: sastIntegrationLevel ? parseInt(sastIntegrationLevel) : existing.sastIntegrationLevel,
+      dastTool: dastTool?.trim() || existing.dastTool,
+      dastIntegrationLevel: dastIntegrationLevel ? parseInt(dastIntegrationLevel) : existing.dastIntegrationLevel,
+      appFirewallTool: appFirewallTool?.trim() || existing.appFirewallTool,
+      appFirewallIntegrationLevel: appFirewallIntegrationLevel ? parseInt(appFirewallIntegrationLevel) : existing.appFirewallIntegrationLevel,
+      apiSecurityTool: apiSecurityTool?.trim() || existing.apiSecurityTool,
+      apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : existing.apiSecurityIntegrationLevel,
+      apiSecurityNA: apiSecurityNA === true || apiSecurityNA === 'true' || existing.apiSecurityNA,
+      currentVersion: existing.currentVersion,
+      deploymentEnvironment: existing.deploymentEnvironment,
+      gitBranch: existing.gitBranch,
+      lastDastScanDate: existing.lastDastScanDate,
+      lastSastScanDate: existing.lastSastScanDate,
     };
 
-    const application = await prisma.application.update({
-      where: { id },
-      data: updateData,
-    });
+    // Create pending version instead of updating application
+    const pendingVersion = await createVersionFromData(
+      id,
+      versionData,
+      null, // No user ID for technical form submissions
+      'technical_form',
+      'pending',
+      requesterEmail.trim() // Store the requester email directly
+    );
 
-    // Update reciprocal interfaces if interfaces were changed
-    if (hasInterfaces === 'Yes' || hasInterfaces === true) {
-      if (interfaceAppIds.length > 0) {
-        try {
-          const currentAppId = application.id;
-          
-          // For each interface application, add this application to their interfaces
-          for (const interfaceAppId of interfaceAppIds) {
-            const interfaceApp = await prisma.application.findUnique({
-              where: { id: interfaceAppId },
-            });
-            
-            if (interfaceApp && interfaceApp.interfaces) {
-              try {
-                const existingInterfaces = JSON.parse(interfaceApp.interfaces);
-                if (!Array.isArray(existingInterfaces)) {
-                  await prisma.application.update({
-                    where: { id: interfaceAppId },
-                    data: {
-                      interfaces: JSON.stringify([currentAppId]),
-                    },
-                  });
-                } else if (!existingInterfaces.includes(currentAppId)) {
-                  existingInterfaces.push(currentAppId);
-                  await prisma.application.update({
-                    where: { id: interfaceAppId },
-                    data: {
-                      interfaces: JSON.stringify(existingInterfaces),
-                    },
-                  });
-                }
-              } catch (e) {
-                await prisma.application.update({
-                  where: { id: interfaceAppId },
-                  data: {
-                    interfaces: JSON.stringify([currentAppId]),
-                  },
-                });
-              }
-            } else if (interfaceApp) {
-              await prisma.application.update({
-                where: { id: interfaceAppId },
-                data: {
-                  interfaces: JSON.stringify([currentAppId]),
-                },
-              });
-            }
-          }
-          
-          // Remove this app from interfaces that are no longer in the list
-          if (existing.interfaces) {
-            try {
-              const oldInterfaceIds = JSON.parse(existing.interfaces);
-              if (Array.isArray(oldInterfaceIds)) {
-                const removedIds = oldInterfaceIds.filter(id => !interfaceAppIds.includes(id));
-                for (const removedId of removedIds) {
-                  const removedApp = await prisma.application.findUnique({
-                    where: { id: removedId },
-                  });
-                  if (removedApp && removedApp.interfaces) {
-                    try {
-                      const removedAppInterfaces = JSON.parse(removedApp.interfaces);
-                      if (Array.isArray(removedAppInterfaces)) {
-                        const updated = removedAppInterfaces.filter(id => id !== currentAppId);
-                        await prisma.application.update({
-                          where: { id: removedId },
-                          data: {
-                            interfaces: updated.length > 0 ? JSON.stringify(updated) : null,
-                          },
-                        });
-                      }
-                    } catch (e) {
-                      // Ignore parse errors
-                    }
-                  }
-                }
-              }
-            } catch (e) {
-              // Ignore parse errors
-            }
-          }
-        } catch (error) {
-          console.error('Error updating reciprocal interfaces:', error);
-          // Don't fail the request if reciprocal update fails
-        }
-      } else if (existing.interfaces) {
-        // If interfaces were cleared, remove this app from all interface apps
-        try {
-          const oldInterfaceIds = JSON.parse(existing.interfaces);
-          if (Array.isArray(oldInterfaceIds)) {
-            for (const oldInterfaceId of oldInterfaceIds) {
-              const oldInterfaceApp = await prisma.application.findUnique({
-                where: { id: oldInterfaceId },
-              });
-              if (oldInterfaceApp && oldInterfaceApp.interfaces) {
-                try {
-                  const oldInterfaces = JSON.parse(oldInterfaceApp.interfaces);
-                  if (Array.isArray(oldInterfaces)) {
-                    const updated = oldInterfaces.filter(id => id !== application.id);
-                    await prisma.application.update({
-                      where: { id: oldInterfaceId },
-                      data: {
-                        interfaces: updated.length > 0 ? JSON.stringify(updated) : null,
-                      },
-                    });
-                  }
-                } catch (e) {
-                  // Ignore parse errors
-                }
-              }
-            }
-          }
-        } catch (e) {
-          // Ignore parse errors
-        }
-      }
-    }
+    // Don't update the application - it will be updated when admin approves the version
+    const application = existing;
 
-    // Recalculate and save score after update
-    try {
-      // Fetch application with deployments for scoring
-      const appWithDeployments = await prisma.application.findUnique({
-        where: { id: application.id },
-        include: {
-          deployments: {
-            orderBy: { deployedAt: 'desc' },
-            take: 1,
-          },
-        },
-      });
-      const scores = calculateApplicationScore(appWithDeployments);
-      await prisma.score.create({
-        data: {
-          applicationId: application.id,
-          knowledgeScore: scores.knowledgeScore,
-          toolScore: scores.toolScore,
-          totalScore: scores.totalScore,
-        },
-      });
-    } catch (error) {
-      console.error('Error saving score after update:', error);
-    }
+    // Note: Reciprocal interface updates will happen when the version is approved
+    // For now, we just store the interfaces in the pending version
+    // This will be handled in the approval endpoint
 
     // Create automatic note for technical form submission
     try {
@@ -642,7 +539,7 @@ router.put('/public/:id', async (req, res) => {
       
       if (providedFields.length > 0) {
         const userId = req.session?.userId || null; // Use system user if no session
-        const noteContent = `Technical form submitted for application "${application.name}". Fields provided: ${providedFields.join(', ')}.`;
+        const noteContent = `Technical form submitted for application "${application.name}". Pending admin approval. Fields provided: ${providedFields.join(', ')}.`;
         await createNote(userId, noteContent, null, application.id);
       }
     } catch (error) {
@@ -650,12 +547,10 @@ router.put('/public/:id', async (req, res) => {
       // Don't fail the request if note creation fails
     }
 
-    // Create version snapshot after technical form update
-    await createApplicationVersion(application.id, req.session?.userId || null, 'technical_form');
-
     res.json({
       application,
-      message: 'Application technical details updated successfully',
+      version: pendingVersion,
+      message: 'Technical form submitted successfully. Changes are pending admin approval.',
     });
   } catch (error) {
     console.error('Error updating application:', error);
@@ -2372,6 +2267,12 @@ router.get('/:id/versions', requireAuth, requireAdmin, async (req, res) => {
             email: true,
           },
         },
+        approver: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
       },
       orderBy: { versionNumber: 'desc' },
     });
@@ -2539,6 +2440,211 @@ router.get('/:id/reviews', requireAuth, requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error fetching application reviews:', error);
     res.status(500).json({ error: 'Failed to fetch application reviews' });
+  }
+});
+
+// Approve or reject a version (Admin only)
+router.post('/:id/versions/:versionId/approve', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id, versionId } = req.params;
+    const { action, approvedFields, rejectionReason, approvalNotes } = req.body; // action: 'approve' or 'reject'
+
+    if (!action || !['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ error: 'Action must be "approve" or "reject"' });
+    }
+
+    // Verify application exists
+    const application = await prisma.application.findUnique({
+      where: { id },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Get the version
+    const version = await prisma.applicationVersion.findUnique({
+      where: { id: versionId },
+    });
+
+    if (!version || version.applicationId !== id) {
+      return res.status(404).json({ error: 'Version not found' });
+    }
+
+    if (version.approvalStatus !== 'pending') {
+      return res.status(400).json({ error: 'Version is not pending approval' });
+    }
+
+    if (action === 'approve') {
+      // Update version status
+      const approvedFieldsStr = approvedFields && Array.isArray(approvedFields) 
+        ? approvedFields.join(',') 
+        : null;
+
+      await prisma.applicationVersion.update({
+        where: { id: versionId },
+        data: {
+          approvalStatus: 'approved',
+          approvedBy: req.session.userId,
+          approvedAt: new Date(),
+          approvedFields: approvedFieldsStr,
+          approvalNotes: approvalNotes?.trim() || null,
+        },
+      });
+
+      // Apply approved fields to the application
+      const fieldsToApply = approvedFields && Array.isArray(approvedFields) && approvedFields.length > 0
+        ? approvedFields
+        : null; // null means apply all fields
+
+      await applyApprovedVersion(id, version, fieldsToApply);
+
+      // Handle reciprocal interfaces if interfaces were approved
+      if (!fieldsToApply || fieldsToApply.includes('interfaces')) {
+        if (version.interfaces) {
+          try {
+            const interfaceAppIds = JSON.parse(version.interfaces);
+            if (Array.isArray(interfaceAppIds) && interfaceAppIds.length > 0) {
+              // Get current application's ID
+              const currentAppId = application.id;
+              
+              // For each interface application, add this application to their interfaces
+              for (const interfaceAppId of interfaceAppIds) {
+                const interfaceApp = await prisma.application.findUnique({
+                  where: { id: interfaceAppId },
+                });
+                
+                if (interfaceApp && interfaceApp.interfaces) {
+                  try {
+                    const existingInterfaces = JSON.parse(interfaceApp.interfaces);
+                    if (!Array.isArray(existingInterfaces)) {
+                      await prisma.application.update({
+                        where: { id: interfaceAppId },
+                        data: {
+                          interfaces: JSON.stringify([currentAppId]),
+                        },
+                      });
+                    } else if (!existingInterfaces.includes(currentAppId)) {
+                      existingInterfaces.push(currentAppId);
+                      await prisma.application.update({
+                        where: { id: interfaceAppId },
+                        data: {
+                          interfaces: JSON.stringify(existingInterfaces),
+                        },
+                      });
+                    }
+                  } catch (e) {
+                    await prisma.application.update({
+                      where: { id: interfaceAppId },
+                      data: {
+                        interfaces: JSON.stringify([currentAppId]),
+                      },
+                    });
+                  }
+                } else if (interfaceApp) {
+                  await prisma.application.update({
+                    where: { id: interfaceAppId },
+                    data: {
+                      interfaces: JSON.stringify([currentAppId]),
+                    },
+                  });
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error updating reciprocal interfaces:', error);
+            // Don't fail the request if reciprocal update fails
+          }
+        }
+      }
+
+      // Recalculate and save score after update
+      try {
+        const appWithDeployments = await prisma.application.findUnique({
+          where: { id },
+          include: {
+            deployments: {
+              orderBy: { deployedAt: 'desc' },
+              take: 1,
+            },
+          },
+        });
+        const scores = calculateApplicationScore(appWithDeployments);
+        await prisma.score.create({
+          data: {
+            applicationId: id,
+            knowledgeScore: scores.knowledgeScore,
+            toolScore: scores.toolScore,
+            totalScore: scores.totalScore,
+          },
+        });
+      } catch (error) {
+        console.error('Error saving score after approval:', error);
+      }
+
+      // Create automatic note
+      try {
+        const approver = await prisma.user.findUnique({
+          where: { id: req.session.userId },
+          select: { email: true },
+        });
+        const fieldsStr = approvedFieldsStr || 'all fields';
+        const notesStr = approvalNotes ? ` Notes: ${approvalNotes}.` : '';
+        const noteContent = `Version ${version.versionNumber} approved by ${approver?.email || 'Unknown'}. Approved fields: ${fieldsStr}.${notesStr}`;
+        await createNote(req.session.userId, noteContent, null, id);
+      } catch (error) {
+        console.error('Error creating note for approval:', error);
+      }
+
+      res.json({
+        message: 'Version approved and applied successfully',
+        version: await prisma.applicationVersion.findUnique({
+          where: { id: versionId },
+          include: {
+            user: { select: { id: true, email: true } },
+            approver: { select: { id: true, email: true } },
+          },
+        }),
+      });
+    } else {
+      // Reject the version
+      await prisma.applicationVersion.update({
+        where: { id: versionId },
+        data: {
+          approvalStatus: 'rejected',
+          approvedBy: req.session.userId,
+          approvedAt: new Date(),
+          rejectionReason: rejectionReason?.trim() || null,
+        },
+      });
+
+      // Create automatic note
+      try {
+        const approver = await prisma.user.findUnique({
+          where: { id: req.session.userId },
+          select: { email: true },
+        });
+        const reasonStr = rejectionReason ? ` Reason: ${rejectionReason}` : '';
+        const noteContent = `Version ${version.versionNumber} rejected by ${approver?.email || 'Unknown'}.${reasonStr}`;
+        await createNote(req.session.userId, noteContent, null, id);
+      } catch (error) {
+        console.error('Error creating note for rejection:', error);
+      }
+
+      res.json({
+        message: 'Version rejected successfully',
+        version: await prisma.applicationVersion.findUnique({
+          where: { id: versionId },
+          include: {
+            user: { select: { id: true, email: true } },
+            approver: { select: { id: true, email: true } },
+          },
+        }),
+      });
+    }
+  } catch (error) {
+    console.error('Error approving/rejecting version:', error);
+    res.status(500).json({ error: 'Failed to approve/reject version' });
   }
 });
 

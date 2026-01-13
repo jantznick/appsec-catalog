@@ -5,9 +5,10 @@ import { prisma } from '../prisma/client.js';
  * @param {string} applicationId - The application ID
  * @param {string|null} userId - User ID who made the change (null for system/automated)
  * @param {string} changeSource - Source of the change (e.g., "web_form", "technical_form", "api", "bulk_import", "deployment_token")
+ * @param {string} status - Version status: "pending", "approved", "rejected" (default: "approved")
  * @returns {Promise<Object>} The created version record
  */
-export async function createApplicationVersion(applicationId, userId = null, changeSource = 'api') {
+export async function createApplicationVersion(applicationId, userId = null, changeSource = 'api', status = 'approved') {
   try {
     // Get the current application state
     const application = await prisma.application.findUnique({
@@ -34,6 +35,7 @@ export async function createApplicationVersion(applicationId, userId = null, cha
         versionNumber: nextVersionNumber,
         createdBy: userId,
         changeSource,
+        approvalStatus: status, // pending, approved, or rejected
         // Copy all metadata fields
         name: application.name,
         description: application.description,
@@ -143,5 +145,119 @@ export function compareVersions(version1, version2) {
     changedFields,
     diff,
   };
+}
+
+/**
+ * Create a version from provided data (for pending versions from forms)
+ * @param {string} applicationId - The application ID
+ * @param {Object} versionData - The data to store in the version
+ * @param {string|null} userId - User ID who made the change
+ * @param {string} changeSource - Source of the change
+ * @param {string} status - Version status (default: "pending")
+ * @returns {Promise<Object>} The created version record
+ */
+export async function createVersionFromData(applicationId, versionData, userId = null, changeSource = 'api', status = 'pending', requesterEmail = null) {
+  try {
+    // Get the current highest version number for this application
+    const latestVersion = await prisma.applicationVersion.findFirst({
+      where: { applicationId },
+      orderBy: { versionNumber: 'desc' },
+      select: { versionNumber: true },
+    });
+
+    const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+
+    // Create the version with provided data
+    const version = await prisma.applicationVersion.create({
+      data: {
+        applicationId,
+        versionNumber: nextVersionNumber,
+        createdBy: userId,
+        requesterEmail: requesterEmail?.trim() || null,
+        changeSource,
+        approvalStatus: status,
+        // Store all metadata fields from versionData
+        name: versionData.name?.trim() || null,
+        description: versionData.description?.trim() || null,
+        owner: versionData.owner?.trim() || null,
+        repoUrl: versionData.repoUrl?.trim() || null,
+        language: versionData.language?.trim() || null,
+        framework: versionData.framework?.trim() || null,
+        serverEnvironment: versionData.serverEnvironment?.trim() || null,
+        facing: versionData.facing?.trim() || null,
+        deploymentType: versionData.deploymentType?.trim() || null,
+        authProfiles: versionData.authProfiles?.trim() || null,
+        dataTypes: versionData.dataTypes?.trim() || null,
+        status: versionData.status?.trim() || null, // Application status field (not version status)
+        businessCriticality: versionData.businessCriticality ? parseInt(versionData.businessCriticality) : null,
+        criticalAspects: versionData.criticalAspects?.trim() || null,
+        devTeamContact: versionData.devTeamContact?.trim() || null,
+        securityTestingDescription: versionData.securityTestingDescription?.trim() || null,
+        additionalNotes: versionData.additionalNotes?.trim() || null,
+        sastTool: versionData.sastTool?.trim() || null,
+        sastIntegrationLevel: versionData.sastIntegrationLevel ? parseInt(versionData.sastIntegrationLevel) : null,
+        dastTool: versionData.dastTool?.trim() || null,
+        dastIntegrationLevel: versionData.dastIntegrationLevel ? parseInt(versionData.dastIntegrationLevel) : null,
+        appFirewallTool: versionData.appFirewallTool?.trim() || null,
+        appFirewallIntegrationLevel: versionData.appFirewallIntegrationLevel ? parseInt(versionData.appFirewallIntegrationLevel) : null,
+        apiSecurityTool: versionData.apiSecurityTool?.trim() || null,
+        apiSecurityIntegrationLevel: versionData.apiSecurityIntegrationLevel ? parseInt(versionData.apiSecurityIntegrationLevel) : null,
+        apiSecurityNA: versionData.apiSecurityNA || false,
+        currentVersion: versionData.currentVersion?.trim() || null,
+        deploymentEnvironment: versionData.deploymentEnvironment?.trim() || null,
+        gitBranch: versionData.gitBranch?.trim() || null,
+        lastDastScanDate: versionData.lastDastScanDate ? new Date(versionData.lastDastScanDate) : null,
+        lastSastScanDate: versionData.lastSastScanDate ? new Date(versionData.lastSastScanDate) : null,
+        interfaces: versionData.interfaces || null,
+      },
+    });
+
+    return version;
+  } catch (error) {
+    console.error('Error creating version from data:', error);
+    throw error;
+  }
+}
+
+/**
+ * Apply approved version fields to the application
+ * @param {string} applicationId - The application ID
+ * @param {Object} version - The approved version object
+ * @param {Array<string>|null} approvedFields - Array of field names to apply (null = all fields)
+ * @returns {Promise<Object>} The updated application
+ */
+export async function applyApprovedVersion(applicationId, version, approvedFields = null) {
+  try {
+    const updateData = {};
+
+    // If approvedFields is null, apply all fields
+    // Otherwise, only apply the specified fields
+    const fieldsToApply = approvedFields || [
+      'name', 'description', 'owner', 'repoUrl', 'language', 'framework',
+      'serverEnvironment', 'facing', 'deploymentType', 'authProfiles', 'dataTypes',
+      'status', 'businessCriticality', 'criticalAspects', 'devTeamContact',
+      'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel',
+      'dastTool', 'dastIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
+      'apiSecurityTool', 'apiSecurityIntegrationLevel', 'apiSecurityNA',
+      'currentVersion', 'deploymentEnvironment', 'gitBranch',
+      'lastDastScanDate', 'lastSastScanDate', 'interfaces',
+    ];
+
+    for (const field of fieldsToApply) {
+      if (version[field] !== undefined) {
+        updateData[field] = version[field];
+      }
+    }
+
+    const updated = await prisma.application.update({
+      where: { id: applicationId },
+      data: updateData,
+    });
+
+    return updated;
+  } catch (error) {
+    console.error('Error applying approved version:', error);
+    throw error;
+  }
 }
 
