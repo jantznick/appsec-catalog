@@ -23,6 +23,7 @@ export function Select({
           ${error ? 'border-red-300 focus:ring-red-500' : 'border-gray-300'}
           ${className}
         `}
+        style={props.disabled ? { pointerEvents: 'none' } : {}}
         {...props}
       >
         {placeholder && (

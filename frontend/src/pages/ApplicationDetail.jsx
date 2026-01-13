@@ -152,6 +152,12 @@ export function ApplicationDetail() {
     }
   };
 
+  const getIntegrationLevelName = (levelValue) => {
+    if (!levelValue && levelValue !== 0) return null;
+    const level = integrationLevels.find(l => l.value === String(levelValue));
+    return level ? level.label : null;
+  };
+
   const loadAvailableApplications = async () => {
     if (!application) return;
     
@@ -569,6 +575,33 @@ export function ApplicationDetail() {
     setHasUnsavedChanges(false);
   };
 
+  const handleFieldClick = (e) => {
+    if (!canEdit() || isEditing) {
+      return;
+    }
+    
+    // Don't trigger if clicking on actual buttons or links
+    const clickedButton = e.target.closest('button:not([disabled])');
+    const clickedLink = e.target.closest('a');
+    if (clickedButton || clickedLink) {
+      return;
+    }
+    
+    // Enable editing mode
+    handleEditClick();
+    
+    // Try to focus the field that was clicked on
+    const input = e.target.closest('input, select, textarea');
+    if (input) {
+      setTimeout(() => {
+        input.focus();
+        if (input.type === 'text' || input.type === 'url' || input.tagName === 'TEXTAREA') {
+          input.select();
+        }
+      }, 10);
+    }
+  };
+
   const canEdit = () => {
     if (isAdmin()) return true;
     if (application && user?.companyId === application.companyId) return true;
@@ -706,11 +739,6 @@ export function ApplicationDetail() {
             </p>
           </div>
           <div className="flex gap-3 items-center">
-            {canEdit() && !isEditing && (
-              <Button variant="primary" onClick={handleEditClick}>
-                Edit Application
-              </Button>
-            )}
             {isAdmin() && (
               <Button
                 variant="danger"
@@ -786,122 +814,295 @@ export function ApplicationDetail() {
               <CardHeader>
                 <CardTitle>Basic Information</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="relative">
+                {canEdit() && !isEditing && (
+                  <div
+                    onClick={handleFieldClick}
+                    className="absolute inset-0 z-10 cursor-pointer"
+                    style={{ backgroundColor: 'transparent' }}
+                  />
+                )}
                 <div className="space-y-4">
-                  <Input
-                    label="Application Name"
-                    value={formData.name}
-                    onChange={(e) => handleFieldChange('name', e.target.value)}
-                    disabled={!isEditing}
-                    required
-                  />
-                  <Textarea
-                    label="Description / Use Case"
-                    value={formData.description}
-                    onChange={(e) => handleFieldChange('description', e.target.value)}
-                    disabled={!isEditing}
-                    rows={3}
-                  />
-                  <Input
-                    label="Repository URL"
-                    type="url"
-                    value={formData.repoUrl}
-                    onChange={(e) => handleFieldChange('repoUrl', e.target.value)}
-                    disabled={!isEditing}
-                  />
-                  <Textarea
-                    label="Development Team Contact Info"
-                    value={formData.devTeamContact}
-                    onChange={(e) => handleFieldChange('devTeamContact', e.target.value)}
-                    disabled={!isEditing}
-                    rows={3}
-                    placeholder="Name, email, phone, etc. (can include multiple contacts)"
-                    helperText="Contact information for the development team"
-                  />
+                  {isEditing ? (
+                    <>
+                      <Input
+                        label="Application Name"
+                        value={formData.name}
+                        onChange={(e) => handleFieldChange('name', e.target.value)}
+                        required
+                      />
+                      <Textarea
+                        label="Description / Use Case"
+                        value={formData.description}
+                        onChange={(e) => handleFieldChange('description', e.target.value)}
+                        rows={3}
+                      />
+                      <Input
+                        label="Repository URL"
+                        type="url"
+                        value={formData.repoUrl}
+                        onChange={(e) => handleFieldChange('repoUrl', e.target.value)}
+                      />
+                      <Textarea
+                        label="Development Team Contact Info"
+                        value={formData.devTeamContact}
+                        onChange={(e) => handleFieldChange('devTeamContact', e.target.value)}
+                        rows={3}
+                        placeholder="Name, email, phone, etc. (can include multiple contacts)"
+                        helperText="Contact information for the development team"
+                      />
+                    </>
+                  ) : (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Application Name</label>
+                        <p className="text-base text-gray-900 font-medium">{formData.name || <span className="text-gray-400 italic">Not set</span>}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Description / Use Case</label>
+                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <p className="text-sm text-gray-900 whitespace-pre-wrap leading-relaxed">
+                            {formData.description || <span className="text-gray-400 italic">Not set</span>}
+                          </p>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Repository URL</label>
+                        {formData.repoUrl ? (
+                          <a 
+                            href={formData.repoUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 underline text-sm"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                            {formData.repoUrl}
+                          </a>
+                        ) : (
+                          <p className="text-sm text-gray-400 italic">Not set</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Development Team Contact Info</label>
+                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <p className="text-sm text-gray-900 whitespace-pre-wrap leading-relaxed">
+                            {formData.devTeamContact || <span className="text-gray-400 italic">Not set</span>}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>Application Details</CardTitle>
+                <CardTitle>
+                  Application Details
+                  {canEdit() && !isEditing && (
+                    <span className="ml-2 text-xs text-gray-400 font-normal">(click to edit)</span>
+                  )}
+                </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="relative">
+                {canEdit() && !isEditing && (
+                  <div
+                    onClick={handleFieldClick}
+                    className="absolute inset-0 z-10 cursor-pointer"
+                    style={{ backgroundColor: 'transparent' }}
+                  />
+                )}
                 <div className="space-y-4">
-                  <div className="grid grid-cols-3 gap-4">
-                    <Input
-                      label="Language"
-                      value={formData.language}
-                      onChange={(e) => handleFieldChange('language', e.target.value)}
-                      disabled={!isEditing}
-                    />
-                    <Input
-                      label="Framework"
-                      value={formData.framework}
-                      onChange={(e) => handleFieldChange('framework', e.target.value)}
-                      disabled={!isEditing}
-                    />
-                    <Select
-                      label="Server Environment"
-                      value={formData.serverEnvironment || ''}
-                      onChange={(e) => handleFieldChange('serverEnvironment', e.target.value)}
-                      disabled={!isEditing}
-                      options={[
-                        { value: '', label: 'Select environment' },
-                        { value: 'Cloud', label: 'Cloud' },
-                        { value: 'On-prem', label: 'On-prem' },
-                        { value: 'Both', label: 'Both' },
-                      ]}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Input
-                      label="Current Version"
-                      value={formData.currentVersion}
-                      onChange={(e) => handleFieldChange('currentVersion', e.target.value)}
-                      disabled={!isEditing}
-                      placeholder="e.g., 1.2.3, v2.1.0"
-                      helperText="Auto-populated from most recent deployment (can be overridden)"
-                    />
-                    <div></div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Select
-                      label="Facing"
-                      value={formData.facing || ''}
-                      onChange={(e) => handleFieldChange('facing', e.target.value)}
-                      disabled={!isEditing}
-                      options={[
-                        { value: '', label: 'Select facing' },
-                        { value: 'Internal', label: 'Internal' },
-                        { value: 'External', label: 'External' },
-                      ]}
-                    />
-                    <Input
-                      label="Deployment Type"
-                      value={formData.deploymentType}
-                      onChange={(e) => handleFieldChange('deploymentType', e.target.value)}
-                      disabled={!isEditing}
-                    />
-                  </div>
-                  <Input
-                    label="Auth Profiles"
-                    value={formData.authProfiles}
-                    onChange={(e) => handleFieldChange('authProfiles', e.target.value)}
-                    disabled={!isEditing}
-                  />
-                  <Input
-                    label="Data Types"
-                    value={formData.dataTypes}
-                    onChange={(e) => handleFieldChange('dataTypes', e.target.value)}
-                    disabled={!isEditing}
-                  />
-                  <DomainPills
-                    domains={domains}
-                    onAdd={handleAddDomain}
-                    onRemove={handleRemoveDomain}
-                    disabled={!canEdit()}
-                  />
+                  {isEditing ? (
+                    <div className="space-y-5">
+                      {/* Tech Stack Section */}
+                      <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
+                        <h5 className="text-sm font-semibold text-indigo-900 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                          </svg>
+                          Tech Stack
+                        </h5>
+                        <div className="grid grid-cols-3 gap-4">
+                          <Input
+                            label="Language"
+                            value={formData.language}
+                            onChange={(e) => handleFieldChange('language', e.target.value)}
+                          />
+                          <Input
+                            label="Framework"
+                            value={formData.framework}
+                            onChange={(e) => handleFieldChange('framework', e.target.value)}
+                          />
+                          <Select
+                            label="Server Environment"
+                            value={formData.serverEnvironment || ''}
+                            onChange={(e) => handleFieldChange('serverEnvironment', e.target.value)}
+                            options={[
+                              { value: '', label: 'Select environment' },
+                              { value: 'Cloud', label: 'Cloud' },
+                              { value: 'On-prem', label: 'On-prem' },
+                              { value: 'Both', label: 'Both' },
+                            ]}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Deployment Info Section */}
+                      <div className="bg-teal-50 rounded-lg p-4 border border-teal-200">
+                        <h5 className="text-sm font-semibold text-teal-900 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                          Deployment Information
+                        </h5>
+                        <div className="grid grid-cols-2 gap-4">
+                          <Input
+                            label="Current Version"
+                            value={formData.currentVersion}
+                            onChange={(e) => handleFieldChange('currentVersion', e.target.value)}
+                            placeholder="e.g., 1.2.3, v2.1.0"
+                            helperText="Auto-populated from most recent deployment (can be overridden)"
+                          />
+                          <div></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 mt-4">
+                          <Select
+                            label="Facing"
+                            value={formData.facing || ''}
+                            onChange={(e) => handleFieldChange('facing', e.target.value)}
+                            options={[
+                              { value: '', label: 'Select facing' },
+                              { value: 'Internal', label: 'Internal' },
+                              { value: 'External', label: 'External' },
+                            ]}
+                          />
+                          <Input
+                            label="Deployment Type"
+                            value={formData.deploymentType}
+                            onChange={(e) => handleFieldChange('deploymentType', e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Security & Data Section */}
+                      <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                        <h5 className="text-sm font-semibold text-amber-900 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                          Security & Data
+                        </h5>
+                        <div className="space-y-4">
+                          <Input
+                            label="Auth Profiles"
+                            value={formData.authProfiles}
+                            onChange={(e) => handleFieldChange('authProfiles', e.target.value)}
+                          />
+                          <Input
+                            label="Data Types"
+                            value={formData.dataTypes}
+                            onChange={(e) => handleFieldChange('dataTypes', e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Domains Section */}
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Hosting Domains</label>
+                        <DomainPills
+                          domains={domains}
+                          onAdd={handleAddDomain}
+                          onRemove={handleRemoveDomain}
+                          disabled={false}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      {/* Tech Stack Section */}
+                      <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
+                        <h5 className="text-sm font-semibold text-indigo-900 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                          </svg>
+                          Tech Stack
+                        </h5>
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Language:</span>
+                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.language || <span className="text-gray-400 italic">Not set</span>}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Framework:</span>
+                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.framework || <span className="text-gray-400 italic">Not set</span>}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Server Environment:</span>
+                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.serverEnvironment || <span className="text-gray-400 italic">Not set</span>}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Deployment Info Section */}
+                      <div className="bg-teal-50 rounded-lg p-4 border border-teal-200">
+                        <h5 className="text-sm font-semibold text-teal-900 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                          Deployment Information
+                        </h5>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Current Version:</span>
+                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.currentVersion || <span className="text-gray-400 italic">Not set</span>}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Facing:</span>
+                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.facing || <span className="text-gray-400 italic">Not set</span>}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Deployment Type:</span>
+                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.deploymentType || <span className="text-gray-400 italic">Not set</span>}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Security & Data Section */}
+                      <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                        <h5 className="text-sm font-semibold text-amber-900 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                          Security & Data
+                        </h5>
+                        <div className="space-y-2">
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Auth Profiles:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">{formData.authProfiles || <span className="text-gray-400 italic">Not set</span>}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Data Types:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">{formData.dataTypes || <span className="text-gray-400 italic">Not set</span>}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Domains Section */}
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Hosting Domains</label>
+                        <DomainPills
+                          domains={domains}
+                          onAdd={handleAddDomain}
+                          onRemove={handleRemoveDomain}
+                          disabled={!canEdit()}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -910,9 +1111,22 @@ export function ApplicationDetail() {
           {/* Interfaces with Other Applications */}
           <Card className="mt-6">
             <CardHeader>
-              <CardTitle>Interfaces with Other Applications</CardTitle>
+              <CardTitle>
+                Interfaces with Other Applications
+                {canEdit() && !isEditing && (
+                  <span className="ml-2 text-xs text-gray-400 font-normal">(click to edit)</span>
+                )}
+              </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="relative">
+              {canEdit() && !isEditing && (
+                <div
+                  onClick={handleFieldClick}
+                  className="absolute inset-0 z-10 cursor-pointer"
+                  style={{ backgroundColor: 'transparent' }}
+                />
+              )}
+              <div>
               {isEditing ? (
                 <div className="space-y-4">
                   {/* Available Applications Pills */}
@@ -1017,10 +1231,13 @@ export function ApplicationDetail() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-500">No interfaces configured</p>
+                    <div className="text-center py-6 bg-gray-50 rounded-lg border border-gray-200">
+                      <p className="text-sm text-gray-500">No interfaces configured</p>
+                    </div>
                   )}
                 </div>
               )}
+              </div>
             </CardContent>
           </Card>
         </TabPanel>
@@ -1160,122 +1377,261 @@ export function ApplicationDetail() {
         <TabPanel>
           <Card>
             <CardHeader>
-              <CardTitle>Security Tools</CardTitle>
+              <CardTitle>
+                Security Tools
+                {canEdit() && !isEditing && (
+                  <span className="ml-2 text-xs text-gray-400 font-normal">(click to edit)</span>
+                )}
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Left Column: Security Testing Description */}
-                <div>
-                  <Textarea
-                    label="Security Testing Description"
-                    value={formData.securityTestingDescription}
-                    onChange={(e) => handleFieldChange('securityTestingDescription', e.target.value)}
-                    disabled={!isEditing}
-                    rows={12}
-                    placeholder="Describe the security testing practices, tools, and processes"
-                    helperText="Information about security testing in place"
-                  />
+            <CardContent className="relative">
+              {canEdit() && !isEditing && (
+                <div
+                  onClick={handleFieldClick}
+                  className="absolute inset-0 z-10 cursor-pointer"
+                  style={{ backgroundColor: 'transparent' }}
+                />
+              )}
+              <div className="space-y-8">
+                {/* Security Testing Description - Full Width */}
+                <div className="border-b border-gray-200 pb-6">
+                  {isEditing ? (
+                    <Textarea
+                      label="Security Testing Description"
+                      value={formData.securityTestingDescription}
+                      onChange={(e) => handleFieldChange('securityTestingDescription', e.target.value)}
+                      rows={6}
+                      placeholder="Describe the security testing practices, tools, and processes"
+                      helperText="Information about security testing in place"
+                    />
+                  ) : (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Security Testing Description</label>
+                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        <p className="text-gray-900 whitespace-pre-wrap leading-relaxed">
+                          {formData.securityTestingDescription || <span className="text-gray-400 italic">Not set</span>}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 
-                {/* Right Column: Security Tools */}
-                <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <Input
-                        label="SAST Tool"
-                        value={formData.sastTool}
-                        onChange={(e) => handleFieldChange('sastTool', e.target.value)}
-                        disabled={!isEditing}
-                      />
-                      <Select
-                        label="SAST Integration Level"
-                        value={formData.sastIntegrationLevel}
-                        onChange={(e) => handleFieldChange('sastIntegrationLevel', e.target.value)}
-                        disabled={!isEditing}
-                        options={[
-                          { value: '', label: 'Select level' },
-                          ...integrationLevels,
-                        ]}
-                      />
+                {/* Security Tools - Grid Layout */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700 mb-4">Security Tools Configuration</h4>
+                  {isEditing ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* SAST Section */}
+                      <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                        <h5 className="text-sm font-semibold text-blue-900 mb-3">SAST (Static Analysis)</h5>
+                        <div className="space-y-3">
+                          <Input
+                            label="Tool"
+                            value={formData.sastTool}
+                            onChange={(e) => handleFieldChange('sastTool', e.target.value)}
+                          />
+                          <Select
+                            label="Integration Level"
+                            value={formData.sastIntegrationLevel}
+                            onChange={(e) => handleFieldChange('sastIntegrationLevel', e.target.value)}
+                            options={[
+                              { value: '', label: 'Select level' },
+                              ...integrationLevels,
+                            ]}
+                          />
+                          <Input
+                            label="Last Scan Date"
+                            type="date"
+                            value={formData.lastSastScanDate}
+                            onChange={(e) => handleFieldChange('lastSastScanDate', e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* DAST Section */}
+                      <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                        <h5 className="text-sm font-semibold text-green-900 mb-3">DAST (Dynamic Analysis)</h5>
+                        <div className="space-y-3">
+                          <Input
+                            label="Tool"
+                            value={formData.dastTool}
+                            onChange={(e) => handleFieldChange('dastTool', e.target.value)}
+                          />
+                          <Select
+                            label="Integration Level"
+                            value={formData.dastIntegrationLevel}
+                            onChange={(e) => handleFieldChange('dastIntegrationLevel', e.target.value)}
+                            options={[
+                              { value: '', label: 'Select level' },
+                              ...integrationLevels,
+                            ]}
+                          />
+                          <Input
+                            label="Last Scan Date"
+                            type="date"
+                            value={formData.lastDastScanDate}
+                            onChange={(e) => handleFieldChange('lastDastScanDate', e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* App Firewall Section */}
+                      <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                        <h5 className="text-sm font-semibold text-purple-900 mb-3">Application Firewall</h5>
+                        <div className="space-y-3">
+                          <Input
+                            label="Tool"
+                            value={formData.appFirewallTool}
+                            onChange={(e) => handleFieldChange('appFirewallTool', e.target.value)}
+                          />
+                          <Select
+                            label="Integration Level"
+                            value={formData.appFirewallIntegrationLevel}
+                            onChange={(e) => handleFieldChange('appFirewallIntegrationLevel', e.target.value)}
+                            options={[
+                              { value: '', label: 'Select level' },
+                              ...integrationLevels,
+                            ]}
+                          />
+                        </div>
+                      </div>
+
+                      {/* API Security Section */}
+                      <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                        <h5 className="text-sm font-semibold text-orange-900 mb-3">API Security</h5>
+                        <div className="space-y-3">
+                          <Input
+                            label="Tool"
+                            value={formData.apiSecurityTool}
+                            onChange={(e) => handleFieldChange('apiSecurityTool', e.target.value)}
+                          />
+                          <Select
+                            label="Integration Level"
+                            value={formData.apiSecurityIntegrationLevel}
+                            onChange={(e) => handleFieldChange('apiSecurityIntegrationLevel', e.target.value)}
+                            options={[
+                              { value: '', label: 'Select level' },
+                              ...integrationLevels,
+                            ]}
+                          />
+                          <Checkbox
+                            id="apiSecurityNA"
+                            label="Not Applicable"
+                            checked={formData.apiSecurityNA}
+                            onChange={(e) => handleFieldChange('apiSecurityNA', e.target.checked)}
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <Input
-                      label="Last SAST Scan Date"
-                      type="date"
-                      value={formData.lastSastScanDate}
-                      onChange={(e) => handleFieldChange('lastSastScanDate', e.target.value)}
-                      disabled={!isEditing}
-                      helperText="Date of last Static Application Security Testing scan"
-                    />
-                    <div className="grid grid-cols-2 gap-4">
-                      <Input
-                        label="DAST Tool"
-                        value={formData.dastTool}
-                        onChange={(e) => handleFieldChange('dastTool', e.target.value)}
-                        disabled={!isEditing}
-                      />
-                      <Select
-                        label="DAST Integration Level"
-                        value={formData.dastIntegrationLevel}
-                        onChange={(e) => handleFieldChange('dastIntegrationLevel', e.target.value)}
-                        disabled={!isEditing}
-                        options={[
-                          { value: '', label: 'Select level' },
-                          ...integrationLevels,
-                        ]}
-                      />
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* SAST Section */}
+                      <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                        <h5 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          SAST (Static Analysis)
+                        </h5>
+                        <div className="space-y-2">
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Tool:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">{formData.sastTool || <span className="text-gray-400 italic">Not set</span>}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Integration Level:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">
+                              {getIntegrationLevelName(formData.sastIntegrationLevel) || <span className="text-gray-400 italic">Not set</span>}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Last Scan Date:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">
+                              {formData.lastSastScanDate ? new Date(formData.lastSastScanDate).toLocaleDateString() : <span className="text-gray-400 italic">Not set</span>}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* DAST Section */}
+                      <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                        <h5 className="text-sm font-semibold text-green-900 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          DAST (Dynamic Analysis)
+                        </h5>
+                        <div className="space-y-2">
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Tool:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">{formData.dastTool || <span className="text-gray-400 italic">Not set</span>}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Integration Level:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">
+                              {getIntegrationLevelName(formData.dastIntegrationLevel) || <span className="text-gray-400 italic">Not set</span>}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Last Scan Date:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">
+                              {formData.lastDastScanDate ? new Date(formData.lastDastScanDate).toLocaleDateString() : <span className="text-gray-400 italic">Not set</span>}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* App Firewall Section */}
+                      <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                        <h5 className="text-sm font-semibold text-purple-900 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                          Application Firewall
+                        </h5>
+                        <div className="space-y-2">
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Tool:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">{formData.appFirewallTool || <span className="text-gray-400 italic">Not set</span>}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Integration Level:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">
+                              {getIntegrationLevelName(formData.appFirewallIntegrationLevel) || <span className="text-gray-400 italic">Not set</span>}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* API Security Section */}
+                      <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                        <h5 className="text-sm font-semibold text-orange-900 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          API Security
+                        </h5>
+                        <div className="space-y-2">
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Tool:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">{formData.apiSecurityTool || <span className="text-gray-400 italic">Not set</span>}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Integration Level:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">
+                              {getIntegrationLevelName(formData.apiSecurityIntegrationLevel) || <span className="text-gray-400 italic">Not set</span>}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Not Applicable:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">{formData.apiSecurityNA ? 'Yes' : 'No'}</p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <Input
-                      label="Last DAST Scan Date"
-                      type="date"
-                      value={formData.lastDastScanDate}
-                      onChange={(e) => handleFieldChange('lastDastScanDate', e.target.value)}
-                      disabled={!isEditing}
-                      helperText="Date of last Dynamic Application Security Testing scan"
-                    />
-                    <div className="grid grid-cols-2 gap-4">
-                      <Input
-                        label="App Firewall Tool"
-                        value={formData.appFirewallTool}
-                        onChange={(e) => handleFieldChange('appFirewallTool', e.target.value)}
-                        disabled={!isEditing}
-                      />
-                      <Select
-                        label="App Firewall Integration Level"
-                        value={formData.appFirewallIntegrationLevel}
-                        onChange={(e) => handleFieldChange('appFirewallIntegrationLevel', e.target.value)}
-                        disabled={!isEditing}
-                        options={[
-                          { value: '', label: 'Select level' },
-                          ...integrationLevels,
-                        ]}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <Input
-                        label="API Security Tool"
-                        value={formData.apiSecurityTool}
-                        onChange={(e) => handleFieldChange('apiSecurityTool', e.target.value)}
-                        disabled={!isEditing}
-                      />
-                      <Select
-                        label="API Security Integration Level"
-                        value={formData.apiSecurityIntegrationLevel}
-                        onChange={(e) => handleFieldChange('apiSecurityIntegrationLevel', e.target.value)}
-                        disabled={!isEditing}
-                        options={[
-                          { value: '', label: 'Select level' },
-                          ...integrationLevels,
-                        ]}
-                      />
-                    </div>
-                    <Checkbox
-                      id="apiSecurityNA"
-                      label="API Security Not Applicable"
-                      checked={formData.apiSecurityNA}
-                      onChange={(e) => handleFieldChange('apiSecurityNA', e.target.checked)}
-                      disabled={!isEditing}
-                    />
-                  </div>
+                  )}
                 </div>
+              </div>
               </CardContent>
             </Card>
         </TabPanel>
