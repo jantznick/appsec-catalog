@@ -7,6 +7,7 @@ import { LoadingPage } from '../components/ui/Loading.jsx';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
+import { Select } from '../components/ui/Select.jsx';
 import useAuthStore from '../store/authStore.js';
 
 export function Companies() {
@@ -14,19 +15,37 @@ export function Companies() {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [averageScores, setAverageScores] = useState({}); // Cache average scores by company ID
+  const [divisions, setDivisions] = useState([]);
+  const [divisionFilter, setDivisionFilter] = useState('');
   
   // Table state
   const [sorting, setSorting] = useState([]);
   const [globalFilter, setGlobalFilter] = useState('');
 
   useEffect(() => {
+    if (isAdmin()) {
+      loadDivisions();
+    }
     loadCompanies();
-  }, []);
+  }, [divisionFilter]);
+
+  const loadDivisions = async () => {
+    try {
+      const data = await api.getDivisions();
+      setDivisions(data);
+    } catch (error) {
+      console.error('Failed to load divisions:', error);
+    }
+  };
 
   const loadCompanies = async () => {
     try {
       setLoading(true);
-      const data = await api.getCompanies();
+      const filters = {};
+      if (divisionFilter) {
+        filters.divisionId = divisionFilter;
+      }
+      const data = await api.getCompanies(filters);
       setCompanies(Array.isArray(data) ? data : []);
       
       // Load average scores for all companies
@@ -78,6 +97,25 @@ export function Companies() {
       accessorKey: 'domains',
       header: 'Email Domains',
       cell: ({ row }) => row.original.domains || <span className="text-gray-400">—</span>,
+    },
+    {
+      accessorKey: 'division',
+      header: 'Division',
+      cell: ({ row }) => {
+        const division = row.original.division;
+        if (division) {
+          return (
+            <Link
+              to={`/divisions/${division.id}`}
+              className="font-medium text-blue-600 hover:text-blue-700"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {division.name}
+            </Link>
+          );
+        }
+        return <span className="text-gray-400">—</span>;
+      },
     },
     {
       accessorKey: 'users',
@@ -137,7 +175,8 @@ export function Companies() {
       const filterLower = globalFilter.toLowerCase();
       data = data.filter(company =>
         company.name?.toLowerCase().includes(filterLower) ||
-        company.domains?.toLowerCase().includes(filterLower)
+        company.domains?.toLowerCase().includes(filterLower) ||
+        company.division?.name?.toLowerCase().includes(filterLower)
       );
     }
 
@@ -172,7 +211,7 @@ export function Companies() {
     <div>
       <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Companies</h1>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Companies</h1>
           <p className="text-gray-600">
             {isAdmin() ? 'Manage all companies' : 'View your company'}
           </p>
@@ -202,14 +241,27 @@ export function Companies() {
       ) : (
         <Card>
           <CardContent padding="none">
-            {/* Global Search */}
-            <div className="p-4 border-b">
-              <Input
-                label="Search"
-                value={globalFilter}
-                onChange={(e) => setGlobalFilter(e.target.value)}
-                placeholder="Search companies..."
-              />
+            {/* Filters */}
+            <div className="p-4 border-b space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Search"
+                  value={globalFilter}
+                  onChange={(e) => setGlobalFilter(e.target.value)}
+                  placeholder="Search companies..."
+                />
+                {isAdmin() && (
+                  <Select
+                    label="Filter by Division"
+                    value={divisionFilter}
+                    onChange={(e) => setDivisionFilter(e.target.value)}
+                    options={[
+                      { value: '', label: 'All Divisions' },
+                      ...divisions.map(d => ({ value: d.id, label: d.name })),
+                    ]}
+                  />
+                )}
+              </div>
             </div>
 
             <div className="overflow-x-auto">

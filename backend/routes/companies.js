@@ -106,8 +106,22 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     if (req.session.isAdmin) {
       // Admin sees all companies
+      const { divisionId } = req.query;
+      
+      const whereClause = {};
+      if (divisionId) {
+        whereClause.divisionId = divisionId;
+      }
+      
       const companies = await prisma.company.findMany({
+        where: whereClause,
         include: {
+          division: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
           _count: {
             select: {
               users: true,
@@ -128,6 +142,12 @@ router.get('/', requireAuth, async (req, res) => {
       const company = await prisma.company.findUnique({
         where: { id: req.session.companyId },
         include: {
+          division: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
           _count: {
             select: {
               users: true,
@@ -265,6 +285,13 @@ router.get('/:id', requireAuth, async (req, res) => {
         name: true,
         slug: true,
         domains: true,
+        divisionId: true,
+        division: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         engManager: true,
         language: true,
         framework: true,
@@ -344,6 +371,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
     const {
       name,
       domains,
+      divisionId,
       engManager,
       language,
       framework,
@@ -377,6 +405,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
         name: name.trim(),
         slug, // Required for new companies
         domains: domains?.trim() || null,
+        divisionId: divisionId || null,
         engManager: engManager?.trim() || null,
         language: language?.trim() || null,
         framework: framework?.trim() || null,
@@ -402,6 +431,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     const {
       name,
       domains,
+      divisionId,
       engManager,
       language,
       framework,
@@ -466,6 +496,7 @@ router.put('/:id', requireAuth, async (req, res) => {
       data: {
         ...updateData,
         ...(domains !== undefined && req.session.isAdmin && { domains: domains?.trim() || null }),
+        ...(divisionId !== undefined && req.session.isAdmin && { divisionId: divisionId || null }),
         ...(engManager !== undefined && { engManager: engManager?.trim() || null }),
         ...(language !== undefined && { language: language?.trim() || null }),
         ...(framework !== undefined && { framework: framework?.trim() || null }),

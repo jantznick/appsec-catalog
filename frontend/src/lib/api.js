@@ -113,11 +113,42 @@ export const api = {
     }),
 
   // Company management
-  getCompanies: () =>
-    apiRequest('/api/companies'),
+  getCompanies: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.divisionId) params.append('divisionId', filters.divisionId);
+    const queryString = params.toString();
+    return apiRequest(`/api/companies${queryString ? `?${queryString}` : ''}`);
+  },
 
   getCompany: (id) =>
     apiRequest(`/api/companies/${id}`),
+
+  // Division management
+  getDivisions: () =>
+    apiRequest('/api/divisions'),
+
+  getDivision: (id) =>
+    apiRequest(`/api/divisions/${id}`),
+
+  createDivision: (data) =>
+    apiRequest('/api/divisions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateDivision: (id, data) =>
+    apiRequest(`/api/divisions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteDivision: (id) =>
+    apiRequest(`/api/divisions/${id}`, {
+      method: 'DELETE',
+    }),
+
+  getDivisionStats: (id) =>
+    apiRequest(`/api/divisions/${id}/stats`),
   getCompanyAverageScore: (id) =>
     apiRequest(`/api/companies/${id}/average-score`),
   getCompanyDomains: (id) =>
@@ -294,6 +325,7 @@ export const api = {
   getAdminApplications: (filters = {}) => {
     const params = new URLSearchParams();
     if (filters.companyId) params.append('companyId', filters.companyId);
+    if (filters.divisionId) params.append('divisionId', filters.divisionId);
     if (filters.status) params.append('status', filters.status);
     if (filters.search) params.append('search', filters.search);
     const queryString = params.toString();

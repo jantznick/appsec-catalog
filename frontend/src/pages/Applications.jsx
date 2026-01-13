@@ -20,10 +20,12 @@ export function Applications() {
   const { isAdmin, user } = useAuthStore();
   const [applications, setApplications] = useState([]);
   const [companies, setCompanies] = useState([]);
+  const [divisions, setDivisions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [scores, setScores] = useState({}); // Cache scores by application ID
   const [filters, setFilters] = useState({
     companyId: searchParams.get('companyId') || '',
+    divisionId: '',
     status: '',
     search: '',
   });
@@ -44,9 +46,19 @@ export function Applications() {
   useEffect(() => {
     if (isAdmin()) {
       loadCompanies();
+      loadDivisions();
     }
     loadApplications();
   }, []);
+
+  const loadDivisions = async () => {
+    try {
+      const data = await api.getDivisions();
+      setDivisions(data);
+    } catch (error) {
+      console.error('Failed to load divisions:', error);
+    }
+  };
 
   useEffect(() => {
     // Only reload when filters change if admin (regular users don't have filters)
@@ -384,6 +396,9 @@ export function Applications() {
       if (filters.companyId) {
         data = data.filter(app => app.companyId === filters.companyId);
       }
+      if (filters.divisionId) {
+        data = data.filter(app => app.company?.divisionId === filters.divisionId);
+      }
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
         data = data.filter(app => 
@@ -434,7 +449,7 @@ export function Applications() {
     <div>
       <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Applications</h1>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Applications</h1>
           <p className="text-gray-600">
             {isAdmin() ? 'Manage applications across all companies' : 'View your company applications'}
           </p>
@@ -456,12 +471,21 @@ export function Applications() {
             <CardTitle>Filters</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <Input
                 label="Search"
                 value={filters.search}
                 onChange={(e) => handleFilterChange('search', e.target.value)}
                 placeholder="Search by name or description..."
+              />
+              <Select
+                label="Division"
+                value={filters.divisionId}
+                onChange={(e) => handleFilterChange('divisionId', e.target.value)}
+                options={[
+                  { value: '', label: 'All Divisions' },
+                  ...divisions.map(d => ({ value: d.id, label: d.name })),
+                ]}
               />
               <Select
                 label="Company"

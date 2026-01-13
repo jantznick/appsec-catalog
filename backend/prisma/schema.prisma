@@ -25,11 +25,24 @@ model User {
   applicationReviews ApplicationMetadataReview[] // Reviews performed by this user
 }
 
+model Division {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  companies   Company[]
+  
+  @@index([name])
+}
+
 model Company {
   id          String    @id @default(cuid())
   name        String    @unique
   slug        String?   @unique
   domains     String?  // Email domains (comma-separated) - used for auto-assigning users to company based on email domain (e.g., "example.com, subdomain.example.com")
+  divisionId  String?  // Division this company belongs to
+  division    Division? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
   users       User[]
   applications Application[]
   invitations Invitation[]
@@ -47,6 +60,7 @@ model Company {
   contacts    Contact[]
   
   @@index([slug])
+  @@index([divisionId])
 }
 
 model ChangeLog {

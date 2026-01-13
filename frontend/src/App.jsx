@@ -26,6 +26,8 @@ import { Domains } from './pages/Domains.jsx';
 import { DomainDetail } from './pages/DomainDetail.jsx';
 import { DeploymentTokens } from './pages/DeploymentTokens.jsx';
 import { PendingApprovals } from './pages/PendingApprovals.jsx';
+import { Divisions } from './pages/Divisions.jsx';
+import { DivisionDetail } from './pages/DivisionDetail.jsx';
 
 function CatchAllRedirect() {
   const { isAuthenticated, isVerified, loading } = useAuthStore();
@@ -240,6 +242,26 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <PendingApprovals />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/divisions"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Divisions />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/divisions/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <DivisionDetail />
               </Layout>
             </ProtectedRoute>
           }

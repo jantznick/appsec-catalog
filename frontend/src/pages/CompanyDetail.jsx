@@ -21,18 +21,22 @@ export function CompanyDetail() {
   const [company, setCompany] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [newUserEmail, setNewUserEmail] = useState('');
-  const [allUsers, setAllUsers] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [originalFormData, setOriginalFormData] = useState(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [averageScore, setAverageScore] = useState(null);
   const [scoreData, setScoreData] = useState(null);
   const [domains, setDomains] = useState([]);
+
+  const [divisions, setDivisions] = useState([]);
+  const [loadingDivisions, setLoadingDivisions] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
     name: '',
     domains: '',
+    divisionId: '',
     engManager: '',
     language: '',
     framework: '',
@@ -49,7 +53,22 @@ export function CompanyDetail() {
       loadAverageScore();
       loadDomains();
     }
-  }, [id]);
+    if (isAdmin()) {
+      loadDivisions();
+    }
+  }, [id, isAdmin]);
+
+  const loadDivisions = async () => {
+    try {
+      setLoadingDivisions(true);
+      const data = await api.getDivisions();
+      setDivisions(data);
+    } catch (error) {
+      console.error('Failed to load divisions:', error);
+    } finally {
+      setLoadingDivisions(false);
+    }
+  };
 
   const loadAverageScore = async () => {
     try {
@@ -75,9 +94,10 @@ export function CompanyDetail() {
       setLoading(true);
       const data = await api.getCompany(id);
       setCompany(data);
-      setFormData({
+      const newFormData = {
         name: data.name || '',
         domains: data.domains || '',
+        divisionId: data.divisionId || '',
         engManager: data.engManager || '',
         language: data.language || '',
         framework: data.framework || '',
@@ -86,7 +106,9 @@ export function CompanyDetail() {
         deploymentType: data.deploymentType || '',
         authProfiles: data.authProfiles || '',
         dataTypes: data.dataTypes || '',
-      });
+      };
+      setFormData(newFormData);
+      setOriginalFormData(JSON.parse(JSON.stringify(newFormData)));
     } catch (error) {
       toast.error('Failed to load company');
       console.error(error);
@@ -97,9 +119,58 @@ export function CompanyDetail() {
   };
 
   // Helper function to check if user can edit company fields
-  // Company members can edit everything except name and email domains
   const canEditCompany = () => {
     return isAdmin() || user?.companyId === id;
+  };
+
+  const handleEditClick = () => {
+    if (!canEditCompany()) return;
+    setIsEditing(true);
+    setOriginalFormData(JSON.parse(JSON.stringify(formData)));
+  };
+
+  const handleFieldClick = (e) => {
+    if (!canEditCompany() || isEditing) {
+      return;
+    }
+    
+    // Don't trigger if clicking on actual buttons or links
+    const clickedButton = e.target.closest('button:not([disabled])');
+    const clickedLink = e.target.closest('a');
+    if (clickedButton || clickedLink) {
+      return;
+    }
+    
+    // Enable editing mode
+    handleEditClick();
+  };
+
+  const handleFieldChange = (field, value) => {
+    const newFormData = { ...formData, [field]: value };
+    setFormData(newFormData);
+    if (isEditing && originalFormData) {
+      const hasChanges = JSON.stringify(newFormData) !== JSON.stringify(originalFormData);
+      setHasUnsavedChanges(hasChanges);
+    }
+  };
+
+  const handleCancel = () => {
+    if (hasUnsavedChanges) {
+      setShowCancelModal(true);
+      return;
+    }
+    cancelEditing();
+  };
+
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setHasUnsavedChanges(false);
+    setShowCancelModal(false);
+    if (originalFormData) {
+      setFormData(JSON.parse(JSON.stringify(originalFormData)));
+    } else {
+      loadCompany();
+    }
   };
 
   const handleSave = async () => {
@@ -113,7 +184,9 @@ export function CompanyDetail() {
       setSaving(true);
       await api.updateCompany(id, formData);
       toast.success('Company updated successfully');
-      loadCompany();
+      setIsEditing(false);
+      setHasUnsavedChanges(false);
+      await loadCompany();
     } catch (error) {
       toast.error(error.message || 'Failed to update company');
     } finally {
@@ -121,48 +194,6 @@ export function CompanyDetail() {
     }
   };
 
-  const handleRemoveUser = async (userId) => {
-    if (!confirm('Are you sure you want to remove this user from the company?')) {
-      return;
-    }
-
-    try {
-      await api.removeUserFromCompany(id, userId);
-      toast.success('User removed from company');
-      loadCompany();
-    } catch (error) {
-      toast.error(error.message || 'Failed to remove user');
-    }
-  };
-
-  const handleAddUser = async () => {
-    if (!newUserEmail.trim()) {
-      toast.error('Please enter an email address');
-      return;
-    }
-
-    try {
-      setLoadingUsers(true);
-      // Get all users to find the one with this email
-      const users = await api.getAllUsers();
-      const user = users.find(u => u.email.toLowerCase() === newUserEmail.trim().toLowerCase());
-
-      if (!user) {
-        toast.error('User not found. They may need to register first.');
-        return;
-      }
-
-      await api.assignUserToCompany(id, user.id);
-      toast.success('User added to company');
-      setNewUserEmail('');
-      setShowAddUserModal(false);
-      loadCompany();
-    } catch (error) {
-      toast.error(error.message || 'Failed to add user');
-    } finally {
-      setLoadingUsers(false);
-    }
-  };
 
   if (loading) {
     return <LoadingPage message="Loading company..." />;
@@ -173,20 +204,32 @@ export function CompanyDetail() {
   }
 
   return (
-    <div>
+    <div className="pb-24">
       <div className="mb-8">
-        {!isAdmin && <button
-          onClick={() => navigate('/companies')}
-          className="text-blue-600 hover:text-blue-700 mb-4"
-        >
-          ← Back to Companies
-        </button>}
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">{company.name}</h1>
+        {!isAdmin() && (
+          <button
+            onClick={() => navigate('/companies')}
+            className="text-blue-600 hover:text-blue-700 mb-4"
+          >
+            ← Back to Companies
+          </button>
+        )}
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-gray-800">{company.name}</h1>
+          {company.division && (
+            <Link
+              to={`/divisions/${company.division.id}`}
+              className="px-3 py-1 text-sm font-medium text-blue-700 bg-blue-100 rounded-full hover:bg-blue-200 transition-colors"
+            >
+              {company.division.name}
+            </Link>
+          )}
+        </div>
         <p className="text-gray-600">Company details and settings</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Form */}
+        {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
           {/* Score Cards */}
           {scoreData && (
@@ -208,7 +251,7 @@ export function CompanyDetail() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-center">
-                      <div className={`text-3xl font-bold mb-1 ${
+                      <div className={`text-3xl font-semibold mb-1 ${
                         averageScore >= 76 ? 'text-green-600' :
                         averageScore >= 51 ? 'text-yellow-600' :
                         'text-red-600'
@@ -238,7 +281,6 @@ export function CompanyDetail() {
                       <div className="text-3xl font-bold mb-1 text-green-600">
                         {scoreData.highestApplication.score}/100
                       </div>
-
                       <Link
                         to={`/applications/${scoreData.highestApplication.id}`}
                         className="text-sm text-blue-600 hover:text-blue-700 block truncate"
@@ -259,7 +301,7 @@ export function CompanyDetail() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-center">
-                      <div className="text-3xl font-bold mb-1 text-red-600">
+                      <div className="text-3xl font-semibold mb-1 text-red-600">
                         {scoreData.lowestApplication.score}/100
                       </div>
                       <Link
@@ -288,114 +330,223 @@ export function CompanyDetail() {
             </div>
           )}
 
+          {/* Company Information */}
           <Card>
             <CardHeader>
-              <CardTitle>Company Information</CardTitle>
+              <CardTitle>
+                Company Information
+                {canEditCompany() && !isEditing && (
+                  <span className="ml-2 text-xs text-gray-400 font-normal">(click to edit)</span>
+                )}
+              </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="relative">
+              {canEditCompany() && !isEditing && (
+                <div
+                  onClick={handleFieldClick}
+                  className="absolute inset-0 z-10 cursor-pointer"
+                  style={{ backgroundColor: 'transparent' }}
+                />
+              )}
               <div className="space-y-4">
-                <Input
-                  label="Company Name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  disabled={!isAdmin()}
-                  required
-                />
-                <Textarea
-                  label="Email Domains (comma-separated)"
-                  value={formData.domains}
-                  onChange={(e) => setFormData({ ...formData, domains: e.target.value })}
-                  disabled={!isAdmin()}
-                  placeholder="example.com, subdomain.example.com"
-                  helperText="Email domains that will automatically assign users to this company (different from hosting domains where applications are hosted)"
-                />
-                <Input
-                  label="Engineering Manager"
-                  value={formData.engManager}
-                  onChange={(e) => setFormData({ ...formData, engManager: e.target.value })}
-                  disabled={!canEditCompany()}
-                />
+                {isEditing ? (
+                  <>
+                    <Input
+                      label="Company Name"
+                      value={formData.name}
+                      onChange={(e) => handleFieldChange('name', e.target.value)}
+                      disabled={!isAdmin()}
+                      required
+                    />
+                    <Textarea
+                      label="Email Domains (comma-separated)"
+                      value={formData.domains}
+                      onChange={(e) => handleFieldChange('domains', e.target.value)}
+                      disabled={!isAdmin()}
+                      placeholder="example.com, subdomain.example.com"
+                      helperText="Email domains that will automatically assign users to this company (different from hosting domains where applications are hosted)"
+                    />
+                    {isAdmin() && (
+                      <Select
+                        label="Division"
+                        value={formData.divisionId || ''}
+                        onChange={(e) => handleFieldChange('divisionId', e.target.value)}
+                        disabled={loadingDivisions}
+                        options={[
+                          { value: '', label: 'No division' },
+                          ...divisions.map(d => ({ value: d.id, label: d.name })),
+                        ]}
+                      />
+                    )}
+                    <Input
+                      label="Engineering Manager"
+                      value={formData.engManager}
+                      onChange={(e) => handleFieldChange('engManager', e.target.value)}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1">Company Name</label>
+                      <p className="text-base text-gray-800 font-medium">{formData.name || <span className="text-gray-400 italic">Not set</span>}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1">Email Domains</label>
+                      <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                        <p className="text-sm text-gray-800">
+                          {formData.domains || <span className="text-gray-400 italic">Not set</span>}
+                        </p>
+                      </div>
+                    </div>
+                    {isAdmin() && company.division && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-600 mb-1">Division</label>
+                        <Link
+                          to={`/divisions/${company.division.id}`}
+                          className="inline-block px-3 py-1 text-sm font-medium text-blue-700 bg-blue-100 rounded-full hover:bg-blue-200 transition-colors"
+                        >
+                          {company.division.name}
+                        </Link>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1">Engineering Manager</label>
+                      <p className="text-base text-gray-800">
+                        {formData.engManager || <span className="text-gray-400 italic">Not set</span>}
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
 
+          {/* Default Settings */}
           <Card>
             <CardHeader>
-              <CardTitle>Default Settings</CardTitle>
+              <CardTitle>
+                Default Settings
+                {canEditCompany() && !isEditing && (
+                  <span className="ml-2 text-xs text-gray-400 font-normal">(click to edit)</span>
+                )}
+              </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="relative">
+              {canEditCompany() && !isEditing && (
+                <div
+                  onClick={handleFieldClick}
+                  className="absolute inset-0 z-10 cursor-pointer"
+                  style={{ backgroundColor: 'transparent' }}
+                />
+              )}
               <p className="text-sm text-gray-600 mb-4">
                 These settings will be used as defaults when onboarding new applications for this company.
               </p>
               <div className="space-y-4">
-                <Input
-                  label="Language"
-                  value={formData.language}
-                  onChange={(e) => setFormData({ ...formData, language: e.target.value })}
-                  disabled={!canEditCompany()}
-                />
-                <Input
-                  label="Framework"
-                  value={formData.framework}
-                  onChange={(e) => setFormData({ ...formData, framework: e.target.value })}
-                  disabled={!canEditCompany()}
-                />
-                <Select
-                  label="Server Environment"
-                  value={formData.serverEnvironment || ''}
-                  onChange={(e) => setFormData({ ...formData, serverEnvironment: e.target.value })}
-                  disabled={!canEditCompany()}
-                  options={[
-                    { value: '', label: 'Select environment' },
-                    { value: 'Cloud', label: 'Cloud' },
-                    { value: 'On-prem', label: 'On-prem' },
-                    { value: 'Both', label: 'Both' },
-                  ]}
-                />
-                <Select
-                  label="Facing"
-                  value={formData.facing || ''}
-                  onChange={(e) => setFormData({ ...formData, facing: e.target.value })}
-                  disabled={!canEditCompany()}
-                  options={[
-                    { value: '', label: 'Select facing' },
-                    { value: 'Internal', label: 'Internal' },
-                    { value: 'External', label: 'External' },
-                  ]}
-                />
-                <Input
-                  label="Deployment Type"
-                  value={formData.deploymentType}
-                  onChange={(e) => setFormData({ ...formData, deploymentType: e.target.value })}
-                  disabled={!canEditCompany()}
-                />
-                <Input
-                  label="Auth Profiles"
-                  value={formData.authProfiles}
-                  onChange={(e) => setFormData({ ...formData, authProfiles: e.target.value })}
-                  disabled={!canEditCompany()}
-                />
-                <Input
-                  label="Data Types"
-                  value={formData.dataTypes}
-                  onChange={(e) => setFormData({ ...formData, dataTypes: e.target.value })}
-                  disabled={!canEditCompany()}
-                />
+                {isEditing ? (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Input
+                        label="Language"
+                        value={formData.language}
+                        onChange={(e) => handleFieldChange('language', e.target.value)}
+                      />
+                      <Input
+                        label="Framework"
+                        value={formData.framework}
+                        onChange={(e) => handleFieldChange('framework', e.target.value)}
+                      />
+                      <Select
+                        label="Server Environment"
+                        value={formData.serverEnvironment || ''}
+                        onChange={(e) => handleFieldChange('serverEnvironment', e.target.value)}
+                        options={[
+                          { value: '', label: 'Select environment' },
+                          { value: 'Cloud', label: 'Cloud' },
+                          { value: 'On-prem', label: 'On-prem' },
+                          { value: 'Both', label: 'Both' },
+                        ]}
+                      />
+                      <Select
+                        label="Facing"
+                        value={formData.facing || ''}
+                        onChange={(e) => handleFieldChange('facing', e.target.value)}
+                        options={[
+                          { value: '', label: 'Select facing' },
+                          { value: 'Internal', label: 'Internal' },
+                          { value: 'External', label: 'External' },
+                        ]}
+                      />
+                      <Input
+                        label="Deployment Type"
+                        value={formData.deploymentType}
+                        onChange={(e) => handleFieldChange('deploymentType', e.target.value)}
+                      />
+                      <Input
+                        label="Auth Profiles"
+                        value={formData.authProfiles}
+                        onChange={(e) => handleFieldChange('authProfiles', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Input
+                        label="Data Types"
+                        value={formData.dataTypes}
+                        onChange={(e) => handleFieldChange('dataTypes', e.target.value)}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-600 mb-1">Language</label>
+                        <p className="text-sm text-gray-700">
+                          {formData.language || <span className="text-gray-400 italic">Not set</span>}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-600 mb-1">Framework</label>
+                        <p className="text-sm text-gray-700">
+                          {formData.framework || <span className="text-gray-400 italic">Not set</span>}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-600 mb-1">Server Environment</label>
+                        <p className="text-sm text-gray-700">
+                          {formData.serverEnvironment || <span className="text-gray-400 italic">Not set</span>}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-600 mb-1">Facing</label>
+                        <p className="text-sm text-gray-700">
+                          {formData.facing || <span className="text-gray-400 italic">Not set</span>}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-600 mb-1">Deployment Type</label>
+                        <p className="text-sm text-gray-700">
+                          {formData.deploymentType || <span className="text-gray-400 italic">Not set</span>}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-600 mb-1">Auth Profiles</label>
+                        <p className="text-sm text-gray-700">
+                          {formData.authProfiles || <span className="text-gray-400 italic">Not set</span>}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1">Data Types</label>
+                      <p className="text-sm text-gray-700">
+                        {formData.dataTypes || <span className="text-gray-400 italic">Not set</span>}
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
-
-          {canEditCompany() && (
-            <div className="flex justify-end">
-              <Button
-                variant="primary"
-                onClick={handleSave}
-                loading={saving}
-              >
-                Save Changes
-              </Button>
-            </div>
-          )}
         </div>
 
         {/* Sidebar */}
@@ -451,70 +602,6 @@ export function CompanyDetail() {
             </Card>
           )}
 
-          {/* Users */}
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <CardTitle>Users ({company.users?.length || 0})</CardTitle>
-                {isAdmin() && (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => setShowAddUserModal(true)}
-                  >
-                    Add User
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent padding="none">
-              {company.users && company.users.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Email</TableHead>
-                      {isAdmin() && <TableHead>Actions</TableHead>}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {company.users.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell>
-                          <div>
-                            <div className="font-medium">{user.email}</div>
-                            <div className="text-xs text-gray-500 space-x-2">
-                              {user.verifiedAccount && (
-                                <span className="text-green-600">Verified</span>
-                              )}
-                              {user.isAdmin && (
-                                <span className="text-purple-600">Admin</span>
-                              )}
-                            </div>
-                          </div>
-                        </TableCell>
-                        {isAdmin() && (
-                          <TableCell>
-                            <Button
-                              variant="danger"
-                              size="sm"
-                              onClick={() => handleRemoveUser(user.id)}
-                            >
-                              Remove
-                            </Button>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <div className="p-4 text-center text-gray-500">
-                  No users assigned
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           {/* Hosting Domains */}
           <Card>
             <CardHeader>
@@ -565,48 +652,78 @@ export function CompanyDetail() {
         </div>
       )}
 
-      {/* Add User Modal */}
+      {/* Sticky Save Bar - Only show when editing */}
+      {isEditing && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {hasUnsavedChanges && (
+                  <div className="flex items-center gap-2 text-sm text-amber-600">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span>You have unsaved changes</span>
+                  </div>
+                )}
+                {!hasUnsavedChanges && (
+                  <div className="text-sm text-gray-500">
+                    No changes made
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <Button variant="secondary" onClick={handleCancel}>
+                  Cancel
+                </Button>
+                <Button 
+                  variant="primary" 
+                  onClick={handleSave} 
+                  loading={saving}
+                  disabled={!hasUnsavedChanges}
+                >
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Confirmation Modal */}
       <Modal
-        isOpen={showAddUserModal}
-        onClose={() => {
-          setShowAddUserModal(false);
-          setNewUserEmail('');
-        }}
-        title="Add User to Company"
+        isOpen={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        title="Discard Changes?"
+        size="sm"
         footer={
           <>
             <Button
               variant="secondary"
-              onClick={() => {
-                setShowAddUserModal(false);
-                setNewUserEmail('');
-              }}
+              onClick={() => setShowCancelModal(false)}
             >
-              Cancel
+              Keep Editing
             </Button>
             <Button
               variant="primary"
-              onClick={handleAddUser}
-              loading={loadingUsers}
+              onClick={cancelEditing}
+              className="bg-red-600 hover:bg-red-700"
             >
-              Add User
+              Discard Changes
             </Button>
           </>
         }
       >
         <div className="space-y-4">
-          <Input
-            label="User Email"
-            type="email"
-            value={newUserEmail}
-            onChange={(e) => setNewUserEmail(e.target.value)}
-            placeholder="user@example.com"
-            helperText="Enter the email address of the user to add"
-            required
-          />
+          <p className="text-gray-700">
+            You have unsaved changes. Are you sure you want to discard them?
+          </p>
+          <p className="text-sm text-red-600">
+            This action cannot be undone. All your changes will be lost.
+          </p>
         </div>
       </Modal>
+
     </div>
   );
 }
-

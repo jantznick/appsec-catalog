@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
@@ -13,9 +13,12 @@ export function CompanyNew() {
   const navigate = useNavigate();
   const { isAdmin } = useAuthStore();
   const [saving, setSaving] = useState(false);
+  const [divisions, setDivisions] = useState([]);
+  const [loadingDivisions, setLoadingDivisions] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     domains: '',
+    divisionId: '',
     engManager: '',
     language: '',
     framework: '',
@@ -25,6 +28,24 @@ export function CompanyNew() {
     authProfiles: '',
     dataTypes: '',
   });
+
+  useEffect(() => {
+    if (isAdmin()) {
+      loadDivisions();
+    }
+  }, [isAdmin]);
+
+  const loadDivisions = async () => {
+    try {
+      setLoadingDivisions(true);
+      const data = await api.getDivisions();
+      setDivisions(data);
+    } catch (error) {
+      console.error('Failed to load divisions:', error);
+    } finally {
+      setLoadingDivisions(false);
+    }
+  };
 
   // Redirect if not admin
   if (!isAdmin()) {
@@ -61,7 +82,7 @@ export function CompanyNew() {
         >
           ← Back to Companies
         </button>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Create New Company</h1>
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">Create New Company</h1>
         <p className="text-gray-600">Add a new company to the system</p>
       </div>
 
@@ -85,6 +106,16 @@ export function CompanyNew() {
                   onChange={(e) => setFormData({ ...formData, domains: e.target.value })}
                   placeholder="example.com, subdomain.example.com"
                   helperText="Email domains that will automatically assign users to this company (different from hosting domains where applications are hosted)"
+                />
+                <Select
+                  label="Division"
+                  value={formData.divisionId || ''}
+                  onChange={(e) => setFormData({ ...formData, divisionId: e.target.value })}
+                  options={[
+                    { value: '', label: 'No division' },
+                    ...divisions.map(d => ({ value: d.id, label: d.name })),
+                  ]}
+                  disabled={loadingDivisions}
                 />
                 <Input
                   label="Engineering Manager"

@@ -15,7 +15,7 @@ router.get('/stats', async (req, res) => {
       totalCompanies,
       totalApplications,
       totalUsers,
-      totalDomains,
+      totalDivisions,
       applicationsByStatus,
       verifiedUsers,
       unverifiedUsers,
@@ -23,7 +23,7 @@ router.get('/stats', async (req, res) => {
       prisma.company.count(),
       prisma.application.count(),
       prisma.user.count(),
-      prisma.domain.count(),
+      prisma.division.count(),
       prisma.application.groupBy({
         by: ['status'],
         _count: {
@@ -57,8 +57,8 @@ router.get('/stats', async (req, res) => {
         verified: verifiedUsers,
         unverified: unverifiedUsers,
       },
-      domains: {
-        total: totalDomains,
+      divisions: {
+        total: totalDivisions,
       },
     });
   } catch (error) {
@@ -70,13 +70,20 @@ router.get('/stats', async (req, res) => {
 // ADMIN-5: Get all applications with filtering (admin only)
 router.get('/applications', async (req, res) => {
   try {
-    const { companyId, status, search } = req.query;
+    const { companyId, status, search, divisionId } = req.query;
 
     let whereClause = {};
 
     // Filter by company
     if (companyId) {
       whereClause.companyId = companyId;
+    }
+
+    // Filter by division (through company)
+    if (divisionId) {
+      whereClause.company = {
+        divisionId: divisionId,
+      };
     }
 
     // Filter by status
@@ -99,6 +106,13 @@ router.get('/applications', async (req, res) => {
           select: {
             id: true,
             name: true,
+            divisionId: true,
+            division: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },

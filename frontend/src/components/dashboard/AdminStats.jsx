@@ -47,7 +47,7 @@ export function AdminStats() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Total Companies</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.companies.total}</p>
+                  <p className="text-3xl font-semibold text-gray-800">{stats.companies.total}</p>
                 </div>
                 <div className="p-3 bg-blue-100 rounded-lg">
                   <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -65,7 +65,7 @@ export function AdminStats() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Total Applications</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.applications.total}</p>
+                  <p className="text-3xl font-semibold text-gray-800">{stats.applications.total}</p>
                 </div>
                 <div className="p-3 bg-green-100 rounded-lg">
                   <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -83,7 +83,7 @@ export function AdminStats() {
               <div className="flex items-center justify-between flex-1">
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Total Users</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.users.total}</p>
+                  <p className="text-3xl font-semibold text-gray-800">{stats.users.total}</p>
                 </div>
                 <div className="p-3 bg-purple-100 rounded-lg">
                   <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -104,7 +104,7 @@ export function AdminStats() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Pending Approvals</p>
-                  <p className="text-3xl font-bold text-gray-900">{globalPendingCount}</p>
+                  <p className="text-3xl font-semibold text-gray-800">{globalPendingCount}</p>
                 </div>
                 <div className="p-3 bg-yellow-100 rounded-lg">
                   <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -121,17 +121,17 @@ export function AdminStats() {
           </Card>
         </Link>
 
-        <Link to="/domains" className="h-full">
+        <Link to="/divisions" className="h-full">
           <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
             <CardContent className="flex-1 flex flex-col">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Total Domains</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.domains?.total || 0}</p>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Total Divisions</p>
+                  <p className="text-3xl font-semibold text-gray-800">{stats.divisions?.total || 0}</p>
                 </div>
                 <div className="p-3 bg-indigo-100 rounded-lg">
                   <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                   </svg>
                 </div>
               </div>
@@ -149,19 +149,19 @@ export function AdminStats() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-4 bg-gray-50 rounded-lg">
               <p className="text-sm font-medium text-gray-600 mb-1">Onboarded</p>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-semibold text-gray-800">
                 {stats.applications.byStatus.onboarded || 0}
               </p>
             </div>
             <div className="p-4 bg-yellow-50 rounded-lg">
               <p className="text-sm font-medium text-gray-600 mb-1">Pending Technical</p>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-semibold text-gray-800">
                 {stats.applications.byStatus.pending_technical || 0}
               </p>
             </div>
             <div className="p-4 bg-blue-50 rounded-lg">
               <p className="text-sm font-medium text-gray-600 mb-1">Pending Executive</p>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-semibold text-gray-800">
                 {stats.applications.byStatus.pending_executive || 0}
               </p>
             </div>
@@ -220,6 +220,24 @@ export function AdminStats() {
             <Link to="/users" className="mt-auto">
               <Button variant="primary" className="w-full">
                 Manage Users
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card className="flex flex-col">
+          <CardHeader>
+            <CardTitle>Divisions</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col h-full">
+            <div className="flex-grow">
+              <p className="text-gray-600 mb-4">
+                Organize companies into divisions for better management and reporting.
+              </p>
+            </div>
+            <Link to="/divisions" className="mt-auto">
+              <Button variant="primary" className="w-full">
+                Manage Divisions
               </Button>
             </Link>
           </CardContent>
