@@ -9,12 +9,12 @@ import { Modal } from '../ui/Modal.jsx';
 import { Textarea } from '../ui/Textarea.jsx';
 import useAuthStore from '../../store/authStore.js';
 
-export function VersionHistory({ applicationId }) {
+export function VersionHistory({ applicationId, alwaysExpanded = false, onVersionProcessed }) {
   const [versions, setVersions] = useState([]);
   const [totalVersionCount, setTotalVersionCount] = useState(0);
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(alwaysExpanded);
   const [selectedVersion, setSelectedVersion] = useState(null);
   const [versionChanges, setVersionChanges] = useState({}); // Cache of changes for each version
   const [approvingVersion, setApprovingVersion] = useState(null); // Version ID being approved
@@ -29,14 +29,14 @@ export function VersionHistory({ applicationId }) {
 
   useEffect(() => {
     if (applicationId) {
-      if (expanded) {
+      if (expanded || alwaysExpanded) {
         loadData();
       } else {
         // Load just the latest version for collapsed view
         loadLatestVersion();
       }
     }
-  }, [applicationId, expanded]);
+  }, [applicationId, expanded, alwaysExpanded]);
 
   const loadLatestVersion = async () => {
     try {
@@ -253,6 +253,9 @@ export function VersionHistory({ applicationId }) {
       setSelectedFields([]);
       setApprovalNotes('');
       setShowApproveModal(false);
+      if (onVersionProcessed) {
+        onVersionProcessed();
+      }
     } catch (error) {
       toast.error(error.message || 'Failed to approve version');
     } finally {
@@ -269,6 +272,9 @@ export function VersionHistory({ applicationId }) {
       setSelectedVersion(null);
       setRejectionReason('');
       setShowRejectModal(false);
+      if (onVersionProcessed) {
+        onVersionProcessed();
+      }
     } catch (error) {
       toast.error(error.message || 'Failed to reject version');
     } finally {
@@ -375,28 +381,30 @@ export function VersionHistory({ applicationId }) {
   return (
     <Card className="border-gray-200">
       <CardContent>
-        <div className="flex items-center justify-between mb-4">
-          <div
-            onClick={() => setExpanded(!expanded)}
-            className="flex items-center gap-2 text-left flex-1 cursor-pointer"
-          >
-            <h3 className="text-lg font-semibold text-gray-900">Version History</h3>
-            {!expanded && latestVersion && (
-              <span className="text-sm text-gray-500">
-                ({versionCount} version{versionCount !== 1 ? 's' : ''})
-              </span>
-            )}
-            <svg
-              className={`w-5 h-5 text-gray-500 transition-transform ${expanded ? 'transform rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        {!alwaysExpanded && (
+          <div className="flex items-center justify-between mb-4">
+            <div
+              onClick={() => setExpanded(!expanded)}
+              className="flex items-center gap-2 text-left flex-1 cursor-pointer"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
+              <h3 className="text-lg font-semibold text-gray-900">Version History</h3>
+              {!expanded && latestVersion && (
+                <span className="text-sm text-gray-500">
+                  ({versionCount} version{versionCount !== 1 ? 's' : ''})
+                </span>
+              )}
+              <svg
+                className={`w-5 h-5 text-gray-500 transition-transform ${expanded ? 'transform rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
           </div>
-        </div>
-        {!expanded && latestVersion && (
+        )}
+        {!alwaysExpanded && !expanded && latestVersion && (
           <div className="text-sm text-gray-500 mb-2 space-y-1">
             {latestVersionSummary && (
               <div>
@@ -420,7 +428,7 @@ export function VersionHistory({ applicationId }) {
           </div>
         )}
 
-        {expanded && (
+        {(expanded || alwaysExpanded) && (
           <div className="mt-4">
           {loading ? (
             <LoadingPage message="Loading version history..." />

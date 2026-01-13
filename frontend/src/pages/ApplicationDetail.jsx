@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
@@ -17,6 +17,7 @@ import { copyToClipboard, isClipboardAvailable } from '../utils/clipboard.js';
 import { CICDDeploymentView } from '../components/deployments/CICDDeploymentView.jsx';
 import { NotesSection } from '../components/notes/NotesSection.jsx';
 import { VersionHistory } from '../components/versions/VersionHistory.jsx';
+import { Tabs, Tab, TabPanel } from '../components/ui/Tabs.jsx';
 
 export function ApplicationDetail() {
   const { id } = useParams();
@@ -45,6 +46,7 @@ export function ApplicationDetail() {
   const [loadingApplications, setLoadingApplications] = useState(false);
   const [newInterfaceName, setNewInterfaceName] = useState('');
   const [notesRefreshTrigger, setNotesRefreshTrigger] = useState(0);
+  const [pendingVersionsCount, setPendingVersionsCount] = useState(0);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -99,6 +101,22 @@ export function ApplicationDetail() {
     notes: '',
   });
 
+  const loadPendingVersionsCount = useCallback(async () => {
+    if (!id || !user?.isAdmin) {
+      setPendingVersionsCount(0);
+      return;
+    }
+    try {
+      const data = await api.getPendingVersionsCountForApplication(id);
+      const count = data.count || 0;
+      console.log('Pending versions count for application:', id, count);
+      setPendingVersionsCount(count);
+    } catch (error) {
+      console.error('Failed to load pending versions count:', error);
+      setPendingVersionsCount(0);
+    }
+  }, [id, user?.isAdmin]);
+
   useEffect(() => {
     loadIntegrationLevels();
     if (id) {
@@ -108,6 +126,16 @@ export function ApplicationDetail() {
       loadDeploymentTokens();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (id && user?.isAdmin) {
+      loadPendingVersionsCount();
+      const interval = setInterval(loadPendingVersionsCount, 30000);
+      return () => clearInterval(interval);
+    } else {
+      setPendingVersionsCount(0);
+    }
+  }, [id, user?.isAdmin, loadPendingVersionsCount]);
 
   useEffect(() => {
     if (application && isEditing) {
@@ -477,6 +505,10 @@ export function ApplicationDetail() {
       navigate('/applications');
     } finally {
       setLoading(false);
+      // Refresh pending count after application loads
+      if (isAdmin()) {
+        loadPendingVersionsCount();
+      }
     }
   };
 
@@ -738,195 +770,296 @@ export function ApplicationDetail() {
         </div>
       )}
 
-      {/* Application Details */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Basic Information */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Basic Information</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <Input
-                label="Application Name"
-                value={formData.name}
-                onChange={(e) => handleFieldChange('name', e.target.value)}
-                disabled={!isEditing}
-                required
-              />
-              <Textarea
-                label="Description / Use Case"
-                value={formData.description}
-                onChange={(e) => handleFieldChange('description', e.target.value)}
-                disabled={!isEditing}
-                rows={3}
-              />
-              <Input
-                label="Repository URL"
-                type="url"
-                value={formData.repoUrl}
-                onChange={(e) => handleFieldChange('repoUrl', e.target.value)}
-                disabled={!isEditing}
-              />
-              <Textarea
-                label="Development Team Contact Info"
-                value={formData.devTeamContact}
-                onChange={(e) => handleFieldChange('devTeamContact', e.target.value)}
-                disabled={!isEditing}
-                rows={3}
-                placeholder="Name, email, phone, etc. (can include multiple contacts)"
-                helperText="Contact information for the development team"
-              />
-            </div>
-          </CardContent>
-        </Card>
+      {/* Tabs for organized content */}
+      <Tabs defaultTab={0}>
+        <Tab>App Data</Tab>
+        <Tab>Deployments</Tab>
+        {isAdmin() && <Tab>App Timeline</Tab>}
+        <Tab>Security</Tab>
+        {isAdmin() && <Tab badge={pendingVersionsCount}>Application Metadata History</Tab>}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Application Details</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-                <Input
-                  label="Language"
-                  value={formData.language}
-                  onChange={(e) => handleFieldChange('language', e.target.value)}
-                  disabled={!isEditing}
-                />
-                <Input
-                  label="Framework"
-                  value={formData.framework}
-                  onChange={(e) => handleFieldChange('framework', e.target.value)}
-                  disabled={!isEditing}
-                />
-                <Select
-                  label="Server Environment"
-                  value={formData.serverEnvironment || ''}
-                  onChange={(e) => handleFieldChange('serverEnvironment', e.target.value)}
-                  disabled={!isEditing}
-                  options={[
-                    { value: '', label: 'Select environment' },
-                    { value: 'Cloud', label: 'Cloud' },
-                    { value: 'On-prem', label: 'On-prem' },
-                    { value: 'Both', label: 'Both' },
-                  ]}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Current Version"
-                  value={formData.currentVersion}
-                  onChange={(e) => handleFieldChange('currentVersion', e.target.value)}
-                  disabled={!isEditing}
-                  placeholder="e.g., 1.2.3, v2.1.0"
-                  helperText="Auto-populated from most recent deployment (can be overridden)"
-                />
-                <div></div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Select
-                  label="Facing"
-                  value={formData.facing || ''}
-                  onChange={(e) => handleFieldChange('facing', e.target.value)}
-                  disabled={!isEditing}
-                  options={[
-                    { value: '', label: 'Select facing' },
-                    { value: 'Internal', label: 'Internal' },
-                    { value: 'External', label: 'External' },
-                  ]}
-                />
-                <Input
-                  label="Deployment Type"
-                  value={formData.deploymentType}
-                  onChange={(e) => handleFieldChange('deploymentType', e.target.value)}
-                  disabled={!isEditing}
-                />
-              </div>
-              <Input
-                label="Auth Profiles"
-                value={formData.authProfiles}
-                onChange={(e) => handleFieldChange('authProfiles', e.target.value)}
-                disabled={!isEditing}
-              />
-              <Input
-                label="Data Types"
-                value={formData.dataTypes}
-                onChange={(e) => handleFieldChange('dataTypes', e.target.value)}
-                disabled={!isEditing}
-              />
-              <DomainPills
-                domains={domains}
-                onAdd={handleAddDomain}
-                onRemove={handleRemoveDomain}
-                disabled={!canEdit()}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        {/* App Data Tab */}
+        <TabPanel>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Basic Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Basic Information</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <Input
+                    label="Application Name"
+                    value={formData.name}
+                    onChange={(e) => handleFieldChange('name', e.target.value)}
+                    disabled={!isEditing}
+                    required
+                  />
+                  <Textarea
+                    label="Description / Use Case"
+                    value={formData.description}
+                    onChange={(e) => handleFieldChange('description', e.target.value)}
+                    disabled={!isEditing}
+                    rows={3}
+                  />
+                  <Input
+                    label="Repository URL"
+                    type="url"
+                    value={formData.repoUrl}
+                    onChange={(e) => handleFieldChange('repoUrl', e.target.value)}
+                    disabled={!isEditing}
+                  />
+                  <Textarea
+                    label="Development Team Contact Info"
+                    value={formData.devTeamContact}
+                    onChange={(e) => handleFieldChange('devTeamContact', e.target.value)}
+                    disabled={!isEditing}
+                    rows={3}
+                    placeholder="Name, email, phone, etc. (can include multiple contacts)"
+                    helperText="Contact information for the development team"
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
-      {/* Deployment History */}
-      <Card className="mt-6">
-        <CardContent>
-          <div className="flex items-center justify-between mb-4">
-            <div
-              onClick={() => setDeploymentHistoryExpanded(!deploymentHistoryExpanded)}
-              className="flex items-center gap-2 text-left flex-1 cursor-pointer"
-            >
-              <h3 className="text-lg font-semibold text-gray-900">Last 5 Deployments</h3>
-              <svg
-                className={`w-5 h-5 text-gray-500 transition-transform ${deploymentHistoryExpanded ? 'transform rotate-180' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-            <div className="flex items-center gap-2">
-              {canEdit() && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowDeploymentForm(true);
-                  }}
-                  className="p-2"
-                  title="Add Deployment"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                </Button>
-              )}
-              {availableEnvironments.length > 0 && (
-                <select
-                  value={deploymentEnvironmentFilter}
-                  onChange={(e) => {
-                    setDeploymentEnvironmentFilter(e.target.value);
-                    setDeploymentPage(1); // Reset to first page when filter changes
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-sm border border-gray-300 rounded px-2 py-1 bg-white"
-                  title="Filter by environment"
-                >
-                  <option value="">All Environments</option>
-                  {availableEnvironments.map(env => (
-                    <option key={env} value={env}>{formatEnvironmentLabel(env)}</option>
-                  ))}
-                </select>
-              )}
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Application Details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-3 gap-4">
+                    <Input
+                      label="Language"
+                      value={formData.language}
+                      onChange={(e) => handleFieldChange('language', e.target.value)}
+                      disabled={!isEditing}
+                    />
+                    <Input
+                      label="Framework"
+                      value={formData.framework}
+                      onChange={(e) => handleFieldChange('framework', e.target.value)}
+                      disabled={!isEditing}
+                    />
+                    <Select
+                      label="Server Environment"
+                      value={formData.serverEnvironment || ''}
+                      onChange={(e) => handleFieldChange('serverEnvironment', e.target.value)}
+                      disabled={!isEditing}
+                      options={[
+                        { value: '', label: 'Select environment' },
+                        { value: 'Cloud', label: 'Cloud' },
+                        { value: 'On-prem', label: 'On-prem' },
+                        { value: 'Both', label: 'Both' },
+                      ]}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input
+                      label="Current Version"
+                      value={formData.currentVersion}
+                      onChange={(e) => handleFieldChange('currentVersion', e.target.value)}
+                      disabled={!isEditing}
+                      placeholder="e.g., 1.2.3, v2.1.0"
+                      helperText="Auto-populated from most recent deployment (can be overridden)"
+                    />
+                    <div></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Select
+                      label="Facing"
+                      value={formData.facing || ''}
+                      onChange={(e) => handleFieldChange('facing', e.target.value)}
+                      disabled={!isEditing}
+                      options={[
+                        { value: '', label: 'Select facing' },
+                        { value: 'Internal', label: 'Internal' },
+                        { value: 'External', label: 'External' },
+                      ]}
+                    />
+                    <Input
+                      label="Deployment Type"
+                      value={formData.deploymentType}
+                      onChange={(e) => handleFieldChange('deploymentType', e.target.value)}
+                      disabled={!isEditing}
+                    />
+                  </div>
+                  <Input
+                    label="Auth Profiles"
+                    value={formData.authProfiles}
+                    onChange={(e) => handleFieldChange('authProfiles', e.target.value)}
+                    disabled={!isEditing}
+                  />
+                  <Input
+                    label="Data Types"
+                    value={formData.dataTypes}
+                    onChange={(e) => handleFieldChange('dataTypes', e.target.value)}
+                    disabled={!isEditing}
+                  />
+                  <DomainPills
+                    domains={domains}
+                    onAdd={handleAddDomain}
+                    onRemove={handleRemoveDomain}
+                    disabled={!canEdit()}
+                  />
+                </div>
+              </CardContent>
+            </Card>
           </div>
-          {deploymentHistoryExpanded && (
-            <>
+
+          {/* Interfaces with Other Applications */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Interfaces with Other Applications</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isEditing ? (
+                <div className="space-y-4">
+                  {/* Available Applications Pills */}
+                  {loadingApplications ? (
+                    <p className="text-sm text-gray-500">Loading applications...</p>
+                  ) : (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Select from existing applications:
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {availableApplications.map((app) => {
+                          const isSelected = interfaces.includes(app.name);
+                          return (
+                            <button
+                              key={app.id}
+                              type="button"
+                              onClick={() => toggleInterface(app.name)}
+                              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                                isSelected
+                                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
+                            >
+                              {app.name}
+                            </button>
+                          );
+                        })}
+                        {availableApplications.length === 0 && (
+                          <p className="text-sm text-gray-500">No other applications available</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Add New Interface */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Or add a new application name:
+                    </label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={newInterfaceName}
+                        onChange={(e) => setNewInterfaceName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && newInterfaceName.trim()) {
+                            e.preventDefault();
+                            handleAddNewInterface();
+                          }
+                        }}
+                        placeholder="Type application name and press Enter"
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleAddNewInterface}
+                        disabled={!newInterfaceName.trim()}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Selected Interfaces */}
+                  {interfaces.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Selected interfaces:
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {interfaces.map((name, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-800"
+                          >
+                            {name}
+                            <button
+                              type="button"
+                              onClick={() => removeInterface(name)}
+                              className="ml-2 text-blue-600 hover:text-blue-800 font-bold"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  {interfaces.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {interfaces.map((name, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-800"
+                        >
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">No interfaces configured</p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabPanel>
+
+        {/* Deployments Tab */}
+        <TabPanel>
+          <Card>
+            <CardContent>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Deployment History</h3>
+                <div className="flex items-center gap-2">
+                  {canEdit() && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowDeploymentForm(true)}
+                      title="Add Deployment"
+                    >
+                      Add Deployment
+                    </Button>
+                  )}
+                  {availableEnvironments.length > 0 && (
+                    <select
+                      value={deploymentEnvironmentFilter}
+                      onChange={(e) => {
+                        setDeploymentEnvironmentFilter(e.target.value);
+                        setDeploymentPage(1);
+                      }}
+                      className="text-sm border border-gray-300 rounded px-2 py-1 bg-white"
+                      title="Filter by environment"
+                    >
+                      <option value="">All Environments</option>
+                      {availableEnvironments.map(env => (
+                        <option key={env} value={env}>{formatEnvironmentLabel(env)}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
               {loadingDeployments ? (
                 <p className="text-sm text-gray-500">Loading deployments...</p>
               ) : allDeployments.length === 0 ? (
@@ -1007,10 +1140,157 @@ export function ApplicationDetail() {
                   )}
                 </>
               )}
-            </>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </TabPanel>
+
+        {/* Notes/Timeline Tab - Admin Only */}
+        {isAdmin() && (
+          <TabPanel>
+            <NotesSection
+              entityType="application"
+              entityId={id}
+              showApplicationLabels={false}
+              refreshTrigger={notesRefreshTrigger}
+            />
+          </TabPanel>
+        )}
+
+        {/* Security Tab */}
+        <TabPanel>
+          <Card>
+            <CardHeader>
+              <CardTitle>Security Tools</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Column: Security Testing Description */}
+                <div>
+                  <Textarea
+                    label="Security Testing Description"
+                    value={formData.securityTestingDescription}
+                    onChange={(e) => handleFieldChange('securityTestingDescription', e.target.value)}
+                    disabled={!isEditing}
+                    rows={12}
+                    placeholder="Describe the security testing practices, tools, and processes"
+                    helperText="Information about security testing in place"
+                  />
+                </div>
+                
+                {/* Right Column: Security Tools */}
+                <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <Input
+                        label="SAST Tool"
+                        value={formData.sastTool}
+                        onChange={(e) => handleFieldChange('sastTool', e.target.value)}
+                        disabled={!isEditing}
+                      />
+                      <Select
+                        label="SAST Integration Level"
+                        value={formData.sastIntegrationLevel}
+                        onChange={(e) => handleFieldChange('sastIntegrationLevel', e.target.value)}
+                        disabled={!isEditing}
+                        options={[
+                          { value: '', label: 'Select level' },
+                          ...integrationLevels,
+                        ]}
+                      />
+                    </div>
+                    <Input
+                      label="Last SAST Scan Date"
+                      type="date"
+                      value={formData.lastSastScanDate}
+                      onChange={(e) => handleFieldChange('lastSastScanDate', e.target.value)}
+                      disabled={!isEditing}
+                      helperText="Date of last Static Application Security Testing scan"
+                    />
+                    <div className="grid grid-cols-2 gap-4">
+                      <Input
+                        label="DAST Tool"
+                        value={formData.dastTool}
+                        onChange={(e) => handleFieldChange('dastTool', e.target.value)}
+                        disabled={!isEditing}
+                      />
+                      <Select
+                        label="DAST Integration Level"
+                        value={formData.dastIntegrationLevel}
+                        onChange={(e) => handleFieldChange('dastIntegrationLevel', e.target.value)}
+                        disabled={!isEditing}
+                        options={[
+                          { value: '', label: 'Select level' },
+                          ...integrationLevels,
+                        ]}
+                      />
+                    </div>
+                    <Input
+                      label="Last DAST Scan Date"
+                      type="date"
+                      value={formData.lastDastScanDate}
+                      onChange={(e) => handleFieldChange('lastDastScanDate', e.target.value)}
+                      disabled={!isEditing}
+                      helperText="Date of last Dynamic Application Security Testing scan"
+                    />
+                    <div className="grid grid-cols-2 gap-4">
+                      <Input
+                        label="App Firewall Tool"
+                        value={formData.appFirewallTool}
+                        onChange={(e) => handleFieldChange('appFirewallTool', e.target.value)}
+                        disabled={!isEditing}
+                      />
+                      <Select
+                        label="App Firewall Integration Level"
+                        value={formData.appFirewallIntegrationLevel}
+                        onChange={(e) => handleFieldChange('appFirewallIntegrationLevel', e.target.value)}
+                        disabled={!isEditing}
+                        options={[
+                          { value: '', label: 'Select level' },
+                          ...integrationLevels,
+                        ]}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Input
+                        label="API Security Tool"
+                        value={formData.apiSecurityTool}
+                        onChange={(e) => handleFieldChange('apiSecurityTool', e.target.value)}
+                        disabled={!isEditing}
+                      />
+                      <Select
+                        label="API Security Integration Level"
+                        value={formData.apiSecurityIntegrationLevel}
+                        onChange={(e) => handleFieldChange('apiSecurityIntegrationLevel', e.target.value)}
+                        disabled={!isEditing}
+                        options={[
+                          { value: '', label: 'Select level' },
+                          ...integrationLevels,
+                        ]}
+                      />
+                    </div>
+                    <Checkbox
+                      id="apiSecurityNA"
+                      label="API Security Not Applicable"
+                      checked={formData.apiSecurityNA}
+                      onChange={(e) => handleFieldChange('apiSecurityNA', e.target.checked)}
+                      disabled={!isEditing}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+        </TabPanel>
+
+        {/* Application Metadata History Tab - Admin Only */}
+        {isAdmin() && (
+          <TabPanel>
+            <VersionHistory 
+              applicationId={id} 
+              alwaysExpanded={true}
+              onVersionProcessed={loadPendingVersionsCount}
+            />
+          </TabPanel>
+        )}
+      </Tabs>
 
       {/* Add Deployment Modal */}
       <Modal
@@ -1149,264 +1429,6 @@ export function ApplicationDetail() {
           />
         )}
       </Modal>
-
-      {/* Interfaces with Other Applications */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Interfaces with Other Applications</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isEditing ? (
-            <div className="space-y-4">
-              {/* Available Applications Pills */}
-              {loadingApplications ? (
-                <p className="text-sm text-gray-500">Loading applications...</p>
-              ) : (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select from existing applications:
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {availableApplications.map((app) => {
-                      const isSelected = interfaces.includes(app.name);
-                      return (
-                        <button
-                          key={app.id}
-                          type="button"
-                          onClick={() => toggleInterface(app.name)}
-                          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                            isSelected
-                              ? 'bg-blue-600 text-white hover:bg-blue-700'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          {app.name}
-                        </button>
-                      );
-                    })}
-                    {availableApplications.length === 0 && (
-                      <p className="text-sm text-gray-500">No other applications available</p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Add New Interface */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Or add a new application name:
-                </label>
-                <div className="flex gap-2">
-                  <Input
-                    value={newInterfaceName}
-                    onChange={(e) => setNewInterfaceName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && newInterfaceName.trim()) {
-                        e.preventDefault();
-                        handleAddNewInterface();
-                      }
-                    }}
-                    placeholder="Type application name and press Enter"
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleAddNewInterface}
-                    disabled={!newInterfaceName.trim()}
-                  >
-                    Add
-                  </Button>
-                </div>
-              </div>
-
-              {/* Selected Interfaces */}
-              {interfaces.length > 0 && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Selected interfaces:
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {interfaces.map((name, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-800"
-                      >
-                        {name}
-                        <button
-                          type="button"
-                          onClick={() => removeInterface(name)}
-                          className="ml-2 text-blue-600 hover:text-blue-800 font-bold"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div>
-              {interfaces.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {interfaces.map((name, idx) => (
-                    <span
-                      key={idx}
-                      className="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-800"
-                    >
-                      {name}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">No interfaces configured</p>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Version History - Admin Only */}
-      {isAdmin() && (
-        <div className="mt-6">
-          <VersionHistory applicationId={id} />
-        </div>
-      )}
-
-      {/* Notes & Timeline - Admin Only */}
-      {isAdmin() && (
-        <div className="mt-6">
-          <NotesSection
-            entityType="application"
-            entityId={id}
-            showApplicationLabels={false}
-            refreshTrigger={notesRefreshTrigger}
-          />
-        </div>
-      )}
-
-      {/* Security Tools - Full Width */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Security Tools</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Left Column: Security Testing Description */}
-            <div>
-              <Textarea
-                label="Security Testing Description"
-                value={formData.securityTestingDescription}
-                onChange={(e) => handleFieldChange('securityTestingDescription', e.target.value)}
-                disabled={!isEditing}
-                rows={12}
-                placeholder="Describe the security testing practices, tools, and processes"
-                helperText="Information about security testing in place"
-              />
-            </div>
-            
-            {/* Right Column: Security Tools */}
-            <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="SAST Tool"
-                    value={formData.sastTool}
-                    onChange={(e) => handleFieldChange('sastTool', e.target.value)}
-                    disabled={!isEditing}
-                  />
-                  <Select
-                    label="SAST Integration Level"
-                    value={formData.sastIntegrationLevel}
-                    onChange={(e) => handleFieldChange('sastIntegrationLevel', e.target.value)}
-                    disabled={!isEditing}
-                    options={[
-                      { value: '', label: 'Select level' },
-                      ...integrationLevels,
-                    ]}
-                  />
-                </div>
-                <Input
-                  label="Last SAST Scan Date"
-                  type="date"
-                  value={formData.lastSastScanDate}
-                  onChange={(e) => handleFieldChange('lastSastScanDate', e.target.value)}
-                  disabled={!isEditing}
-                  helperText="Date of last Static Application Security Testing scan"
-                />
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="DAST Tool"
-                    value={formData.dastTool}
-                    onChange={(e) => handleFieldChange('dastTool', e.target.value)}
-                    disabled={!isEditing}
-                  />
-                  <Select
-                    label="DAST Integration Level"
-                    value={formData.dastIntegrationLevel}
-                    onChange={(e) => handleFieldChange('dastIntegrationLevel', e.target.value)}
-                    disabled={!isEditing}
-                    options={[
-                      { value: '', label: 'Select level' },
-                      ...integrationLevels,
-                    ]}
-                  />
-                </div>
-                <Input
-                  label="Last DAST Scan Date"
-                  type="date"
-                  value={formData.lastDastScanDate}
-                  onChange={(e) => handleFieldChange('lastDastScanDate', e.target.value)}
-                  disabled={!isEditing}
-                  helperText="Date of last Dynamic Application Security Testing scan"
-                />
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="App Firewall Tool"
-                    value={formData.appFirewallTool}
-                    onChange={(e) => handleFieldChange('appFirewallTool', e.target.value)}
-                    disabled={!isEditing}
-                  />
-                  <Select
-                    label="App Firewall Integration Level"
-                    value={formData.appFirewallIntegrationLevel}
-                    onChange={(e) => handleFieldChange('appFirewallIntegrationLevel', e.target.value)}
-                    disabled={!isEditing}
-                    options={[
-                      { value: '', label: 'Select level' },
-                      ...integrationLevels,
-                    ]}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="API Security Tool"
-                    value={formData.apiSecurityTool}
-                    onChange={(e) => handleFieldChange('apiSecurityTool', e.target.value)}
-                    disabled={!isEditing}
-                  />
-                  <Select
-                    label="API Security Integration Level"
-                    value={formData.apiSecurityIntegrationLevel}
-                    onChange={(e) => handleFieldChange('apiSecurityIntegrationLevel', e.target.value)}
-                    disabled={!isEditing}
-                    options={[
-                      { value: '', label: 'Select level' },
-                      ...integrationLevels,
-                    ]}
-                  />
-                </div>
-                <Checkbox
-                  id="apiSecurityNA"
-                  label="API Security Not Applicable"
-                  checked={formData.apiSecurityNA}
-                  onChange={(e) => handleFieldChange('apiSecurityNA', e.target.checked)}
-                  disabled={!isEditing}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
       {/* Sticky Save Bar - Only show when editing */}
       {isEditing && (

@@ -341,6 +341,9 @@ export const api = {
   getPendingVersionsCount: () =>
     apiRequest('/api/applications/versions/pending/count'),
 
+  getPendingVersionsCountForApplication: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/versions/pending/count`),
+
   getApplicationVersion: (applicationId, versionNumber) =>
     apiRequest(`/api/applications/${applicationId}/versions/${versionNumber}`),
 

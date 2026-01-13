@@ -5,15 +5,16 @@ import { AuthModal } from './AuthModal.jsx';
 import { Dropdown, DropdownItem } from './ui/Dropdown.jsx';
 import { api } from '../lib/api.js';
 import { useToastStore } from './ui/Toast.jsx';
+import { usePendingApprovals } from '../contexts/PendingApprovalsContext.jsx';
 
 export function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, isAdmin, isAuthenticated, loading } = useAuthStore();
+  const { globalPendingCount } = usePendingApprovals();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [companyName, setCompanyName] = useState(null);
-  const [pendingCount, setPendingCount] = useState(0);
 
   // Open auth modal when on /login or /register routes
   useEffect(() => {
@@ -47,23 +48,6 @@ export function Layout({ children }) {
     }
   }, [user]);
 
-  // Load pending approvals count for admins
-  useEffect(() => {
-    if (isAdmin() && isAuthenticated()) {
-      const loadPendingCount = async () => {
-        try {
-          const data = await api.getPendingVersionsCount();
-          setPendingCount(data.count || 0);
-        } catch (error) {
-          console.error('Failed to load pending approvals count:', error);
-        }
-      };
-      loadPendingCount();
-      // Refresh count every 30 seconds
-      const interval = setInterval(loadPendingCount, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [isAdmin, isAuthenticated]);
 
   const handleLogout = async () => {
     await logout();
@@ -191,9 +175,9 @@ export function Layout({ children }) {
                           className="relative"
                         >
                           <span>Pending Approvals</span>
-                          {pendingCount > 0 && (
+                          {globalPendingCount > 0 && (
                             <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
-                              {pendingCount > 99 ? '99+' : pendingCount}
+                              {globalPendingCount > 99 ? '99+' : globalPendingCount}
                             </span>
                           )}
                         </DropdownItem>
@@ -213,13 +197,13 @@ export function Layout({ children }) {
                   </Dropdown>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-700">{user.email}</span>
-                    {isAdmin() && pendingCount > 0 && (
+                    {isAdmin() && globalPendingCount > 0 && (
                       <button
                         onClick={() => {
                           const { addToast, removeToast } = useToastStore.getState();
                           const toastId = addToast({
                             type: 'warning',
-                            message: `There ${pendingCount === 1 ? 'is' : 'are'} ${pendingCount} application change${pendingCount !== 1 ? 's' : ''} to review. Click here to view.`,
+                            message: `There ${globalPendingCount === 1 ? 'is' : 'are'} ${globalPendingCount} application change${globalPendingCount !== 1 ? 's' : ''} to review. Click here to view.`,
                             persistent: true,
                             clickable: true,
                             onClick: () => {
@@ -229,9 +213,9 @@ export function Layout({ children }) {
                           });
                         }}
                         className="relative inline-flex items-center justify-center px-2.5 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full hover:bg-red-700 transition-colors"
-                        title={`${pendingCount} pending approval${pendingCount !== 1 ? 's' : ''}`}
+                        title={`${globalPendingCount} pending approval${globalPendingCount !== 1 ? 's' : ''}`}
                       >
-                        {pendingCount > 99 ? '99+' : pendingCount}
+                        {globalPendingCount > 99 ? '99+' : globalPendingCount}
                       </button>
                     )}
                   </div>

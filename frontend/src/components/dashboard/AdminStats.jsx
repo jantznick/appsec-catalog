@@ -5,15 +5,15 @@ import { toast } from '../ui/Toast.jsx';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card.jsx';
 import { Button } from '../ui/Button.jsx';
 import { LoadingPage } from '../ui/Loading.jsx';
+import { usePendingApprovals } from '../../contexts/PendingApprovalsContext.jsx';
 
 export function AdminStats() {
+  const { globalPendingCount } = usePendingApprovals();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     loadStats();
-    loadPendingCount();
   }, []);
 
   const loadStats = async () => {
@@ -28,21 +28,6 @@ export function AdminStats() {
       setLoading(false);
     }
   };
-
-  const loadPendingCount = async () => {
-    try {
-      const data = await api.getPendingVersionsCount();
-      setPendingCount(data.count || 0);
-    } catch (error) {
-      console.error('Failed to load pending approvals count:', error);
-    }
-  };
-
-  // Refresh pending count periodically
-  useEffect(() => {
-    const interval = setInterval(loadPendingCount, 30000); // Every 30 seconds
-    return () => clearInterval(interval);
-  }, []);
 
   if (loading) {
     return <LoadingPage message="Loading dashboard..." />;
@@ -114,12 +99,12 @@ export function AdminStats() {
         </Link>
 
         <Link to="/pending-approvals" className="h-full">
-          <Card className={`hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col ${pendingCount > 0 ? 'border-yellow-300 bg-yellow-50' : ''}`}>
+          <Card className={`hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col ${globalPendingCount > 0 ? 'border-yellow-300 bg-yellow-50' : ''}`}>
             <CardContent className="flex-1 flex flex-col">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Pending Approvals</p>
-                  <p className="text-3xl font-bold text-gray-900">{pendingCount}</p>
+                  <p className="text-3xl font-bold text-gray-900">{globalPendingCount}</p>
                 </div>
                 <div className="p-3 bg-yellow-100 rounded-lg">
                   <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -127,7 +112,7 @@ export function AdminStats() {
                   </svg>
                 </div>
               </div>
-              {pendingCount > 0 && (
+              {globalPendingCount > 0 && (
                 <div className="mt-2 text-xs text-yellow-700 font-medium">
                   Click to review
                 </div>

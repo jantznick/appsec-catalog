@@ -4,6 +4,7 @@ import useAuthStore from './store/authStore.js';
 import { Layout } from './components/Layout.jsx';
 import { ProtectedRoute } from './components/ProtectedRoute.jsx';
 import { ToastContainer } from './components/ui/Toast.jsx';
+import { PendingApprovalsProvider } from './contexts/PendingApprovalsContext.jsx';
 import { Auth } from './pages/Auth.jsx';
 import { MustVerify } from './pages/MustVerify.jsx';
 import { Dashboard } from './pages/Dashboard.jsx';
@@ -50,8 +51,9 @@ function App() {
 
   return (
     <BrowserRouter>
-      <ToastContainer />
-      <Routes>
+      <PendingApprovalsProvider>
+        <ToastContainer />
+        <Routes>
         {/* Public routes - login/register now handled by Layout modal */}
         <Route path="/login" element={
           <Layout>
@@ -259,6 +261,7 @@ function App() {
           }
         />
       </Routes>
+      </PendingApprovalsProvider>
     </BrowserRouter>
   );
 }
