@@ -9,6 +9,26 @@ export function ScoreCard({ knowledgeScore, toolScore, totalScore, breakdown, on
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [markingReviewed, setMarkingReviewed] = useState(false);
 
+  // Check if Quick Wins section should be shown
+  const hasQuickWins = breakdown && (() => {
+    const recommendations = [];
+    if (breakdown.tools) {
+      const missingTools = breakdown.tools.filter(t => t.status === 'missing');
+      if (missingTools.length > 0) recommendations.push({});
+    }
+    if (breakdown.knowledgeSharing?.missingFields && breakdown.knowledgeSharing.missingFields.length > 0) {
+      recommendations.push({});
+    }
+    if (breakdown.tools) {
+      const lowIntegration = breakdown.tools.find(t => t.status === 'low');
+      if (lowIntegration) recommendations.push({});
+    }
+    if (breakdown.reviewRecommendation && recommendations.length < 2) {
+      recommendations.push({});
+    }
+    return recommendations.length > 0 || toolScore === 0;
+  })();
+
   const getScoreColor = (score) => {
     if (score >= 76) return 'text-green-600';
     if (score >= 51) return 'text-yellow-600';
@@ -68,20 +88,21 @@ export function ScoreCard({ knowledgeScore, toolScore, totalScore, breakdown, on
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Left Side - Score Display */}
-            <div className="md:col-span-1">
-              <div className="text-center md:text-left">
-                <div className={`text-5xl font-bold ${getScoreColor(totalScore)} mb-2`}>
-                  {totalScore}
-                </div>
-                <div className="text-sm text-gray-600 mb-4">out of 100</div>
-                <div className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${getScoreBgColor(totalScore)} ${getScoreColor(totalScore)}`}>
-                  {totalScore >= 76 ? 'Excellent' : totalScore >= 51 ? 'Good' : 'Needs Improvement'}
-                </div>
+          <div className={`grid grid-cols-1 gap-6 ${hasQuickWins ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+            {/* Column 1 - Score Display */}
+            <div>
+              <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-lg p-5 border-2 border-gray-200 shadow-sm h-full">
+                <div className="text-center md:text-left">
+                  <div className={`text-5xl font-bold ${getScoreColor(totalScore)} mb-2`}>
+                    {totalScore}
+                  </div>
+                  <div className="text-sm text-gray-600 mb-4">out of 100</div>
+                  <div className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${getScoreBgColor(totalScore)} ${getScoreColor(totalScore)}`}>
+                    {totalScore >= 76 ? 'Excellent' : totalScore >= 51 ? 'Good' : 'Needs Improvement'}
+                  </div>
 
-                {/* Category Scores */}
-                <div className="mt-6 space-y-4">
+                  {/* Category Scores */}
+                  <div className="mt-6 space-y-4">
                   <div>
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-gray-600">Knowledge Sharing</span>
@@ -110,6 +131,16 @@ export function ScoreCard({ knowledgeScore, toolScore, totalScore, breakdown, on
                         }}
                       />
                     </div>
+                    {breakdown?.knowledgeSharing && (
+                      <div className="text-xs text-gray-600 mt-1.5">
+                        {breakdown.knowledgeSharing.fieldsFilled || 0} of {breakdown.knowledgeSharing.totalFields || 8} fields filled
+                        {breakdown.knowledgeSharing.lastReviewed ? (
+                          <span className="text-gray-500"> • Last reviewed {new Date(breakdown.knowledgeSharing.lastReviewed).toLocaleDateString()}</span>
+                        ) : (
+                          <span className="text-yellow-600"> • {isAdmin ? 'Not yet reviewed' : 'Pending review'}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <div className="flex justify-between text-sm mb-1">
@@ -139,167 +170,179 @@ export function ScoreCard({ knowledgeScore, toolScore, totalScore, breakdown, on
                         }}
                       />
                     </div>
+                    {breakdown?.configuredTools && (
+                      <div className="text-xs text-gray-600 mt-1.5">
+                        {breakdown.configuredTools.length > 0 ? (
+                          `Security tools: ${breakdown.configuredTools.join(', ')}`
+                        ) : (
+                          'No security tools configured'
+                        )}
+                      </div>
+                    )}
                   </div>
+                </div>
                 </div>
               </div>
             </div>
 
-            {/* Right Side - Breakdown */}
-            {breakdown && (
-              <div className="md:col-span-2">
-                <div className="space-y-4 text-sm">
-                  {/* Knowledge Sharing Breakdown */}
-                  <div className="border-b pb-3">
-                    <div className="font-medium text-gray-700 mb-1">Knowledge Sharing</div>
-                    <div className="text-xs text-gray-600">
-                      {breakdown.knowledgeSharing?.fieldsFilled || 0} of {breakdown.knowledgeSharing?.totalFields || 8} fields filled
-                      {breakdown.knowledgeSharing?.lastReviewed ? (
-                        <span className="text-gray-500"> • Last reviewed {new Date(breakdown.knowledgeSharing.lastReviewed).toLocaleDateString()}</span>
-                      ) : (
-                        <span className="text-yellow-600"> • {isAdmin ? 'Not yet reviewed' : 'Pending review'}</span>
-                      )}
-                    </div>
+            {/* Column 2 - Criticality Information */}
+            {breakdown?.importance && (
+              <div>
+                <div className="bg-gradient-to-br from-purple-50/50 via-pink-50/50 to-red-50/50 rounded-lg p-5 border-2 border-purple-100 shadow-sm h-full">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div className="text-sm font-bold text-purple-900">Application Criticality</div>
                   </div>
-
-                  {/* Tool Usage Breakdown */}
-                  <div className="border-b pb-3">
-                    <div className="font-medium text-gray-700 mb-1">Tool Usage</div>
-                    <div className="text-xs text-gray-600">
-                      {breakdown.configuredTools && breakdown.configuredTools.length > 0 ? (
-                        `Security tools: ${breakdown.configuredTools.join(', ')}`
-                      ) : (
-                        'No security tools configured'
-                      )}
-                    </div>
+                  <div className="text-base font-semibold text-gray-900 mb-4 leading-tight">
+                    {breakdown.importance.importanceScore < 0.33 
+                      ? 'Lower priority application: Focus on documentation and data sharing'
+                      : breakdown.importance.importanceScore < 0.67
+                      ? 'Standard application: Balanced focus on documentation and security tools'
+                      : 'Critical application: Emphasis on security tooling and active protection'}
                   </div>
-
-                  {/* Recommendations Section - Only show top 2-3 suggestions */}
-                  {(() => {
-                    const recommendations = [];
-                    
-                    // Priority 1: Missing tools (highest impact)
-                    if (breakdown.tools) {
-                      const missingTools = breakdown.tools.filter(t => t.status === 'missing');
-                      if (missingTools.length > 0) {
-                        recommendations.push({
-                          priority: 1,
-                          type: 'tool',
-                          message: `Set up ${missingTools[0].category} to automatically scan your code for vulnerabilities`,
-                          impact: 'This will significantly improve your security score',
-                        });
-                      }
-                    }
-
-                    // Priority 2: Missing knowledge fields (easy win)
-                    if (breakdown.knowledgeSharing?.missingFields && breakdown.knowledgeSharing.missingFields.length > 0) {
-                      const missingCount = breakdown.knowledgeSharing.missingFields.length;
-                      const firstField = breakdown.knowledgeSharing.missingFields[0];
-                      // Each missing field adds 5 raw points, but we need to apply the knowledge weight
-                      // Formula: rawPoints * knowledgeWeight * 2 (to scale to 100 point total)
-                      const knowledgeWeight = breakdown.importance?.knowledgeWeight || 0.5;
-                      const weightedPoints = Math.round(missingCount * 5 * knowledgeWeight * 2);
-                      recommendations.push({
-                        priority: 2,
-                        type: 'knowledge',
-                        message: `Fill in ${firstField}${missingCount > 1 ? ` and ${missingCount - 1} other field${missingCount > 2 ? 's' : ''}` : ''} to help us better understand your application`,
-                        impact: `Quick win: adds ${weightedPoints} point${weightedPoints !== 1 ? 's' : ''} to your score`,
-                      });
-                    }
-
-                    // Priority 3: Low integration levels
-                    if (breakdown.tools) {
-                      const lowIntegration = breakdown.tools.find(t => t.status === 'low');
-                      if (lowIntegration) {
-                        recommendations.push({
-                          priority: 3,
-                          type: 'tool',
-                          message: `Improve ${lowIntegration.category} integration to share scan results with the security team`,
-                          impact: 'Better integration means better visibility and higher scores',
-                        });
-                      }
-                    }
-
-                    // Priority 4: Review needed
-                    if (breakdown.reviewRecommendation && recommendations.length < 2) {
-                      // Review score is up to 10 raw points, weighted by knowledgeWeight
-                      const knowledgeWeight = breakdown.importance?.knowledgeWeight || 0.5;
-                      const maxWeightedReviewPoints = Math.round(10 * knowledgeWeight * 2);
-                      recommendations.push({
-                        priority: 4,
-                        type: 'review',
-                        message: 'Request a metadata review from the AppSec team to verify your information is up to date',
-                        impact: `Recent reviews can add up to ${maxWeightedReviewPoints} points`,
-                      });
-                    }
-
-                    // Only show top 2-3 recommendations
-                    const topRecommendations = recommendations.slice(0, 3);
-
-                    // Always show recommendations section if there are any, or if tool score is low
-                    if (topRecommendations.length === 0 && toolScore > 0) {
-                      return null;
-                    }
-
-                    // If no recommendations but tool score is 0, show a helpful message
-                    if (topRecommendations.length === 0 && toolScore === 0) {
-                      return (
-                        <div className="border-b pb-3">
-                          <div className="font-medium text-gray-700 mb-2">Quick Wins</div>
-                          <div className="text-xs text-gray-700">
-                            <div className="flex items-start gap-2">
-                              <span className="text-blue-600 mt-0.5">•</span>
-                              <div>
-                                <div>Set up security tools (SAST, DAST, WAF, or API Security) to start earning points</div>
-                                <div className="text-gray-500 text-xs mt-0.5">Each tool you configure will improve your security score</div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div className="border-b pb-3">
-                        <div className="font-medium text-gray-700 mb-2">Quick Wins</div>
-                        <div className="space-y-2 text-xs">
-                          {topRecommendations.map((rec, idx) => (
-                            <div key={idx} className="flex items-start gap-2 text-gray-700">
-                              <span className="text-blue-600 mt-0.5">•</span>
-                              <div className="flex-1">
-                                <div>{rec.message}</div>
-                                <div className="text-gray-500 text-xs mt-0.5">{rec.impact}</div>
-                              </div>
+                  {breakdown.importance.importanceFactors && breakdown.importance.importanceFactors.length > 0 && (
+                    <div className="text-xs text-gray-700 mt-4 pt-4 border-t border-purple-100">
+                      <div className="font-semibold text-gray-800 mb-2.5">Based on:</div>
+                      <div className="space-y-2">
+                        {breakdown.importance.importanceFactors
+                          .filter(factor => {
+                            if (factor.type === 'facing' && factor.value === 'Internal') return false;
+                            if (factor.type === 'interfaces' && factor.value === 0) return false;
+                            if (factor.type === 'dataTypes' && !factor.contributed) return false;
+                            return true;
+                          })
+                          .map((factor, idx) => (
+                            <div key={idx} className="flex items-start gap-2">
+                              <span className="text-purple-500 mt-0.5 font-bold">•</span>
+                              <span className={factor.description.includes('assumed') ? 'text-gray-500 italic' : 'text-gray-800'}>
+                                {factor.description}
+                              </span>
                             </div>
                           ))}
-                        </div>
                       </div>
-                    );
-                  })()}
-
-                  {/* Importance Score Breakdown - Simplified */}
-                  {breakdown?.importance && (
-                    <div className="text-xs text-gray-500">
-                      {breakdown.importance.importanceScore < 0.33 
-                        ? 'Lower priority application: Focus on documentation and data sharing'
-                        : breakdown.importance.importanceScore < 0.67
-                        ? 'Standard application: Balanced focus on documentation and security tools'
-                        : 'Critical application: Emphasis on security tooling and active protection'}
                     </div>
                   )}
-
-                  {/* Link to full documentation */}
-                  <div className="pt-2 border-t">
-                    <Link
-                      to="/docs/scoring-methodology"
-                      className="text-blue-600 hover:text-blue-700 text-xs"
-                      target="_blank"
-                    >
-                      View detailed scoring methodology →
-                    </Link>
-                  </div>
                 </div>
               </div>
             )}
+
+            {/* Column 3 - Quick Wins */}
+            {breakdown && (() => {
+                  const recommendations = [];
+                  
+                  // Priority 1: Missing tools (highest impact)
+                  if (breakdown.tools) {
+                    const missingTools = breakdown.tools.filter(t => t.status === 'missing');
+                    if (missingTools.length > 0) {
+                      let message = '';
+                      if (missingTools.length === 1) {
+                        message = `Add a ${missingTools[0].category} tool`;
+                      } else if (missingTools.length === 2) {
+                        message = `Add a ${missingTools[0].category} and ${missingTools[1].category} tool`;
+                      } else {
+                        message = `Add a ${missingTools[0].category} and other security tools`;
+                      }
+                      recommendations.push({
+                        priority: 1,
+                        type: 'tool',
+                        message: message,
+                        impact: 'This will significantly improve your security score',
+                      });
+                    }
+                  }
+
+                  // Priority 2: Missing knowledge fields (easy win)
+                  if (breakdown.knowledgeSharing?.missingFields && breakdown.knowledgeSharing.missingFields.length > 0) {
+                    const missingCount = breakdown.knowledgeSharing.missingFields.length;
+                    const firstField = breakdown.knowledgeSharing.missingFields[0];
+                    const knowledgeWeight = breakdown.importance?.knowledgeWeight || 0.5;
+                    const weightedPoints = Math.round(missingCount * 5 * knowledgeWeight * 2);
+                    recommendations.push({
+                      priority: 2,
+                      type: 'knowledge',
+                      message: `Fill in ${firstField}${missingCount > 1 ? ` and ${missingCount - 1} other field${missingCount > 2 ? 's' : ''}` : ''} to help us better understand your application`,
+                      impact: `Quick win: adds ${weightedPoints} point${weightedPoints !== 1 ? 's' : ''} to your score`,
+                    });
+                  }
+
+                  // Priority 3: Low integration levels
+                  if (breakdown.tools) {
+                    const lowIntegration = breakdown.tools.find(t => t.status === 'low');
+                    if (lowIntegration) {
+                      recommendations.push({
+                        priority: 3,
+                        type: 'tool',
+                        message: `Improve ${lowIntegration.category} integration level`,
+                        impact: 'Better integration means better visibility and higher scores',
+                      });
+                    }
+                  }
+
+                  // Priority 4: Review needed
+                  if (breakdown.reviewRecommendation && recommendations.length < 2) {
+                    const knowledgeWeight = breakdown.importance?.knowledgeWeight || 0.5;
+                    const maxWeightedReviewPoints = Math.round(10 * knowledgeWeight * 2);
+                    recommendations.push({
+                      priority: 4,
+                      type: 'review',
+                      message: 'Request a metadata review from the AppSec team to verify your information is up to date',
+                      impact: `Recent reviews can add up to ${maxWeightedReviewPoints} points`,
+                    });
+                  }
+
+                  const topRecommendations = recommendations.slice(0, 3);
+
+                  // If no recommendations but tool score is 0, show a helpful message
+                  if (topRecommendations.length === 0 && toolScore === 0) {
+                    return (
+                      <div className="bg-gradient-to-br from-blue-50/50 to-indigo-50/50 rounded-lg p-5 border-2 border-blue-100 shadow-sm h-full">
+                        <div className="flex items-center gap-2 mb-3">
+                          <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          <div className="font-semibold text-blue-900 text-sm">Quick Wins</div>
+                        </div>
+                        <div className="text-xs text-gray-700">
+                          <div className="flex items-start gap-2">
+                            <span className="text-blue-600 mt-0.5 font-bold">•</span>
+                            <div>
+                              <div className="font-medium">Set up security tools (SAST, DAST, WAF, or API Security) to start earning points</div>
+                              <div className="text-gray-600 text-xs mt-1">Each tool you configure will improve your security score</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (topRecommendations.length === 0 && toolScore > 0) {
+                    return null;
+                  }
+
+                  return (
+                    <div className="bg-gradient-to-br from-blue-50/50 to-indigo-50/50 rounded-lg p-5 border-2 border-blue-100 shadow-sm h-full">
+                      <div className="flex items-center gap-2 mb-3">
+                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        <div className="font-semibold text-blue-900 text-sm">Quick Wins</div>
+                      </div>
+                      <div className="space-y-3 text-xs">
+                        {topRecommendations.map((rec, idx) => (
+                          <div key={idx} className="flex items-start gap-2 text-gray-800 rounded-md p-2.5">
+                            <span className="text-blue-600 mt-0.5 font-bold text-base">•</span>
+                            <div className="flex-1">
+                              <div className="font-medium text-gray-900">{rec.message}</div>
+                              <div className="text-blue-700 text-xs mt-1 font-medium">{rec.impact}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
           </div>
         </CardContent>
       </Card>

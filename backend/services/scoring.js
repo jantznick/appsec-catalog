@@ -37,55 +37,103 @@ const METADATA_REVIEW_MAX_POINTS = 10; // Maximum points for metadata review
  * 
  * IMPORTANT: Missing data defaults to high importance to encourage teams to provide information.
  * This creates an incentive to fill out forms - if they don't provide data, we assume worst-case.
+ * 
+ * @returns {Object} - { score: number, factors: Array<{type: string, description: string, contributed: boolean}> }
  */
 function calculateImportanceScore(app) {
   let importance = 0;
-  let hasDataProvided = false;
+  const factors = [];
   
   // Business Criticality (1-5 scale) → contributes 0-0.3
   if (app.businessCriticality) {
-    importance += (app.businessCriticality / 5) * 0.3;
-    hasDataProvided = true;
+    const contribution = (app.businessCriticality / 5) * 0.3;
+    importance += contribution;
+    factors.push({
+      type: 'businessCriticality',
+      description: `Business criticality: ${app.businessCriticality}/5`,
+      contributed: true,
+      value: app.businessCriticality
+    });
   } else {
     // Missing data: assume high criticality (4 out of 5) to encourage disclosure
     importance += (4 / 5) * 0.3;
+    factors.push({
+      type: 'businessCriticality',
+      description: 'Business criticality: High (assumed - data not provided)',
+      contributed: false,
+      value: null
+    });
   }
   
   // Critical Aspects (count aspects) → contributes 0-0.2
   if (app.criticalAspects) {
     const aspects = app.criticalAspects.split(',').map(a => a.trim()).filter(a => a);
     if (aspects.length > 0) {
-      importance += Math.min(aspects.length * 0.05, 0.2);
-      hasDataProvided = true;
+      const contribution = Math.min(aspects.length * 0.05, 0.2);
+      importance += contribution;
+      factors.push({
+        type: 'criticalAspects',
+        description: `${aspects.length} critical aspect${aspects.length !== 1 ? 's' : ''}: ${aspects.join(', ')}`,
+        contributed: true,
+        value: aspects
+      });
     } else {
       // Missing data: assume 2 critical aspects (moderate importance)
       importance += 2 * 0.05;
+      factors.push({
+        type: 'criticalAspects',
+        description: 'Critical aspects: Moderate (assumed - data not provided)',
+        contributed: false,
+        value: null
+      });
     }
   } else {
     // Missing data: assume 2 critical aspects (moderate importance)
     importance += 2 * 0.05;
+    factors.push({
+      type: 'criticalAspects',
+      description: 'Critical aspects: Moderate (assumed - data not provided)',
+      contributed: false,
+      value: null
+    });
   }
   
   // Deployment Type/Frequency → contributes 0-0.2
   if (app.deploymentType) {
     const deploymentLower = app.deploymentType.toLowerCase();
+    let contribution = 0;
+    let frequencyDesc = '';
+    
     // High frequency or automated deployments increase importance
     if (deploymentLower.includes('multiple times per day') || 
         deploymentLower.includes('daily') ||
         deploymentLower.includes('automated')) {
-      importance += 0.2;
-      hasDataProvided = true;
+      contribution = 0.2;
+      frequencyDesc = 'High frequency deployments';
     } else if (deploymentLower.includes('weekly')) {
-      importance += 0.1;
-      hasDataProvided = true;
+      contribution = 0.1;
+      frequencyDesc = 'Weekly deployments';
     } else {
       // Deployment type provided but not high frequency: assume moderate
-      importance += 0.1;
-      hasDataProvided = true;
+      contribution = 0.1;
+      frequencyDesc = 'Moderate deployment frequency';
     }
+    importance += contribution;
+    factors.push({
+      type: 'deploymentFrequency',
+      description: `${frequencyDesc}: ${app.deploymentType}`,
+      contributed: true,
+      value: app.deploymentType
+    });
   } else {
     // Missing data: assume high frequency/automated deployment (worst case)
     importance += 0.2;
+    factors.push({
+      type: 'deploymentFrequency',
+      description: 'High frequency deployments (assumed - data not provided)',
+      contributed: false,
+      value: null
+    });
   }
   
   // Interfaces (count) → contributes 0-0.15
@@ -93,36 +141,108 @@ function calculateImportanceScore(app) {
     try {
       const interfaceIds = JSON.parse(app.interfaces);
       if (Array.isArray(interfaceIds) && interfaceIds.length > 0) {
-        importance += Math.min(interfaceIds.length * 0.03, 0.15);
-        hasDataProvided = true;
+        const contribution = Math.min(interfaceIds.length * 0.03, 0.15);
+        importance += contribution;
+        factors.push({
+          type: 'interfaces',
+          description: `${interfaceIds.length} interface${interfaceIds.length !== 1 ? 's' : ''} with other applications`,
+          contributed: true,
+          value: interfaceIds.length
+        });
       } else {
         // Interfaces field exists but is empty: assume no interfaces (lower importance)
         // Don't add anything
+        factors.push({
+          type: 'interfaces',
+          description: 'No interfaces with other applications',
+          contributed: true,
+          value: 0
+        });
       }
     } catch (e) {
       // Parse error: assume no interfaces
+      factors.push({
+        type: 'interfaces',
+        description: 'No interfaces with other applications',
+        contributed: true,
+        value: 0
+      });
     }
   } else {
     // Missing data: assume some interfaces exist (moderate importance)
     // Assume 2 interfaces to encourage disclosure
     importance += Math.min(2 * 0.03, 0.15);
+    factors.push({
+      type: 'interfaces',
+      description: '2 interfaces (assumed - data not provided)',
+      contributed: false,
+      value: null
+    });
   }
   
   // Facing (External = more important) → contributes 0-0.15
   if (app.facing === 'External') {
     importance += 0.15;
-    hasDataProvided = true;
+    factors.push({
+      type: 'facing',
+      description: 'External-facing application',
+      contributed: true,
+      value: 'External'
+    });
   } else if (app.facing === 'Internal') {
     // Internal is explicitly stated, so lower importance
-    hasDataProvided = true;
     // Don't add anything (Internal = 0 contribution)
+    factors.push({
+      type: 'facing',
+      description: 'Internal-facing application',
+      contributed: true,
+      value: 'Internal'
+    });
   } else {
     // Missing data: assume External (worst case, higher importance)
     importance += 0.15;
+    factors.push({
+      type: 'facing',
+      description: 'External-facing (assumed - data not provided)',
+      contributed: false,
+      value: null
+    });
+  }
+  
+  // Data Types (PII, PCI, etc.) → check if they contribute to risk
+  if (app.dataTypes) {
+    const dataTypesLower = app.dataTypes.toLowerCase();
+    const hasPII = dataTypesLower.includes('pii') || dataTypesLower.includes('personal');
+    const hasPCI = dataTypesLower.includes('pci') || dataTypesLower.includes('payment');
+    const hasSensitive = hasPII || hasPCI;
+    
+    if (hasSensitive) {
+      const sensitiveTypes = [];
+      if (hasPII) sensitiveTypes.push('PII');
+      if (hasPCI) sensitiveTypes.push('PCI');
+      factors.push({
+        type: 'dataTypes',
+        description: `Handles sensitive data: ${sensitiveTypes.join(', ')}`,
+        contributed: true,
+        value: app.dataTypes
+      });
+    } else {
+      factors.push({
+        type: 'dataTypes',
+        description: `Data types: ${app.dataTypes}`,
+        contributed: false,
+        value: app.dataTypes
+      });
+    }
   }
   
   // Clamp to 0-1 range
-  return Math.min(Math.max(importance, 0), 1);
+  const score = Math.min(Math.max(importance, 0), 1);
+  
+  return {
+    score,
+    factors
+  };
 }
 
 /**
@@ -340,8 +460,10 @@ export function calculateApplicationScore(app) {
   const rawKnowledgeScore = calculateKnowledgeSharingScore(app);
   const rawToolScore = calculateToolUsageScore(app);
   
-  // Calculate importance score (0-1 scale)
-  const importanceScore = calculateImportanceScore(app);
+  // Calculate importance score (0-1 scale) and factors
+  const importanceResult = calculateImportanceScore(app);
+  const importanceScore = importanceResult.score;
+  const importanceFactors = importanceResult.factors;
   
   // Determine weighting based on importance
   // Low importance (0-0.33): More weight on Knowledge Sharing (60/40)
@@ -372,6 +494,7 @@ export function calculateApplicationScore(app) {
     toolScore,
     totalScore,
     importanceScore: Math.round(importanceScore * 100) / 100, // Round to 2 decimal places
+    importanceFactors, // Include factors that contributed to importance
     knowledgeWeight,
     toolWeight,
     rawKnowledgeScore, // Include raw scores for transparency

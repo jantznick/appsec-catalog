@@ -723,6 +723,7 @@ router.get('/:id/score', requireAuth, async (req, res) => {
         missingImportanceFields: missingImportanceFields.length > 0 ? missingImportanceFields : null,
         importance: {
           importanceScore: scores.importanceScore,
+          importanceFactors: scores.importanceFactors || [],
           knowledgeWeight: scores.knowledgeWeight,
           toolWeight: scores.toolWeight,
           rawKnowledgeScore: scores.rawKnowledgeScore,

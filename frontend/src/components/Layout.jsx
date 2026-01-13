@@ -181,17 +181,6 @@ export function Layout({ children }) {
                             </span>
                           )}
                         </DropdownItem>
-                        <DropdownItem divider />
-                        <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                          Utils
-                        </div>
-                        <DropdownItem
-                          onClick={() => {
-                            navigate('/components');
-                          }}
-                        >
-                          Components
-                        </DropdownItem>
                       </>
                     )}
                   </Dropdown>
