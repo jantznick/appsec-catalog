@@ -4,6 +4,7 @@ import useAuthStore from '../store/authStore.js';
 import { AuthModal } from './AuthModal.jsx';
 import { Dropdown, DropdownItem } from './ui/Dropdown.jsx';
 import { api } from '../lib/api.js';
+import { useToastStore } from './ui/Toast.jsx';
 
 export function Layout({ children }) {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ export function Layout({ children }) {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [companyName, setCompanyName] = useState(null);
+  const [pendingCount, setPendingCount] = useState(0);
 
   // Open auth modal when on /login or /register routes
   useEffect(() => {
@@ -44,6 +46,24 @@ export function Layout({ children }) {
       setCompanyName(null);
     }
   }, [user]);
+
+  // Load pending approvals count for admins
+  useEffect(() => {
+    if (isAdmin() && isAuthenticated()) {
+      const loadPendingCount = async () => {
+        try {
+          const data = await api.getPendingVersionsCount();
+          setPendingCount(data.count || 0);
+        } catch (error) {
+          console.error('Failed to load pending approvals count:', error);
+        }
+      };
+      loadPendingCount();
+      // Refresh count every 30 seconds
+      const interval = setInterval(loadPendingCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isAdmin, isAuthenticated]);
 
   const handleLogout = async () => {
     await logout();
@@ -164,6 +184,20 @@ export function Layout({ children }) {
                     {isAdmin() && (
                       <>
                         <DropdownItem divider />
+                        <DropdownItem
+                          onClick={() => {
+                            navigate('/pending-approvals');
+                          }}
+                          className="relative"
+                        >
+                          <span>Pending Approvals</span>
+                          {pendingCount > 0 && (
+                            <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
+                              {pendingCount > 99 ? '99+' : pendingCount}
+                            </span>
+                          )}
+                        </DropdownItem>
+                        <DropdownItem divider />
                         <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                           Utils
                         </div>
@@ -177,7 +211,30 @@ export function Layout({ children }) {
                       </>
                     )}
                   </Dropdown>
-                  <span className="text-sm text-gray-700">{user.email}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-700">{user.email}</span>
+                    {isAdmin() && pendingCount > 0 && (
+                      <button
+                        onClick={() => {
+                          const { addToast, removeToast } = useToastStore.getState();
+                          const toastId = addToast({
+                            type: 'warning',
+                            message: `There ${pendingCount === 1 ? 'is' : 'are'} ${pendingCount} application change${pendingCount !== 1 ? 's' : ''} to review. Click here to view.`,
+                            persistent: true,
+                            clickable: true,
+                            onClick: () => {
+                              navigate('/pending-approvals');
+                              removeToast(toastId);
+                            },
+                          });
+                        }}
+                        className="relative inline-flex items-center justify-center px-2.5 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full hover:bg-red-700 transition-colors"
+                        title={`${pendingCount} pending approval${pendingCount !== 1 ? 's' : ''}`}
+                      >
+                        {pendingCount > 99 ? '99+' : pendingCount}
+                      </button>
+                    )}
+                  </div>
                   <button
                     onClick={handleLogout}
                     className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"

@@ -9,12 +9,14 @@ const useToastStore = create((set) => ({
       toasts: [...state.toasts, { ...toast, id }],
     }));
     
-    // Auto remove after duration
-    setTimeout(() => {
-      set((state) => ({
-        toasts: state.toasts.filter((t) => t.id !== id),
-      }));
-    }, toast.duration || 5000);
+    // Auto remove after duration (unless persistent)
+    if (!toast.persistent && toast.duration !== 0) {
+      setTimeout(() => {
+        set((state) => ({
+          toasts: state.toasts.filter((t) => t.id !== id),
+        }));
+      }, toast.duration || 5000);
+    }
     
     return id;
   },
@@ -48,6 +50,9 @@ export function ToastContainer() {
           type={toast.type}
           message={toast.message}
           duration={toast.duration || 5000}
+          persistent={toast.persistent}
+          clickable={toast.clickable}
+          onClick={toast.onClick}
           onClose={() => removeToast(toast.id)}
         />
       ))}
@@ -55,7 +60,7 @@ export function ToastContainer() {
   );
 }
 
-function Toast({ type, message, onClose, duration = 5000 }) {
+function Toast({ type, message, onClose, duration = 5000, persistent = false, onClick, clickable = false }) {
   const variants = {
     success: 'bg-green-600 text-white',
     error: 'bg-red-600 text-white',
@@ -63,14 +68,16 @@ function Toast({ type, message, onClose, duration = 5000 }) {
     warning: 'bg-yellow-600 text-white',
   };
 
-  // Auto-dismiss after duration
+  // Auto-dismiss after duration (unless persistent)
   useEffect(() => {
-    const timer = setTimeout(() => {
-      onClose();
-    }, duration);
+    if (!persistent && duration > 0) {
+      const timer = setTimeout(() => {
+        onClose();
+      }, duration);
 
-    return () => clearTimeout(timer);
-  }, [duration, onClose]);
+      return () => clearTimeout(timer);
+    }
+  }, [duration, onClose, persistent]);
 
   const icons = {
     success: (
@@ -100,12 +107,17 @@ function Toast({ type, message, onClose, duration = 5000 }) {
       className={`
         ${variants[type]} rounded-lg shadow-lg p-4 min-w-[300px] max-w-md
         flex items-start gap-3 animate-in slide-in-from-right
+        ${clickable ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''}
       `}
+      onClick={clickable ? onClick : undefined}
     >
       <div className="flex-shrink-0">{icons[type]}</div>
       <div className="flex-1 text-sm font-medium">{message}</div>
       <button
-        onClick={onClose}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
         className="flex-shrink-0 opacity-80 hover:opacity-100"
         aria-label="Close"
       >

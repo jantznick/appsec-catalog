@@ -24,6 +24,7 @@ import { AcceptInvitation } from './pages/AcceptInvitation.jsx';
 import { Domains } from './pages/Domains.jsx';
 import { DomainDetail } from './pages/DomainDetail.jsx';
 import { DeploymentTokens } from './pages/DeploymentTokens.jsx';
+import { PendingApprovals } from './pages/PendingApprovals.jsx';
 
 function CatchAllRedirect() {
   const { isAuthenticated, isVerified, loading } = useAuthStore();
@@ -227,6 +228,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <DeploymentTokens />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pending-approvals"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <PendingApprovals />
               </Layout>
             </ProtectedRoute>
           }

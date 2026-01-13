@@ -2241,6 +2241,66 @@ router.get('/:id/deployment-tokens', requireAuth, async (req, res) => {
 // ============================================================================
 // VERSION HISTORY (Admin only)
 // ============================================================================
+// Get count of pending versions (Admin only)
+router.get('/versions/pending/count', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const count = await prisma.applicationVersion.count({
+      where: {
+        approvalStatus: 'pending',
+      },
+    });
+
+    res.json({ count });
+  } catch (error) {
+    console.error('Error fetching pending versions count:', error);
+    res.status(500).json({ error: 'Failed to fetch pending versions count' });
+  }
+});
+// Get all pending versions across all applications (Admin only)
+router.get('/versions/pending', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    // Get all pending versions with application and user info
+    const pendingVersions = await prisma.applicationVersion.findMany({
+      where: {
+        approvalStatus: 'pending',
+      },
+      include: {
+        application: {
+          select: {
+            id: true,
+            name: true,
+            company: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
+        approver: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc', // Newest first
+      },
+    });
+
+    res.json(pendingVersions);
+  } catch (error) {
+    console.error('Error fetching pending versions:', error);
+    res.status(500).json({ error: 'Failed to fetch pending versions' });
+  }
+});
 
 // Get version history for an application
 router.get('/:id/versions', requireAuth, requireAdmin, async (req, res) => {

@@ -9,9 +9,11 @@ import { LoadingPage } from '../ui/Loading.jsx';
 export function AdminStats() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     loadStats();
+    loadPendingCount();
   }, []);
 
   const loadStats = async () => {
@@ -26,6 +28,21 @@ export function AdminStats() {
       setLoading(false);
     }
   };
+
+  const loadPendingCount = async () => {
+    try {
+      const data = await api.getPendingVersionsCount();
+      setPendingCount(data.count || 0);
+    } catch (error) {
+      console.error('Failed to load pending approvals count:', error);
+    }
+  };
+
+  // Refresh pending count periodically
+  useEffect(() => {
+    const interval = setInterval(loadPendingCount, 30000); // Every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
 
   if (loading) {
     return <LoadingPage message="Loading dashboard..." />;
@@ -96,20 +113,25 @@ export function AdminStats() {
           </Card>
         </Link>
 
-        <Link to="/users" className="h-full">
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
+        <Link to="/pending-approvals" className="h-full">
+          <Card className={`hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col ${pendingCount > 0 ? 'border-yellow-300 bg-yellow-50' : ''}`}>
             <CardContent className="flex-1 flex flex-col">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Pending Users</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.users.unverified}</p>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Pending Approvals</p>
+                  <p className="text-3xl font-bold text-gray-900">{pendingCount}</p>
                 </div>
                 <div className="p-3 bg-yellow-100 rounded-lg">
                   <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
               </div>
+              {pendingCount > 0 && (
+                <div className="mt-2 text-xs text-yellow-700 font-medium">
+                  Click to review
+                </div>
+              )}
             </CardContent>
           </Card>
         </Link>
