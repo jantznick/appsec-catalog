@@ -25,6 +25,7 @@ export function VersionHistory({ applicationId }) {
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [versionPage, setVersionPage] = useState(1);
   const versionsPerPage = 5;
+  const [latestVersionSummary, setLatestVersionSummary] = useState(null);
 
   useEffect(() => {
     if (applicationId) {
@@ -45,9 +46,82 @@ export function VersionHistory({ applicationId }) {
       // Store total count for display
       setTotalVersionCount(versionsList.length);
       // Only keep the latest version for collapsed view
-      setVersions(versionsList.length > 0 ? [versionsList[0]] : []);
+      const latestVersion = versionsList.length > 0 ? versionsList[0] : null;
+      setVersions(latestVersion ? [latestVersion] : []);
       setReviews([]);
       setVersionChanges({});
+      
+      // Calculate summary for the latest version
+      if (latestVersion) {
+        try {
+          let changedFields = [];
+          let isInitialVersion = versionsList.length === 1;
+          
+          if (!isInitialVersion && versionsList.length > 1) {
+            // Compare with previous version
+            const previousVersion = versionsList[1];
+            const comparisonData = await api.compareApplicationVersions(
+              applicationId,
+              previousVersion.versionNumber,
+              latestVersion.versionNumber
+            );
+            changedFields = comparisonData.comparison?.changedFields || [];
+          } else if (isInitialVersion) {
+            // For initial version, get all non-null fields
+            const fieldsToCheck = [
+              'name', 'description', 'owner', 'repoUrl', 'language', 'framework',
+              'serverEnvironment', 'facing', 'deploymentType', 'authProfiles', 'dataTypes',
+              'status', 'businessCriticality', 'criticalAspects', 'devTeamContact',
+              'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel',
+              'dastTool', 'dastIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
+              'apiSecurityTool', 'apiSecurityIntegrationLevel', 'apiSecurityNA',
+              'currentVersion', 'deploymentEnvironment', 'gitBranch',
+              'lastDastScanDate', 'lastSastScanDate', 'interfaces',
+            ];
+            changedFields = fieldsToCheck.filter(field => latestVersion[field] !== null && latestVersion[field] !== undefined);
+          }
+          
+          // Format summary similar to expanded view
+          let summaryText = '';
+          const wentThroughWorkflow = latestVersion.approvalStatus !== 'pending' && latestVersion.approvedBy;
+          
+          if (isInitialVersion) {
+            const fieldsDisplay = changedFields.slice(0, 3).map(f => getFieldLabel(f)).join(', ');
+            const moreCount = changedFields.length > 3 ? changedFields.length - 3 : 0;
+            summaryText = `${changedFields.length} field${changedFields.length !== 1 ? 's' : ''} set: ${fieldsDisplay}${moreCount > 0 ? ` +${moreCount} more` : ''}`;
+          } else if (latestVersion.approvalStatus === 'approved' && wentThroughWorkflow) {
+            const approvedFieldsList = latestVersion.approvedFields ? latestVersion.approvedFields.split(',').map(f => f.trim()) : null;
+            const approvedCount = approvedFieldsList ? approvedFieldsList.length : changedFields.length;
+            const approvedFieldsDisplay = approvedFieldsList 
+              ? approvedFieldsList.slice(0, 3).map(f => getFieldLabel(f)).join(', ')
+              : changedFields.slice(0, 3).map(f => getFieldLabel(f)).join(', ');
+            const moreCount = approvedFieldsList 
+              ? (approvedFieldsList.length > 3 ? approvedFieldsList.length - 3 : 0)
+              : (changedFields.length > 3 ? changedFields.length - 3 : 0);
+            
+            summaryText = `${changedFields.length} field${changedFields.length !== 1 ? 's' : ''} requested, ${approvedCount === changedFields.length ? 'all' : approvedCount} approved: ${approvedFieldsDisplay}${moreCount > 0 ? ` +${moreCount} more` : ''}`;
+          } else if (latestVersion.approvalStatus === 'rejected' && wentThroughWorkflow) {
+            const fieldsDisplay = changedFields.slice(0, 3).map(f => getFieldLabel(f)).join(', ');
+            const moreCount = changedFields.length > 3 ? changedFields.length - 3 : 0;
+            summaryText = `${changedFields.length} field${changedFields.length !== 1 ? 's' : ''} requested, rejected: ${fieldsDisplay}${moreCount > 0 ? ` +${moreCount} more` : ''}`;
+          } else {
+            const fieldsDisplay = changedFields.slice(0, 3).map(f => getFieldLabel(f)).join(', ');
+            const moreCount = changedFields.length > 3 ? changedFields.length - 3 : 0;
+            summaryText = `${changedFields.length} field${changedFields.length !== 1 ? 's' : ''} changed: ${fieldsDisplay}${moreCount > 0 ? ` +${moreCount} more` : ''}`;
+          }
+          
+          setLatestVersionSummary({
+            text: summaryText,
+            requester: latestVersion.user?.email || latestVersion.requesterEmail,
+            approver: latestVersion.approver?.email,
+          });
+        } catch (error) {
+          console.error('Failed to calculate latest version summary:', error);
+          setLatestVersionSummary(null);
+        }
+      } else {
+        setLatestVersionSummary(null);
+      }
     } catch (error) {
       console.error('Failed to load latest version:', error);
     } finally {
@@ -323,16 +397,26 @@ export function VersionHistory({ applicationId }) {
           </div>
         </div>
         {!expanded && latestVersion && (
-          <div className="text-sm text-gray-500 mb-2">
-            {latestVersion.user && (
-              <>Last updated by <span className="font-medium">{latestVersion.user.email}</span></>
+          <div className="text-sm text-gray-500 mb-2 space-y-1">
+            {latestVersionSummary && (
+              <div>
+                {latestVersionSummary.text}
+                {latestVersionSummary.requester && (
+                  <> • requested by: <span className="font-medium">{latestVersionSummary.requester}</span></>
+                )}
+                {latestVersionSummary.approver && (
+                  <> • approved by: <span className="font-medium">{latestVersionSummary.approver}</span></>
+                )}
+              </div>
             )}
-            {latestVersion.createdAt && (
-              <> • <span>{formatRelativeDate(latestVersion.createdAt)}</span></>
-            )}
-            {reviewCount > 0 && (
-              <> • <span>{reviewCount} review{reviewCount !== 1 ? 's' : ''}</span></>
-            )}
+            <div>
+              {latestVersion.createdAt && (
+                <span>{formatRelativeDate(latestVersion.createdAt)}</span>
+              )}
+              {reviewCount > 0 && (
+                <> • <span>{reviewCount} review{reviewCount !== 1 ? 's' : ''}</span></>
+              )}
+            </div>
           </div>
         )}
 
