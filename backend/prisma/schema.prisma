@@ -413,3 +413,38 @@ model ApplicationMetadataReview {
   @@index([reviewedAt])
   @@index([reviewedBy])
 }
+
+// Policy controls - defines security policy requirements that applications must meet
+model PolicyControl {
+  id              String              @id @default(cuid())
+  controlId       String              @unique // e.g., "3.4.2"
+  name            String              // e.g., "Pre-Prod Scanning Required"
+  description     String              // Full description of the control requirement
+  category        String?             // e.g., "Security Testing", "Infrastructure Security"
+  evaluationLogic String              @default("AND") // "AND" or "OR" - how to combine field checks
+  isActive        Boolean             @default(true)
+  displayOrder    Int                 @default(0) // Order for display in UI
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  fields          PolicyControlField[] // Field mappings for this control
+  
+  @@index([controlId])
+  @@index([isActive])
+  @@index([displayOrder])
+}
+
+// Policy control field mappings - defines which application fields are checked for each control
+model PolicyControlField {
+  id              String          @id @default(cuid())
+  controlId       String          // Foreign key to PolicyControl
+  control         PolicyControl   @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  fieldPath       String          // e.g., "sastTool", "sastIntegrationLevel", "facing"
+  operator        String          // "exists", "equals", "not_equals", "gte", "gt", "lte", "lt", "contains", "in", "not_in"
+  value           String?         // JSON string for the value (supports different types: string, number, boolean, array)
+  displayOrder    Int             @default(0) // Order for display within the control
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([controlId])
+  @@index([fieldPath])
+}

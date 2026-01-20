@@ -2,6 +2,7 @@ import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { calculateApplicationScore } from '../services/scoring.js';
+import { evaluateAllControls } from '../services/policy.js';
 import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
 import { createApplicationVersion, createVersionFromData, applyApprovedVersion } from '../utils/applicationVersion.js';
@@ -734,6 +735,45 @@ router.get('/:id/score', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error calculating application score:', error);
     res.status(500).json({ error: 'Failed to calculate score' });
+  }
+});
+
+// Get application policy compliance - MUST come before /:id route
+router.get('/:id/policy-compliance', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const application = await prisma.application.findUnique({
+      where: { id },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if user has access (admin or member of same company)
+    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only access applications in your company',
+      });
+    }
+
+    // Evaluate all policy controls
+    const compliance = await evaluateAllControls(application);
+
+    res.json(compliance);
+  } catch (error) {
+    console.error('Error evaluating policy compliance:', error);
+    res.status(500).json({ error: 'Failed to evaluate policy compliance' });
   }
 });
 

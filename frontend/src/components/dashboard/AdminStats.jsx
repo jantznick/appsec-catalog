@@ -278,6 +278,25 @@ export function AdminStats() {
             </Link>
           </CardContent>
         </Card>
+
+        <Card className="flex flex-col">
+          <CardHeader>
+            <CardTitle>Policy Controls</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col h-full">
+            <div className="flex-grow">
+              <p className="text-gray-600 mb-4">
+                Manage policy controls for application security policies.
+              </p>
+            </div>
+            <Link to="/policy-controls" className="mt-auto">
+              <Button variant="primary" className="w-full">
+                Manage Policy Controls
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
       </div>
     </>
   );

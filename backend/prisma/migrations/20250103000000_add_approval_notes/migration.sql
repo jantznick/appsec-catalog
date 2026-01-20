@@ -1,0 +1,1 @@
+-- This migration was already applied (duplicate of 20250102000000_add_version_approval)

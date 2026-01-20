@@ -144,6 +144,13 @@ export function Layout({ children }) {
                         >
                           Companies
                         </DropdownItem>
+                        <DropdownItem
+                          onClick={() => {
+                            navigate('/policy-controls');
+                          }}
+                        >
+                          Policy Controls
+                        </DropdownItem>
                       </>
                     ) : null}
                     <DropdownItem

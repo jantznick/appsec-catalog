@@ -147,6 +147,42 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // Policy Controls endpoints
+  getPolicyControls: () =>
+    apiRequest('/api/policy-controls'),
+
+  getPolicyControl: (id) =>
+    apiRequest(`/api/policy-controls/${id}`),
+
+  createPolicyControl: (data) =>
+    apiRequest('/api/policy-controls', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updatePolicyControl: (id, data) =>
+    apiRequest(`/api/policy-controls/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deletePolicyControl: (id) =>
+    apiRequest(`/api/policy-controls/${id}`, {
+      method: 'DELETE',
+    }),
+
+  updatePolicyControlOrder: (id, displayOrder) =>
+    apiRequest(`/api/policy-controls/${id}/reorder`, {
+      method: 'PATCH',
+      body: JSON.stringify({ displayOrder }),
+    }),
+
+  getAvailableFields: () =>
+    apiRequest('/api/config/available-fields'),
+
+  getApplicationPolicyCompliance: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/policy-compliance`),
+
   getDivisionStats: (id) =>
     apiRequest(`/api/divisions/${id}/stats`),
   getCompanyAverageScore: (id) =>

@@ -18,6 +18,7 @@ import { CICDDeploymentView } from '../components/deployments/CICDDeploymentView
 import { NotesSection } from '../components/notes/NotesSection.jsx';
 import { VersionHistory } from '../components/versions/VersionHistory.jsx';
 import { Tabs, Tab, TabPanel } from '../components/ui/Tabs.jsx';
+import { PolicyComplianceView } from '../components/policy/PolicyComplianceView.jsx';
 
 export function ApplicationDetail() {
   const { id } = useParams();
@@ -47,6 +48,8 @@ export function ApplicationDetail() {
   const [newInterfaceName, setNewInterfaceName] = useState('');
   const [notesRefreshTrigger, setNotesRefreshTrigger] = useState(0);
   const [pendingVersionsCount, setPendingVersionsCount] = useState(0);
+  const [policyCompliance, setPolicyCompliance] = useState(null);
+  const [loadingCompliance, setLoadingCompliance] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -522,6 +525,20 @@ export function ApplicationDetail() {
     }
   };
 
+  const loadPolicyCompliance = async () => {
+    if (!id) return;
+    try {
+      setLoadingCompliance(true);
+      const data = await api.getApplicationPolicyCompliance(id);
+      setPolicyCompliance(data);
+    } catch (error) {
+      console.error('Failed to load policy compliance:', error);
+      // Don't show toast error here - it's not critical if it fails
+    } finally {
+      setLoadingCompliance(false);
+    }
+  };
+
   const handleSave = async () => {
     try {
       setSaving(true);
@@ -536,6 +553,8 @@ export function ApplicationDetail() {
       // Reload both application data and score
       await loadApplication();
       await loadScore();
+      // Reload policy compliance to reflect any changes
+      await loadPolicyCompliance();
     } catch (error) {
       toast.error(error.message || 'Failed to update application');
     } finally {
@@ -816,6 +835,7 @@ export function ApplicationDetail() {
         <Tab>Deployments</Tab>
         {isAdmin() && <Tab>App Timeline</Tab>}
         <Tab>Security</Tab>
+        <Tab>Infosec Policy Compliance</Tab>
         {isAdmin() && <Tab badge={pendingVersionsCount}>Application Metadata History</Tab>}
 
         {/* App Data Tab */}
@@ -1733,6 +1753,17 @@ export function ApplicationDetail() {
               </div>
               </CardContent>
             </Card>
+        </TabPanel>
+
+        {/* Infosec Policy Compliance Tab */}
+        <TabPanel>
+          <PolicyComplianceView 
+            applicationId={id}
+            compliance={policyCompliance}
+            loading={loadingCompliance}
+            onLoad={loadPolicyCompliance}
+            onRefresh={loadPolicyCompliance}
+          />
         </TabPanel>
 
         {/* Application Metadata History Tab - Admin Only */}
