@@ -9,6 +9,13 @@ if [ ! -d "node_modules/.prisma/client" ]; then
   npx prisma generate
 fi
 
+# Validate migrations before deploying (catches duplicate operations early)
+echo "🔍 Validating migrations..."
+node scripts/validate-migrations.js || {
+  echo "❌ Migration validation failed! Aborting deployment."
+  exit 1
+}
+
 echo "🔄 Running Prisma migrations..."
 # Use migrate deploy for production (only applies pending migrations)
 # This is safe to run multiple times - it only applies migrations that haven't been applied yet
