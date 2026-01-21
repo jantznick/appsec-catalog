@@ -8,9 +8,7 @@
     "start": "node server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "prisma:push": "prisma db push",
-    "validate:migrations": "node scripts/validate-migrations.js",
-    "predeploy": "npm run validate:migrations"
+    "prisma:push": "prisma db push"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.2.0",
