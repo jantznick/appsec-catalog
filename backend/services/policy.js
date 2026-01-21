@@ -138,10 +138,40 @@ export function evaluateFieldCheck(fieldCheck, fieldValue) {
  * Evaluate a single policy control against an application
  * @param {Object} control - PolicyControl with fields
  * @param {Object} application - Application object
+ * @param {Object} override - Optional PolicyControlOverride object
  * @returns {Object} - Evaluation result
  */
-export async function evaluateControl(control, application) {
+export async function evaluateControl(control, application, override = null) {
+  // If control has no field mappings, check for manual override
   if (!control.fields || control.fields.length === 0) {
+    if (override) {
+      return {
+        status: override.isCompliant ? 'meeting' : 'not_meeting',
+        evidence: override.isCompliant 
+          ? ['Manually marked as compliant by admin']
+          : ['Manually marked as not compliant by admin'],
+        details: {
+          fieldResults: [],
+          evaluationLogic: control.evaluationLogic,
+          finalResult: override.isCompliant,
+          override: {
+            isCompliant: override.isCompliant,
+            noteId: override.noteId,
+            note: override.note ? {
+              id: override.note.id,
+              content: override.note.content,
+              createdAt: override.note.createdAt,
+            } : null,
+            overriddenBy: override.overriddenBy,
+            user: override.user ? {
+              id: override.user.id,
+              email: override.user.email,
+            } : null,
+            overriddenAt: override.overriddenAt,
+          },
+        },
+      };
+    }
     return {
       status: 'not_meeting',
       evidence: ['No field mappings defined for this control'],
@@ -400,10 +430,43 @@ export async function evaluateAllControls(application) {
     },
   });
 
+  // Fetch all overrides for this application and these controls
+  const controlIds = controls.map(c => c.id);
+  const overrides = await prisma.policyControlOverride.findMany({
+    where: {
+      applicationId: application.id,
+      controlId: {
+        in: controlIds,
+      },
+    },
+    include: {
+      note: {
+        select: {
+          id: true,
+          content: true,
+          createdAt: true,
+        },
+      },
+      user: {
+        select: {
+          id: true,
+          email: true,
+        },
+      },
+    },
+  });
+
+  // Create a map of controlId -> override for quick lookup
+  const overrideMap = new Map();
+  overrides.forEach(override => {
+    overrideMap.set(override.controlId, override);
+  });
+
   // Evaluate each control
   const controlResults = await Promise.all(
     controls.map(async (control) => {
-      const evaluation = await evaluateControl(control, application);
+      const override = overrideMap.get(control.id) || null;
+      const evaluation = await evaluateControl(control, application, override);
       return {
         control: {
           id: control.id,

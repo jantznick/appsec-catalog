@@ -183,6 +183,21 @@ export const api = {
   getApplicationPolicyCompliance: (applicationId) =>
     apiRequest(`/api/applications/${applicationId}/policy-compliance`),
 
+  // Policy Control Override endpoints (Admin only)
+  getApplicationPolicyOverrides: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/policy-overrides`),
+
+  createOrUpdatePolicyOverride: (applicationId, data) =>
+    apiRequest(`/api/applications/${applicationId}/policy-overrides`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  deletePolicyOverride: (applicationId, controlId) =>
+    apiRequest(`/api/applications/${applicationId}/policy-overrides/${controlId}`, {
+      method: 'DELETE',
+    }),
+
   // Policies endpoints
   getPolicies: () =>
     apiRequest('/api/policies'),

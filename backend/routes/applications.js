@@ -778,6 +778,248 @@ router.get('/:id/policy-compliance', requireAuth, async (req, res) => {
   }
 });
 
+// Get all policy control overrides for an application (Admin only)
+router.get('/:id/policy-overrides', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Verify application exists
+    const application = await prisma.application.findUnique({
+      where: { id },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Get all overrides for this application
+    const overrides = await prisma.policyControlOverride.findMany({
+      where: {
+        applicationId: id,
+      },
+      include: {
+        control: {
+          select: {
+            id: true,
+            controlId: true,
+            name: true,
+          },
+        },
+        note: {
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        overriddenAt: 'desc',
+      },
+    });
+
+    res.json(overrides);
+  } catch (error) {
+    console.error('Error fetching policy overrides:', error);
+    res.status(500).json({ error: 'Failed to fetch policy overrides' });
+  }
+});
+
+// Create or update a policy control override (Admin only)
+router.post('/:id/policy-overrides', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id: applicationId } = req.params;
+    const { controlId, isCompliant, noteContent } = req.body;
+
+    // Validate required fields
+    if (!controlId) {
+      return res.status(400).json({ error: 'controlId is required' });
+    }
+    if (typeof isCompliant !== 'boolean') {
+      return res.status(400).json({ error: 'isCompliant must be a boolean' });
+    }
+
+    // Verify application exists
+    const application = await prisma.application.findUnique({
+      where: { id: applicationId },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Verify control exists and get policy info
+    const control = await prisma.policyControl.findUnique({
+      where: { id: controlId },
+      include: {
+        policy: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!control) {
+      return res.status(404).json({ error: 'Policy control not found' });
+    }
+
+    // Check if override already exists
+    const existingOverride = await prisma.policyControlOverride.findUnique({
+      where: {
+        applicationId_controlId: {
+          applicationId,
+          controlId,
+        },
+      },
+      include: {
+        note: true,
+      },
+    });
+
+    let noteId = null;
+
+    // Create or update note if noteContent is provided
+    if (noteContent && noteContent.trim()) {
+      if (existingOverride && existingOverride.noteId) {
+        // Update existing note
+        await prisma.note.update({
+          where: { id: existingOverride.noteId },
+          data: {
+            content: noteContent.trim(),
+          },
+        });
+        noteId = existingOverride.noteId;
+      } else {
+        // Create new note with prefix
+        const prefix = `Manual Override Added for ${control.name} of ${control.policy.name}:\n\n`;
+        const note = await prisma.note.create({
+          data: {
+            content: prefix + noteContent.trim(),
+            createdBy: req.session.userId,
+            applicationId: applicationId,
+          },
+        });
+        noteId = note.id;
+      }
+    } else if (existingOverride && existingOverride.noteId) {
+      // If no note content provided but note exists, keep the existing note
+      noteId = existingOverride.noteId;
+    }
+
+    // Create or update override
+    const override = await prisma.policyControlOverride.upsert({
+      where: {
+        applicationId_controlId: {
+          applicationId,
+          controlId,
+        },
+      },
+      create: {
+        applicationId,
+        controlId,
+        isCompliant,
+        noteId,
+        overriddenBy: req.session.userId,
+      },
+      update: {
+        isCompliant,
+        noteId,
+        overriddenBy: req.session.userId,
+      },
+      include: {
+        control: {
+          select: {
+            id: true,
+            controlId: true,
+            name: true,
+          },
+        },
+        note: {
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    res.json(override);
+  } catch (error) {
+    console.error('Error creating/updating policy override:', error);
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'Override already exists for this control' });
+    }
+    res.status(500).json({ error: 'Failed to create/update policy override' });
+  }
+});
+
+// Delete a policy control override (Admin only)
+router.delete('/:id/policy-overrides/:controlId', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id: applicationId, controlId } = req.params;
+
+    // Verify application exists
+    const application = await prisma.application.findUnique({
+      where: { id: applicationId },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Get existing override to check for note
+    const existingOverride = await prisma.policyControlOverride.findUnique({
+      where: {
+        applicationId_controlId: {
+          applicationId,
+          controlId,
+        },
+      },
+      include: {
+        note: true,
+      },
+    });
+
+    if (!existingOverride) {
+      return res.status(404).json({ error: 'Override not found' });
+    }
+
+    // Delete the override (note will be deleted via cascade if it's only linked to this override)
+    // But we want to keep the note if it's a general application note, so we'll just unlink it
+    await prisma.policyControlOverride.delete({
+      where: {
+        applicationId_controlId: {
+          applicationId,
+          controlId,
+        },
+      },
+    });
+
+    // Note: The note will remain in the timeline even if the override is deleted
+    // This is intentional - the note provides context in the timeline
+
+    res.json({ message: 'Override deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting policy override:', error);
+    res.status(500).json({ error: 'Failed to delete policy override' });
+  }
+});
+
 // APP-4: Get application detail
 router.get('/:id', requireAuth, async (req, res) => {
   try {

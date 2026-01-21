@@ -2,12 +2,23 @@ import { useEffect, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card.jsx';
 import { LoadingPage } from '../ui/Loading.jsx';
 import { Button } from '../ui/Button.jsx';
+import { Checkbox } from '../ui/Checkbox.jsx';
+import { Textarea } from '../ui/Textarea.jsx';
+import { Modal } from '../ui/Modal.jsx';
+import { toast } from '../ui/Toast.jsx';
 import { api } from '../../lib/api.js';
+import useAuthStore from '../../store/authStore.js';
 
 export function PolicyComplianceView({ applicationId, compliance, loading, onLoad, onRefresh }) {
+  const { isAdmin } = useAuthStore();
   const [availableFields, setAvailableFields] = useState([]);
   const [loadingFields, setLoadingFields] = useState(false);
   const [expandedPolicies, setExpandedPolicies] = useState(new Set());
+  const [overrides, setOverrides] = useState([]);
+  const [loadingOverrides, setLoadingOverrides] = useState(false);
+  const [editingOverrides, setEditingOverrides] = useState({}); // { controlId: { isCompliant, noteContent } }
+  const [savingOverride, setSavingOverride] = useState(null);
+  const [overrideModal, setOverrideModal] = useState(null); // { controlId, isCompliant, noteContent, mode: 'edit' | 'delete' }
 
   useEffect(() => {
     // Load compliance data when component mounts (tab becomes active)
@@ -33,6 +44,23 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
     loadFields();
   }, []);
 
+  useEffect(() => {
+    // Load overrides if user is admin
+    const loadOverrides = async () => {
+      if (!isAdmin() || !applicationId) return;
+      try {
+        setLoadingOverrides(true);
+        const data = await api.getApplicationPolicyOverrides(applicationId);
+        setOverrides(data);
+      } catch (error) {
+        console.error('Failed to load policy overrides:', error);
+      } finally {
+        setLoadingOverrides(false);
+      }
+    };
+    loadOverrides();
+  }, [applicationId, isAdmin]);
+
   const togglePolicy = (policyId) => {
     const newExpanded = new Set(expandedPolicies);
     if (newExpanded.has(policyId)) {
@@ -46,6 +74,140 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
   const getFieldLabel = (fieldPath) => {
     const field = availableFields.find(f => f.path === fieldPath);
     return field ? field.label : fieldPath.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()).trim();
+  };
+
+  const getOverrideForControl = (controlId) => {
+    return overrides.find(o => o.controlId === controlId);
+  };
+
+  const handleOverrideChange = (controlId, isCompliant, noteContent = '') => {
+    setEditingOverrides({
+      ...editingOverrides,
+      [controlId]: {
+        isCompliant,
+        noteContent,
+      },
+    });
+  };
+
+  const handleSaveOverride = async (controlId) => {
+    if (!isAdmin()) return;
+    
+    try {
+      setSavingOverride(controlId);
+      const overrideData = editingOverrides[controlId];
+      if (!overrideData) return;
+
+      await api.createOrUpdatePolicyOverride(applicationId, {
+        controlId,
+        isCompliant: overrideData.isCompliant,
+        noteContent: overrideData.noteContent || '',
+      });
+
+      // Reload overrides and compliance
+      const data = await api.getApplicationPolicyOverrides(applicationId);
+      setOverrides(data);
+      
+      // Clear editing state
+      const newEditing = { ...editingOverrides };
+      delete newEditing[controlId];
+      setEditingOverrides(newEditing);
+
+      if (onRefresh) {
+        onRefresh();
+      }
+
+      toast.success('Override saved successfully');
+    } catch (error) {
+      toast.error(error.message || 'Failed to save override');
+    } finally {
+      setSavingOverride(null);
+    }
+  };
+
+  const handleDeleteOverride = async (controlId) => {
+    if (!isAdmin()) return;
+
+    try {
+      setSavingOverride(controlId);
+      await api.deletePolicyOverride(applicationId, controlId);
+
+      // Reload overrides and compliance
+      const data = await api.getApplicationPolicyOverrides(applicationId);
+      setOverrides(data);
+      
+      // Clear editing state
+      const newEditing = { ...editingOverrides };
+      delete newEditing[controlId];
+      setEditingOverrides(newEditing);
+
+      // Close modal
+      setOverrideModal(null);
+
+      if (onRefresh) {
+        onRefresh();
+      }
+
+      toast.success('Override removed successfully');
+    } catch (error) {
+      toast.error(error.message || 'Failed to delete override');
+    } finally {
+      setSavingOverride(null);
+    }
+  };
+
+  const handleOpenEditModal = (controlId) => {
+    const existingOverride = getOverrideForControl(controlId);
+    if (existingOverride) {
+      setOverrideModal({
+        controlId,
+        isCompliant: existingOverride.isCompliant,
+        noteContent: existingOverride.note?.content || '',
+        mode: 'edit',
+      });
+    }
+  };
+
+  const handleOpenDeleteModal = (controlId) => {
+    const existingOverride = getOverrideForControl(controlId);
+    if (existingOverride) {
+      setOverrideModal({
+        controlId,
+        isCompliant: existingOverride.isCompliant,
+        noteContent: existingOverride.note?.content || '',
+        mode: 'delete',
+      });
+    }
+  };
+
+  const handleSaveFromModal = async () => {
+    if (!overrideModal) return;
+    
+    try {
+      setSavingOverride(overrideModal.controlId);
+      await api.createOrUpdatePolicyOverride(applicationId, {
+        controlId: overrideModal.controlId,
+        isCompliant: overrideModal.isCompliant,
+        noteContent: overrideModal.noteContent || '',
+      });
+
+      // Reload overrides and compliance
+      const data = await api.getApplicationPolicyOverrides(applicationId);
+      setOverrides(data);
+
+      // Close modal
+      setOverrideModal(null);
+
+      if (onRefresh) {
+        onRefresh();
+      }
+
+      toast.success('Override saved successfully');
+    } catch (error) {
+      toast.error(error.message || 'Failed to save override');
+    } finally {
+      setSavingOverride(null);
+    }
   };
 
   if (loading) {
@@ -289,6 +451,138 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
                                   )}
                                 </div>
                               )}
+
+                              {/* Manual Override UI for controls without field mappings */}
+                              {(!details?.fieldResults || details.fieldResults.length === 0) && (
+                                <div className="border-t border-gray-200 pt-4 mt-4">
+                                  {(() => {
+                                    const existingOverride = getOverrideForControl(control.id);
+                                    const overrideFromDetails = details?.override;
+                                    const displayOverride = existingOverride || overrideFromDetails;
+                                    
+                                    // If override exists, show simplified view in blue box
+                                    if (displayOverride) {
+                                      const override = existingOverride || {
+                                        isCompliant: overrideFromDetails.isCompliant,
+                                        user: overrideFromDetails.user,
+                                        overriddenAt: overrideFromDetails.overriddenAt,
+                                        note: overrideFromDetails.note,
+                                      };
+                                      
+                                      return (
+                                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                          <div className="flex items-start justify-between">
+                                            <div className="flex-1">
+                                              <div className="text-sm font-medium text-gray-800 mb-2">Manual Override Active</div>
+                                              <div className="text-xs text-gray-700 space-y-1">
+                                                <div>
+                                                  <span className="font-medium">Status:</span> {override.isCompliant ? 'Compliant' : 'Not Compliant'}
+                                                </div>
+                                                {override.user && (
+                                                  <div>
+                                                    <span className="font-medium">Set by:</span> {override.user.email || override.user}
+                                                  </div>
+                                                )}
+                                                {override.overriddenAt && (
+                                                  <div>
+                                                    <span className="font-medium">Date:</span> {new Date(override.overriddenAt).toLocaleString()}
+                                                  </div>
+                                                )}
+                                                {override.note && override.note.content && (
+                                                  <div className="mt-2 p-2 bg-white rounded border border-blue-200">
+                                                    <div className="font-medium text-gray-700 mb-1">Note:</div>
+                                                    <div className="text-gray-600 whitespace-pre-wrap">{override.note.content}</div>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </div>
+                                            {isAdmin() && existingOverride && (
+                                              <div className="flex gap-2 ml-4">
+                                                <button
+                                                  onClick={() => handleOpenEditModal(control.id)}
+                                                  className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-100 rounded transition-colors"
+                                                  title="Edit override"
+                                                >
+                                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                  </svg>
+                                                </button>
+                                                <button
+                                                  onClick={() => handleOpenDeleteModal(control.id)}
+                                                  className="p-1.5 text-red-600 hover:text-red-700 hover:bg-red-100 rounded transition-colors"
+                                                  title="Delete override"
+                                                >
+                                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                  </svg>
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+                                    
+                                    // If no override exists, show form for admins
+                                    if (isAdmin()) {
+                                      const editingOverride = editingOverrides[control.id];
+                                      const currentOverride = editingOverride || null;
+                                      
+                                      return (
+                                        <div className="space-y-3">
+                                          <div className="text-sm font-medium text-gray-700">
+                                            Manual Override (Admin Only)
+                                          </div>
+                                          <p className="text-xs text-gray-500">
+                                            This control has no field mappings. Use the override below to manually mark compliance.
+                                          </p>
+                                          
+                                          <Checkbox
+                                            id={`override-${control.id}`}
+                                            label="Manually mark as compliant"
+                                            checked={currentOverride?.isCompliant || false}
+                                            onChange={(e) => {
+                                              handleOverrideChange(control.id, e.target.checked, currentOverride?.noteContent || '');
+                                            }}
+                                            disabled={savingOverride === control.id}
+                                          />
+                                          
+                                          <Textarea
+                                            label="Notes/Justification"
+                                            placeholder="Explain why this control is marked as compliant (optional)"
+                                            value={currentOverride?.noteContent || ''}
+                                            onChange={(e) => {
+                                              handleOverrideChange(control.id, currentOverride?.isCompliant || false, e.target.value);
+                                            }}
+                                            disabled={savingOverride === control.id}
+                                            rows={3}
+                                            helperText="This note will be linked to the override and visible in the timeline"
+                                          />
+                                          
+                                          {currentOverride && (
+                                            <Button
+                                              variant="primary"
+                                              size="sm"
+                                              onClick={() => handleSaveOverride(control.id)}
+                                              loading={savingOverride === control.id}
+                                              disabled={savingOverride === control.id}
+                                            >
+                                              Save Override
+                                            </Button>
+                                          )}
+                                        </div>
+                                      );
+                                    }
+                                    
+                                    // Non-admin view when no override exists
+                                    return (
+                                      <div className="text-sm text-gray-500 italic">
+                                        Admin access required to set overrides
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                              )}
                             </div>
                           </CardContent>
                         </Card>
@@ -311,6 +605,97 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
             No policy controls configured
           </CardContent>
         </Card>
+      )}
+
+      {/* Override Edit/Delete Modal */}
+      {overrideModal && (
+        <Modal
+          isOpen={!!overrideModal}
+          onClose={() => setOverrideModal(null)}
+          title={overrideModal.mode === 'edit' ? 'Edit Manual Override' : 'Delete Manual Override'}
+          size="md"
+        >
+          {overrideModal.mode === 'edit' ? (
+            <div className="space-y-4">
+              <Checkbox
+                id="modal-override-compliant"
+                label="Manually mark as compliant"
+                checked={overrideModal.isCompliant}
+                onChange={(e) => {
+                  setOverrideModal({
+                    ...overrideModal,
+                    isCompliant: e.target.checked,
+                  });
+                }}
+                disabled={savingOverride === overrideModal.controlId}
+              />
+              
+              <Textarea
+                label="Notes/Justification"
+                placeholder="Explain why this control is marked as compliant (optional)"
+                value={overrideModal.noteContent}
+                onChange={(e) => {
+                  setOverrideModal({
+                    ...overrideModal,
+                    noteContent: e.target.value,
+                  });
+                }}
+                disabled={savingOverride === overrideModal.controlId}
+                rows={4}
+                helperText="This note will be linked to the override and visible in the timeline"
+              />
+              
+              <div className="flex justify-end gap-3 pt-4">
+                <Button
+                  variant="secondary"
+                  onClick={() => setOverrideModal(null)}
+                  disabled={savingOverride === overrideModal.controlId}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleSaveFromModal}
+                  loading={savingOverride === overrideModal.controlId}
+                  disabled={savingOverride === overrideModal.controlId}
+                >
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-gray-600">
+                Are you sure you want to remove this manual override? This action cannot be undone.
+              </p>
+              
+              {overrideModal.noteContent && (
+                <div className="p-3 bg-gray-50 rounded border border-gray-200">
+                  <div className="text-sm font-medium text-gray-700 mb-1">Current Note:</div>
+                  <div className="text-sm text-gray-600 whitespace-pre-wrap">{overrideModal.noteContent}</div>
+                </div>
+              )}
+              
+              <div className="flex justify-end gap-3 pt-4">
+                <Button
+                  variant="secondary"
+                  onClick={() => setOverrideModal(null)}
+                  disabled={savingOverride === overrideModal.controlId}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => handleDeleteOverride(overrideModal.controlId)}
+                  loading={savingOverride === overrideModal.controlId}
+                  disabled={savingOverride === overrideModal.controlId}
+                >
+                  Delete Override
+                </Button>
+              </div>
+            </div>
+          )}
+        </Modal>
       )}
     </div>
   );

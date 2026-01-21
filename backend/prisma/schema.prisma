@@ -23,6 +23,7 @@ model User {
   applicationVersions ApplicationVersion[] // Versions created by this user
   approvedVersions ApplicationVersion[] @relation("VersionApprover") // Versions approved by this user
   applicationReviews ApplicationMetadataReview[] // Reviews performed by this user
+  policyControlOverrides PolicyControlOverride[] // Policy control overrides set by this user
 }
 
 model Division {
@@ -97,6 +98,7 @@ model Application {
   notes           Note[]    // Notes associated with this application
   versions        ApplicationVersion[] // Version history of metadata changes
   reviews         ApplicationMetadataReview[] // History of metadata reviews
+  policyControlOverrides PolicyControlOverride[] // Manual overrides for policy controls
   description     String?
   owner           String?
   repoUrl         String?
@@ -334,6 +336,9 @@ model Note {
   // User relation for easy access to creator info
   user          User      @relation(fields: [createdBy], references: [id])
   
+  // Policy control override relation (if this note is linked to an override)
+  policyControlOverride PolicyControlOverride? @relation("OverrideNote")
+  
   @@index([companyId])
   @@index([applicationId])
   @@index([createdAt])
@@ -482,6 +487,7 @@ model PolicyControl {
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   fields          PolicyControlField[] // Field mappings for this control
+  overrides       PolicyControlOverride[] // Manual overrides for this control
   
   @@index([controlId])
   @@index([isActive])
@@ -503,4 +509,27 @@ model PolicyControlField {
   
   @@index([controlId])
   @@index([fieldPath])
+}
+
+// Policy control overrides - manual compliance overrides for controls without field mappings
+// Admin-only feature to mark controls as compliant when they can't be automatically evaluated
+model PolicyControlOverride {
+  id              String      @id @default(cuid())
+  applicationId   String
+  application      Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  controlId        String
+  control          PolicyControl @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  isCompliant      Boolean     // true = manually marked as meeting, false = manually marked as not meeting
+  noteId           String?     @unique // Optional link to a Note explaining the override
+  note             Note?       @relation("OverrideNote", fields: [noteId], references: [id], onDelete: SetNull)
+  overriddenBy     String      // User ID who set the override (must be admin)
+  user             User        @relation(fields: [overriddenBy], references: [id])
+  overriddenAt     DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  
+  @@unique([applicationId, controlId]) // One override per application-control pair
+  @@index([applicationId])
+  @@index([controlId])
+  @@index([overriddenAt])
+  @@index([noteId])
 }
