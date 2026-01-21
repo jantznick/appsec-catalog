@@ -1,9 +1,8 @@
 import express from 'express';
-import { PrismaClient } from '../prisma/client.js';
+import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // GET /api/policies - List all policies (admin only)
 router.get('/', requireAuth, requireAdmin, async (req, res) => {

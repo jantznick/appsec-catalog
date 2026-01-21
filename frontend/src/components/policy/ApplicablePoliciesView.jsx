@@ -145,7 +145,7 @@ export function ApplicablePoliciesView({ entityType, entityId, entityData }) {
   };
 
   return (
-    <Card>
+    <Card className="mt-8">
       <CardHeader>
         <CardTitle>Applicable Policies ({policies.length})</CardTitle>
       </CardHeader>
