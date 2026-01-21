@@ -225,20 +225,70 @@ export async function evaluateControl(control, application) {
 }
 
 /**
- * Evaluate all active policy controls for an application
- * @param {Object} application - Application object
- * @returns {Object} - Evaluation results for all controls
+ * Evaluate conditional targeting rules for a policy
+ * @param {Object} targetingRules - Parsed targeting rules JSON
+ * @param {Object} application - Application object with company relation
+ * @returns {boolean} - True if policy applies to this application
  */
-export async function evaluateAllControls(application) {
-  // Get all active controls with their fields
-  const controls = await prisma.policyControl.findMany({
+function evaluateConditionalTargeting(targetingRules, application) {
+  if (!targetingRules || !targetingRules.conditions || !Array.isArray(targetingRules.conditions)) {
+    return false;
+  }
+
+  const { conditions, logic = 'AND' } = targetingRules;
+
+  // Evaluate each condition
+  const conditionResults = conditions.map(condition => {
+    const fieldValue = getFieldValue(application, condition.fieldPath);
+    // Reuse the evaluateFieldCheck logic by creating a temporary field check object
+    // Condition value might be a string that needs to be stored as JSON string
+    const tempFieldCheck = {
+      operator: condition.operator,
+      value: typeof condition.value === 'string' ? condition.value : JSON.stringify(condition.value),
+    };
+    return evaluateFieldCheck(tempFieldCheck, fieldValue);
+  });
+
+  // Combine results based on logic
+  if (logic === 'OR') {
+    return conditionResults.some(result => result === true);
+  } else {
+    // AND (default)
+    return conditionResults.every(result => result === true);
+  }
+}
+
+/**
+ * Determine which policies apply to an application
+ * @param {Object} application - Application object with company relation
+ * @returns {Array} - Array of applicable Policy objects
+ */
+async function getApplicablePolicies(application) {
+  const applicablePolicies = [];
+
+  // Get all active policies with their relationships
+  const allPolicies = await prisma.policy.findMany({
     where: {
       isActive: true,
     },
     include: {
-      fields: {
-        orderBy: {
-          displayOrder: 'asc',
+      divisionPolicies: {
+        include: {
+          division: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
+      companyPolicies: {
+        include: {
+          company: {
+            select: {
+              id: true,
+            },
+          },
         },
       },
     },
@@ -246,7 +296,110 @@ export async function evaluateAllControls(application) {
       displayOrder: 'asc',
     },
   });
+
+  // Check each policy
+  for (const policy of allPolicies) {
+    let applies = false;
+    let reason = '';
+
+    if (policy.scope === 'global') {
+      applies = true;
+      reason = 'Applies to all applications';
+    } else if (policy.scope === 'division') {
+      // Check if application's company is in one of the policy's divisions
+      if (application.company?.divisionId) {
+        const divisionMatch = policy.divisionPolicies.find(
+          dp => dp.division.id === application.company.divisionId
+        );
+        if (divisionMatch) {
+          applies = true;
+          reason = `Your company is in the ${divisionMatch.division.name} division`;
+        }
+      }
+    } else if (policy.scope === 'company') {
+      // Check if application's company is in the policy's companies
+      if (application.companyId) {
+        const companyMatch = policy.companyPolicies.some(
+          cp => cp.company.id === application.companyId
+        );
+        if (companyMatch) {
+          applies = true;
+          reason = 'Applies to your company';
+        }
+      }
+    } else if (policy.scope === 'conditional') {
+      // Evaluate conditional targeting rules
+      if (policy.targetingRules) {
+        try {
+          const targetingRules = JSON.parse(policy.targetingRules);
+          if (evaluateConditionalTargeting(targetingRules, application)) {
+            applies = true;
+            // Build reason from conditions
+            if (targetingRules.conditions && targetingRules.conditions.length > 0) {
+              const conditionDescriptions = targetingRules.conditions.map(c => {
+                const fieldValue = getFieldValue(application, c.fieldPath);
+                return `${c.fieldPath} ${c.operator} ${c.value} (actual: ${fieldValue})`;
+              });
+              reason = `Conditional policy: ${conditionDescriptions.join(', ')}`;
+            } else {
+              reason = 'Conditional policy requirements met';
+            }
+          }
+        } catch (e) {
+          console.error('Error parsing targeting rules for policy:', policy.id, e);
+        }
+      }
+    }
+
+    if (applies) {
+      applicablePolicies.push({
+        ...policy,
+        reason,
+      });
+    }
+  }
+
+  return applicablePolicies;
+}
+
+/**
+ * Evaluate all applicable policies and their controls for an application
+ * @param {Object} application - Application object with company relation
+ * @returns {Object} - Evaluation results grouped by policy
+ */
+export async function evaluateAllControls(application) {
+  // Get applicable policies
+  const applicablePolicies = await getApplicablePolicies(application);
+
+  // Get all controls from applicable policies
+  const policyIds = applicablePolicies.map(p => p.id);
   
+  const controls = await prisma.policyControl.findMany({
+    where: {
+      isActive: true,
+      policyId: {
+        in: policyIds,
+      },
+    },
+    include: {
+      fields: {
+        orderBy: {
+          displayOrder: 'asc',
+        },
+      },
+      policy: {
+        select: {
+          id: true,
+          name: true,
+          scope: true,
+        },
+      },
+    },
+    orderBy: {
+      displayOrder: 'asc',
+    },
+  });
+
   // Evaluate each control
   const controlResults = await Promise.all(
     controls.map(async (control) => {
@@ -260,26 +413,81 @@ export async function evaluateAllControls(application) {
           category: control.category,
           evaluationLogic: control.evaluationLogic,
         },
+        policy: control.policy,
         status: evaluation.status,
         evidence: evaluation.evidence,
         details: evaluation.details,
       };
     })
   );
+
+  // Group controls by policy
+  const policiesMap = new Map();
   
-  // Calculate summary
-  const total = controlResults.length;
-  const meeting = controlResults.filter(cr => cr.status === 'meeting').length;
-  const notMeeting = controlResults.filter(cr => cr.status === 'not_meeting').length;
+  // Initialize policy entries
+  applicablePolicies.forEach(policy => {
+    policiesMap.set(policy.id, {
+      policy: {
+        id: policy.id,
+        name: policy.name,
+        description: policy.description,
+        scope: policy.scope,
+        category: policy.category,
+      },
+      reason: policy.reason,
+      controls: [],
+      summary: {
+        total: 0,
+        meeting: 0,
+        not_meeting: 0,
+        compliance_percentage: 0,
+      },
+    });
+  });
+
+  // Group control results by policy
+  controlResults.forEach(controlResult => {
+    const policyEntry = policiesMap.get(controlResult.policy.id);
+    if (policyEntry) {
+      policyEntry.controls.push(controlResult);
+      policyEntry.summary.total++;
+      if (controlResult.status === 'meeting') {
+        policyEntry.summary.meeting++;
+      } else {
+        policyEntry.summary.not_meeting++;
+      }
+    }
+  });
+
+  // Calculate compliance percentages for each policy
+  policiesMap.forEach(policyEntry => {
+    const { total, meeting } = policyEntry.summary;
+    policyEntry.summary.compliance_percentage = total > 0 ? Math.round((meeting / total) * 100) : 100;
+  });
+
+  // Convert to array
+  const policies = Array.from(policiesMap.values());
+
+  // Calculate overall summary
+  const allControls = controlResults;
+  const total = allControls.length;
+  const meeting = allControls.filter(cr => cr.status === 'meeting').length;
+  const notMeeting = allControls.filter(cr => cr.status === 'not_meeting').length;
   const compliancePercentage = total > 0 ? Math.round((meeting / total) * 100) : 100;
-  
+
+  // Overall compliance: all policies must be 100% compliant
+  const allPoliciesCompliant = policies.every(p => p.summary.compliance_percentage === 100);
+
   return {
-    controls: controlResults,
+    policies,
     summary: {
       total,
       meeting,
       not_meeting: notMeeting,
       compliance_percentage: compliancePercentage,
+      all_policies_compliant: allPoliciesCompliant,
+      total_policies: policies.length,
+      compliant_policies: policies.filter(p => p.summary.compliance_percentage === 100).length,
     },
   };
 }

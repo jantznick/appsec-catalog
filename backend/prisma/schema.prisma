@@ -26,12 +26,13 @@ model User {
 }
 
 model Division {
-  id          String    @id @default(cuid())
-  name        String    @unique
-  description String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  companies   Company[]
+  id              String          @id @default(cuid())
+  name            String          @unique
+  description     String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  companies       Company[]
+  divisionPolicies DivisionPolicy[]
   
   @@index([name])
 }
@@ -58,6 +59,7 @@ model Company {
   authProfiles        String?
   dataTypes           String?
   contacts    Contact[]
+  companyPolicies CompanyPolicy[]
   
   @@index([slug])
   @@index([divisionId])
@@ -414,6 +416,57 @@ model ApplicationMetadataReview {
   @@index([reviewedBy])
 }
 
+// Policies - groups of policy controls with scoping rules
+model Policy {
+  id              String          @id @default(cuid())
+  name            String          // e.g., "Global Security Baseline", "Healthcare Division Policy"
+  description     String?         // Optional description
+  scope           String          // 'global', 'division', 'company', 'conditional'
+  isActive        Boolean         @default(true)
+  displayOrder    Int             @default(0)
+  
+  // Targeting/Scoping Configuration (stored as JSON for flexibility)
+  targetingRules  String?         @db.Text // JSON: { type: 'division', divisionIds: [...] } or { type: 'company', companyIds: [...] } or { type: 'conditional', conditions: [...] }
+  
+  // Relations
+  controls        PolicyControl[] // Controls that belong to this policy
+  divisionPolicies DivisionPolicy[] // Many-to-many with divisions
+  companyPolicies CompanyPolicy[] // Many-to-many with companies
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([scope])
+  @@index([isActive])
+  @@index([displayOrder])
+}
+
+// Division-Policy relationship (many-to-many)
+model DivisionPolicy {
+  id         String   @id @default(cuid())
+  divisionId String
+  division   Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  policyId   String
+  policy     Policy   @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  
+  @@unique([divisionId, policyId])
+  @@index([divisionId])
+  @@index([policyId])
+}
+
+// Company-Policy relationship (many-to-many)
+model CompanyPolicy {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  policyId  String
+  policy    Policy  @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  
+  @@unique([companyId, policyId])
+  @@index([companyId])
+  @@index([policyId])
+}
+
 // Policy controls - defines security policy requirements that applications must meet
 model PolicyControl {
   id              String              @id @default(cuid())
@@ -424,6 +477,8 @@ model PolicyControl {
   evaluationLogic String              @default("AND") // "AND" or "OR" - how to combine field checks
   isActive        Boolean             @default(true)
   displayOrder    Int                 @default(0) // Order for display in UI
+  policyId        String              // Required - all controls must belong to a policy
+  policy          Policy              @relation(fields: [policyId], references: [id], onDelete: Cascade)
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   fields          PolicyControlField[] // Field mappings for this control
@@ -431,6 +486,7 @@ model PolicyControl {
   @@index([controlId])
   @@index([isActive])
   @@index([displayOrder])
+  @@index([policyId])
 }
 
 // Policy control field mappings - defines which application fields are checked for each control

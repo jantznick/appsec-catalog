@@ -13,6 +13,7 @@ import { Modal } from '../components/ui/Modal.jsx';
 import useAuthStore from '../store/authStore.js';
 import { isClipboardAvailable, copyToClipboard } from '../utils/clipboard.js';
 import { NotesSection } from '../components/notes/NotesSection.jsx';
+import { ApplicablePoliciesView } from '../components/policy/ApplicablePoliciesView.jsx';
 
 export function CompanyDetail() {
   const { id } = useParams();
@@ -638,6 +639,13 @@ export function CompanyDetail() {
               )}
             </CardContent>
           </Card>
+
+          {/* Applicable Policies */}
+          <ApplicablePoliciesView
+            entityType="company"
+            entityId={id}
+            entityData={company}
+          />
         </div>
       </div>
 

@@ -183,6 +183,36 @@ export const api = {
   getApplicationPolicyCompliance: (applicationId) =>
     apiRequest(`/api/applications/${applicationId}/policy-compliance`),
 
+  // Policies endpoints
+  getPolicies: () =>
+    apiRequest('/api/policies'),
+
+  getPolicy: (id) =>
+    apiRequest(`/api/policies/${id}`),
+
+  createPolicy: (data) =>
+    apiRequest('/api/policies', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updatePolicy: (id, data) =>
+    apiRequest(`/api/policies/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deletePolicy: (id) =>
+    apiRequest(`/api/policies/${id}`, {
+      method: 'DELETE',
+    }),
+
+  updatePolicyOrder: (id, displayOrder) =>
+    apiRequest(`/api/policies/${id}/reorder`, {
+      method: 'PATCH',
+      body: JSON.stringify({ displayOrder }),
+    }),
+
   getDivisionStats: (id) =>
     apiRequest(`/api/divisions/${id}/stats`),
   getCompanyAverageScore: (id) =>

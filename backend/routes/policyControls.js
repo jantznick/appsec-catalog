@@ -7,11 +7,26 @@ const router = express.Router();
 // Get all policy controls (with fields) - admin only
 router.get('/', requireAuth, requireAdmin, async (req, res) => {
   try {
+    const { policyId } = req.query;
+
+    const where = {};
+    if (policyId) {
+      where.policyId = policyId;
+    }
+
     const controls = await prisma.policyControl.findMany({
+      where,
       include: {
         fields: {
           orderBy: {
             displayOrder: 'asc',
+          },
+        },
+        policy: {
+          select: {
+            id: true,
+            name: true,
+            scope: true,
           },
         },
       },
@@ -39,6 +54,13 @@ router.get('/:id', requireAuth, requireAdmin, async (req, res) => {
             displayOrder: 'asc',
           },
         },
+        policy: {
+          select: {
+            id: true,
+            name: true,
+            scope: true,
+          },
+        },
       },
     });
 
@@ -64,6 +86,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       evaluationLogic,
       isActive,
       displayOrder,
+      policyId,
       fields,
     } = req.body;
 
@@ -76,6 +99,18 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
     }
     if (!description || !description.trim()) {
       return res.status(400).json({ error: 'Control description is required' });
+    }
+    if (!policyId || !policyId.trim()) {
+      return res.status(400).json({ error: 'Policy ID is required' });
+    }
+
+    // Validate that policy exists
+    const policy = await prisma.policy.findUnique({
+      where: { id: policyId },
+    });
+
+    if (!policy) {
+      return res.status(400).json({ error: 'Policy not found' });
     }
 
     // Validate evaluation logic
@@ -95,6 +130,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
           evaluationLogic: evaluationLogic || 'AND',
           isActive: isActive !== undefined ? isActive : true,
           displayOrder: displayOrder || 0,
+          policyId: policyId.trim(),
         },
       });
 
@@ -146,6 +182,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       evaluationLogic,
       isActive,
       displayOrder,
+      policyId,
       fields,
     } = req.body;
 
@@ -158,6 +195,22 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
     }
     if (description !== undefined && (!description || !description.trim())) {
       return res.status(400).json({ error: 'Control description cannot be empty' });
+    }
+
+    // Validate policyId if provided
+    if (policyId !== undefined) {
+      if (!policyId || !policyId.trim()) {
+        return res.status(400).json({ error: 'Policy ID cannot be empty' });
+      }
+
+      // Validate that policy exists
+      const policy = await prisma.policy.findUnique({
+        where: { id: policyId },
+      });
+
+      if (!policy) {
+        return res.status(400).json({ error: 'Policy not found' });
+      }
     }
 
     // Validate evaluation logic
@@ -185,6 +238,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       if (evaluationLogic !== undefined) updateData.evaluationLogic = evaluationLogic;
       if (isActive !== undefined) updateData.isActive = isActive;
       if (displayOrder !== undefined) updateData.displayOrder = displayOrder;
+      if (policyId !== undefined) updateData.policyId = policyId.trim();
 
       await tx.policyControl.update({
         where: { id },
@@ -212,13 +266,20 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
         }
       }
 
-      // Return updated control with fields
+      // Return updated control with fields and policy
       return await tx.policyControl.findUnique({
         where: { id },
         include: {
           fields: {
             orderBy: {
               displayOrder: 'asc',
+            },
+          },
+          policy: {
+            select: {
+              id: true,
+              name: true,
+              scope: true,
             },
           },
         },

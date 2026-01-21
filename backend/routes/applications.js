@@ -750,6 +750,7 @@ router.get('/:id/policy-compliance', requireAuth, async (req, res) => {
           select: {
             id: true,
             name: true,
+            divisionId: true,
           },
         },
       },

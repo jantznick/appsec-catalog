@@ -49,12 +49,18 @@ const getOperatorsForField = (fieldPath, availableFields) => {
 
 export function PolicyControls() {
   const { isAdmin } = useAuthStore();
+  const [policies, setPolicies] = useState([]);
   const [controls, setControls] = useState([]);
   const [availableFields, setAvailableFields] = useState([]);
+  const [divisions, setDivisions] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingFields, setLoadingFields] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
   const [editingControl, setEditingControl] = useState(null);
+  const [editingPolicy, setEditingPolicy] = useState(null);
+  const [expandedPolicies, setExpandedPolicies] = useState(new Set());
   const [formData, setFormData] = useState({
     controlId: '',
     name: '',
@@ -63,29 +69,79 @@ export function PolicyControls() {
     evaluationLogic: 'AND',
     isActive: true,
     displayOrder: 0,
+    policyId: '',
     fields: [],
   });
+  const [policyFormData, setPolicyFormData] = useState({
+    name: '',
+    description: '',
+    scope: 'global',
+    isActive: true,
+    displayOrder: 0,
+    divisionIds: [],
+    companyIds: [],
+    targetingRules: null,
+    conditionalLogic: 'AND',
+    conditionalConditions: [],
+  });
   const [saving, setSaving] = useState(false);
+  const [savingPolicy, setSavingPolicy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deletingPolicy, setDeletingPolicy] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletePolicyTarget, setDeletePolicyTarget] = useState(null);
 
   useEffect(() => {
     if (isAdmin()) {
-      loadControls();
+      loadData();
       loadAvailableFields();
+      loadDivisions();
+      loadCompanies();
     }
   }, [isAdmin]);
 
-  const loadControls = async () => {
+  const loadDivisions = async () => {
+    try {
+      const data = await api.getDivisions();
+      setDivisions(data);
+    } catch (error) {
+      console.error('Failed to load divisions:', error);
+    }
+  };
+
+  const loadCompanies = async () => {
+    try {
+      const data = await api.getCompanies();
+      setCompanies(data);
+    } catch (error) {
+      console.error('Failed to load companies:', error);
+    }
+  };
+
+  const loadData = async () => {
     try {
       setLoading(true);
+      const [policiesData, controlsData] = await Promise.all([
+        api.getPolicies(),
+        api.getPolicyControls(),
+      ]);
+      setPolicies(policiesData);
+      setControls(controlsData);
+    } catch (error) {
+      toast.error('Failed to load data');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadControls = async () => {
+    try {
       const data = await api.getPolicyControls();
       setControls(data);
     } catch (error) {
       toast.error('Failed to load policy controls');
       console.error(error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -102,6 +158,227 @@ export function PolicyControls() {
     }
   };
 
+  const togglePolicy = (policyId) => {
+    const newExpanded = new Set(expandedPolicies);
+    if (newExpanded.has(policyId)) {
+      newExpanded.delete(policyId);
+    } else {
+      newExpanded.add(policyId);
+    }
+    setExpandedPolicies(newExpanded);
+  };
+
+  const handleCreatePolicy = () => {
+    setEditingPolicy(null);
+    setPolicyFormData({
+      name: '',
+      description: '',
+      scope: 'global',
+      isActive: true,
+      displayOrder: policies.length,
+      divisionIds: [],
+      companyIds: [],
+      targetingRules: null,
+      conditionalLogic: 'AND',
+      conditionalConditions: [],
+    });
+    setShowPolicyModal(true);
+  };
+
+  const handleEditPolicy = async (policy) => {
+    try {
+      const fullPolicy = await api.getPolicy(policy.id);
+      setEditingPolicy(fullPolicy);
+      
+      // Parse targeting rules if they exist
+      let parsedTargetingRules = null;
+      let conditionalLogic = 'AND';
+      let conditionalConditions = [];
+      
+      if (fullPolicy.targetingRules) {
+        try {
+          parsedTargetingRules = JSON.parse(fullPolicy.targetingRules);
+          if (parsedTargetingRules.conditions && Array.isArray(parsedTargetingRules.conditions)) {
+            conditionalConditions = parsedTargetingRules.conditions.map((cond, idx) => {
+              const fieldMetadata = getFieldMetadata(cond.fieldPath);
+              let value = cond.value;
+              
+              // Parse value if it's a string
+              if (typeof value === 'string') {
+                try {
+                  value = JSON.parse(value);
+                } catch {
+                  // Keep as string
+                }
+              }
+              
+              // For in/not_in operators, convert array to comma-separated string for editing
+              if ((cond.operator === 'in' || cond.operator === 'not_in') && Array.isArray(value)) {
+                value = value.join(', ');
+              }
+              
+              return {
+                fieldPath: cond.fieldPath,
+                operator: cond.operator,
+                value: value,
+                displayOrder: idx,
+              };
+            });
+          }
+          conditionalLogic = parsedTargetingRules.logic || 'AND';
+        } catch (e) {
+          console.error('Error parsing targeting rules:', e);
+        }
+      }
+      
+      setPolicyFormData({
+        name: fullPolicy.name,
+        description: fullPolicy.description || '',
+        scope: fullPolicy.scope,
+        isActive: fullPolicy.isActive,
+        displayOrder: fullPolicy.displayOrder || 0,
+        divisionIds: fullPolicy.divisionPolicies?.map(dp => dp.division.id) || [],
+        companyIds: fullPolicy.companyPolicies?.map(cp => cp.company.id) || [],
+        targetingRules: parsedTargetingRules,
+        conditionalLogic: conditionalLogic,
+        conditionalConditions: conditionalConditions,
+      });
+      setShowPolicyModal(true);
+    } catch (error) {
+      toast.error('Failed to load policy details');
+      console.error(error);
+    }
+  };
+
+  const handleDeletePolicy = (policy) => {
+    setDeletePolicyTarget(policy);
+  };
+
+  const confirmDeletePolicy = async () => {
+    if (!deletePolicyTarget) return;
+
+    try {
+      setDeletingPolicy(true);
+      await api.deletePolicy(deletePolicyTarget.id);
+      toast.success('Policy deleted successfully');
+      setDeletePolicyTarget(null);
+      await loadData();
+    } catch (error) {
+      toast.error(error.message || 'Failed to delete policy');
+    } finally {
+      setDeletingPolicy(false);
+    }
+  };
+
+  const handleSubmitPolicy = async (e) => {
+    e.preventDefault();
+    if (!policyFormData.name.trim()) {
+      toast.error('Policy name is required');
+      return;
+    }
+
+    try {
+      setSavingPolicy(true);
+      const payload = {
+        name: policyFormData.name.trim(),
+        description: policyFormData.description?.trim() || null,
+        scope: policyFormData.scope,
+        isActive: policyFormData.isActive,
+        displayOrder: policyFormData.displayOrder || 0,
+      };
+
+      // Only include divisionIds/companyIds if scope matches and they're not empty
+      if (policyFormData.scope === 'division') {
+        if (policyFormData.divisionIds.length === 0) {
+          toast.error('Please select at least one division for division-scoped policies');
+          return;
+        }
+        payload.divisionIds = policyFormData.divisionIds;
+      } else if (policyFormData.scope === 'company') {
+        if (policyFormData.companyIds.length === 0) {
+          toast.error('Please select at least one company for company-scoped policies');
+          return;
+        }
+        payload.companyIds = policyFormData.companyIds;
+      } else if (policyFormData.scope === 'conditional') {
+        if (policyFormData.conditionalConditions.length === 0) {
+          toast.error('Please add at least one condition for conditional-scoped policies');
+          return;
+        }
+        
+        // Validate each condition has required fields
+        for (let i = 0; i < policyFormData.conditionalConditions.length; i++) {
+          const cond = policyFormData.conditionalConditions[i];
+          if (!cond.fieldPath || !cond.fieldPath.trim()) {
+            toast.error(`Condition ${i + 1} is missing a field selection`);
+            return;
+          }
+          if (!cond.operator) {
+            toast.error(`Condition ${i + 1} is missing an operator`);
+            return;
+          }
+          // Check if value is required (not for exists/not_exists)
+          if (cond.operator !== 'exists' && cond.operator !== 'not_exists') {
+            if (cond.value === null || cond.value === undefined || cond.value === '') {
+              toast.error(`Condition ${i + 1} is missing a value`);
+              return;
+            }
+          }
+        }
+        
+        // Build targeting rules from conditions
+        const conditions = policyFormData.conditionalConditions.map(cond => {
+          let value = cond.value;
+          
+          // Convert comma-separated strings to arrays for in/not_in operators
+          if ((cond.operator === 'in' || cond.operator === 'not_in') && typeof value === 'string' && value.trim() !== '') {
+            const values = value.split(',').map(v => v.trim()).filter(v => v.length > 0);
+            value = values.length > 0 ? values : value;
+          }
+          
+          return {
+            fieldPath: cond.fieldPath,
+            operator: cond.operator,
+            value: value !== null && value !== undefined ? value : null,
+          };
+        });
+        
+        payload.targetingRules = {
+          type: 'conditional',
+          conditions: conditions,
+          logic: policyFormData.conditionalLogic || 'AND',
+        };
+      }
+
+      if (editingPolicy) {
+        await api.updatePolicy(editingPolicy.id, payload);
+        toast.success('Policy updated successfully');
+      } else {
+        await api.createPolicy(payload);
+        toast.success('Policy created successfully');
+      }
+      setShowPolicyModal(false);
+      setPolicyFormData({
+        name: '',
+        description: '',
+        scope: 'global',
+        isActive: true,
+        displayOrder: 0,
+        divisionIds: [],
+        companyIds: [],
+        targetingRules: null,
+        conditionalLogic: 'AND',
+        conditionalConditions: [],
+      });
+      setEditingPolicy(null);
+      await loadData();
+    } catch (error) {
+      toast.error(error.message || `Failed to ${editingPolicy ? 'update' : 'create'} policy`);
+    } finally {
+      setSavingPolicy(false);
+    }
+  };
+
   const handleCreate = () => {
     setEditingControl(null);
     setFormData({
@@ -112,6 +389,7 @@ export function PolicyControls() {
       evaluationLogic: 'AND',
       isActive: true,
       displayOrder: controls.length,
+      policyId: policies.length > 0 ? policies[0].id : '',
       fields: [],
     });
     setShowModal(true);
@@ -127,6 +405,7 @@ export function PolicyControls() {
       evaluationLogic: control.evaluationLogic,
       isActive: control.isActive,
       displayOrder: control.displayOrder,
+      policyId: control.policyId || (policies.length > 0 ? policies[0].id : ''),
       fields: control.fields.map(f => {
         const fieldMetadata = getFieldMetadata(f.fieldPath);
         const availableOperators = getOperatorsForField(f.fieldPath, availableFields);
@@ -173,7 +452,7 @@ export function PolicyControls() {
       await api.deletePolicyControl(deleteTarget.id);
       toast.success('Policy control deleted successfully');
       setDeleteTarget(null);
-      await loadControls();
+      await loadData();
     } catch (error) {
       toast.error(error.message || 'Failed to delete policy control');
     } finally {
@@ -370,109 +649,194 @@ export function PolicyControls() {
     <div>
       <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Policy Controls</h1>
-          <p className="text-gray-600">Manage InfoSec policy controls and field mappings</p>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Policies & Controls</h1>
+          <p className="text-gray-600">Manage policies and their InfoSec policy controls</p>
         </div>
-        <Button variant="primary" onClick={handleCreate}>
-          Create Policy Control
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleCreatePolicy}>
+            Create Policy
+          </Button>
+          <Button variant="primary" onClick={handleCreate}>
+            Create Control
+          </Button>
+        </div>
       </div>
 
-      {controls.length === 0 ? (
+      {policies.length === 0 ? (
         <Card>
           <CardContent>
             <div className="text-center py-12">
-              <p className="text-gray-500 mb-4">No policy controls found. Create your first control to get started.</p>
-              <Button variant="primary" onClick={handleCreate}>
-                Create Policy Control
-              </Button>
+              <p className="text-gray-500 mb-4">No policies found. Create a policy first, then add controls to it.</p>
             </div>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-4">
-          {controls.map((control) => (
-            <Card key={control.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <CardTitle className="text-lg">
-                        {control.controlId} - {control.name}
-                      </CardTitle>
-                      {!control.isActive && (
-                        <span className="px-2 py-1 text-xs font-medium rounded bg-gray-100 text-gray-600">
-                          Inactive
-                        </span>
-                      )}
-                      {control.category && (
-                        <span className="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">
-                          {control.category}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-gray-600 mt-1">{control.description}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEdit(control)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(control)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              {control.fields && control.fields.length > 0 && (
-                <CardContent>
-                  <div className="border-t border-gray-200 pt-4 mt-4">
-                    <span className="text-sm font-medium text-gray-700 mb-3 block">Field Mappings:</span>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {control.fields.map((field, idx) => {
-                        const fieldLabel = getFieldLabel(field.fieldPath);
-                        const operatorLabel = OPERATORS.find(op => op.value === field.operator)?.label || field.operator;
-                        const hasValue = field.value !== null && field.value !== undefined && field.value !== '';
-                        const isLast = idx === control.fields.length - 1;
-                        const showLogic = !isLast && control.evaluationLogic;
-                        
-                        return (
-                          <div key={idx} className="flex items-center gap-2">
-                            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-200 text-sm">
-                              <span className="font-medium text-gray-700">{fieldLabel}</span>
-                              <span className="text-gray-400">•</span>
-                              <span className="text-gray-600">{operatorLabel}</span>
-                              {hasValue && (
-                                <>
-                                  <span className="text-gray-400">•</span>
-                                  <span className="px-1.5 py-0.5 bg-white rounded text-gray-700 border border-gray-200 font-mono text-xs">
-                                    {String(field.value)}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                            {showLogic && (
-                              <span className="px-2 py-1 text-xs font-semibold text-gray-500 uppercase">
-                                {control.evaluationLogic}
+          {policies
+            .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+            .map((policy) => {
+              const policyControls = controls
+                .filter(c => c.policyId === policy.id)
+                .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+              const isExpanded = expandedPolicies.has(policy.id);
+              const scopeLabels = {
+                global: 'Global',
+                division: 'Division',
+                company: 'Company',
+                conditional: 'Conditional',
+              };
+
+              return (
+                <Card key={policy.id}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 flex-1">
+                        <button
+                          onClick={() => togglePolicy(policy.id)}
+                          className="flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
+                        >
+                          <span className="text-xl">
+                            {isExpanded ? '▼' : '▶'}
+                          </span>
+                          <div>
+                            <CardTitle className="text-lg">
+                              {policy.name}
+                            </CardTitle>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">
+                                {scopeLabels[policy.scope] || policy.scope}
                               </span>
+                              {!policy.isActive && (
+                                <span className="px-2 py-1 text-xs font-medium rounded bg-gray-100 text-gray-600">
+                                  Inactive
+                                </span>
+                              )}
+                              <span className="text-sm text-gray-500">
+                                {policyControls.length} control{policyControls.length !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                            {policy.description && (
+                              <p className="text-sm text-gray-600 mt-1">{policy.description}</p>
                             )}
                           </div>
-                        );
-                      })}
+                        </button>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditPolicy(policy)}
+                        >
+                          Edit Policy
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeletePolicy(policy)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          Delete
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              )}
-            </Card>
-          ))}
+                  </CardHeader>
+                  {isExpanded && (
+                    <CardContent>
+                      {policyControls.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <p className="text-sm">No controls in this policy. Create a control and assign it to this policy.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3 pt-2">
+                          {policyControls.map((control) => (
+                            <Card key={control.id} className="bg-gray-50">
+                              <CardHeader>
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-3 mb-2">
+                                      <CardTitle className="text-base">
+                                        {control.controlId} - {control.name}
+                                      </CardTitle>
+                                      {!control.isActive && (
+                                        <span className="px-2 py-1 text-xs font-medium rounded bg-gray-100 text-gray-600">
+                                          Inactive
+                                        </span>
+                                      )}
+                                      {control.category && (
+                                        <span className="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">
+                                          {control.category}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-sm text-gray-600 mt-1">{control.description}</p>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleEdit(control)}
+                                    >
+                                      Edit
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleDelete(control)}
+                                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    >
+                                      Delete
+                                    </Button>
+                                  </div>
+                                </div>
+                              </CardHeader>
+                              {control.fields && control.fields.length > 0 && (
+                                <CardContent>
+                                  <div className="border-t border-gray-200 pt-4 mt-4">
+                                    <span className="text-sm font-medium text-gray-700 mb-3 block">Field Mappings:</span>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {control.fields.map((field, idx) => {
+                                        const fieldLabel = getFieldLabel(field.fieldPath);
+                                        const operatorLabel = OPERATORS.find(op => op.value === field.operator)?.label || field.operator;
+                                        const hasValue = field.value !== null && field.value !== undefined && field.value !== '';
+                                        const isLast = idx === control.fields.length - 1;
+                                        const showLogic = !isLast && control.evaluationLogic;
+                                        
+                                        return (
+                                          <div key={idx} className="flex items-center gap-2">
+                                            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg border border-gray-200 text-sm">
+                                              <span className="font-medium text-gray-700">{fieldLabel}</span>
+                                              <span className="text-gray-400">•</span>
+                                              <span className="text-gray-600">{operatorLabel}</span>
+                                              {hasValue && (
+                                                <>
+                                                  <span className="text-gray-400">•</span>
+                                                  <span className="px-1.5 py-0.5 bg-gray-50 rounded text-gray-700 border border-gray-200 font-mono text-xs">
+                                                    {String(field.value)}
+                                                  </span>
+                                                </>
+                                              )}
+                                            </div>
+                                            {showLogic && (
+                                              <span className="px-2 py-1 text-xs font-semibold text-gray-500 uppercase">
+                                                {control.evaluationLogic}
+                                              </span>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              )}
+                            </Card>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  )}
+                </Card>
+              );
+            })}
         </div>
       )}
 
@@ -490,6 +854,7 @@ export function PolicyControls() {
               evaluationLogic: 'AND',
               isActive: true,
               displayOrder: 0,
+              policyId: policies.length > 0 ? policies[0].id : '',
               fields: [],
             });
             setEditingControl(null);
@@ -516,6 +881,15 @@ export function PolicyControls() {
                   helperText="Order for display (lower numbers appear first)"
                 />
               </div>
+
+              <Select
+                label="Policy"
+                value={formData.policyId}
+                onChange={(e) => setFormData({ ...formData, policyId: e.target.value })}
+                required
+                options={policies.map(p => ({ value: p.id, label: p.name }))}
+                helperText="Select the policy this control belongs to"
+              />
 
               <Input
                 label="Control Name"
@@ -629,7 +1003,7 @@ export function PolicyControls() {
                               onChange={(e) => handleFieldChange(index, 'fieldPath', e.target.value)}
                               required
                               options={Object.entries(categoryFields).flatMap(([category, fields]) => [
-                                { value: '', label: `--- ${category} ---`, disabled: true },
+                                { value: `__category__${category}`, label: `--- ${category} ---`, disabled: true },
                                 ...fields.map(f => ({ value: f.path, label: f.label })),
                               ])}
                               placeholder="Select field"
@@ -825,7 +1199,7 @@ export function PolicyControls() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-6 mt-6 border-t">
+            <div className="flex justify-end gap-3 pt-6 mt-6">
               <Button
                 type="button"
                 variant="secondary"
@@ -839,6 +1213,7 @@ export function PolicyControls() {
                     evaluationLogic: 'AND',
                     isActive: true,
                     displayOrder: 0,
+                    policyId: policies.length > 0 ? policies[0].id : '',
                     fields: [],
                   });
                   setEditingControl(null);
@@ -880,6 +1255,561 @@ export function PolicyControls() {
                 variant="danger"
                 onClick={confirmDelete}
                 loading={deleting}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Policy Create/Edit Modal */}
+      {showPolicyModal && (
+        <Modal
+          isOpen={showPolicyModal}
+          onClose={() => {
+            setShowPolicyModal(false);
+            setPolicyFormData({
+              name: '',
+              description: '',
+              scope: 'global',
+              isActive: true,
+              displayOrder: 0,
+              divisionIds: [],
+              companyIds: [],
+              targetingRules: null,
+            });
+            setEditingPolicy(null);
+          }}
+          title={editingPolicy ? 'Edit Policy' : 'Create Policy'}
+          size="xl"
+        >
+          <form onSubmit={handleSubmitPolicy}>
+            <div className="space-y-6 max-h-[80vh] overflow-y-auto pr-2">
+              <Input
+                label="Policy Name"
+                value={policyFormData.name}
+                onChange={(e) => setPolicyFormData({ ...policyFormData, name: e.target.value })}
+                required
+                placeholder="e.g., Global Security Baseline"
+              />
+
+              <Textarea
+                label="Description"
+                value={policyFormData.description}
+                onChange={(e) => setPolicyFormData({ ...policyFormData, description: e.target.value })}
+                rows={3}
+                placeholder="Description of what this policy covers"
+              />
+
+              <div className="grid grid-cols-2 gap-4">
+                <Select
+                  label="Scope"
+                  value={policyFormData.scope}
+                  onChange={(e) => {
+                    const newScope = e.target.value;
+                    setPolicyFormData({
+                      ...policyFormData,
+                      scope: newScope,
+                      divisionIds: newScope === 'division' ? policyFormData.divisionIds : [],
+                      companyIds: newScope === 'company' ? policyFormData.companyIds : [],
+                      targetingRules: newScope === 'conditional' ? policyFormData.targetingRules : null,
+                      conditionalLogic: newScope === 'conditional' ? policyFormData.conditionalLogic : 'AND',
+                      conditionalConditions: newScope === 'conditional' ? policyFormData.conditionalConditions : [],
+                    });
+                  }}
+                  required
+                  options={[
+                    { value: 'global', label: 'Global (All Applications)' },
+                    { value: 'division', label: 'Division' },
+                    { value: 'company', label: 'Company' },
+                    { value: 'conditional', label: 'Conditional' },
+                  ]}
+                  helperText="Who this policy applies to"
+                />
+                <Input
+                  label="Display Order"
+                  type="number"
+                  value={policyFormData.displayOrder}
+                  onChange={(e) => setPolicyFormData({ ...policyFormData, displayOrder: parseInt(e.target.value) || 0 })}
+                  helperText="Order for display (lower numbers appear first)"
+                />
+              </div>
+
+              {policyFormData.scope === 'division' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Divisions <span className="text-red-500">*</span>
+                  </label>
+                  {divisions.length === 0 ? (
+                    <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                      <p className="text-sm text-gray-500">No divisions available. Create divisions first.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-white">
+                        {divisions.map((division) => (
+                          <Checkbox
+                            key={division.id}
+                            id={`division-${division.id}`}
+                            label={division.name}
+                            checked={policyFormData.divisionIds.includes(division.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setPolicyFormData({
+                                  ...policyFormData,
+                                  divisionIds: [...policyFormData.divisionIds, division.id],
+                                });
+                              } else {
+                                setPolicyFormData({
+                                  ...policyFormData,
+                                  divisionIds: policyFormData.divisionIds.filter(id => id !== division.id),
+                                });
+                              }
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Select which divisions this policy applies to. {policyFormData.divisionIds.length > 0 && (
+                          <span className="text-green-600 font-medium">
+                            {policyFormData.divisionIds.length} selected
+                          </span>
+                        )}
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {policyFormData.scope === 'company' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Companies <span className="text-red-500">*</span>
+                  </label>
+                  {companies.length === 0 ? (
+                    <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                      <p className="text-sm text-gray-500">No companies available. Create companies first.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-white">
+                        {companies.map((company) => (
+                          <Checkbox
+                            key={company.id}
+                            id={`company-${company.id}`}
+                            label={company.name}
+                            checked={policyFormData.companyIds.includes(company.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setPolicyFormData({
+                                  ...policyFormData,
+                                  companyIds: [...policyFormData.companyIds, company.id],
+                                });
+                              } else {
+                                setPolicyFormData({
+                                  ...policyFormData,
+                                  companyIds: policyFormData.companyIds.filter(id => id !== company.id),
+                                });
+                              }
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Select which companies this policy applies to. {policyFormData.companyIds.length > 0 && (
+                          <span className="text-green-600 font-medium">
+                            {policyFormData.companyIds.length} selected
+                          </span>
+                        )}
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {policyFormData.scope === 'conditional' && (
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Conditional Rules <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600">Logic:</span>
+                      <Select
+                        value={policyFormData.conditionalLogic}
+                        onChange={(e) => setPolicyFormData({ ...policyFormData, conditionalLogic: e.target.value })}
+                        options={[
+                          { value: 'AND', label: 'AND (all conditions must pass)' },
+                          { value: 'OR', label: 'OR (at least one condition must pass)' },
+                        ]}
+                        className="w-64"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3 mb-4">
+                    {policyFormData.conditionalConditions.length === 0 ? (
+                      <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
+                        <p className="text-sm text-gray-500 mb-3">No conditions defined. Add a condition to get started.</p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setPolicyFormData({
+                              ...policyFormData,
+                              conditionalConditions: [
+                                ...policyFormData.conditionalConditions,
+                                {
+                                  fieldPath: '',
+                                  operator: 'exists',
+                                  value: null,
+                                  displayOrder: policyFormData.conditionalConditions.length,
+                                },
+                              ],
+                            });
+                          }}
+                        >
+                          Add Condition
+                        </Button>
+                      </div>
+                    ) : (
+                      policyFormData.conditionalConditions.map((condition, index) => {
+                        const fieldMetadata = getFieldMetadata(condition.fieldPath);
+                        const availableOperators = getOperatorsForField(condition.fieldPath, availableFields);
+                        const needsValue = condition.operator !== 'exists' && condition.operator !== 'not_exists';
+                        
+                        return (
+                          <Card key={index} className="bg-gray-50">
+                            <CardContent className="pt-4">
+                              <div className="flex justify-between items-start mb-4">
+                                <h4 className="text-sm font-semibold text-gray-700">Condition {index + 1}</h4>
+                                <div className="flex gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      const newConditions = [...policyFormData.conditionalConditions];
+                                      if (index > 0) {
+                                        [newConditions[index], newConditions[index - 1]] = [newConditions[index - 1], newConditions[index]];
+                                        newConditions.forEach((c, i) => { c.displayOrder = i; });
+                                        setPolicyFormData({ ...policyFormData, conditionalConditions: newConditions });
+                                      }
+                                    }}
+                                    disabled={index === 0}
+                                    title="Move up"
+                                  >
+                                    ↑
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      const newConditions = [...policyFormData.conditionalConditions];
+                                      if (index < newConditions.length - 1) {
+                                        [newConditions[index], newConditions[index + 1]] = [newConditions[index + 1], newConditions[index]];
+                                        newConditions.forEach((c, i) => { c.displayOrder = i; });
+                                        setPolicyFormData({ ...policyFormData, conditionalConditions: newConditions });
+                                      }
+                                    }}
+                                    disabled={index === policyFormData.conditionalConditions.length - 1}
+                                    title="Move down"
+                                  >
+                                    ↓
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setPolicyFormData({
+                                        ...policyFormData,
+                                        conditionalConditions: policyFormData.conditionalConditions.filter((_, i) => i !== index).map((c, i) => ({
+                                          ...c,
+                                          displayOrder: i,
+                                        })),
+                                      });
+                                    }}
+                                    className="text-red-600 hover:text-red-700"
+                                  >
+                                    Remove
+                                  </Button>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-3 gap-4">
+                                <Select
+                                  label="Field"
+                                  value={condition.fieldPath}
+                                  onChange={(e) => {
+                                    const newConditions = [...policyFormData.conditionalConditions];
+                                    const updatedCondition = {
+                                      ...newConditions[index],
+                                      fieldPath: e.target.value,
+                                    };
+                                    
+                                    // Reset operator if field changed
+                                    const fieldMeta = getFieldMetadata(e.target.value);
+                                    if (fieldMeta) {
+                                      const availableOps = getOperatorsForField(e.target.value, availableFields);
+                                      if (!availableOps.find(op => op.value === updatedCondition.operator)) {
+                                        updatedCondition.operator = availableOps[0]?.value || 'exists';
+                                        if (updatedCondition.operator === 'exists' || updatedCondition.operator === 'not_exists') {
+                                          updatedCondition.value = null;
+                                        }
+                                      }
+                                    }
+                                    
+                                    newConditions[index] = updatedCondition;
+                                    setPolicyFormData({ ...policyFormData, conditionalConditions: newConditions });
+                                  }}
+                                  required
+                                  options={Object.entries(categoryFields).flatMap(([category, fields]) => [
+                                    { value: '', label: `--- ${category} ---`, disabled: true },
+                                    ...fields.map(f => ({ value: f.path, label: f.label })),
+                                  ])}
+                                  placeholder="Select field"
+                                />
+                                <Select
+                                  label="Operator"
+                                  value={condition.operator}
+                                  onChange={(e) => {
+                                    const newConditions = [...policyFormData.conditionalConditions];
+                                    newConditions[index] = {
+                                      ...newConditions[index],
+                                      operator: e.target.value,
+                                      value: (e.target.value === 'exists' || e.target.value === 'not_exists') ? null : newConditions[index].value,
+                                    };
+                                    setPolicyFormData({ ...policyFormData, conditionalConditions: newConditions });
+                                  }}
+                                  required
+                                  options={availableOperators}
+                                />
+                                {(() => {
+                                  const valueType = fieldMetadata?.valueType || (getFieldType(condition.fieldPath) === 'number' ? 'number' : getFieldType(condition.fieldPath) === 'date' ? 'date' : 'text');
+                                  
+                                  // Dropdown for fields with valueOptions
+                                  if (valueType === 'dropdown' && fieldMetadata?.valueOptions && needsValue) {
+                                    return (
+                                      <Select
+                                        label="Value"
+                                        value={condition.value !== null && condition.value !== undefined ? String(condition.value) : ''}
+                                        onChange={(e) => {
+                                          const newConditions = [...policyFormData.conditionalConditions];
+                                          let value = e.target.value;
+                                          if (value === '') {
+                                            value = null;
+                                          } else if (fieldMetadata.fieldType === 'number') {
+                                            value = Number(value);
+                                          }
+                                          newConditions[index] = { ...newConditions[index], value };
+                                          setPolicyFormData({ ...policyFormData, conditionalConditions: newConditions });
+                                        }}
+                                        required={needsValue}
+                                        options={[
+                                          { value: '', label: 'Select value' },
+                                          ...fieldMetadata.valueOptions
+                                        ]}
+                                      />
+                                    );
+                                  }
+                                  
+                                  // Boolean dropdown
+                                  if (valueType === 'boolean' && fieldMetadata?.valueOptions && needsValue) {
+                                    return (
+                                      <Select
+                                        label="Value"
+                                        value={condition.value !== null && condition.value !== undefined ? String(condition.value) : ''}
+                                        onChange={(e) => {
+                                          const newConditions = [...policyFormData.conditionalConditions];
+                                          let value = e.target.value;
+                                          if (value === '') {
+                                            value = null;
+                                          } else {
+                                            value = value === 'true';
+                                          }
+                                          newConditions[index] = { ...newConditions[index], value };
+                                          setPolicyFormData({ ...policyFormData, conditionalConditions: newConditions });
+                                        }}
+                                        required={needsValue}
+                                        options={[
+                                          { value: '', label: 'Select value' },
+                                          ...fieldMetadata.valueOptions
+                                        ]}
+                                      />
+                                    );
+                                  }
+                                  
+                                  // Regular input
+                                  return (
+                                    <Input
+                                      label="Value"
+                                      type={valueType === 'number' ? 'number' : valueType === 'date' ? 'date' : 'text'}
+                                      value={
+                                        condition.value !== null && condition.value !== undefined
+                                          ? Array.isArray(condition.value)
+                                            ? condition.value.join(', ')
+                                            : String(condition.value)
+                                          : ''
+                                      }
+                                      onChange={(e) => {
+                                        const newConditions = [...policyFormData.conditionalConditions];
+                                        let value = e.target.value;
+                                        const fieldType = getFieldType(condition.fieldPath);
+                                        
+                                        if (fieldType === 'number') {
+                                          value = value === '' ? null : Number(value);
+                                        } else if (fieldType === 'boolean') {
+                                          if (value === 'true' || value === '1') {
+                                            value = true;
+                                          } else if (value === 'false' || value === '0') {
+                                            value = false;
+                                          } else {
+                                            value = value === '' ? null : value;
+                                          }
+                                        } else {
+                                          if (condition.operator === 'in' || condition.operator === 'not_in') {
+                                            // Keep as string for comma-separated values
+                                            value = value === '' ? null : value;
+                                          } else {
+                                            value = value === '' ? null : value;
+                                          }
+                                        }
+                                        
+                                        newConditions[index] = { ...newConditions[index], value };
+                                        setPolicyFormData({ ...policyFormData, conditionalConditions: newConditions });
+                                      }}
+                                      onBlur={(e) => {
+                                        // Convert comma-separated string to array for in/not_in operators
+                                        if (condition.operator === 'in' || condition.operator === 'not_in') {
+                                          const newConditions = [...policyFormData.conditionalConditions];
+                                          const value = e.target.value;
+                                          if (value === '') {
+                                            newConditions[index] = { ...newConditions[index], value: null };
+                                          } else {
+                                            const values = value.split(',').map(v => v.trim()).filter(v => v.length > 0);
+                                            newConditions[index] = { ...newConditions[index], value: values.length > 0 ? values : null };
+                                          }
+                                          setPolicyFormData({ ...policyFormData, conditionalConditions: newConditions });
+                                        }
+                                      }}
+                                      min={fieldMetadata?.validationRules?.min}
+                                      max={fieldMetadata?.validationRules?.max}
+                                      placeholder={
+                                        !needsValue
+                                          ? 'No value needed'
+                                          : condition.operator === 'in' || condition.operator === 'not_in'
+                                          ? 'Comma-separated values'
+                                          : 'Enter value'
+                                      }
+                                      disabled={!needsValue}
+                                    />
+                                  );
+                                })()}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })
+                    )}
+                  </div>
+                  
+                  {policyFormData.conditionalConditions.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setPolicyFormData({
+                          ...policyFormData,
+                          conditionalConditions: [
+                            ...policyFormData.conditionalConditions,
+                            {
+                              fieldPath: '',
+                              operator: 'exists',
+                              value: null,
+                              displayOrder: policyFormData.conditionalConditions.length,
+                            },
+                          ],
+                        });
+                      }}
+                    >
+                      Add Condition
+                    </Button>
+                  )}
+                  
+                  <p className="text-xs text-gray-500 mt-2">
+                    Define conditions that determine when this policy applies. All conditions must pass ({policyFormData.conditionalLogic}) for the policy to apply.
+                  </p>
+                </div>
+              )}
+
+              <Checkbox
+                id="policyIsActive"
+                label="Active"
+                checked={policyFormData.isActive}
+                onChange={(e) => setPolicyFormData({ ...policyFormData, isActive: e.target.checked })}
+                helperText="Only active policies are evaluated"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-6 mt-6">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setShowPolicyModal(false);
+                  setPolicyFormData({
+                    name: '',
+                    description: '',
+                    scope: 'global',
+                    isActive: true,
+                    displayOrder: 0,
+                    divisionIds: [],
+                    companyIds: [],
+                    targetingRules: null,
+                  });
+                  setEditingPolicy(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" loading={savingPolicy}>
+                {editingPolicy ? 'Update' : 'Create'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Delete Policy Confirmation Modal */}
+      {deletePolicyTarget && (
+        <Modal
+          isOpen={!!deletePolicyTarget}
+          onClose={() => setDeletePolicyTarget(null)}
+          title="Delete Policy"
+        >
+          <div className="space-y-4">
+            <p className="text-gray-600">
+              Are you sure you want to delete <strong>{deletePolicyTarget.name}</strong>?
+            </p>
+            <p className="text-sm text-gray-500">
+              This action cannot be undone. All controls in this policy will also be deleted.
+            </p>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button
+                variant="secondary"
+                onClick={() => setDeletePolicyTarget(null)}
+                disabled={deletingPolicy}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                onClick={confirmDeletePolicy}
+                loading={deletingPolicy}
               >
                 Delete
               </Button>

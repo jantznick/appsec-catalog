@@ -10,6 +10,7 @@ import { Textarea } from '../components/ui/Textarea.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table.jsx';
 import useAuthStore from '../store/authStore.js';
+import { ApplicablePoliciesView } from '../components/policy/ApplicablePoliciesView.jsx';
 
 export function DivisionDetail() {
   const { id } = useParams();
@@ -314,6 +315,13 @@ export function DivisionDetail() {
           )}
         </CardContent>
       </Card>
+
+      {/* Applicable Policies */}
+      <ApplicablePoliciesView
+        entityType="division"
+        entityId={id}
+        entityData={division}
+      />
 
       {/* Edit Modal */}
       {showEditModal && (
