@@ -20,6 +20,14 @@ function getStatusBadgeClasses(status) {
   return 'bg-gray-100 text-gray-800';
 }
 
+function getScoreBadgeClasses(score) {
+  const numericScore = Number(score ?? 0);
+  if (numericScore >= 80) return 'bg-green-100 text-green-800';
+  if (numericScore >= 60) return 'bg-blue-100 text-blue-800';
+  if (numericScore >= 40) return 'bg-yellow-100 text-yellow-800';
+  return 'bg-red-100 text-red-800';
+}
+
 export function Domains() {
   const { isAdmin, user } = useAuthStore();
   const [domains, setDomains] = useState([]);
@@ -171,6 +179,21 @@ export function Domains() {
         return (
           <span className={`px-2 py-1 text-xs font-medium rounded ${getStatusBadgeClasses(status)}`}>
             {status}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: 'dnsScore',
+      header: 'DNS Score',
+      cell: ({ row }) => {
+        const latestSnapshot = Array.isArray(row.original.dnsSnapshots) ? row.original.dnsSnapshots[0] : null;
+        if (!latestSnapshot || latestSnapshot.totalSecurityScore === null || latestSnapshot.totalSecurityScore === undefined) {
+          return '—';
+        }
+        return (
+          <span className={`px-2 py-1 text-xs font-medium rounded ${getScoreBadgeClasses(latestSnapshot.totalSecurityScore)}`}>
+            {latestSnapshot.totalSecurityScore}/100
           </span>
         );
       },

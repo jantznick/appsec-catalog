@@ -9,6 +9,9 @@ if [ ! -d "node_modules/.prisma/client" ]; then
   npx prisma generate
 fi
 
+echo "🔄 Ensuring Puppeteer Chrome runtime is installed..."
+npx puppeteer browsers install chrome
+
 echo "🔄 Running Prisma migrations..."
 # Use migrate deploy for production (only applies pending migrations)
 # This is safe to run multiple times - it only applies migrations that haven't been applied yet

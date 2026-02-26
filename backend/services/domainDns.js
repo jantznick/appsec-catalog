@@ -51,6 +51,16 @@ async function safeResolve(hostname, type) {
   }
 }
 
+async function safeResolveDnssec(domainName) {
+  try {
+    const records = await dns.resolveAny(domainName);
+    const dsRecords = (records || []).filter((record) => record?.type === 'DS');
+    return { records: dsRecords, error: null };
+  } catch (error) {
+    return { records: null, error };
+  }
+}
+
 function classifyChange(previousValue, currentValue) {
   const prevEmpty = previousValue == null || (Array.isArray(previousValue) && previousValue.length === 0) || previousValue === '';
   const currEmpty = currentValue == null || (Array.isArray(currentValue) && currentValue.length === 0) || currentValue === '';
@@ -58,6 +68,15 @@ function classifyChange(previousValue, currentValue) {
   if (prevEmpty && !currEmpty) return 'record_added';
   if (!prevEmpty && currEmpty) return 'record_removed';
   return 'record_changed';
+}
+
+function shouldIgnoreDnsError(type, error) {
+  if (!error) return true;
+  const message = String(error.message || '');
+  if (type === 'DNSSEC' && /rrtype/i.test(message) && /DS/i.test(message)) {
+    return true;
+  }
+  return false;
 }
 
 function getSeverityForType(recordType) {
@@ -70,7 +89,7 @@ function getSeverityForType(recordType) {
 export async function runDnsCheck(domainName) {
   const errors = [];
 
-  const [cnameLookup, aLookup, aaaaLookup, txtLookup, mxLookup, nsLookup, dmarcLookup] = await Promise.all([
+  const [cnameLookup, aLookup, aaaaLookup, txtLookup, mxLookup, nsLookup, dmarcLookup, caaLookup, dsLookup] = await Promise.all([
     safeResolve(domainName, 'CNAME'),
     safeResolve(domainName, 'A'),
     safeResolve(domainName, 'AAAA'),
@@ -78,6 +97,8 @@ export async function runDnsCheck(domainName) {
     safeResolve(domainName, 'MX'),
     safeResolve(domainName, 'NS'),
     safeResolve(`_dmarc.${domainName}`, 'TXT'),
+    safeResolve(domainName, 'CAA'),
+    safeResolveDnssec(domainName),
   ]);
 
   const cnameRecords = dedupeAndSortStrings(cnameLookup.records || []);
@@ -87,6 +108,12 @@ export async function runDnsCheck(domainName) {
   const mxRecords = normalizeMxRecords(mxLookup.records || []);
   const nsRecords = dedupeAndSortStrings(nsLookup.records || []);
   const dmarcRecords = flattenTxtRecords(dmarcLookup.records || []);
+  const caaRecords = dedupeAndSortStrings(
+    (caaLookup.records || []).map((record) => (
+      `${record.flag ?? 0} ${record.tag || 'issue'} ${record.value || ''}`.trim()
+    ))
+  );
+  const dnssecEnabled = Array.isArray(dsLookup.records) && dsLookup.records.length > 0;
 
   const spfRecord = txtRecords.find((record) => record.toLowerCase().startsWith('v=spf1')) || null;
   const dmarcRecord = dmarcRecords.find((record) => record.toLowerCase().startsWith('v=dmarc1')) || null;
@@ -109,10 +136,13 @@ export async function runDnsCheck(domainName) {
     ['MX', mxLookup.error],
     ['NS', nsLookup.error],
     ['DMARC', dmarcLookup.error],
+    ['CAA', caaLookup.error],
+    ['DNSSEC', dsLookup.error],
   ];
 
   for (const [type, error] of baseLookups) {
     if (!error) continue;
+    if (shouldIgnoreDnsError(type, error)) continue;
     if (!NON_FATAL_DNS_ERROR_CODES.has(error?.code)) {
       errors.push(`${type}: ${error.message}`);
     }
@@ -129,18 +159,24 @@ export async function runDnsCheck(domainName) {
     txtRecords,
     mxRecords,
     nsRecords,
+    caaRecords,
+    dnssecEnabled,
     spfRecord,
     dmarcRecord,
     dkimRecords: dkimResult,
   };
 }
 
-export function buildSnapshotCreateData(domainId, userId, checkResult) {
+export function buildSnapshotCreateData(domainId, userId, checkResult, scoreData = null) {
   return {
     domainId,
     createdBy: userId || null,
     status: checkResult.status,
     error: checkResult.error,
+    metadataScore: scoreData?.metadataScore ?? null,
+    dnsSecurityScore: scoreData?.dnsSecurityScore ?? null,
+    totalSecurityScore: scoreData?.totalSecurityScore ?? null,
+    scoreBreakdown: scoreData?.breakdown ? JSON.stringify(scoreData.breakdown) : null,
     cnameRecords: stringifyRecords(checkResult.cnameRecords),
     aRecords: stringifyRecords(checkResult.aRecords),
     aaaaRecords: stringifyRecords(checkResult.aaaaRecords),

@@ -3,9 +3,23 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Runtime libraries required by bundled Chrome for Puppeteer
+RUN apk add --no-cache \
+  nss \
+  freetype \
+  harfbuzz \
+  ca-certificates \
+  ttf-freefont
+
+# Keep Puppeteer browser cache in a stable location inside the image/container
+ENV PUPPETEER_CACHE_DIR=/usr/local/share/puppeteer
+
 # Install dependencies (including dev dependencies for Prisma CLI)
 COPY package*.json ./
 RUN npm ci
+
+# Install Chrome runtime used by Puppeteer snapshots
+RUN npx puppeteer browsers install chrome
 
 # Copy Prisma schema and config
 COPY prisma ./prisma/

@@ -90,6 +90,109 @@ function formatChangeValue(value) {
   return stringified.length > 120 ? `${stringified.slice(0, 117)}...` : stringified;
 }
 
+function getSecurityScoreBadgeClasses(score) {
+  const numericScore = Number(score ?? 0);
+  if (numericScore >= 80) return 'bg-green-100 text-green-800';
+  if (numericScore >= 60) return 'bg-blue-100 text-blue-800';
+  if (numericScore >= 40) return 'bg-yellow-100 text-yellow-800';
+  return 'bg-red-100 text-red-800';
+}
+
+function getProgressBarColor(score, maxScore) {
+  const pct = maxScore > 0 ? (Number(score || 0) / Number(maxScore)) * 100 : 0;
+  if (pct >= 80) return 'bg-green-500';
+  if (pct >= 60) return 'bg-blue-500';
+  if (pct >= 40) return 'bg-yellow-500';
+  return 'bg-red-500';
+}
+
+function getScoreTextColor(score) {
+  const numericScore = Number(score ?? 0);
+  if (numericScore >= 80) return 'text-green-700';
+  if (numericScore >= 60) return 'text-blue-700';
+  if (numericScore >= 40) return 'text-yellow-700';
+  return 'text-red-700';
+}
+
+const SCORE_CHECK_DETAILS = {
+  description: {
+    title: 'Domain Description',
+    securityAspect: 'Context and ownership clarity during triage and incident response.',
+    howToPass: 'Add a concise description of what this domain is for (prod, staging, app purpose, etc.).',
+  },
+  owner: {
+    title: 'Domain Owner/Contact',
+    securityAspect: 'Ensures responders know who can approve and execute DNS changes quickly.',
+    howToPass: 'Populate owner/contact details (team, alias, escalation contact).',
+  },
+  status: {
+    title: 'Domain Status',
+    securityAspect: 'Tracks lifecycle and helps avoid stale domains being treated as active assets.',
+    howToPass: 'Set status to an explicit value like active, parked, or deprecated.',
+  },
+  spf: {
+    title: 'SPF Policy',
+    securityAspect: 'Reduces spoofed mail by defining authorized senders.',
+    howToPass: 'Publish a TXT SPF policy that starts with v=spf1 and reflects valid mail senders.',
+  },
+  dmarc: {
+    title: 'DMARC Policy',
+    securityAspect: 'Adds policy and reporting for SPF/DKIM alignment failures.',
+    howToPass: 'Publish a _dmarc TXT record starting with v=DMARC1 and a policy (p=none/quarantine/reject).',
+  },
+  dkim: {
+    title: 'DKIM Selectors',
+    securityAspect: 'Authenticates message integrity and sender domain alignment.',
+    howToPass: 'Publish at least one valid DKIM selector TXT record for your active mail provider.',
+  },
+  mxHygiene: {
+    title: 'Email Hygiene Gate',
+    securityAspect: 'Domains that receive mail should enforce SPF + DMARC controls.',
+    howToPass: 'If MX exists, ensure SPF and DMARC are both configured and valid.',
+  },
+  caa: {
+    title: 'CAA Restrictions',
+    securityAspect: 'Limits which certificate authorities can issue certs for your domain.',
+    howToPass: 'Add CAA records (for example issue/issuewild) for approved certificate authorities.',
+  },
+  dnssec: {
+    title: 'DNSSEC',
+    securityAspect: 'Protects DNS integrity by validating DNS responses against signed records.',
+    howToPass: 'Enable DNSSEC with your DNS provider and publish DS records at your registrar.',
+  },
+};
+
+function getCheckOutcomeText(check) {
+  if (!check) return '';
+  if (check.passed) {
+    const passedTextById = {
+      description: 'Description is provided',
+      owner: 'Owner/contact is provided',
+      status: 'Status is explicitly set',
+      spf: 'SPF policy is configured',
+      dmarc: 'DMARC policy is configured',
+      dkim: 'DKIM selectors are published',
+      mxHygiene: 'Email hygiene requirements are met',
+      caa: 'CAA restrictions are configured',
+      dnssec: 'DNSSEC is detected',
+    };
+    return passedTextById[check.id] || (check.label ? `${check.label} is configured` : 'Configured correctly');
+  }
+  const fallback = 'Configuration missing';
+  const missingTextById = {
+    description: 'Description is missing',
+    owner: 'Owner/contact is missing',
+    status: 'Status is still unknown',
+    spf: 'SPF policy is missing',
+    dmarc: 'DMARC policy is missing',
+    dkim: 'No DKIM selectors found',
+    mxHygiene: 'MX exists without SPF + DMARC',
+    caa: 'CAA restrictions are missing',
+    dnssec: 'DNSSEC is not detected',
+  };
+  return missingTextById[check.id] || fallback;
+}
+
 const DNS_RECORD_TYPES = ['A', 'AAAA', 'CNAME', 'TXT', 'MX', 'NS', 'SPF', 'DMARC', 'DKIM'];
 
 function getDnsRecordValues(recordType, snapshot, parsed) {
@@ -146,6 +249,7 @@ export function DomainDetail() {
   const [loadingWebSnapshots, setLoadingWebSnapshots] = useState(false);
   const [runningWebSnapshot, setRunningWebSnapshot] = useState(false);
   const [selectedWebSnapshot, setSelectedWebSnapshot] = useState(null);
+  const [selectedScoreCheck, setSelectedScoreCheck] = useState(null);
   const [selectedDnsSnapshotId, setSelectedDnsSnapshotId] = useState(null);
   const [selectedDnsRecordType, setSelectedDnsRecordType] = useState('A');
   const [formData, setFormData] = useState({
@@ -207,7 +311,7 @@ export function DomainDetail() {
       setOriginalFormData(formData);
       setHasUnsavedChanges(false);
       setIsEditing(false);
-      await loadDomain();
+      await Promise.all([loadDomain(), loadDnsData()]);
     } catch (error) {
       toast.error(error.message || 'Failed to update domain metadata');
       console.error(error);
@@ -315,6 +419,9 @@ export function DomainDetail() {
 
   const latestSnapshot = dnsSnapshots[0] || null;
   const selectedDnsSnapshot = dnsSnapshots.find((snapshot) => snapshot.id === selectedDnsSnapshotId) || null;
+  const latestScoreBreakdown = parseSerializedValue(latestSnapshot?.scoreBreakdown, null);
+  const latestMetadataChecks = latestScoreBreakdown?.metadata?.checks || [];
+  const latestDnsChecks = latestScoreBreakdown?.dns?.checks || [];
 
   if (loading) {
     return <LoadingPage message="Loading domain..." />;
@@ -373,110 +480,211 @@ export function DomainDetail() {
 
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Domain Metadata</CardTitle>
+          <CardTitle>Domain Security Score</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <div
-              onClick={!isEditing && isAdmin() ? startEditing : undefined}
-              className="p-2 text-left"
-            >
-              <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Domain Name</p>
-              {isEditing ? (
-                <input
-                  value={formData.name}
-                  onChange={(e) => updateFormField('name', e.target.value)}
-                  placeholder="example.com"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              ) : (
-                <p className="text-gray-900">{domain.name || '—'}</p>
-              )}
-            </div>
+          {latestSnapshot && latestSnapshot.totalSecurityScore !== null && latestSnapshot.totalSecurityScore !== undefined ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="bg-white border border-gray-200 rounded-lg p-3 md:col-span-1">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Current DNS Security Score</p>
+                  <p className={`text-3xl font-bold mt-1 ${getScoreTextColor(latestSnapshot.totalSecurityScore)}`}>
+                    {latestSnapshot.totalSecurityScore}
+                    <span className="text-base font-medium text-gray-500">/100</span>
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Based on latest check: {new Date(latestSnapshot.checkedAt).toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-white border border-gray-200 rounded-lg p-3 md:col-span-2 space-y-2">
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-gray-600">Metadata completeness</span>
+                      <span className="font-medium text-gray-800">{latestSnapshot.metadataScore ?? 0}/50</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div
+                        className={`h-2.5 rounded-full ${getProgressBarColor(latestSnapshot.metadataScore, 50)}`}
+                        style={{ width: `${Math.min(100, ((latestSnapshot.metadataScore ?? 0) / 50) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-gray-600">DNS security checks</span>
+                      <span className="font-medium text-gray-800">{latestSnapshot.dnsSecurityScore ?? 0}/50</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div
+                        className={`h-2.5 rounded-full ${getProgressBarColor(latestSnapshot.dnsSecurityScore, 50)}`}
+                        style={{ width: `${Math.min(100, ((latestSnapshot.dnsSecurityScore ?? 0) / 50) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-            <div
-              onClick={!isEditing && isAdmin() ? startEditing : undefined}
-              className="p-2 text-left"
-            >
-              <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Owner</p>
-              {isEditing ? (
-                <input
-                  value={formData.owner}
-                  onChange={(e) => updateFormField('owner', e.target.value)}
-                  placeholder="Team contacts, email aliases, or owner notes"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              ) : (
-                <p className="text-gray-900">{domain.owner || '—'}</p>
-              )}
-            </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="bg-white border border-gray-200 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Metadata Checks</p>
+                  <div className="space-y-1.5">
+                    {latestMetadataChecks.map((check) => (
+                      <button
+                        key={`top-score-meta-${check.id}`}
+                        type="button"
+                        onClick={() => setSelectedScoreCheck({ ...check, section: 'Metadata' })}
+                        className="w-full text-left flex items-center justify-between text-sm p-2 rounded hover:bg-gray-50"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${check.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {check.passed ? 'Pass' : 'Fail'}
+                          </span>
+                          <span className="text-gray-800">{getCheckOutcomeText(check)}</span>
+                        </div>
+                        <span className="text-xs text-gray-500">{check.passed ? '+info' : 'Fix needed'}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            <div
-              onClick={!isEditing && isAdmin() ? startEditing : undefined}
-              className="p-2 text-left"
-            >
-              <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Status</p>
-              {isEditing ? (
-                <select
-                  value={formData.status}
-                  onChange={(e) => updateFormField('status', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="unknown">unknown</option>
-                  <option value="active">active</option>
-                  <option value="parked">parked</option>
-                  <option value="deprecated">deprecated</option>
-                </select>
-              ) : (
-                <span className={`px-2 py-1 text-xs font-medium rounded ${getStatusBadgeClasses(domain.status)}`}>
-                  {domain.status || 'unknown'}
-                </span>
-              )}
+                <div className="bg-white border border-gray-200 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">DNS Checks</p>
+                  <div className="space-y-1.5">
+                    {latestDnsChecks.map((check) => (
+                      <button
+                        key={`top-score-dns-${check.id}`}
+                        type="button"
+                        onClick={() => setSelectedScoreCheck({ ...check, section: 'DNS' })}
+                        className="w-full text-left flex items-center justify-between text-sm p-2 rounded hover:bg-gray-50"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${check.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {check.passed ? 'Pass' : 'Fail'}
+                          </span>
+                          <span className="text-gray-800">{getCheckOutcomeText(check)}</span>
+                        </div>
+                        <span className="text-xs text-gray-500">{check.passed ? `+${check.points} pts` : `0/${check.points} pts`}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
-
-            <div
-              onClick={!isEditing && apexDomainRecord?.id ? () => navigate(`/domains/${apexDomainRecord.id}`) : undefined}
-              className={!isEditing && apexDomainRecord?.id ? 'p-2 text-left cursor-pointer' : 'p-2 text-left'}
-            >
-              <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Apex Domain Group</p>
-              <p className={apexDomainRecord?.id ? 'text-blue-600' : 'text-gray-900'}>
-                {domain.apexDomain || '—'}
-              </p>
-            </div>
-
-            <div className="p-2 text-left">
-              <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Updated</p>
-              <p className="text-gray-900">
-                {domain.updatedAt ? new Date(domain.updatedAt).toLocaleString() : '—'}
-              </p>
-            </div>
-
-            <div
-              onClick={!isEditing && isAdmin() ? startEditing : undefined}
-              className="md:col-span-2 p-2 text-left"
-            >
-              <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Description</p>
-              {isEditing ? (
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => updateFormField('description', e.target.value)}
-                  placeholder="Add optional context for this domain"
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
-                />
-              ) : (
-                <p className="text-gray-900 whitespace-pre-wrap">{domain.description || 'No description provided'}</p>
-              )}
-            </div>
-          </div>
+          ) : (
+            <p className="text-sm text-gray-500">No DNS score available yet. Run a DNS check to generate scoring.</p>
+          )}
         </CardContent>
       </Card>
 
       <Tabs className="mb-6" defaultTab={0}>
+        <Tab>Metadata</Tab>
         <Tab>Related Domains</Tab>
         <Tab>DNS Info</Tab>
         <Tab>Web Snapshots</Tab>
         <Tab>Applications</Tab>
+
+        <TabPanel>
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Domain Metadata</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div
+                  onClick={!isEditing && isAdmin() ? startEditing : undefined}
+                  className="p-2 text-left"
+                >
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Domain Name</p>
+                  {isEditing ? (
+                    <input
+                      value={formData.name}
+                      onChange={(e) => updateFormField('name', e.target.value)}
+                      placeholder="example.com"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  ) : (
+                    <p className="text-gray-900">{domain.name || '—'}</p>
+                  )}
+                </div>
+
+                <div
+                  onClick={!isEditing && isAdmin() ? startEditing : undefined}
+                  className="p-2 text-left"
+                >
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Owner</p>
+                  {isEditing ? (
+                    <input
+                      value={formData.owner}
+                      onChange={(e) => updateFormField('owner', e.target.value)}
+                      placeholder="Team contacts, email aliases, or owner notes"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  ) : (
+                    <p className="text-gray-900">{domain.owner || '—'}</p>
+                  )}
+                </div>
+
+                <div
+                  onClick={!isEditing && isAdmin() ? startEditing : undefined}
+                  className="p-2 text-left"
+                >
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Status</p>
+                  {isEditing ? (
+                    <select
+                      value={formData.status}
+                      onChange={(e) => updateFormField('status', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="unknown">unknown</option>
+                      <option value="active">active</option>
+                      <option value="parked">parked</option>
+                      <option value="deprecated">deprecated</option>
+                    </select>
+                  ) : (
+                    <span className={`px-2 py-1 text-xs font-medium rounded ${getStatusBadgeClasses(domain.status)}`}>
+                      {domain.status || 'unknown'}
+                    </span>
+                  )}
+                </div>
+
+                <div
+                  onClick={!isEditing && apexDomainRecord?.id ? () => navigate(`/domains/${apexDomainRecord.id}`) : undefined}
+                  className={!isEditing && apexDomainRecord?.id ? 'p-2 text-left cursor-pointer' : 'p-2 text-left'}
+                >
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Apex Domain Group</p>
+                  <p className={apexDomainRecord?.id ? 'text-blue-600' : 'text-gray-900'}>
+                    {domain.apexDomain || '—'}
+                  </p>
+                </div>
+
+                <div className="p-2 text-left">
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Updated</p>
+                  <p className="text-gray-900">
+                    {domain.updatedAt ? new Date(domain.updatedAt).toLocaleString() : '—'}
+                  </p>
+                </div>
+
+                <div
+                  onClick={!isEditing && isAdmin() ? startEditing : undefined}
+                  className="md:col-span-2 p-2 text-left"
+                >
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Description</p>
+                  {isEditing ? (
+                    <textarea
+                      value={formData.description}
+                      onChange={(e) => updateFormField('description', e.target.value)}
+                      placeholder="Add optional context for this domain"
+                      rows={4}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+                    />
+                  ) : (
+                    <p className="text-gray-900 whitespace-pre-wrap">{domain.description || 'No description provided'}</p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabPanel>
 
         <TabPanel>
           <Card className="mb-6">
@@ -656,6 +864,11 @@ export function DomainDetail() {
                                   }`}>
                                     {snapshot.status}
                                   </span>
+                                  {snapshot.totalSecurityScore !== null && snapshot.totalSecurityScore !== undefined && (
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${getSecurityScoreBadgeClasses(snapshot.totalSecurityScore)}`}>
+                                      Score {snapshot.totalSecurityScore}/100
+                                    </span>
+                                  )}
                                   {snapshotChanges.length > 0 && (
                                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">
                                       {snapshotChanges.length} change{snapshotChanges.length !== 1 ? 's' : ''}
@@ -981,6 +1194,49 @@ export function DomainDetail() {
           </div>
         </div>
       )}
+
+      <Modal
+        isOpen={!!selectedScoreCheck}
+        onClose={() => setSelectedScoreCheck(null)}
+        title={selectedScoreCheck ? `${selectedScoreCheck.section} Check Details` : 'Check Details'}
+        size="md"
+        footer={
+          <Button variant="secondary" onClick={() => setSelectedScoreCheck(null)}>
+            Close
+          </Button>
+        }
+      >
+        {selectedScoreCheck && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${selectedScoreCheck.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                {selectedScoreCheck.passed ? 'Pass' : 'Fail'}
+              </span>
+              <p className="text-sm text-gray-800">{getCheckOutcomeText(selectedScoreCheck)}</p>
+            </div>
+
+            <div className="rounded border border-gray-200 bg-gray-50 p-3">
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Security Aspect</p>
+              <p className="text-sm text-gray-800 mt-1">
+                {SCORE_CHECK_DETAILS[selectedScoreCheck.id]?.securityAspect || 'This check validates baseline domain security hygiene.'}
+              </p>
+            </div>
+
+            <div className="rounded border border-blue-200 bg-blue-50 p-3">
+              <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">How To Pass</p>
+              <p className="text-sm text-blue-900 mt-1">
+                {SCORE_CHECK_DETAILS[selectedScoreCheck.id]?.howToPass || selectedScoreCheck.recommendation || 'Apply the recommended configuration and rerun DNS check.'}
+              </p>
+            </div>
+
+            {selectedScoreCheck.points !== undefined && (
+              <p className="text-xs text-gray-500">
+                Scoring impact: {selectedScoreCheck.passed ? `+${selectedScoreCheck.points} points` : `0/${selectedScoreCheck.points} points`}
+              </p>
+            )}
+          </div>
+        )}
+      </Modal>
 
       <Modal
         isOpen={!!selectedWebSnapshot}

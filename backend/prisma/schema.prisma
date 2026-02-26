@@ -267,6 +267,10 @@ model DomainDnsSnapshot {
   checkedAt     DateTime @default(now())
   status        String   // ok, warning, error
   error         String?  @db.Text
+  metadataScore Int?
+  dnsSecurityScore Int?
+  totalSecurityScore Int?
+  scoreBreakdown String? @db.Text
   cnameRecords  String?  @db.Text
   aRecords      String?  @db.Text
   aaaaRecords   String?  @db.Text

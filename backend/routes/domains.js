@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { getApexDomain } from '../utils/domainApex.js';
 import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { runDnsCheck, buildSnapshotCreateData, detectDnsChanges } from '../services/domainDns.js';
+import { buildDomainDnsScore, recomputeSnapshotScoreForMetadata } from '../services/domainDnsScoring.js';
 import { runDomainWebSnapshot, enforceDomainWebSnapshotRetention } from '../services/domainSnapshot.js';
 
 const router = express.Router();
@@ -22,6 +23,29 @@ function serializeWebSnapshot(snapshot, req) {
     ...snapshot,
     screenshotUrl: snapshot.screenshotPath ? `${baseUrl}${snapshot.screenshotPath}` : null,
   };
+}
+
+function isDsRrtypeResolverIssue(messagePart) {
+  return /rrtype/i.test(messagePart) && /DS/i.test(messagePart);
+}
+
+function isOnlyNonActionableDnsWarning(errorMessage) {
+  if (!errorMessage || typeof errorMessage !== 'string') return false;
+  const parts = errorMessage.split('; ').map((part) => part.trim()).filter(Boolean);
+  if (parts.length === 0) return false;
+  return parts.every((part) => isDsRrtypeResolverIssue(part));
+}
+
+function normalizeDnsSnapshotStatus(snapshot) {
+  if (!snapshot) return snapshot;
+  if (snapshot.status === 'warning' && isOnlyNonActionableDnsWarning(snapshot.error)) {
+    return {
+      ...snapshot,
+      status: 'ok',
+      error: null,
+    };
+  }
+  return snapshot;
 }
 
 function deriveDomainRelationships(targetDomain, relatedDomains) {
@@ -97,6 +121,16 @@ router.get('/', requireAuth, async (req, res) => {
           select: {
             id: true,
             name: true,
+          },
+        },
+        dnsSnapshots: {
+          orderBy: { checkedAt: 'desc' },
+          take: 1,
+          select: {
+            totalSecurityScore: true,
+            metadataScore: true,
+            dnsSecurityScore: true,
+            checkedAt: true,
           },
         },
         _count: {
@@ -294,6 +328,7 @@ router.post('/:id/check-dns', requireAuth, requireAdmin, async (req, res) => {
 
     const { domain } = access;
     const checkResult = await runDnsCheck(domain.name);
+    const scoreData = buildDomainDnsScore(domain, checkResult);
 
     const previousSnapshot = await prisma.domainDnsSnapshot.findFirst({
       where: { domainId: domain.id },
@@ -301,7 +336,7 @@ router.post('/:id/check-dns', requireAuth, requireAdmin, async (req, res) => {
     });
 
     const snapshot = await prisma.domainDnsSnapshot.create({
-      data: buildSnapshotCreateData(domain.id, req.session.userId, checkResult),
+      data: buildSnapshotCreateData(domain.id, req.session.userId, checkResult, scoreData),
     });
 
     const changes = detectDnsChanges(previousSnapshot, snapshot);
@@ -322,6 +357,11 @@ router.post('/:id/check-dns', requireAuth, requireAdmin, async (req, res) => {
     res.status(201).json({
       snapshot,
       changesDetected: changes.length,
+      score: {
+        totalSecurityScore: scoreData.totalSecurityScore,
+        metadataScore: scoreData.metadataScore,
+        dnsSecurityScore: scoreData.dnsSecurityScore,
+      },
     });
   } catch (error) {
     console.error('Error running DNS check:', error);
@@ -344,7 +384,7 @@ router.get('/:id/dns-snapshots', requireAuth, async (req, res) => {
       take: 50,
     });
 
-    res.json(snapshots);
+    res.json(snapshots.map(normalizeDnsSnapshotStatus));
   } catch (error) {
     console.error('Error fetching DNS snapshots:', error);
     res.status(500).json({ error: 'Failed to fetch DNS snapshots' });
@@ -502,6 +542,24 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
         },
       },
     });
+
+    const latestDnsSnapshot = await prisma.domainDnsSnapshot.findFirst({
+      where: { domainId: id },
+      orderBy: { checkedAt: 'desc' },
+    });
+
+    if (latestDnsSnapshot) {
+      const refreshedScore = recomputeSnapshotScoreForMetadata(updatedDomain, latestDnsSnapshot);
+      await prisma.domainDnsSnapshot.update({
+        where: { id: latestDnsSnapshot.id },
+        data: {
+          metadataScore: refreshedScore.metadataScore,
+          dnsSecurityScore: refreshedScore.dnsSecurityScore,
+          totalSecurityScore: refreshedScore.totalSecurityScore,
+          scoreBreakdown: JSON.stringify(refreshedScore.breakdown),
+        },
+      });
+    }
 
     res.json(updatedDomain);
   } catch (error) {
