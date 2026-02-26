@@ -22,3 +22,15 @@ A simple, web application designed to serve as a central hub for managing a mult
 - **Database**: PostgreSQL
 - **ORM**: Prisma
 - **Deployment**: docker compose 
+
+## Domain Web Snapshot Runtime (Puppeteer)
+
+Domain web snapshots use Puppeteer on the backend. In some environments, you must install the Chrome runtime manually.
+
+From `backend/`:
+
+```bash
+npx puppeteer browsers install chrome
+```
+
+If snapshots fail with a "Could not find Chrome" error, run the command above and restart the backend service.

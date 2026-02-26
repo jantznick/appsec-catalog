@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
+import { Tabs, Tab, TabPanel } from '../components/ui/Tabs.jsx';
 import useAuthStore from '../store/authStore.js';
 
 function getStatusBadgeClasses(status) {
@@ -471,466 +472,481 @@ export function DomainDetail() {
         </CardContent>
       </Card>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Related Domains ({relatedDomains.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
-              {relationships.isApexDomain ? (
-                <>
-                  <p className="font-medium text-gray-900 mb-1">This is the apex domain.</p>
-                  <p>
-                    {relationships.children?.length > 0
-                      ? `Detected ${relationships.children.length} related subdomain${relationships.children.length !== 1 ? 's' : ''}.`
-                      : 'No related subdomains detected yet.'}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="font-medium text-gray-900 mb-1">Parent apex domain</p>
-                  {relationships.parent ? (
-                    <Link to={`/domains/${relationships.parent.id}`} className="text-blue-600 hover:text-blue-700">
-                      {relationships.parent.name}
-                    </Link>
+      <Tabs className="mb-6" defaultTab={0}>
+        <Tab>Related Domains</Tab>
+        <Tab>DNS Info</Tab>
+        <Tab>Web Snapshots</Tab>
+        <Tab>Applications</Tab>
+
+        <TabPanel>
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Related Domains ({relatedDomains.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                  {relationships.isApexDomain ? (
+                    <>
+                      <p className="font-medium text-gray-900 mb-1">This is the apex domain.</p>
+                      <p>
+                        {relationships.children?.length > 0
+                          ? `Detected ${relationships.children.length} related subdomain${relationships.children.length !== 1 ? 's' : ''}.`
+                          : 'No related subdomains detected yet.'}
+                      </p>
+                    </>
                   ) : (
-                    <p>No apex domain record exists yet for this group.</p>
+                    <>
+                      <p className="font-medium text-gray-900 mb-1">Parent apex domain</p>
+                      {relationships.parent ? (
+                        <Link to={`/domains/${relationships.parent.id}`} className="text-blue-600 hover:text-blue-700">
+                          {relationships.parent.name}
+                        </Link>
+                      ) : (
+                        <p>No apex domain record exists yet for this group.</p>
+                      )}
+                    </>
                   )}
-                </>
-              )}
-            </div>
+                </div>
 
-            {relatedDomains.length > 0 && (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Domain</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Applications</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Owner</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {relatedDomains.map((relatedDomain) => (
-                      <tr key={relatedDomain.id}>
-                        <td className="px-4 py-2 text-sm text-gray-900">
-                          {relatedDomain.id === domain.id ? (
-                            <span className="font-semibold text-blue-700">{relatedDomain.name}</span>
-                          ) : (
-                            <Link to={`/domains/${relatedDomain.id}`} className="text-blue-600 hover:text-blue-700">
-                              {relatedDomain.name}
-                            </Link>
-                          )}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-900">
-                          {relatedDomain._count?.applicationDomains || 0}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{relatedDomain.owner || '—'}</td>
-                        <td className="px-4 py-2 text-sm">
-                          <span className={`px-2 py-1 text-xs font-medium rounded ${getStatusBadgeClasses(relatedDomain.status)}`}>
-                            {relatedDomain.status || 'unknown'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {relatedDomains.length > 0 && (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Domain</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Applications</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Owner</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {relatedDomains.map((relatedDomain) => (
+                          <tr key={relatedDomain.id}>
+                            <td className="px-4 py-2 text-sm text-gray-900">
+                              {relatedDomain.id === domain.id ? (
+                                <span className="font-semibold text-blue-700">{relatedDomain.name}</span>
+                              ) : (
+                                <Link to={`/domains/${relatedDomain.id}`} className="text-blue-600 hover:text-blue-700">
+                                  {relatedDomain.name}
+                                </Link>
+                              )}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-900">
+                              {relatedDomain._count?.applicationDomains || 0}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{relatedDomain.owner || '—'}</td>
+                            <td className="px-4 py-2 text-sm">
+                              <span className={`px-2 py-1 text-xs font-medium rounded ${getStatusBadgeClasses(relatedDomain.status)}`}>
+                                {relatedDomain.status || 'unknown'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </TabPanel>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>DNS Checks</CardTitle>
-            {isAdmin() && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRunDnsCheck}
-                loading={runningDnsCheck}
-              >
-                Run DNS Check
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loadingDns ? (
-            <div className="py-4">
-              <LoadingSpinner size="md" />
-              <p className="text-sm text-gray-500 text-center mt-2">Loading DNS history...</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {latestSnapshot ? (
-                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                  <p className="text-sm font-medium text-gray-900">
-                    Latest check: {new Date(latestSnapshot.checkedAt).toLocaleString()}
-                  </p>
-                  <p className="text-sm text-gray-700 mt-1">
-                    Status: <span className="font-medium">{latestSnapshot.status}</span>
-                    {latestSnapshot.error ? ` • ${latestSnapshot.error}` : ''}
-                  </p>
+        <TabPanel>
+          <Card className="mb-6">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>DNS Checks</CardTitle>
+                {isAdmin() && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRunDnsCheck}
+                    loading={runningDnsCheck}
+                  >
+                    Run DNS Check
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingDns ? (
+                <div className="py-4">
+                  <LoadingSpinner size="md" />
+                  <p className="text-sm text-gray-500 text-center mt-2">Loading DNS history...</p>
                 </div>
               ) : (
-                <p className="text-sm text-gray-500">No DNS checks run yet.</p>
-              )}
+                <div className="space-y-4">
+                  {latestSnapshot ? (
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                      <p className="text-sm font-medium text-gray-900">
+                        Latest check: {new Date(latestSnapshot.checkedAt).toLocaleString()}
+                      </p>
+                      <p className="text-sm text-gray-700 mt-1">
+                        Status: <span className="font-medium">{latestSnapshot.status}</span>
+                        {latestSnapshot.error ? ` • ${latestSnapshot.error}` : ''}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">No DNS checks run yet.</p>
+                  )}
 
-              {dnsSnapshots.length > 0 && (
-                <div className="space-y-2">
-                  {dnsSnapshots.slice(0, 10).map((snapshot) => {
-                    const isOpen = selectedDnsSnapshot?.id === snapshot.id;
-                    const snapshotChanges = dnsChangesBySnapshotId[snapshot.id] || [];
-                    const changedRecordTypes = [...new Set(snapshotChanges.map((change) => change.recordType))];
-                    const changeCountByRecordType = snapshotChanges.reduce((acc, change) => {
-                      acc[change.recordType] = (acc[change.recordType] || 0) + 1;
-                      return acc;
-                    }, {});
-                    const parsedSnapshotRecords = {
-                      a: parseSerializedRecords(snapshot.aRecords),
-                      aaaa: parseSerializedRecords(snapshot.aaaaRecords),
-                      cname: parseSerializedRecords(snapshot.cnameRecords),
-                      txt: parseSerializedRecords(snapshot.txtRecords),
-                      mx: parseSerializedRecords(snapshot.mxRecords),
-                      ns: parseSerializedRecords(snapshot.nsRecords),
-                      dkim: parseSerializedValue(snapshot.dkimRecords, {}),
-                    };
-                    const snapshotRecordValues = getDnsRecordValues(
-                      selectedDnsRecordType,
-                      snapshot,
-                      parsedSnapshotRecords
-                    );
-                    const selectedTypeChanges = snapshotChanges
-                      .filter((change) => change.recordType === selectedDnsRecordType)
-                      .map((change) => ({
-                        ...change,
-                        parsedDetails: parseChangeDetails(change.details),
-                      }));
+                  {dnsSnapshots.length > 0 && (
+                    <div className="space-y-2">
+                      {dnsSnapshots.slice(0, 10).map((snapshot) => {
+                        const isOpen = selectedDnsSnapshot?.id === snapshot.id;
+                        const snapshotChanges = dnsChangesBySnapshotId[snapshot.id] || [];
+                        const changedRecordTypes = [...new Set(snapshotChanges.map((change) => change.recordType))];
+                        const changeCountByRecordType = snapshotChanges.reduce((acc, change) => {
+                          acc[change.recordType] = (acc[change.recordType] || 0) + 1;
+                          return acc;
+                        }, {});
+                        const parsedSnapshotRecords = {
+                          a: parseSerializedRecords(snapshot.aRecords),
+                          aaaa: parseSerializedRecords(snapshot.aaaaRecords),
+                          cname: parseSerializedRecords(snapshot.cnameRecords),
+                          txt: parseSerializedRecords(snapshot.txtRecords),
+                          mx: parseSerializedRecords(snapshot.mxRecords),
+                          ns: parseSerializedRecords(snapshot.nsRecords),
+                          dkim: parseSerializedValue(snapshot.dkimRecords, {}),
+                        };
+                        const snapshotRecordValues = getDnsRecordValues(
+                          selectedDnsRecordType,
+                          snapshot,
+                          parsedSnapshotRecords
+                        );
+                        const selectedTypeChanges = snapshotChanges
+                          .filter((change) => change.recordType === selectedDnsRecordType)
+                          .map((change) => ({
+                            ...change,
+                            parsedDetails: parseChangeDetails(change.details),
+                          }));
 
-                    return (
-                      <div
-                        key={snapshot.id}
-                        onClick={() => {
-                          setSelectedDnsSnapshotId((currentId) => (
-                            currentId === snapshot.id ? null : snapshot.id
-                          ));
-                        }}
-                        className={`p-3 rounded border cursor-pointer transition-all ${
-                          isOpen
-                            ? 'border-blue-500 bg-blue-50'
-                            : snapshotChanges.length > 0
-                            ? 'border-amber-300 bg-amber-50/40 hover:bg-amber-50/60'
-                            : 'border-gray-200 bg-white hover:bg-gray-50'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <span className="text-xs text-gray-500">
-                                {isOpen ? '▼' : '▶'}
-                              </span>
-                              <span className="text-sm font-medium text-gray-900">
-                                {new Date(snapshot.checkedAt).toLocaleString()}
-                              </span>
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
-                                snapshot.status === 'ok'
-                                  ? 'bg-green-100 text-green-800'
-                                  : snapshot.status === 'warning'
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-red-100 text-red-800'
-                              }`}>
-                                {snapshot.status}
-                              </span>
-                              {snapshotChanges.length > 0 && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">
-                                  {snapshotChanges.length} change{snapshotChanges.length !== 1 ? 's' : ''}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">A {getRecordCount(snapshot.aRecords)}</span>
-                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">AAAA {getRecordCount(snapshot.aaaaRecords)}</span>
-                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">CNAME {getRecordCount(snapshot.cnameRecords)}</span>
-                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">TXT {getRecordCount(snapshot.txtRecords)}</span>
-                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">MX {getRecordCount(snapshot.mxRecords)}</span>
-                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">NS {getRecordCount(snapshot.nsRecords)}</span>
-                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">SPF {getSingleRecordCount(snapshot.spfRecord)}</span>
-                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">DMARC {getSingleRecordCount(snapshot.dmarcRecord)}</span>
-                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">DKIM {getDkimRecordCount(snapshot.dkimRecords)}</span>
-                            </div>
-                            {snapshotChanges.length > 0 && (
-                              <p className="text-xs text-amber-800 mt-2">
-                                Changed: {changedRecordTypes.join(', ')}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        {isOpen && (
-                          <div className="mt-3 pt-3 border-t border-gray-200 space-y-3" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-between">
-                              <h4 className="text-sm font-semibold text-gray-700">Record Details</h4>
-                              <span className="text-xs text-gray-500">Select record type to inspect</span>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {DNS_RECORD_TYPES.map((recordType) => (
-                                <button
-                                  key={recordType}
-                                  type="button"
-                                  onClick={() => setSelectedDnsRecordType(recordType)}
-                                  className={`px-2.5 py-1 rounded text-xs font-medium border ${
-                                    selectedDnsRecordType === recordType
-                                      ? 'bg-blue-600 text-white border-blue-600'
-                                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                  }`}
-                                >
-                                  {recordType}
-                                  {changeCountByRecordType[recordType] > 0 && (
-                                    <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                      selectedDnsRecordType === recordType
-                                        ? 'bg-blue-200 text-blue-900'
-                                        : 'bg-amber-100 text-amber-800'
-                                    }`}>
-                                      {changeCountByRecordType[recordType]}
+                        return (
+                          <div
+                            key={snapshot.id}
+                            onClick={() => {
+                              setSelectedDnsSnapshotId((currentId) => (
+                                currentId === snapshot.id ? null : snapshot.id
+                              ));
+                            }}
+                            className={`p-3 rounded border cursor-pointer transition-all ${
+                              isOpen
+                                ? 'border-blue-500 bg-blue-50'
+                                : snapshotChanges.length > 0
+                                ? 'border-amber-300 bg-amber-50/40 hover:bg-amber-50/60'
+                                : 'border-gray-200 bg-white hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                  <span className="text-xs text-gray-500">
+                                    {isOpen ? '▼' : '▶'}
+                                  </span>
+                                  <span className="text-sm font-medium text-gray-900">
+                                    {new Date(snapshot.checkedAt).toLocaleString()}
+                                  </span>
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
+                                    snapshot.status === 'ok'
+                                      ? 'bg-green-100 text-green-800'
+                                      : snapshot.status === 'warning'
+                                      ? 'bg-yellow-100 text-yellow-800'
+                                      : 'bg-red-100 text-red-800'
+                                  }`}>
+                                    {snapshot.status}
+                                  </span>
+                                  {snapshotChanges.length > 0 && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">
+                                      {snapshotChanges.length} change{snapshotChanges.length !== 1 ? 's' : ''}
                                     </span>
                                   )}
-                                </button>
-                              ))}
-                            </div>
-                            <div className="p-2">
-                              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
-                                {selectedDnsRecordType} Records
-                              </p>
-                              {selectedTypeChanges.length > 0 && (
-                                <div className="mb-3 space-y-2">
-                                  {selectedTypeChanges.map((change) => (
-                                    <div key={`delta-${change.id}`} className="p-2 rounded">
-                                      <p className="text-xs font-semibold text-gray-700 mb-1">{change.summary}</p>
-                                      {change.parsedDetails ? (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                          <div>
-                                            <div className="text-[11px] text-gray-500 mb-1">Current</div>
-                                            <div className="text-xs text-gray-700 bg-green-50 p-1.5 rounded break-words font-mono">
-                                              {formatChangeValue(change.parsedDetails.current)}
-                                            </div>
-                                          </div>
-                                          <div>
-                                            <div className="text-[11px] text-gray-500 mb-1">Previous</div>
-                                            <div className="text-xs text-gray-700 bg-red-50 p-1.5 rounded break-words font-mono">
-                                              {formatChangeValue(change.parsedDetails.previous)}
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        <p className="text-xs text-gray-500">Detailed diff not available for this change.</p>
-                                      )}
-                                    </div>
-                                  ))}
                                 </div>
-                              )}
-                              {snapshotRecordValues.length > 0 && selectedTypeChanges.length === 0 ? (
-                                <div className="space-y-1 max-h-56 overflow-auto pr-1">
-                                  {snapshotRecordValues.map((value, index) => (
-                                    <p
-                                      key={`${selectedDnsRecordType}-${snapshot.id}-${index}`}
-                                      className="text-sm text-gray-900 font-mono break-all"
+                                <div className="flex flex-wrap gap-1">
+                                  <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">A {getRecordCount(snapshot.aRecords)}</span>
+                                  <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">AAAA {getRecordCount(snapshot.aaaaRecords)}</span>
+                                  <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">CNAME {getRecordCount(snapshot.cnameRecords)}</span>
+                                  <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">TXT {getRecordCount(snapshot.txtRecords)}</span>
+                                  <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">MX {getRecordCount(snapshot.mxRecords)}</span>
+                                  <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">NS {getRecordCount(snapshot.nsRecords)}</span>
+                                  <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">SPF {getSingleRecordCount(snapshot.spfRecord)}</span>
+                                  <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">DMARC {getSingleRecordCount(snapshot.dmarcRecord)}</span>
+                                  <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">DKIM {getDkimRecordCount(snapshot.dkimRecords)}</span>
+                                </div>
+                                {snapshotChanges.length > 0 && (
+                                  <p className="text-xs text-amber-800 mt-2">
+                                    Changed: {changedRecordTypes.join(', ')}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            {isOpen && (
+                              <div className="mt-3 pt-3 border-t border-gray-200 space-y-3" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-between">
+                                  <h4 className="text-sm font-semibold text-gray-700">Record Details</h4>
+                                  <span className="text-xs text-gray-500">Select record type to inspect</span>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {DNS_RECORD_TYPES.map((recordType) => (
+                                    <button
+                                      key={recordType}
+                                      type="button"
+                                      onClick={() => setSelectedDnsRecordType(recordType)}
+                                      className={`px-2.5 py-1 rounded text-xs font-medium border ${
+                                        selectedDnsRecordType === recordType
+                                          ? 'bg-blue-600 text-white border-blue-600'
+                                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                      }`}
                                     >
-                                      {value}
-                                    </p>
+                                      {recordType}
+                                      {changeCountByRecordType[recordType] > 0 && (
+                                        <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                          selectedDnsRecordType === recordType
+                                            ? 'bg-blue-200 text-blue-900'
+                                            : 'bg-amber-100 text-amber-800'
+                                        }`}>
+                                          {changeCountByRecordType[recordType]}
+                                        </span>
+                                      )}
+                                    </button>
                                   ))}
                                 </div>
-                              ) : selectedTypeChanges.length === 0 ? (
-                                <p className="text-sm text-gray-500">No records found for this type in this snapshot.</p>
-                              ) : null}
-                            </div>
+                                <div className="p-2">
+                                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                                    {selectedDnsRecordType} Records
+                                  </p>
+                                  {selectedTypeChanges.length > 0 && (
+                                    <div className="mb-3 space-y-2">
+                                      {selectedTypeChanges.map((change) => (
+                                        <div key={`delta-${change.id}`} className="p-2 rounded">
+                                          <p className="text-xs font-semibold text-gray-700 mb-1">{change.summary}</p>
+                                          {change.parsedDetails ? (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                              <div>
+                                                <div className="text-[11px] text-gray-500 mb-1">Current</div>
+                                                <div className="text-xs text-gray-700 bg-green-50 p-1.5 rounded break-words font-mono">
+                                                  {formatChangeValue(change.parsedDetails.current)}
+                                                </div>
+                                              </div>
+                                              <div>
+                                                <div className="text-[11px] text-gray-500 mb-1">Previous</div>
+                                                <div className="text-xs text-gray-700 bg-red-50 p-1.5 rounded break-words font-mono">
+                                                  {formatChangeValue(change.parsedDetails.previous)}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <p className="text-xs text-gray-500">Detailed diff not available for this change.</p>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {snapshotRecordValues.length > 0 && selectedTypeChanges.length === 0 ? (
+                                    <div className="space-y-1 max-h-56 overflow-auto pr-1">
+                                      {snapshotRecordValues.map((value, index) => (
+                                        <p
+                                          key={`${selectedDnsRecordType}-${snapshot.id}-${index}`}
+                                          className="text-sm text-gray-900 font-mono break-all"
+                                        >
+                                          {value}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  ) : selectedTypeChanges.length === 0 ? (
+                                    <p className="text-sm text-gray-500">No records found for this type in this snapshot.</p>
+                                  ) : null}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </TabPanel>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Web Snapshots</CardTitle>
-            {isAdmin() && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRunWebSnapshot}
-                loading={runningWebSnapshot}
-              >
-                Run Web Snapshot
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loadingWebSnapshots ? (
-            <div className="py-4">
-              <LoadingSpinner size="md" />
-              <p className="text-sm text-gray-500 text-center mt-2">Loading web snapshot history...</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {webSnapshots.length > 0 ? (
-                <div>
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Snapshot History</h4>
-                  <div className="space-y-3">
-                    {webSnapshots.map((snapshot) => (
-                      <div
-                        key={snapshot.id}
-                        onClick={() => setSelectedWebSnapshot(snapshot)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            setSelectedWebSnapshot(snapshot);
-                          }
-                        }}
-                        role="button"
-                        tabIndex={0}
-                        className="flex items-start justify-between gap-4 p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-gray-900">
-                              {new Date(snapshot.checkedAt).toLocaleString()}
-                            </span>
-                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                              snapshot.error ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-                            }`}>
-                              {snapshot.error ? 'failed' : 'captured'}
-                            </span>
-                            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-700">
-                              {snapshot.usedHttpFallback ? 'http fallback' : 'https'}
-                            </span>
-                            {snapshot.statusCode && (
-                              <span className="px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800">
-                                {snapshot.statusCode}
-                              </span>
-                            )}
-                            {snapshot.loadTimeMs && (
-                              <span className="text-xs text-gray-500">{snapshot.loadTimeMs}ms</span>
-                            )}
-                          </div>
-                          {snapshot.title && (
-                            <p className="text-sm text-gray-700 mt-1 truncate">Title: {snapshot.title}</p>
-                          )}
-                          <p className="text-sm text-gray-600 mt-1 truncate">
-                            {snapshot.finalUrl || 'No final URL captured'}
-                          </p>
-                          {snapshot.error && (
-                            <p className="text-sm text-red-700 mt-1 truncate">{snapshot.error}</p>
-                          )}
-                        </div>
-                        <div className="w-[150px] h-[150px] rounded border border-gray-200 bg-white overflow-hidden flex-shrink-0">
-                          {snapshot.screenshotUrl ? (
-                            <img
-                              src={snapshot.screenshotUrl}
-                              alt={`Snapshot preview for ${domain.name}`}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-xs text-gray-400 p-2 text-center">
-                              No image
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+        <TabPanel>
+          <Card className="mb-6">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Web Snapshots</CardTitle>
+                {isAdmin() && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRunWebSnapshot}
+                    loading={runningWebSnapshot}
+                  >
+                    Run Web Snapshot
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingWebSnapshots ? (
+                <div className="py-4">
+                  <LoadingSpinner size="md" />
+                  <p className="text-sm text-gray-500 text-center mt-2">Loading web snapshot history...</p>
                 </div>
               ) : (
-                <p className="text-sm text-gray-500">No web snapshots run yet.</p>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Associated Applications ({domain.applications?.length || 0})</CardTitle>
-        </CardHeader>
-        <CardContent padding="none">
-          {domain.applications && domain.applications.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Application Name</TableHead>
-                  <TableHead>Owner</TableHead>
-                  {isAdmin() && <TableHead>Company</TableHead>}
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {domain.applications.map((application) => (
-                  <TableRow key={application.id}>
-                    <TableCell>
-                      <Link
-                        to={`/applications/${application.id}`}
-                        className="font-medium text-blue-600 hover:text-blue-700"
-                      >
-                        {application.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{application.owner || '—'}</TableCell>
-                    {isAdmin() && (
-                      <TableCell>
-                        {application.company ? (
-                          <Link
-                            to={`/companies/${application.company.id}`}
-                            className="text-gray-700 hover:text-blue-600"
+                <div className="space-y-4">
+                  {webSnapshots.length > 0 ? (
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Snapshot History</h4>
+                      <div className="space-y-3">
+                        {webSnapshots.map((snapshot) => (
+                          <div
+                            key={snapshot.id}
+                            onClick={() => setSelectedWebSnapshot(snapshot)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                setSelectedWebSnapshot(snapshot);
+                              }
+                            }}
+                            role="button"
+                            tabIndex={0}
+                            className="flex items-start justify-between gap-4 p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
                           >
-                            {application.company.name}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-gray-900">
+                                  {new Date(snapshot.checkedAt).toLocaleString()}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                  snapshot.error ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                                }`}>
+                                  {snapshot.error ? 'failed' : 'captured'}
+                                </span>
+                                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-700">
+                                  {snapshot.usedHttpFallback ? 'http fallback' : 'https'}
+                                </span>
+                                {snapshot.statusCode && (
+                                  <span className="px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800">
+                                    {snapshot.statusCode}
+                                  </span>
+                                )}
+                                {snapshot.loadTimeMs && (
+                                  <span className="text-xs text-gray-500">{snapshot.loadTimeMs}ms</span>
+                                )}
+                              </div>
+                              {snapshot.title && (
+                                <p className="text-sm text-gray-700 mt-1 truncate">Title: {snapshot.title}</p>
+                              )}
+                              <p className="text-sm text-gray-600 mt-1 truncate">
+                                {snapshot.finalUrl || 'No final URL captured'}
+                              </p>
+                              {snapshot.error && (
+                                <p className="text-sm text-red-700 mt-1 truncate">{snapshot.error}</p>
+                              )}
+                            </div>
+                            <div className="w-[150px] h-[150px] rounded border border-gray-200 bg-white overflow-hidden flex-shrink-0">
+                              {snapshot.screenshotUrl ? (
+                                <img
+                                  src={snapshot.screenshotUrl}
+                                  alt={`Snapshot preview for ${domain.name}`}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-xs text-gray-400 p-2 text-center">
+                                  No image
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">No web snapshots run yet.</p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabPanel>
+
+        <TabPanel>
+          <Card>
+            <CardHeader>
+              <CardTitle>Associated Applications ({domain.applications?.length || 0})</CardTitle>
+            </CardHeader>
+            <CardContent padding="none">
+              {domain.applications && domain.applications.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Application Name</TableHead>
+                      <TableHead>Owner</TableHead>
+                      {isAdmin() && <TableHead>Company</TableHead>}
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {domain.applications.map((application) => (
+                      <TableRow key={application.id}>
+                        <TableCell>
+                          <Link
+                            to={`/applications/${application.id}`}
+                            className="font-medium text-blue-600 hover:text-blue-700"
+                          >
+                            {application.name}
                           </Link>
-                        ) : (
-                          '—'
+                        </TableCell>
+                        <TableCell>{application.owner || '—'}</TableCell>
+                        {isAdmin() && (
+                          <TableCell>
+                            {application.company ? (
+                              <Link
+                                to={`/companies/${application.company.id}`}
+                                className="text-gray-700 hover:text-blue-600"
+                              >
+                                {application.company.name}
+                              </Link>
+                            ) : (
+                              '—'
+                            )}
+                          </TableCell>
                         )}
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      <span className={`px-2 py-1 text-xs font-medium rounded ${
-                        application.status === 'onboarded' 
-                          ? 'bg-green-100 text-green-800'
-                          : application.status === 'pending_technical'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {application.status || 'onboarded'}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        to={`/applications/${application.id}`}
-                        className="text-blue-600 hover:text-blue-700 text-sm"
-                      >
-                        View →
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="p-4 text-center text-gray-500">
-              No applications hosted on this domain
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                        <TableCell>
+                          <span className={`px-2 py-1 text-xs font-medium rounded ${
+                            application.status === 'onboarded'
+                              ? 'bg-green-100 text-green-800'
+                              : application.status === 'pending_technical'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {application.status || 'onboarded'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Link
+                            to={`/applications/${application.id}`}
+                            className="text-blue-600 hover:text-blue-700 text-sm"
+                          >
+                            View →
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="p-4 text-center text-gray-500">
+                  No applications hosted on this domain
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabPanel>
+      </Tabs>
 
       {isEditing && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50">
