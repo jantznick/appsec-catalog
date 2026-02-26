@@ -182,6 +182,21 @@ router.post('/', requireAuth, async (req, res) => {
     }
 
     const normalizedName = normalizeDomain(name);
+    const existingDomain = await prisma.domain.findFirst({
+      where: {
+        companyId,
+        name: {
+          equals: normalizedName,
+          mode: 'insensitive',
+        },
+      },
+      select: { id: true },
+    });
+
+    if (existingDomain) {
+      return res.status(400).json({ error: 'Domain already exists for this company' });
+    }
+
     if (status !== undefined && status !== null && typeof status !== 'string') {
       return res.status(400).json({ error: 'Status must be a string' });
     }
@@ -500,6 +515,22 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
         });
       }
       const normalizedName = normalizeDomain(name);
+      const conflictingDomain = await prisma.domain.findFirst({
+        where: {
+          companyId: existingDomain.companyId,
+          name: {
+            equals: normalizedName,
+            mode: 'insensitive',
+          },
+          id: {
+            not: id,
+          },
+        },
+        select: { id: true },
+      });
+      if (conflictingDomain) {
+        return res.status(400).json({ error: 'Domain already exists for this company' });
+      }
       updateData.name = normalizedName;
       updateData.apexDomain = getApexDomain(normalizedName);
     }

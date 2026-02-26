@@ -1731,11 +1731,12 @@ router.post('/:id/domains', requireAuth, async (req, res) => {
     const normalizedDomain = normalizeDomain(domainName);
 
     // Find or create domain within the company
-    let domain = await prisma.domain.findUnique({
+    let domain = await prisma.domain.findFirst({
       where: {
-        name_companyId: {
-          name: normalizedDomain,
-          companyId: application.companyId,
+        companyId: application.companyId,
+        name: {
+          equals: normalizedDomain,
+          mode: 'insensitive',
         },
       },
     });
@@ -1949,11 +1950,12 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
           for (const domainName of domainNames) {
             try {
               // Find or create domain within the company
-              let domain = await prisma.domain.findUnique({
+              let domain = await prisma.domain.findFirst({
                 where: {
-                  name_companyId: {
-                    name: domainName,
-                    companyId: companyId,
+                  companyId: companyId,
+                  name: {
+                    equals: domainName,
+                    mode: 'insensitive',
                   },
                 },
               });

@@ -30,9 +30,6 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - node_modules_frontend:/app/node_modules
     depends_on:
       - postgres
     networks:
@@ -50,8 +47,7 @@ services:
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
       - NODE_ENV=${NODE_ENV:-production}
     volumes:
-      - ./backend:/app
-      - node_modules_backend:/app/node_modules
+      - backend_storage:/app/storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,8 +75,7 @@ services:
 
 volumes:
   postgres_data:
-  node_modules_frontend:
-  node_modules_backend:
+  backend_storage: # Persists backend-generated files (domain snapshots, etc.)
   caddy_data:      # Persists Let's Encrypt certificates
   caddy_config:    # Persists Caddy configuration
 
