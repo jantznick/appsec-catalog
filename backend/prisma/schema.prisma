@@ -248,6 +248,8 @@ model Domain {
   companyId       String              // Domains are company-specific
   company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   applicationDomains ApplicationDomain[] // Many-to-many: applications hosted on this domain
+  dnsSnapshots    DomainDnsSnapshot[]
+  dnsChanges      DomainDnsChange[]
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   
@@ -255,6 +257,48 @@ model Domain {
   @@index([companyId])
   @@index([name])
   @@index([companyId, apexDomain])
+}
+
+model DomainDnsSnapshot {
+  id            String   @id @default(cuid())
+  domainId      String
+  domain        Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  checkedAt     DateTime @default(now())
+  status        String   // ok, warning, error
+  error         String?  @db.Text
+  cnameRecords  String?  @db.Text
+  aRecords      String?  @db.Text
+  aaaaRecords   String?  @db.Text
+  txtRecords    String?  @db.Text
+  mxRecords     String?  @db.Text
+  nsRecords     String?  @db.Text
+  spfRecord     String?  @db.Text
+  dmarcRecord   String?  @db.Text
+  dkimRecords   String?  @db.Text
+  createdBy     String?
+  changes       DomainDnsChange[]
+
+  @@index([domainId])
+  @@index([checkedAt])
+  @@index([domainId, checkedAt])
+}
+
+model DomainDnsChange {
+  id          String            @id @default(cuid())
+  domainId    String
+  domain      Domain            @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  snapshotId  String
+  snapshot    DomainDnsSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  changeType  String            // record_added, record_removed, record_changed
+  recordType  String            // A, AAAA, CNAME, TXT, MX, NS, SPF, DMARC, DKIM
+  severity    String            // info, warning, high
+  summary     String
+  details     String?           @db.Text
+  createdAt   DateTime          @default(now())
+
+  @@index([domainId])
+  @@index([snapshotId])
+  @@index([createdAt])
 }
 
 // Join table: Associates applications with hosting domains (many-to-many)

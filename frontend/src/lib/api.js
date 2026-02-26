@@ -405,6 +405,17 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  runDomainDnsCheck: (id) =>
+    apiRequest(`/api/domains/${id}/check-dns`, {
+      method: 'POST',
+    }),
+
+  getDomainDnsSnapshots: (id) =>
+    apiRequest(`/api/domains/${id}/dns-snapshots`),
+
+  getDomainDnsChanges: (id) =>
+    apiRequest(`/api/domains/${id}/dns-changes`),
+
   searchApplications: (query, companyId) => {
     const params = new URLSearchParams({ q: query });
     if (companyId) params.append('companyId', companyId);

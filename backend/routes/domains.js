@@ -3,6 +3,7 @@ import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { getApexDomain } from '../utils/domainApex.js';
 import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
+import { runDnsCheck, buildSnapshotCreateData, detectDnsChanges } from '../services/domainDns.js';
 
 const router = express.Router();
 
@@ -33,6 +34,30 @@ function deriveDomainRelationships(targetDomain, relatedDomains) {
     children,
     siblings,
   };
+}
+
+async function getDomainForUser(id, session) {
+  const domain = await prisma.domain.findUnique({
+    where: { id },
+  });
+
+  if (!domain) {
+    return { error: { status: 404, body: { error: 'Domain not found' } } };
+  }
+
+  if (!session.isAdmin && session.companyId !== domain.companyId) {
+    return {
+      error: {
+        status: 403,
+        body: {
+          error: 'Permission denied',
+          message: 'You can only access domains in your company',
+        },
+      },
+    };
+  }
+
+  return { domain };
 }
 
 // Get all domains (admin sees all, non-admin sees their company's domains)
@@ -238,6 +263,96 @@ router.get('/:id', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error fetching domain:', error);
     res.status(500).json({ error: 'Failed to fetch domain' });
+  }
+});
+
+// Run manual DNS check (admin only)
+router.post('/:id/check-dns', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const access = await getDomainForUser(id, req.session);
+    if (access.error) {
+      return res.status(access.error.status).json(access.error.body);
+    }
+
+    const { domain } = access;
+    const checkResult = await runDnsCheck(domain.name);
+
+    const previousSnapshot = await prisma.domainDnsSnapshot.findFirst({
+      where: { domainId: domain.id },
+      orderBy: { checkedAt: 'desc' },
+    });
+
+    const snapshot = await prisma.domainDnsSnapshot.create({
+      data: buildSnapshotCreateData(domain.id, req.session.userId, checkResult),
+    });
+
+    const changes = detectDnsChanges(previousSnapshot, snapshot);
+    if (changes.length > 0) {
+      await prisma.domainDnsChange.createMany({
+        data: changes.map((change) => ({
+          domainId: domain.id,
+          snapshotId: snapshot.id,
+          changeType: change.changeType,
+          recordType: change.recordType,
+          severity: change.severity,
+          summary: change.summary,
+          details: change.details,
+        })),
+      });
+    }
+
+    res.status(201).json({
+      snapshot,
+      changesDetected: changes.length,
+    });
+  } catch (error) {
+    console.error('Error running DNS check:', error);
+    res.status(500).json({ error: 'Failed to run DNS check' });
+  }
+});
+
+// Get DNS snapshots for a domain
+router.get('/:id/dns-snapshots', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const access = await getDomainForUser(id, req.session);
+    if (access.error) {
+      return res.status(access.error.status).json(access.error.body);
+    }
+
+    const snapshots = await prisma.domainDnsSnapshot.findMany({
+      where: { domainId: id },
+      orderBy: { checkedAt: 'desc' },
+      take: 50,
+    });
+
+    res.json(snapshots);
+  } catch (error) {
+    console.error('Error fetching DNS snapshots:', error);
+    res.status(500).json({ error: 'Failed to fetch DNS snapshots' });
+  }
+});
+
+// Get DNS changes for a domain
+router.get('/:id/dns-changes', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const access = await getDomainForUser(id, req.session);
+    if (access.error) {
+      return res.status(access.error.status).json(access.error.body);
+    }
+
+    const changes = await prisma.domainDnsChange.findMany({
+      where: { domainId: id },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+
+    res.json(changes);
+  } catch (error) {
+    console.error('Error fetching DNS changes:', error);
+    res.status(500).json({ error: 'Failed to fetch DNS changes' });
   }
 });
 

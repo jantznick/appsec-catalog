@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
-import { LoadingPage } from '../components/ui/Loading.jsx';
+import { LoadingPage, LoadingSpinner } from '../components/ui/Loading.jsx';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.jsx';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table.jsx';
 import { Button } from '../components/ui/Button.jsx';
@@ -17,6 +17,115 @@ function getStatusBadgeClasses(status) {
   return 'bg-gray-100 text-gray-800';
 }
 
+function getRecordCount(serializedRecords) {
+  if (!serializedRecords) return 0;
+  try {
+    const parsed = JSON.parse(serializedRecords);
+    return Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function getSingleRecordCount(value) {
+  return value ? 1 : 0;
+}
+
+function getDkimRecordCount(serializedRecords) {
+  const parsed = parseSerializedValue(serializedRecords, {});
+  if (!parsed || typeof parsed !== 'object') return 0;
+  return Object.values(parsed).reduce((count, records) => {
+    if (!Array.isArray(records)) return count;
+    return count + records.length;
+  }, 0);
+}
+
+function parseSerializedRecords(serializedRecords) {
+  if (!serializedRecords) return [];
+  try {
+    const parsed = JSON.parse(serializedRecords);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseSerializedValue(serializedValue, fallbackValue = null) {
+  if (!serializedValue) return fallbackValue;
+  try {
+    return JSON.parse(serializedValue);
+  } catch {
+    return fallbackValue;
+  }
+}
+
+function parseChangeDetails(details) {
+  if (!details) return null;
+  try {
+    const parsed = JSON.parse(details);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function formatChangeValue(value) {
+  if (value === null || value === undefined) return '(none)';
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '(empty)';
+    if (value.length <= 4) return value.join(', ');
+    return `${value.slice(0, 4).join(', ')} +${value.length - 4} more`;
+  }
+  if (typeof value === 'object') {
+    try {
+      const json = JSON.stringify(value);
+      return json.length > 120 ? `${json.slice(0, 117)}...` : json;
+    } catch {
+      return '(object)';
+    }
+  }
+  const stringified = String(value);
+  return stringified.length > 120 ? `${stringified.slice(0, 117)}...` : stringified;
+}
+
+const DNS_RECORD_TYPES = ['A', 'AAAA', 'CNAME', 'TXT', 'MX', 'NS', 'SPF', 'DMARC', 'DKIM'];
+
+function getDnsRecordValues(recordType, snapshot, parsed) {
+  if (!snapshot) return [];
+
+  switch (recordType) {
+    case 'A':
+      return parsed.a;
+    case 'AAAA':
+      return parsed.aaaa;
+    case 'CNAME':
+      return parsed.cname;
+    case 'TXT':
+      return parsed.txt;
+    case 'MX':
+      return parsed.mx.map((record) => `${record.exchange || 'unknown'} (priority ${record.priority ?? 0})`);
+    case 'NS':
+      return parsed.ns;
+    case 'SPF':
+      return snapshot.spfRecord ? [snapshot.spfRecord] : [];
+    case 'DMARC':
+      return snapshot.dmarcRecord ? [snapshot.dmarcRecord] : [];
+    case 'DKIM': {
+      const entries = Object.entries(parsed.dkim || {});
+      if (entries.length === 0) return [];
+      return entries.flatMap(([selector, records]) => {
+        if (!Array.isArray(records) || records.length === 0) {
+          return [`${selector}: no record`];
+        }
+        return records.map((record) => `${selector}: ${record}`);
+      });
+    }
+    default:
+      return [];
+  }
+}
+
 export function DomainDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -28,18 +137,18 @@ export function DomainDetail() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [originalFormData, setOriginalFormData] = useState(null);
+  const [dnsSnapshots, setDnsSnapshots] = useState([]);
+  const [dnsChanges, setDnsChanges] = useState([]);
+  const [loadingDns, setLoadingDns] = useState(false);
+  const [runningDnsCheck, setRunningDnsCheck] = useState(false);
+  const [selectedDnsSnapshotId, setSelectedDnsSnapshotId] = useState(null);
+  const [selectedDnsRecordType, setSelectedDnsRecordType] = useState('A');
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     owner: '',
     status: 'unknown',
   });
-
-  useEffect(() => {
-    if (id) {
-      loadDomain();
-    }
-  }, [id]);
 
   const loadDomain = async () => {
     try {
@@ -80,14 +189,6 @@ export function DomainDetail() {
     }
   };
 
-  if (loading) {
-    return <LoadingPage message="Loading domain..." />;
-  }
-
-  if (!domain) {
-    return null;
-  }
-
   const handleSave = async () => {
     try {
       setSaving(true);
@@ -127,11 +228,77 @@ export function DomainDetail() {
     cancelEditing();
   };
 
+  const loadDnsData = async () => {
+    try {
+      setLoadingDns(true);
+      const [snapshots, changes] = await Promise.all([
+        api.getDomainDnsSnapshots(id),
+        api.getDomainDnsChanges(id),
+      ]);
+      const normalizedSnapshots = Array.isArray(snapshots) ? snapshots : [];
+      setDnsSnapshots(normalizedSnapshots);
+      setDnsChanges(Array.isArray(changes) ? changes : []);
+      setSelectedDnsSnapshotId((previousId) => {
+        if (previousId && normalizedSnapshots.some((snapshot) => snapshot.id === previousId)) {
+          return previousId;
+        }
+        return null;
+      });
+    } catch (error) {
+      console.error('Failed to load DNS data:', error);
+      setDnsSnapshots([]);
+      setDnsChanges([]);
+      setSelectedDnsSnapshotId(null);
+    } finally {
+      setLoadingDns(false);
+    }
+  };
+
+  useEffect(() => {
+    if (id) {
+      loadDomain();
+      loadDnsData();
+    }
+  }, [id]);
+
+  const handleRunDnsCheck = async () => {
+    try {
+      setRunningDnsCheck(true);
+      const result = await api.runDomainDnsCheck(id);
+      const changeCount = result?.changesDetected || 0;
+      toast.success(changeCount > 0 ? `DNS check complete (${changeCount} change${changeCount !== 1 ? 's' : ''} detected)` : 'DNS check complete');
+      await loadDnsData();
+    } catch (error) {
+      toast.error(error.message || 'Failed to run DNS check');
+      console.error(error);
+    } finally {
+      setRunningDnsCheck(false);
+    }
+  };
+
+  const latestSnapshot = dnsSnapshots[0] || null;
+  const selectedDnsSnapshot = dnsSnapshots.find((snapshot) => snapshot.id === selectedDnsSnapshotId) || null;
+
+  if (loading) {
+    return <LoadingPage message="Loading domain..." />;
+  }
+
+  if (!domain) {
+    return null;
+  }
+
   const relatedDomains = domain.relatedDomains || [];
   const relationships = domain.relationships || {};
   const apexDomainRecord = relatedDomains.find(
     (relatedDomain) => relatedDomain.name === domain.apexDomain
   );
+  const dnsChangesBySnapshotId = dnsChanges.reduce((acc, change) => {
+    if (!acc[change.snapshotId]) {
+      acc[change.snapshotId] = [];
+    }
+    acc[change.snapshotId].push(change);
+    return acc;
+  }, {});
 
   return (
     <div className={isEditing ? 'pb-24' : ''}>
@@ -337,6 +504,223 @@ export function DomainDetail() {
               </div>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>DNS Checks</CardTitle>
+            {isAdmin() && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRunDnsCheck}
+                loading={runningDnsCheck}
+              >
+                Run DNS Check
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadingDns ? (
+            <div className="py-4">
+              <LoadingSpinner size="md" />
+              <p className="text-sm text-gray-500 text-center mt-2">Loading DNS history...</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {latestSnapshot ? (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <p className="text-sm font-medium text-gray-900">
+                    Latest check: {new Date(latestSnapshot.checkedAt).toLocaleString()}
+                  </p>
+                  <p className="text-sm text-gray-700 mt-1">
+                    Status: <span className="font-medium">{latestSnapshot.status}</span>
+                    {latestSnapshot.error ? ` • ${latestSnapshot.error}` : ''}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No DNS checks run yet.</p>
+              )}
+
+              {dnsSnapshots.length > 0 && (
+                <div className="space-y-2">
+                  {dnsSnapshots.slice(0, 10).map((snapshot) => {
+                    const isOpen = selectedDnsSnapshot?.id === snapshot.id;
+                    const snapshotChanges = dnsChangesBySnapshotId[snapshot.id] || [];
+                    const changedRecordTypes = [...new Set(snapshotChanges.map((change) => change.recordType))];
+                    const changeCountByRecordType = snapshotChanges.reduce((acc, change) => {
+                      acc[change.recordType] = (acc[change.recordType] || 0) + 1;
+                      return acc;
+                    }, {});
+                    const parsedSnapshotRecords = {
+                      a: parseSerializedRecords(snapshot.aRecords),
+                      aaaa: parseSerializedRecords(snapshot.aaaaRecords),
+                      cname: parseSerializedRecords(snapshot.cnameRecords),
+                      txt: parseSerializedRecords(snapshot.txtRecords),
+                      mx: parseSerializedRecords(snapshot.mxRecords),
+                      ns: parseSerializedRecords(snapshot.nsRecords),
+                      dkim: parseSerializedValue(snapshot.dkimRecords, {}),
+                    };
+                    const snapshotRecordValues = getDnsRecordValues(
+                      selectedDnsRecordType,
+                      snapshot,
+                      parsedSnapshotRecords
+                    );
+                    const selectedTypeChanges = snapshotChanges
+                      .filter((change) => change.recordType === selectedDnsRecordType)
+                      .map((change) => ({
+                        ...change,
+                        parsedDetails: parseChangeDetails(change.details),
+                      }));
+
+                    return (
+                      <div
+                        key={snapshot.id}
+                        onClick={() => {
+                          setSelectedDnsSnapshotId((currentId) => (
+                            currentId === snapshot.id ? null : snapshot.id
+                          ));
+                        }}
+                        className={`p-3 rounded border cursor-pointer transition-all ${
+                          isOpen
+                            ? 'border-blue-500 bg-blue-50'
+                            : snapshotChanges.length > 0
+                            ? 'border-amber-300 bg-amber-50/40 hover:bg-amber-50/60'
+                            : 'border-gray-200 bg-white hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className="text-xs text-gray-500">
+                                {isOpen ? '▼' : '▶'}
+                              </span>
+                              <span className="text-sm font-medium text-gray-900">
+                                {new Date(snapshot.checkedAt).toLocaleString()}
+                              </span>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
+                                snapshot.status === 'ok'
+                                  ? 'bg-green-100 text-green-800'
+                                  : snapshot.status === 'warning'
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {snapshot.status}
+                              </span>
+                              {snapshotChanges.length > 0 && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">
+                                  {snapshotChanges.length} change{snapshotChanges.length !== 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">A {getRecordCount(snapshot.aRecords)}</span>
+                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">AAAA {getRecordCount(snapshot.aaaaRecords)}</span>
+                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">CNAME {getRecordCount(snapshot.cnameRecords)}</span>
+                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">TXT {getRecordCount(snapshot.txtRecords)}</span>
+                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">MX {getRecordCount(snapshot.mxRecords)}</span>
+                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">NS {getRecordCount(snapshot.nsRecords)}</span>
+                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">SPF {getSingleRecordCount(snapshot.spfRecord)}</span>
+                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">DMARC {getSingleRecordCount(snapshot.dmarcRecord)}</span>
+                              <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700">DKIM {getDkimRecordCount(snapshot.dkimRecords)}</span>
+                            </div>
+                            {snapshotChanges.length > 0 && (
+                              <p className="text-xs text-amber-800 mt-2">
+                                Changed: {changedRecordTypes.join(', ')}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {isOpen && (
+                          <div className="mt-3 pt-3 border-t border-gray-200 space-y-3" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-sm font-semibold text-gray-700">Record Details</h4>
+                              <span className="text-xs text-gray-500">Select record type to inspect</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {DNS_RECORD_TYPES.map((recordType) => (
+                                <button
+                                  key={recordType}
+                                  type="button"
+                                  onClick={() => setSelectedDnsRecordType(recordType)}
+                                  className={`px-2.5 py-1 rounded text-xs font-medium border ${
+                                    selectedDnsRecordType === recordType
+                                      ? 'bg-blue-600 text-white border-blue-600'
+                                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  {recordType}
+                                  {changeCountByRecordType[recordType] > 0 && (
+                                    <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                      selectedDnsRecordType === recordType
+                                        ? 'bg-blue-200 text-blue-900'
+                                        : 'bg-amber-100 text-amber-800'
+                                    }`}>
+                                      {changeCountByRecordType[recordType]}
+                                    </span>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="p-2">
+                              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                                {selectedDnsRecordType} Records
+                              </p>
+                              {selectedTypeChanges.length > 0 && (
+                                <div className="mb-3 space-y-2">
+                                  {selectedTypeChanges.map((change) => (
+                                    <div key={`delta-${change.id}`} className="p-2 rounded">
+                                      <p className="text-xs font-semibold text-gray-700 mb-1">{change.summary}</p>
+                                      {change.parsedDetails ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                          <div>
+                                            <div className="text-[11px] text-gray-500 mb-1">Current</div>
+                                            <div className="text-xs text-gray-700 bg-green-50 p-1.5 rounded break-words font-mono">
+                                              {formatChangeValue(change.parsedDetails.current)}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <div className="text-[11px] text-gray-500 mb-1">Previous</div>
+                                            <div className="text-xs text-gray-700 bg-red-50 p-1.5 rounded break-words font-mono">
+                                              {formatChangeValue(change.parsedDetails.previous)}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <p className="text-xs text-gray-500">Detailed diff not available for this change.</p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {snapshotRecordValues.length > 0 && selectedTypeChanges.length === 0 ? (
+                                <div className="space-y-1 max-h-56 overflow-auto pr-1">
+                                  {snapshotRecordValues.map((value, index) => (
+                                    <p
+                                      key={`${selectedDnsRecordType}-${snapshot.id}-${index}`}
+                                      className="text-sm text-gray-900 font-mono break-all"
+                                    >
+                                      {value}
+                                    </p>
+                                  ))}
+                                </div>
+                              ) : selectedTypeChanges.length === 0 ? (
+                                <p className="text-sm text-gray-500">No records found for this type in this snapshot.</p>
+                              ) : null}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
