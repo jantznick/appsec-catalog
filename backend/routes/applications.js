@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { calculateApplicationScore } from '../services/scoring.js';
 import { evaluateAllControls } from '../services/policy.js';
 import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
+import { getApexDomain } from '../utils/domainApex.js';
 import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
 import { createApplicationVersion, createVersionFromData, applyApprovedVersion } from '../utils/applicationVersion.js';
 
@@ -1744,6 +1745,7 @@ router.post('/:id/domains', requireAuth, async (req, res) => {
       domain = await prisma.domain.create({
         data: {
           name: normalizedDomain,
+          apexDomain: getApexDomain(normalizedDomain),
           companyId: application.companyId,
         },
       });
@@ -1960,6 +1962,7 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
                 domain = await prisma.domain.create({
                   data: {
                     name: domainName,
+                    apexDomain: getApexDomain(domainName),
                     companyId: companyId,
                   },
                 });

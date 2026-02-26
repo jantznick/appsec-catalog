@@ -393,6 +393,18 @@ export const api = {
   getDomain: (id) =>
     apiRequest(`/api/domains/${id}`),
 
+  createDomain: (data) =>
+    apiRequest('/api/domains', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateDomain: (id, data) =>
+    apiRequest(`/api/domains/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
   searchApplications: (query, companyId) => {
     const params = new URLSearchParams({ q: query });
     if (companyId) params.append('companyId', companyId);

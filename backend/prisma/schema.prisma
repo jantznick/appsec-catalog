@@ -241,14 +241,20 @@ model Invitation {
 model Domain {
   id              String              @id @default(cuid())
   name            String              // Hosting domain name (e.g., example.com, subdomain.example.com) - where applications are hosted
+  description     String?             // Optional domain context/details
+  owner           String?             // Optional owner/contact details (freeform text)
+  status          String              @default("unknown") // Domain status (unknown, active, parked, deprecated, etc.)
+  apexDomain      String?             // Registrable/apex domain for grouping related subdomains
   companyId       String              // Domains are company-specific
   company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   applicationDomains ApplicationDomain[] // Many-to-many: applications hosted on this domain
   createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
   
   @@unique([name, companyId]) // Domain name must be unique within a company
   @@index([companyId])
   @@index([name])
+  @@index([companyId, apexDomain])
 }
 
 // Join table: Associates applications with hosting domains (many-to-many)
