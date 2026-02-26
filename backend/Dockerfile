@@ -5,6 +5,7 @@ WORKDIR /app
 
 # Runtime libraries required by bundled Chrome for Puppeteer
 RUN apk add --no-cache \
+  chromium \
   nss \
   freetype \
   harfbuzz \
@@ -13,6 +14,7 @@ RUN apk add --no-cache \
 
 # Keep Puppeteer browser cache in a stable location inside the image/container
 ENV PUPPETEER_CACHE_DIR=/usr/local/share/puppeteer
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Install dependencies (including dev dependencies for Prisma CLI)
 COPY package*.json ./

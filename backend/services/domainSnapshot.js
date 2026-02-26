@@ -78,8 +78,10 @@ async function captureScreenshot(url, screenshotAbsolutePath) {
   const startedAt = performance.now();
 
   try {
+    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
     browser = await puppeteer.launch({
       headless: true,
+      executablePath,
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
     const page = await browser.newPage();
