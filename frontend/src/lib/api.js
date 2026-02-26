@@ -416,6 +416,14 @@ export const api = {
   getDomainDnsChanges: (id) =>
     apiRequest(`/api/domains/${id}/dns-changes`),
 
+  runDomainWebSnapshot: (id) =>
+    apiRequest(`/api/domains/${id}/snapshot`, {
+      method: 'POST',
+    }),
+
+  getDomainWebSnapshots: (id) =>
+    apiRequest(`/api/domains/${id}/snapshots`),
+
   searchApplications: (query, companyId) => {
     const params = new URLSearchParams({ q: query });
     if (companyId) params.append('companyId', companyId);

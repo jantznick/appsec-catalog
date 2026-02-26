@@ -250,6 +250,7 @@ model Domain {
   applicationDomains ApplicationDomain[] // Many-to-many: applications hosted on this domain
   dnsSnapshots    DomainDnsSnapshot[]
   dnsChanges      DomainDnsChange[]
+  webSnapshots    DomainWebSnapshot[]
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   
@@ -299,6 +300,26 @@ model DomainDnsChange {
   @@index([domainId])
   @@index([snapshotId])
   @@index([createdAt])
+}
+
+model DomainWebSnapshot {
+  id               String   @id @default(cuid())
+  domainId         String
+  domain           Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  checkedAt        DateTime @default(now())
+  urlAttempted     String
+  usedHttpFallback Boolean  @default(false)
+  finalUrl         String?
+  statusCode       Int?
+  title            String?
+  loadTimeMs       Int?
+  screenshotPath   String?
+  error            String?  @db.Text
+  createdBy        String?
+
+  @@index([domainId])
+  @@index([checkedAt])
+  @@index([domainId, checkedAt])
 }
 
 // Join table: Associates applications with hosting domains (many-to-many)

@@ -141,6 +141,10 @@ export function DomainDetail() {
   const [dnsChanges, setDnsChanges] = useState([]);
   const [loadingDns, setLoadingDns] = useState(false);
   const [runningDnsCheck, setRunningDnsCheck] = useState(false);
+  const [webSnapshots, setWebSnapshots] = useState([]);
+  const [loadingWebSnapshots, setLoadingWebSnapshots] = useState(false);
+  const [runningWebSnapshot, setRunningWebSnapshot] = useState(false);
+  const [selectedWebSnapshot, setSelectedWebSnapshot] = useState(null);
   const [selectedDnsSnapshotId, setSelectedDnsSnapshotId] = useState(null);
   const [selectedDnsRecordType, setSelectedDnsRecordType] = useState('A');
   const [formData, setFormData] = useState({
@@ -254,10 +258,24 @@ export function DomainDetail() {
     }
   };
 
+  const loadWebSnapshots = async () => {
+    try {
+      setLoadingWebSnapshots(true);
+      const snapshots = await api.getDomainWebSnapshots(id);
+      setWebSnapshots(Array.isArray(snapshots) ? snapshots : []);
+    } catch (error) {
+      console.error('Failed to load web snapshots:', error);
+      setWebSnapshots([]);
+    } finally {
+      setLoadingWebSnapshots(false);
+    }
+  };
+
   useEffect(() => {
     if (id) {
       loadDomain();
       loadDnsData();
+      loadWebSnapshots();
     }
   }, [id]);
 
@@ -273,6 +291,24 @@ export function DomainDetail() {
       console.error(error);
     } finally {
       setRunningDnsCheck(false);
+    }
+  };
+
+  const handleRunWebSnapshot = async () => {
+    try {
+      setRunningWebSnapshot(true);
+      const snapshot = await api.runDomainWebSnapshot(id);
+      if (snapshot?.error) {
+        toast.error(`Snapshot failed: ${snapshot.error}`);
+      } else {
+        toast.success(snapshot?.usedHttpFallback ? 'Web snapshot complete (HTTP fallback used)' : 'Web snapshot complete');
+      }
+      await loadWebSnapshots();
+    } catch (error) {
+      toast.error(error.message || 'Failed to run web snapshot');
+      console.error(error);
+    } finally {
+      setRunningWebSnapshot(false);
     }
   };
 
@@ -724,6 +760,105 @@ export function DomainDetail() {
         </CardContent>
       </Card>
 
+      <Card className="mb-6">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Web Snapshots</CardTitle>
+            {isAdmin() && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRunWebSnapshot}
+                loading={runningWebSnapshot}
+              >
+                Run Web Snapshot
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadingWebSnapshots ? (
+            <div className="py-4">
+              <LoadingSpinner size="md" />
+              <p className="text-sm text-gray-500 text-center mt-2">Loading web snapshot history...</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {webSnapshots.length > 0 ? (
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Snapshot History</h4>
+                  <div className="space-y-3">
+                    {webSnapshots.map((snapshot) => (
+                      <div
+                        key={snapshot.id}
+                        onClick={() => setSelectedWebSnapshot(snapshot)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            setSelectedWebSnapshot(snapshot);
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        className="flex items-start justify-between gap-4 p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-gray-900">
+                              {new Date(snapshot.checkedAt).toLocaleString()}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                              snapshot.error ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                            }`}>
+                              {snapshot.error ? 'failed' : 'captured'}
+                            </span>
+                            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-700">
+                              {snapshot.usedHttpFallback ? 'http fallback' : 'https'}
+                            </span>
+                            {snapshot.statusCode && (
+                              <span className="px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800">
+                                {snapshot.statusCode}
+                              </span>
+                            )}
+                            {snapshot.loadTimeMs && (
+                              <span className="text-xs text-gray-500">{snapshot.loadTimeMs}ms</span>
+                            )}
+                          </div>
+                          {snapshot.title && (
+                            <p className="text-sm text-gray-700 mt-1 truncate">Title: {snapshot.title}</p>
+                          )}
+                          <p className="text-sm text-gray-600 mt-1 truncate">
+                            {snapshot.finalUrl || 'No final URL captured'}
+                          </p>
+                          {snapshot.error && (
+                            <p className="text-sm text-red-700 mt-1 truncate">{snapshot.error}</p>
+                          )}
+                        </div>
+                        <div className="w-[150px] h-[150px] rounded border border-gray-200 bg-white overflow-hidden flex-shrink-0">
+                          {snapshot.screenshotUrl ? (
+                            <img
+                              src={snapshot.screenshotUrl}
+                              alt={`Snapshot preview for ${domain.name}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-xs text-gray-400 p-2 text-center">
+                              No image
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No web snapshots run yet.</p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Associated Applications ({domain.applications?.length || 0})</CardTitle>
@@ -830,6 +965,81 @@ export function DomainDetail() {
           </div>
         </div>
       )}
+
+      <Modal
+        isOpen={!!selectedWebSnapshot}
+        onClose={() => setSelectedWebSnapshot(null)}
+        title="Web Snapshot Details"
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setSelectedWebSnapshot(null)}>
+              Close
+            </Button>
+            {selectedWebSnapshot?.finalUrl && (
+              <a
+                href={selectedWebSnapshot.finalUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Open Site
+              </a>
+            )}
+            {selectedWebSnapshot?.screenshotUrl && (
+              <a
+                href={selectedWebSnapshot.screenshotUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700"
+              >
+                Open Image
+              </a>
+            )}
+          </>
+        }
+      >
+        {selectedWebSnapshot && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+              <p><span className="font-medium text-gray-700">Checked:</span> {new Date(selectedWebSnapshot.checkedAt).toLocaleString()}</p>
+              <p><span className="font-medium text-gray-700">Status:</span> {selectedWebSnapshot.error ? 'failed' : 'captured'}</p>
+              <p><span className="font-medium text-gray-700">Attempted:</span> {selectedWebSnapshot.urlAttempted}</p>
+              <p><span className="font-medium text-gray-700">Protocol:</span> {selectedWebSnapshot.usedHttpFallback ? 'http fallback' : 'https'}</p>
+              <p><span className="font-medium text-gray-700">HTTP Status:</span> {selectedWebSnapshot.statusCode || '—'}</p>
+              <p><span className="font-medium text-gray-700">Load Time:</span> {selectedWebSnapshot.loadTimeMs ? `${selectedWebSnapshot.loadTimeMs}ms` : '—'}</p>
+            </div>
+
+            {selectedWebSnapshot.title && (
+              <p className="text-sm text-gray-700">
+                <span className="font-medium">Title:</span> {selectedWebSnapshot.title}
+              </p>
+            )}
+
+            {selectedWebSnapshot.finalUrl && (
+              <p className="text-sm text-gray-700 break-all">
+                <span className="font-medium">Final URL:</span> {selectedWebSnapshot.finalUrl}
+              </p>
+            )}
+
+            {selectedWebSnapshot.error && (
+              <div className="rounded border border-red-200 bg-red-50 p-3">
+                <p className="text-sm text-red-800">{selectedWebSnapshot.error}</p>
+              </div>
+            )}
+
+            {selectedWebSnapshot.screenshotUrl ? (
+              <img
+                src={selectedWebSnapshot.screenshotUrl}
+                alt={`Snapshot for ${domain.name}`}
+                className="w-full max-h-[520px] object-contain rounded border border-gray-200 bg-white"
+              />
+            ) : (
+              <p className="text-sm text-gray-500">No screenshot captured for this run.</p>
+            )}
+          </div>
+        )}
+      </Modal>
 
       <Modal
         isOpen={showCancelModal}

@@ -4,8 +4,25 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { getApexDomain } from '../utils/domainApex.js';
 import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { runDnsCheck, buildSnapshotCreateData, detectDnsChanges } from '../services/domainDns.js';
+import { runDomainWebSnapshot, enforceDomainWebSnapshotRetention } from '../services/domainSnapshot.js';
 
 const router = express.Router();
+
+function getRequestBaseUrl(req) {
+  const forwardedProto = req.get('x-forwarded-proto');
+  const forwardedHost = req.get('x-forwarded-host');
+  const protocol = (forwardedProto ? forwardedProto.split(',')[0] : req.protocol).trim();
+  const host = (forwardedHost ? forwardedHost.split(',')[0] : req.get('host')).trim();
+  return `${protocol}://${host}`;
+}
+
+function serializeWebSnapshot(snapshot, req) {
+  const baseUrl = getRequestBaseUrl(req);
+  return {
+    ...snapshot,
+    screenshotUrl: snapshot.screenshotPath ? `${baseUrl}${snapshot.screenshotPath}` : null,
+  };
+}
 
 function deriveDomainRelationships(targetDomain, relatedDomains) {
   const targetName = (targetDomain.name || '').trim().toLowerCase();
@@ -353,6 +370,67 @@ router.get('/:id/dns-changes', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error fetching DNS changes:', error);
     res.status(500).json({ error: 'Failed to fetch DNS changes' });
+  }
+});
+
+// Run manual web snapshot (admin only)
+router.post('/:id/snapshot', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const access = await getDomainForUser(id, req.session);
+    if (access.error) {
+      return res.status(access.error.status).json(access.error.body);
+    }
+
+    const { domain } = access;
+    const snapshotResult = await runDomainWebSnapshot(domain.name, domain.id);
+    if (snapshotResult?.internalError) {
+      console.error(`Web snapshot internal failure for ${domain.name}:`, snapshotResult.internalError);
+    }
+    const snapshot = await prisma.domainWebSnapshot.create({
+      data: {
+        domainId: domain.id,
+        urlAttempted: snapshotResult.urlAttempted,
+        usedHttpFallback: snapshotResult.usedHttpFallback,
+        finalUrl: snapshotResult.finalUrl,
+        statusCode: snapshotResult.statusCode,
+        title: snapshotResult.title,
+        loadTimeMs: snapshotResult.loadTimeMs,
+        screenshotPath: snapshotResult.screenshotPath,
+        error: snapshotResult.error,
+        createdBy: req.session.userId || null,
+      },
+    });
+
+    await enforceDomainWebSnapshotRetention(prisma, domain.id);
+    res.status(201).json(serializeWebSnapshot(snapshot, req));
+  } catch (error) {
+    const message = error?.message || 'Failed to run web snapshot';
+    const isValidationError = message.includes('Snapshot blocked') || message.includes('did not resolve');
+    console.error('Error running web snapshot:', error);
+    res.status(isValidationError ? 400 : 500).json({ error: message });
+  }
+});
+
+// Get web snapshots for a domain
+router.get('/:id/snapshots', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const access = await getDomainForUser(id, req.session);
+    if (access.error) {
+      return res.status(access.error.status).json(access.error.body);
+    }
+
+    const snapshots = await prisma.domainWebSnapshot.findMany({
+      where: { domainId: id },
+      orderBy: { checkedAt: 'desc' },
+      take: 5,
+    });
+
+    res.json(snapshots.map((snapshot) => serializeWebSnapshot(snapshot, req)));
+  } catch (error) {
+    console.error('Error fetching web snapshots:', error);
+    res.status(500).json({ error: 'Failed to fetch web snapshots' });
   }
 });
 

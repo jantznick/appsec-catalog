@@ -3,6 +3,8 @@ import session from 'express-session';
 import { PrismaSessionStore } from '@quixo3/prisma-session-store';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { prisma, disconnectPrisma } from './prisma/client.js';
 import { initializeAdminUsers, initializeSystemUser } from './utils/adminInit.js';
 import authRoutes from './routes/auth.js';
@@ -23,6 +25,8 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Determine if we're using HTTPS based on FRONTEND_URL
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -89,6 +93,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 app.use(express.json());
+app.use('/storage', express.static(path.resolve(__dirname, 'storage')));
 
 // Session configuration
 // Using PrismaSessionStore to store sessions in the database (scalable, survives restarts)
