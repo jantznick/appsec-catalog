@@ -28,6 +28,16 @@
 #         }
 #     }
 # 
+#     # Reverse proxy snapshot/static storage requests to backend
+#     handle /storage/* {
+#         reverse_proxy backend:3001 {
+#             header_up Host {host}
+#             header_up X-Real-IP {remote}
+#             header_up X-Forwarded-For {remote}
+#             header_up X-Forwarded-Proto {scheme}
+#         }
+#     }
+# 
 #     # Reverse proxy health check
 #     handle /health {
 #         reverse_proxy backend:3001
@@ -46,6 +56,16 @@
 :80 {
     # Reverse proxy API requests to backend (must come before /)
     handle /api/* {
+        reverse_proxy backend:3001 {
+            header_up Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Reverse proxy snapshot/static storage requests to backend
+    handle /storage/* {
         reverse_proxy backend:3001 {
             header_up Host {host}
             header_up X-Real-IP {remote}
