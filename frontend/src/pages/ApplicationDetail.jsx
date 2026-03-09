@@ -760,6 +760,17 @@ export function ApplicationDetail() {
                   </Link>
                 </>
               )}
+              {application.product?.name && (
+                <> {' • '}
+                  <span className="text-gray-600 font-medium">Product:</span>
+                  <Link
+                    to={`/products/${application.product.id}`}
+                    className="text-blue-600 hover:text-blue-700"
+                  >
+                    {application.product.name}
+                  </Link>
+                </>
+              )}
             </p>
           </div>
           <div className="flex gap-3 items-center">

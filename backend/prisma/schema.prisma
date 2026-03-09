@@ -10,140 +10,222 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  email     String    @unique
-  password  String?
-  verifiedAccount Boolean @default(false)
-  isAdmin   Boolean   @default(false)
-  requests  Request[]
-  companyId String?
-  company   Company?  @relation(fields: [companyId], references: [id])
-  magicCodes MagicCode[]
-  notes     Note[]    // Notes created by this user
-  applicationVersions ApplicationVersion[] // Versions created by this user
-  approvedVersions ApplicationVersion[] @relation("VersionApprover") // Versions approved by this user
-  applicationReviews ApplicationMetadataReview[] // Reviews performed by this user
+  id                     String                      @id @default(cuid())
+  email                  String                      @unique
+  password               String?
+  verifiedAccount        Boolean                     @default(false)
+  isAdmin                Boolean                     @default(false)
+  requests               Request[]
+  companyId              String?
+  company                Company?                    @relation(fields: [companyId], references: [id])
+  magicCodes             MagicCode[]
+  notes                  Note[] // Notes created by this user
+  applicationVersions    ApplicationVersion[] // Versions created by this user
+  approvedVersions       ApplicationVersion[]        @relation("VersionApprover") // Versions approved by this user
+  applicationReviews     ApplicationMetadataReview[] // Reviews performed by this user
   policyControlOverrides PolicyControlOverride[] // Policy control overrides set by this user
 }
 
 model Division {
-  id              String          @id @default(cuid())
-  name            String          @unique
-  description     String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  companies       Company[]
+  id               String           @id @default(cuid())
+  name             String           @unique
+  description      String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  companies        Company[]
   divisionPolicies DivisionPolicy[]
-  
+
   @@index([name])
 }
 
 model Company {
-  id          String    @id @default(cuid())
-  name        String    @unique
-  slug        String?   @unique
-  domains     String?  // Email domains (comma-separated) - used for auto-assigning users to company based on email domain (e.g., "example.com, subdomain.example.com")
-  divisionId  String?  // Division this company belongs to
-  division    Division? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
-  users       User[]
-  applications Application[]
-  invitations Invitation[]
-  domainList  Domain[] // Application hosting domains - domains where this company's applications are hosted (see Domain model)
-  deploymentTokens DeploymentToken[] // Deployment tokens for CI/CD integration
-  notes       Note[]    // Notes associated with this company
-  engManager  String?
-  language            String?
-  framework           String?
-  serverEnvironment   String?
-  facing              String?
-  deploymentType      String?
-  authProfiles        String?
-  dataTypes           String?
-  contacts    Contact[]
-  companyPolicies CompanyPolicy[]
-  
+  id                    String                 @id @default(cuid())
+  name                  String                 @unique
+  slug                  String?                @unique
+  domains               String? // Email domains (comma-separated) - used for auto-assigning users to company based on email domain (e.g., "example.com, subdomain.example.com")
+  divisionId            String? // Division this company belongs to
+  division              Division?              @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+  users                 User[]
+  applications          Application[]
+  invitations           Invitation[]
+  domainList            Domain[] // Application hosting domains - domains where this company's applications are hosted (see Domain model)
+  deploymentTokens      DeploymentToken[] // Deployment tokens for CI/CD integration
+  notes                 Note[] // Notes associated with this company
+  engManager            String?
+  language              String?
+  framework             String?
+  serverEnvironment     String?
+  facing                String?
+  deploymentType        String?
+  authProfiles          String?
+  dataTypes             String?
+  contacts              Contact[]
+  companyPolicies       CompanyPolicy[]
+  products              Product[]
+  productComponentTypes ProductComponentType[]
+
   @@index([slug])
   @@index([divisionId])
 }
 
 model ChangeLog {
-  id                    String    @id @default(cuid())
-  createdAt             DateTime  @default(now())
-  userEmail             String
-  companyName           String? // Name of the company being updated (at time of submission)
-  targetCompanyId       String? // ID of the company being updated (at time of submission)
-  proposedCompanyName   String?
-  changeDetails         String // JSON blob
-  status                String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  id                  String   @id @default(cuid())
+  createdAt           DateTime @default(now())
+  userEmail           String
+  companyName         String? // Name of the company being updated (at time of submission)
+  targetCompanyId     String? // ID of the company being updated (at time of submission)
+  proposedCompanyName String?
+  changeDetails       String // JSON blob
+  status              String   @default("PENDING") // PENDING, APPROVED, REJECTED
 
   // New fields for historical accuracy
-  approvedBy            String?
-  approvedAt            DateTime?
-  actionTaken           String? // e.g., 'MERGE', 'CREATE_NEW'
-  finalTargetCompanyId  String?
+  approvedBy             String?
+  approvedAt             DateTime?
+  actionTaken            String? // e.g., 'MERGE', 'CREATE_NEW'
+  finalTargetCompanyId   String?
   finalTargetCompanyName String?
-  approvedFields        String? // Comma-separated list of fields that were approved
+  approvedFields         String? // Comma-separated list of fields that were approved
 }
 
 model Application {
-  id              String    @id @default(cuid())
-  name            String
-  companyId       String
-  company         Company   @relation(fields: [companyId], references: [id])
-  requests        Request[]
-  scores          Score[]
-  applicationDomains ApplicationDomain[]
-  deployments     Deployment[]
-  deploymentTokens ApplicationDeploymentToken[]
-  notes           Note[]    // Notes associated with this application
-  versions        ApplicationVersion[] // Version history of metadata changes
-  reviews         ApplicationMetadataReview[] // History of metadata reviews
+  id                     String                       @id @default(cuid())
+  name                   String
+  companyId              String
+  company                Company                      @relation(fields: [companyId], references: [id])
+  requests               Request[]
+  scores                 Score[]
+  applicationDomains     ApplicationDomain[]
+  deployments            Deployment[]
+  deploymentTokens       ApplicationDeploymentToken[]
+  notes                  Note[] // Notes associated with this application
+  versions               ApplicationVersion[] // Version history of metadata changes
+  reviews                ApplicationMetadataReview[] // History of metadata reviews
   policyControlOverrides PolicyControlOverride[] // Manual overrides for policy controls
-  description     String?
-  owner           String?
-  repoUrl         String?
-  language        String?
-  framework       String?
-  serverEnvironment String?
-  facing          String?
-  deploymentType  String?
-  authProfiles    String?
-  dataTypes       String?
-  contacts        Contact[]
-  status          String    @default("onboarded") // pending_executive, pending_technical, onboarded
+  productApplications    ProductApplication[]
+  outgoingProductFlows   ProductDataFlow[]            @relation("ProductFlowSource")
+  incomingProductFlows   ProductDataFlow[]            @relation("ProductFlowTarget")
+  description            String?
+  owner                  String?
+  repoUrl                String?
+  language               String?
+  framework              String?
+  serverEnvironment      String?
+  facing                 String?
+  deploymentType         String?
+  authProfiles           String?
+  dataTypes              String?
+  contacts               Contact[]
+  status                 String                       @default("onboarded") // pending_executive, pending_technical, onboarded
 
   // Scoring fields
-  sastTool              String?
-  sastIntegrationLevel  Int?
-  dastTool              String?
-  dastIntegrationLevel  Int?
-  appFirewallTool       String?
+  sastTool                    String?
+  sastIntegrationLevel        Int?
+  dastTool                    String?
+  dastIntegrationLevel        Int?
+  appFirewallTool             String?
   appFirewallIntegrationLevel Int?
-  apiSecurityTool       String?
+  apiSecurityTool             String?
   apiSecurityIntegrationLevel Int?
-  
-  apiSecurityNA         Boolean? @default(false)
 
-  metadataLastReviewed  DateTime?
-  
+  apiSecurityNA Boolean? @default(false)
+
+  metadataLastReviewed DateTime?
+
   // Deployment metadata (editable in main form, not onboarding)
   currentVersion        String? // Current application version (e.g., "1.2.3", "v2.1.0")
   deploymentEnvironment String? // Primary deployment environment (e.g., "dev", "staging", "prod", "qa")
   gitBranch             String? // Current git branch or tag (e.g., "main", "v1.2.3", "release/2024-01")
   lastDastScanDate      DateTime? // Date/time of last DAST (Dynamic Application Security Testing) scan
   lastSastScanDate      DateTime? // Date/time of last SAST (Static Application Security Testing) scan
-  
+
   // Interfaces with other applications (stored as JSON array of application IDs/names)
-  interfaces            String? // JSON array of application names/IDs
-  
+  interfaces String? // JSON array of application names/IDs
+
   // Executive form fields
-  businessCriticality   Int?    // 1-5 scale (5 being most critical)
-  criticalAspects       String? // Availability, Data Handling, Confidentiality, Integrity, Other (comma-separated)
-  devTeamContact        String? // Development team contact information
-  
+  businessCriticality Int? // 1-5 scale (5 being most critical)
+  criticalAspects     String? // Availability, Data Handling, Confidentiality, Integrity, Other (comma-separated)
+  devTeamContact      String? // Development team contact information
+
   // Technical form fields
   securityTestingDescription String? // Description of security testing in place
-  additionalNotes       String? // Any other information about the application
+  additionalNotes            String? // Any other information about the application
+}
+
+model Product {
+  id                  String               @id @default(cuid())
+  companyId           String
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                String
+  description         String?
+  owner               String?
+  facing              String?
+  status              String               @default("active") // active, planned, retired
+  lifecycleStage      String?
+  businessCriticality Int?
+  dataSensitivity     String?
+  complianceNotes     String?              @db.Text
+  applications        ProductApplication[]
+  dataFlows           ProductDataFlow[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@index([status])
+}
+
+model ProductDataFlow {
+  id                  String      @id @default(cuid())
+  productId           String
+  product             Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sourceApplicationId String
+  sourceApplication   Application @relation("ProductFlowSource", fields: [sourceApplicationId], references: [id], onDelete: Cascade)
+  targetApplicationId String
+  targetApplication   Application @relation("ProductFlowTarget", fields: [targetApplicationId], references: [id], onDelete: Cascade)
+  flowName            String?
+  dataClassification  String?
+  protocol            String?
+  direction           String      @default("unidirectional") // unidirectional, bidirectional
+  notes               String?     @db.Text
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@index([productId])
+  @@index([sourceApplicationId])
+  @@index([targetApplicationId])
+  @@index([createdAt])
+}
+
+model ProductComponentType {
+  id           String               @id @default(cuid())
+  companyId    String
+  company      Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name         String
+  isDefault    Boolean              @default(false)
+  applications ProductApplication[]
+  createdAt    DateTime             @default(now())
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+model ProductApplication {
+  id                   String                @id @default(cuid())
+  productId            String
+  product              Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  applicationId        String
+  application          Application           @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  componentTypeId      String?
+  componentType        ProductComponentType? @relation(fields: [componentTypeId], references: [id], onDelete: SetNull)
+  customComponentLabel String?
+  displayOrder         Int                   @default(0)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@unique([productId, applicationId])
+  @@index([productId])
+  @@index([applicationId])
+  @@index([componentTypeId])
 }
 
 model Contact {
@@ -159,28 +241,28 @@ model Contact {
 }
 
 model Request {
-  id            Int         @id @default(autoincrement())
+  id            Int          @id @default(autoincrement())
   products      String
   requestType   String
   users         String?
   notes         String?
   adminNotes    String?
-  status        String      @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, FAILED
-  createdAt     DateTime    @default(now())
+  status        String       @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, FAILED
+  createdAt     DateTime     @default(now())
   userId        String?
-  User          User?       @relation(fields: [userId], references: [id])
+  User          User?        @relation(fields: [userId], references: [id])
   applicationId String?
   application   Application? @relation(fields: [applicationId], references: [id])
   scriptJobs    ScriptJob[]
 }
 
 model ScriptJob {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   requestId Int
-  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  request   Request   @relation(fields: [requestId], references: [id], onDelete: Cascade)
   status    String // RUNNING, COMPLETED, FAILED
   output    String
-  startedAt DateTime @default(now())
+  startedAt DateTime  @default(now())
   endedAt   DateTime?
 }
 
@@ -192,44 +274,44 @@ model Session {
 }
 
 model MagicCode {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   code      String
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
-  
+  createdAt DateTime  @default(now())
+
   @@index([code])
   @@index([userId])
 }
 
 model Score {
-  id                String      @id @default(cuid())
-  applicationId     String
-  application       Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  knowledgeScore    Int
-  toolScore         Int
-  totalScore        Int
-  calculatedAt      DateTime    @default(now())
-  
+  id             String      @id @default(cuid())
+  applicationId  String
+  application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  knowledgeScore Int
+  toolScore      Int
+  totalScore     Int
+  calculatedAt   DateTime    @default(now())
+
   @@index([applicationId])
   @@index([calculatedAt])
   @@index([totalScore])
 }
 
 model Invitation {
-  id        String   @id @default(cuid())
-  token     String   @unique
+  id        String    @id @default(cuid())
+  token     String    @unique
   email     String
   companyId String?
-  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  isAdmin   Boolean  @default(false)
-  invitedBy String?  // User ID who sent the invitation
+  company   Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  isAdmin   Boolean   @default(false)
+  invitedBy String? // User ID who sent the invitation
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
-  
+  createdAt DateTime  @default(now())
+
   @@index([token])
   @@index([email])
   @@index([expiresAt])
@@ -239,21 +321,21 @@ model Invitation {
 // This is different from Company.domains which are email domains for user auto-assignment
 // Example: If an application is hosted at "api.example.com", that would be a Domain record
 model Domain {
-  id              String              @id @default(cuid())
-  name            String              // Hosting domain name (e.g., example.com, subdomain.example.com) - where applications are hosted
-  description     String?             // Optional domain context/details
-  owner           String?             // Optional owner/contact details (freeform text)
-  status          String              @default("unknown") // Domain status (unknown, active, parked, deprecated, etc.)
-  apexDomain      String?             // Registrable/apex domain for grouping related subdomains
-  companyId       String              // Domains are company-specific
-  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id                 String              @id @default(cuid())
+  name               String // Hosting domain name (e.g., example.com, subdomain.example.com) - where applications are hosted
+  description        String? // Optional domain context/details
+  owner              String? // Optional owner/contact details (freeform text)
+  status             String              @default("unknown") // Domain status (unknown, active, parked, deprecated, etc.)
+  apexDomain         String? // Registrable/apex domain for grouping related subdomains
+  companyId          String // Domains are company-specific
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   applicationDomains ApplicationDomain[] // Many-to-many: applications hosted on this domain
-  dnsSnapshots    DomainDnsSnapshot[]
-  dnsChanges      DomainDnsChange[]
-  webSnapshots    DomainWebSnapshot[]
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  
+  dnsSnapshots       DomainDnsSnapshot[]
+  dnsChanges         DomainDnsChange[]
+  webSnapshots       DomainWebSnapshot[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
   @@unique([name, companyId]) // Domain name must be unique within a company
   @@index([companyId])
   @@index([name])
@@ -261,27 +343,27 @@ model Domain {
 }
 
 model DomainDnsSnapshot {
-  id            String   @id @default(cuid())
-  domainId      String
-  domain        Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
-  checkedAt     DateTime @default(now())
-  status        String   // ok, warning, error
-  error         String?  @db.Text
-  metadataScore Int?
-  dnsSecurityScore Int?
+  id                 String            @id @default(cuid())
+  domainId           String
+  domain             Domain            @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  checkedAt          DateTime          @default(now())
+  status             String // ok, warning, error
+  error              String?           @db.Text
+  metadataScore      Int?
+  dnsSecurityScore   Int?
   totalSecurityScore Int?
-  scoreBreakdown String? @db.Text
-  cnameRecords  String?  @db.Text
-  aRecords      String?  @db.Text
-  aaaaRecords   String?  @db.Text
-  txtRecords    String?  @db.Text
-  mxRecords     String?  @db.Text
-  nsRecords     String?  @db.Text
-  spfRecord     String?  @db.Text
-  dmarcRecord   String?  @db.Text
-  dkimRecords   String?  @db.Text
-  createdBy     String?
-  changes       DomainDnsChange[]
+  scoreBreakdown     String?           @db.Text
+  cnameRecords       String?           @db.Text
+  aRecords           String?           @db.Text
+  aaaaRecords        String?           @db.Text
+  txtRecords         String?           @db.Text
+  mxRecords          String?           @db.Text
+  nsRecords          String?           @db.Text
+  spfRecord          String?           @db.Text
+  dmarcRecord        String?           @db.Text
+  dkimRecords        String?           @db.Text
+  createdBy          String?
+  changes            DomainDnsChange[]
 
   @@index([domainId])
   @@index([checkedAt])
@@ -289,17 +371,17 @@ model DomainDnsSnapshot {
 }
 
 model DomainDnsChange {
-  id          String            @id @default(cuid())
-  domainId    String
-  domain      Domain            @relation(fields: [domainId], references: [id], onDelete: Cascade)
-  snapshotId  String
-  snapshot    DomainDnsSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
-  changeType  String            // record_added, record_removed, record_changed
-  recordType  String            // A, AAAA, CNAME, TXT, MX, NS, SPF, DMARC, DKIM
-  severity    String            // info, warning, high
-  summary     String
-  details     String?           @db.Text
-  createdAt   DateTime          @default(now())
+  id         String            @id @default(cuid())
+  domainId   String
+  domain     Domain            @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  snapshotId String
+  snapshot   DomainDnsSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  changeType String // record_added, record_removed, record_changed
+  recordType String // A, AAAA, CNAME, TXT, MX, NS, SPF, DMARC, DKIM
+  severity   String // info, warning, high
+  summary    String
+  details    String?           @db.Text
+  createdAt  DateTime          @default(now())
 
   @@index([domainId])
   @@index([snapshotId])
@@ -335,7 +417,7 @@ model ApplicationDomain {
   domainId      String
   domain        Domain      @relation(fields: [domainId], references: [id], onDelete: Cascade)
   createdAt     DateTime    @default(now())
-  
+
   @@unique([applicationId, domainId]) // Prevent duplicate associations
   @@index([applicationId])
   @@index([domainId])
@@ -347,13 +429,13 @@ model Deployment {
   applicationId String
   application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   deployedAt    DateTime    @default(now())
-  environment   String      // dev, staging, qa, prod, etc.
-  version       String?     // Version that was deployed (e.g., "1.2.3", "v2.1.0")
-  gitBranch     String?     // Git branch or tag that was deployed (e.g., "main", "v1.2.3")
-  deployedBy    String?     // Who deployed it (user email or name)
-  notes         String?     // Optional notes about the deployment
+  environment   String // dev, staging, qa, prod, etc.
+  version       String? // Version that was deployed (e.g., "1.2.3", "v2.1.0")
+  gitBranch     String? // Git branch or tag that was deployed (e.g., "main", "v1.2.3")
+  deployedBy    String? // Who deployed it (user email or name)
+  notes         String? // Optional notes about the deployment
   createdAt     DateTime    @default(now())
-  
+
   @@index([applicationId])
   @@index([deployedAt])
   @@index([environment])
@@ -362,18 +444,18 @@ model Deployment {
 // Deployment tokens for CI/CD pipeline integration
 // Tokens can be associated with multiple applications
 model DeploymentToken {
-  id            String   @id @default(cuid())
-  token         String   @unique // Plaintext token (stored for display, used for API auth)
-  tokenHash     String   @unique // Hashed version for secure verification
-  name          String?  // Optional name/description (e.g., "Production Pipeline")
-  createdBy     String?  // User ID who created it
-  companyId     String   // Company that owns this token (for access control)
-  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  createdAt     DateTime @default(now())
-  revokedAt     DateTime? // When token was revoked (null = active)
-  lastUsedAt    DateTime? // Track last usage for monitoring
-  applications  ApplicationDeploymentToken[] // Many-to-many with applications
-  
+  id           String                       @id @default(cuid())
+  token        String                       @unique // Plaintext token (stored for display, used for API auth)
+  tokenHash    String                       @unique // Hashed version for secure verification
+  name         String? // Optional name/description (e.g., "Production Pipeline")
+  createdBy    String? // User ID who created it
+  companyId    String // Company that owns this token (for access control)
+  company      Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt    DateTime                     @default(now())
+  revokedAt    DateTime? // When token was revoked (null = active)
+  lastUsedAt   DateTime? // Track last usage for monitoring
+  applications ApplicationDeploymentToken[] // Many-to-many with applications
+
   @@index([companyId])
   @@index([tokenHash])
   @@index([revokedAt])
@@ -382,13 +464,13 @@ model DeploymentToken {
 // Join table: Associates deployment tokens with applications (many-to-many)
 // A token can be used for multiple applications, and an application can have multiple tokens
 model ApplicationDeploymentToken {
-  id              String          @id @default(cuid())
-  tokenId         String
-  token           DeploymentToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
-  applicationId   String
-  application     Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  createdAt       DateTime        @default(now())
-  
+  id            String          @id @default(cuid())
+  tokenId       String
+  token         DeploymentToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  applicationId String
+  application   Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  createdAt     DateTime        @default(now())
+
   @@unique([tokenId, applicationId]) // Prevent duplicate associations
   @@index([tokenId])
   @@index([applicationId])
@@ -396,24 +478,24 @@ model ApplicationDeploymentToken {
 
 // Notes/Timeline feature - Admin-only notes for companies and applications
 model Note {
-  id            String    @id @default(cuid())
-  content       String    // The note text content (max 5000 chars)
-  createdBy     String    // User ID who created the note
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
+  id        String   @id @default(cuid())
+  content   String // The note text content (max 5000 chars)
+  createdBy String // User ID who created the note
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Polymorphic associations - one of these will be set
   companyId     String?
-  company       Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company       Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   applicationId String?
   application   Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  
+
   // User relation for easy access to creator info
-  user          User      @relation(fields: [createdBy], references: [id])
-  
+  user User @relation(fields: [createdBy], references: [id])
+
   // Policy control override relation (if this note is linked to an override)
   policyControlOverride PolicyControlOverride? @relation("OverrideNote")
-  
+
   @@index([companyId])
   @@index([applicationId])
   @@index([createdAt])
@@ -421,59 +503,59 @@ model Note {
 
 // Application metadata version history - tracks all changes to application metadata
 model ApplicationVersion {
-  id            String      @id @default(cuid())
-  applicationId String
-  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  versionNumber Int         // Sequential version number (1, 2, 3, ...)
-  createdBy     String?     // User ID who made the change (null for system/automated)
-  user          User?       @relation(fields: [createdBy], references: [id])
-  requesterEmail String?    // Email of the person who requested the change (for technical form submissions)
-  createdAt     DateTime    @default(now())
-  changeSource  String?     // e.g., "web_form", "technical_form", "api", "bulk_import", "deployment_token"
-  
+  id             String      @id @default(cuid())
+  applicationId  String
+  application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  versionNumber  Int // Sequential version number (1, 2, 3, ...)
+  createdBy      String? // User ID who made the change (null for system/automated)
+  user           User?       @relation(fields: [createdBy], references: [id])
+  requesterEmail String? // Email of the person who requested the change (for technical form submissions)
+  createdAt      DateTime    @default(now())
+  changeSource   String? // e.g., "web_form", "technical_form", "api", "bulk_import", "deployment_token"
+
   // Approval workflow fields
-  approvalStatus String      @default("approved") // "pending", "approved", "rejected"
-  approvedBy    String?     // User ID who approved/rejected this version
-  approver      User?       @relation("VersionApprover", fields: [approvedBy], references: [id])
-  approvedAt    DateTime?   // When this version was approved/rejected
-  approvedFields String?    // Comma-separated list of field names that were approved (null = all fields)
-  approvalNotes String?     // Optional notes for approval
-  rejectionReason String?   // Optional reason for rejection
-  
+  approvalStatus  String    @default("approved") // "pending", "approved", "rejected"
+  approvedBy      String? // User ID who approved/rejected this version
+  approver        User?     @relation("VersionApprover", fields: [approvedBy], references: [id])
+  approvedAt      DateTime? // When this version was approved/rejected
+  approvedFields  String? // Comma-separated list of field names that were approved (null = all fields)
+  approvalNotes   String? // Optional notes for approval
+  rejectionReason String? // Optional reason for rejection
+
   // Store snapshot of all metadata fields at this version (excluding metadataLastReviewed)
-  name                  String?
-  description           String?
-  owner                 String?
-  repoUrl               String?
-  language              String?
-  framework             String?
-  serverEnvironment     String?
-  facing                String?
-  deploymentType        String?
-  authProfiles          String?
-  dataTypes             String?
-  status                String?
-  businessCriticality   Int?
-  criticalAspects       String?
-  devTeamContact        String?
-  securityTestingDescription String?
-  additionalNotes       String?
-  sastTool              String?
-  sastIntegrationLevel  Int?
-  dastTool              String?
-  dastIntegrationLevel  Int?
-  appFirewallTool       String?
+  name                        String?
+  description                 String?
+  owner                       String?
+  repoUrl                     String?
+  language                    String?
+  framework                   String?
+  serverEnvironment           String?
+  facing                      String?
+  deploymentType              String?
+  authProfiles                String?
+  dataTypes                   String?
+  status                      String?
+  businessCriticality         Int?
+  criticalAspects             String?
+  devTeamContact              String?
+  securityTestingDescription  String?
+  additionalNotes             String?
+  sastTool                    String?
+  sastIntegrationLevel        Int?
+  dastTool                    String?
+  dastIntegrationLevel        Int?
+  appFirewallTool             String?
   appFirewallIntegrationLevel Int?
-  apiSecurityTool       String?
+  apiSecurityTool             String?
   apiSecurityIntegrationLevel Int?
-  apiSecurityNA         Boolean?
-  currentVersion        String?
-  deploymentEnvironment String?
-  gitBranch             String?
-  lastDastScanDate      DateTime?
-  lastSastScanDate      DateTime?
-  interfaces            String? // JSON array
-  
+  apiSecurityNA               Boolean?
+  currentVersion              String?
+  deploymentEnvironment       String?
+  gitBranch                   String?
+  lastDastScanDate            DateTime?
+  lastSastScanDate            DateTime?
+  interfaces                  String? // JSON array
+
   @@index([applicationId])
   @@index([applicationId, versionNumber])
   @@index([createdAt])
@@ -487,10 +569,10 @@ model ApplicationMetadataReview {
   id            String      @id @default(cuid())
   applicationId String
   application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  reviewedBy    String      // User ID who performed the review
+  reviewedBy    String // User ID who performed the review
   user          User        @relation(fields: [reviewedBy], references: [id])
   reviewedAt    DateTime    @default(now())
-  
+
   @@index([applicationId])
   @@index([reviewedAt])
   @@index([reviewedBy])
@@ -498,24 +580,24 @@ model ApplicationMetadataReview {
 
 // Policies - groups of policy controls with scoping rules
 model Policy {
-  id              String          @id @default(cuid())
-  name            String          // e.g., "Global Security Baseline", "Healthcare Division Policy"
-  description     String?         // Optional description
-  scope           String          // 'global', 'division', 'company', 'conditional'
-  isActive        Boolean         @default(true)
-  displayOrder    Int             @default(0)
-  
+  id           String  @id @default(cuid())
+  name         String // e.g., "Global Security Baseline", "Healthcare Division Policy"
+  description  String? // Optional description
+  scope        String // 'global', 'division', 'company', 'conditional'
+  isActive     Boolean @default(true)
+  displayOrder Int     @default(0)
+
   // Targeting/Scoping Configuration (stored as JSON for flexibility)
-  targetingRules  String?         @db.Text // JSON: { type: 'division', divisionIds: [...] } or { type: 'company', companyIds: [...] } or { type: 'conditional', conditions: [...] }
-  
+  targetingRules String? @db.Text // JSON: { type: 'division', divisionIds: [...] } or { type: 'company', companyIds: [...] } or { type: 'conditional', conditions: [...] }
+
   // Relations
-  controls        PolicyControl[] // Controls that belong to this policy
+  controls         PolicyControl[] // Controls that belong to this policy
   divisionPolicies DivisionPolicy[] // Many-to-many with divisions
-  companyPolicies CompanyPolicy[] // Many-to-many with companies
-  
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  
+  companyPolicies  CompanyPolicy[] // Many-to-many with companies
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([scope])
   @@index([isActive])
   @@index([displayOrder])
@@ -528,7 +610,7 @@ model DivisionPolicy {
   division   Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   policyId   String
   policy     Policy   @relation(fields: [policyId], references: [id], onDelete: Cascade)
-  
+
   @@unique([divisionId, policyId])
   @@index([divisionId])
   @@index([policyId])
@@ -541,7 +623,7 @@ model CompanyPolicy {
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   policyId  String
   policy    Policy  @relation(fields: [policyId], references: [id], onDelete: Cascade)
-  
+
   @@unique([companyId, policyId])
   @@index([companyId])
   @@index([policyId])
@@ -549,21 +631,21 @@ model CompanyPolicy {
 
 // Policy controls - defines security policy requirements that applications must meet
 model PolicyControl {
-  id              String              @id @default(cuid())
-  controlId       String              @unique // e.g., "3.4.2"
-  name            String              // e.g., "Pre-Prod Scanning Required"
-  description     String              // Full description of the control requirement
-  category        String?             // e.g., "Security Testing", "Infrastructure Security"
-  evaluationLogic String              @default("AND") // "AND" or "OR" - how to combine field checks
-  isActive        Boolean             @default(true)
-  displayOrder    Int                 @default(0) // Order for display in UI
-  policyId        String              // Required - all controls must belong to a policy
-  policy          Policy              @relation(fields: [policyId], references: [id], onDelete: Cascade)
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  id              String                  @id @default(cuid())
+  controlId       String                  @unique // e.g., "3.4.2"
+  name            String // e.g., "Pre-Prod Scanning Required"
+  description     String // Full description of the control requirement
+  category        String? // e.g., "Security Testing", "Infrastructure Security"
+  evaluationLogic String                  @default("AND") // "AND" or "OR" - how to combine field checks
+  isActive        Boolean                 @default(true)
+  displayOrder    Int                     @default(0) // Order for display in UI
+  policyId        String // Required - all controls must belong to a policy
+  policy          Policy                  @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
   fields          PolicyControlField[] // Field mappings for this control
   overrides       PolicyControlOverride[] // Manual overrides for this control
-  
+
   @@index([controlId])
   @@index([isActive])
   @@index([displayOrder])
@@ -572,16 +654,16 @@ model PolicyControl {
 
 // Policy control field mappings - defines which application fields are checked for each control
 model PolicyControlField {
-  id              String          @id @default(cuid())
-  controlId       String          // Foreign key to PolicyControl
-  control         PolicyControl   @relation(fields: [controlId], references: [id], onDelete: Cascade)
-  fieldPath       String          // e.g., "sastTool", "sastIntegrationLevel", "facing"
-  operator        String          // "exists", "equals", "not_equals", "gte", "gt", "lte", "lt", "contains", "in", "not_in"
-  value           String?         // JSON string for the value (supports different types: string, number, boolean, array)
-  displayOrder    Int             @default(0) // Order for display within the control
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  
+  id           String        @id @default(cuid())
+  controlId    String // Foreign key to PolicyControl
+  control      PolicyControl @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  fieldPath    String // e.g., "sastTool", "sastIntegrationLevel", "facing"
+  operator     String // "exists", "equals", "not_equals", "gte", "gt", "lte", "lt", "contains", "in", "not_in"
+  value        String? // JSON string for the value (supports different types: string, number, boolean, array)
+  displayOrder Int           @default(0) // Order for display within the control
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
   @@index([controlId])
   @@index([fieldPath])
 }
@@ -589,19 +671,19 @@ model PolicyControlField {
 // Policy control overrides - manual compliance overrides for controls without field mappings
 // Admin-only feature to mark controls as compliant when they can't be automatically evaluated
 model PolicyControlOverride {
-  id              String      @id @default(cuid())
-  applicationId   String
-  application      Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  controlId        String
-  control          PolicyControl @relation(fields: [controlId], references: [id], onDelete: Cascade)
-  isCompliant      Boolean     // true = manually marked as meeting, false = manually marked as not meeting
-  noteId           String?     @unique // Optional link to a Note explaining the override
-  note             Note?       @relation("OverrideNote", fields: [noteId], references: [id], onDelete: SetNull)
-  overriddenBy     String      // User ID who set the override (must be admin)
-  user             User        @relation(fields: [overriddenBy], references: [id])
-  overriddenAt     DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-  
+  id            String        @id @default(cuid())
+  applicationId String
+  application   Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  controlId     String
+  control       PolicyControl @relation(fields: [controlId], references: [id], onDelete: Cascade)
+  isCompliant   Boolean // true = manually marked as meeting, false = manually marked as not meeting
+  noteId        String?       @unique // Optional link to a Note explaining the override
+  note          Note?         @relation("OverrideNote", fields: [noteId], references: [id], onDelete: SetNull)
+  overriddenBy  String // User ID who set the override (must be admin)
+  user          User          @relation(fields: [overriddenBy], references: [id])
+  overriddenAt  DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
   @@unique([applicationId, controlId]) // One override per application-control pair
   @@index([applicationId])
   @@index([controlId])

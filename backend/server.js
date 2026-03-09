@@ -20,6 +20,7 @@ import deploymentTokenRoutes from './routes/deploymentTokens.js';
 import notesRoutes from './routes/notes.js';
 import policyControlRoutes from './routes/policyControls.js';
 import policyRoutes from './routes/policies.js';
+import productRoutes from './routes/products.js';
 
 dotenv.config();
 
@@ -139,6 +140,7 @@ app.use('/api/deployment-tokens', deploymentTokenRoutes);
 app.use('/api/notes', notesRoutes);
 app.use('/api/policy-controls', policyControlRoutes);
 app.use('/api/policies', policyRoutes);
+app.use('/api/products', productRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

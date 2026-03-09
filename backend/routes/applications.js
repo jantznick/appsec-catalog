@@ -1045,6 +1045,19 @@ router.get('/:id', requireAuth, async (req, res) => {
           orderBy: { deployedAt: 'desc' },
           take: 10, // Get last 10 deployments for the detail view
         },
+        productApplications: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
       },
     });
 
@@ -1059,6 +1072,18 @@ router.get('/:id', requireAuth, async (req, res) => {
     } else {
       application.domains = [];
     }
+
+    // Backward-compatible product shape for UI consumers expecting a single product
+    if (application.productApplications && application.productApplications.length > 0) {
+      application.products = application.productApplications
+        .map((pa) => pa.product)
+        .filter(Boolean);
+      application.product = application.products[0] || null;
+    } else {
+      application.products = [];
+      application.product = null;
+    }
+    delete application.productApplications;
 
     // Check if user has access (admin or member of same company)
     if (!req.session.isAdmin && req.session.companyId !== application.companyId) {

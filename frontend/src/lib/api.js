@@ -332,6 +332,84 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // Product management
+  getProducts: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.companyId) params.append('companyId', filters.companyId);
+    const queryString = params.toString();
+    return apiRequest(`/api/products${queryString ? `?${queryString}` : ''}`);
+  },
+
+  getProduct: (id) =>
+    apiRequest(`/api/products/${id}`),
+
+  createProduct: (data) =>
+    apiRequest('/api/products', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateProduct: (id, data) =>
+    apiRequest(`/api/products/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteProduct: (id) =>
+    apiRequest(`/api/products/${id}`, {
+      method: 'DELETE',
+    }),
+
+  getProductComponentTypes: (companyId = null) => {
+    const params = new URLSearchParams();
+    if (companyId) params.append('companyId', companyId);
+    const queryString = params.toString();
+    return apiRequest(`/api/products/component-types${queryString ? `?${queryString}` : ''}`);
+  },
+
+  createProductComponentType: (data) =>
+    apiRequest('/api/products/component-types', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  addApplicationToProduct: (productId, data) =>
+    apiRequest(`/api/products/${productId}/applications`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateProductApplicationMapping: (productId, applicationId, data) =>
+    apiRequest(`/api/products/${productId}/applications/${applicationId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  removeApplicationFromProduct: (productId, applicationId) =>
+    apiRequest(`/api/products/${productId}/applications/${applicationId}`, {
+      method: 'DELETE',
+    }),
+
+  getProductDataFlows: (productId) =>
+    apiRequest(`/api/products/${productId}/data-flows`),
+
+  createProductDataFlow: (productId, data) =>
+    apiRequest(`/api/products/${productId}/data-flows`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateProductDataFlow: (productId, flowId, data) =>
+    apiRequest(`/api/products/${productId}/data-flows/${flowId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteProductDataFlow: (productId, flowId) =>
+    apiRequest(`/api/products/${productId}/data-flows/${flowId}`, {
+      method: 'DELETE',
+    }),
+
   // Domain management
   addDomainToApplication: (applicationId, domainName) =>
     apiRequest(`/api/applications/${applicationId}/domains`, {

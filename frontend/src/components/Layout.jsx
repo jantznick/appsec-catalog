@@ -162,6 +162,13 @@ export function Layout({ children }) {
                     </DropdownItem>
                     <DropdownItem
                       onClick={() => {
+                        navigate('/products');
+                      }}
+                    >
+                      Products
+                    </DropdownItem>
+                    <DropdownItem
+                      onClick={() => {
                         navigate('/domains');
                       }}
                     >

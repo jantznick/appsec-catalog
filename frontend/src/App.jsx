@@ -18,6 +18,8 @@ import { CompanyNew } from './pages/CompanyNew.jsx';
 import { Applications } from './pages/Applications.jsx';
 import { ApplicationNew } from './pages/ApplicationNew.jsx';
 import { ApplicationDetail } from './pages/ApplicationDetail.jsx';
+import { Products } from './pages/Products.jsx';
+import { ProductDetail } from './pages/ProductDetail.jsx';
 import { OnboardManager } from './pages/OnboardManager.jsx';
 import { OnboardApplication } from './pages/OnboardApplication.jsx';
 import { Users } from './pages/Users.jsx';
@@ -193,6 +195,26 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <ApplicationDetail />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/products"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Products />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/products/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProductDetail />
               </Layout>
             </ProtectedRoute>
           }
