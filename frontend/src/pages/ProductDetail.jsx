@@ -36,6 +36,9 @@ export function ProductDetail() {
   const [removeFlowModalOpen, setRemoveFlowModalOpen] = useState(false);
   const [flowToRemove, setFlowToRemove] = useState(null);
   const [removingFlow, setRemovingFlow] = useState(false);
+  const [editFlowModalOpen, setEditFlowModalOpen] = useState(false);
+  const [flowToEdit, setFlowToEdit] = useState(null);
+  const [updatingFlow, setUpdatingFlow] = useState(false);
   const [addingFlow, setAddingFlow] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -69,6 +72,15 @@ export function ProductDetail() {
   });
   const [newComponentType, setNewComponentType] = useState('');
   const [newFlow, setNewFlow] = useState({
+    sourceApplicationId: '',
+    targetApplicationId: '',
+    flowName: '',
+    dataClassification: '',
+    protocol: '',
+    direction: 'unidirectional',
+    notes: '',
+  });
+  const [editFlowForm, setEditFlowForm] = useState({
     sourceApplicationId: '',
     targetApplicationId: '',
     flowName: '',
@@ -438,6 +450,22 @@ export function ProductDetail() {
     setRemoveFlowModalOpen(true);
   };
 
+  const openEditFlowModal = (flowId) => {
+    const flow = dataFlows.find((item) => item.id === flowId);
+    if (!flow) return;
+    setFlowToEdit(flow);
+    setEditFlowForm({
+      sourceApplicationId: flow.sourceApplicationId || '',
+      targetApplicationId: flow.targetApplicationId || '',
+      flowName: flow.flowName || '',
+      dataClassification: flow.dataClassification || '',
+      protocol: flow.protocol || '',
+      direction: flow.direction || 'unidirectional',
+      notes: flow.notes || '',
+    });
+    setEditFlowModalOpen(true);
+  };
+
   const handleAddFlow = async () => {
     if (!product) return false;
     if (!newFlow.sourceApplicationId || !newFlow.targetApplicationId) {
@@ -488,6 +516,33 @@ export function ProductDetail() {
     }
   };
 
+  const handleUpdateFlow = async () => {
+    if (!product || !flowToEdit) return false;
+    if (!editFlowForm.sourceApplicationId || !editFlowForm.targetApplicationId) {
+      toast.error('Source and target applications are required');
+      return false;
+    }
+    if (editFlowForm.sourceApplicationId === editFlowForm.targetApplicationId) {
+      toast.error('Source and target must be different applications');
+      return false;
+    }
+
+    try {
+      setUpdatingFlow(true);
+      await api.updateProductDataFlow(product.id, flowToEdit.id, editFlowForm);
+      await reloadAll();
+      setEditFlowModalOpen(false);
+      setFlowToEdit(null);
+      toast.success('Data flow updated');
+      return true;
+    } catch (error) {
+      toast.error(error.message || 'Failed to update data flow');
+      return false;
+    } finally {
+      setUpdatingFlow(false);
+    }
+  };
+
   if (loading) {
     return <LoadingPage message="Loading product..." />;
   }
@@ -533,6 +588,7 @@ export function ProductDetail() {
           dataFlows={dataFlows}
           setShowAddFlowModal={setShowAddFlowModal}
           openRemoveFlowModal={openRemoveFlowModal}
+          openEditFlowModal={openEditFlowModal}
         />
       </div>
 
@@ -553,6 +609,14 @@ export function ProductDetail() {
         flowToRemove={flowToRemove}
         setFlowToRemove={setFlowToRemove}
         handleRemoveFlow={handleRemoveFlow}
+        editFlowModalOpen={editFlowModalOpen}
+        setEditFlowModalOpen={setEditFlowModalOpen}
+        flowToEdit={flowToEdit}
+        setFlowToEdit={setFlowToEdit}
+        editFlowForm={editFlowForm}
+        setEditFlowForm={setEditFlowForm}
+        handleUpdateFlow={handleUpdateFlow}
+        updatingFlow={updatingFlow}
         showAddFlowModal={showAddFlowModal}
         setShowAddFlowModal={setShowAddFlowModal}
         addingFlow={addingFlow}

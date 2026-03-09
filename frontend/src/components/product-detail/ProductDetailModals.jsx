@@ -12,6 +12,14 @@ export function ProductDetailModals({
   flowToRemove,
   setFlowToRemove,
   handleRemoveFlow,
+  editFlowModalOpen,
+  setEditFlowModalOpen,
+  flowToEdit,
+  setFlowToEdit,
+  editFlowForm,
+  setEditFlowForm,
+  handleUpdateFlow,
+  updatingFlow,
   showAddFlowModal,
   setShowAddFlowModal,
   addingFlow,
@@ -204,6 +212,99 @@ export function ProductDetailModals({
             label="Flow Notes"
             value={newFlow.notes}
             onChange={(e) => setNewFlow((prev) => ({ ...prev, notes: e.target.value }))}
+            rows={2}
+            placeholder="Optional flow context"
+          />
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={editFlowModalOpen}
+        onClose={() => {
+          if (!updatingFlow) {
+            setEditFlowModalOpen(false);
+            setFlowToEdit(null);
+          }
+        }}
+        title={`Edit Data Flow${flowToEdit?.flowName ? `: ${flowToEdit.flowName}` : ''}`}
+        size="xl"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setEditFlowModalOpen(false);
+                setFlowToEdit(null);
+              }}
+              disabled={updatingFlow}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                await handleUpdateFlow();
+              }}
+              loading={updatingFlow}
+            >
+              Save Flow
+            </Button>
+          </>
+        }
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <Select
+            label="Source Application"
+            value={editFlowForm.sourceApplicationId}
+            onChange={(e) =>
+              setEditFlowForm((prev) => ({ ...prev, sourceApplicationId: e.target.value }))
+            }
+            options={mappedAppOptions}
+            placeholder="Select source"
+          />
+          <Select
+            label="Target Application"
+            value={editFlowForm.targetApplicationId}
+            onChange={(e) =>
+              setEditFlowForm((prev) => ({ ...prev, targetApplicationId: e.target.value }))
+            }
+            options={mappedAppOptions}
+            placeholder="Select target"
+          />
+          <Input
+            label="Flow Name"
+            value={editFlowForm.flowName}
+            onChange={(e) => setEditFlowForm((prev) => ({ ...prev, flowName: e.target.value }))}
+            placeholder="e.g. User Profile Sync"
+          />
+          <Input
+            label="Data Classification"
+            value={editFlowForm.dataClassification}
+            onChange={(e) =>
+              setEditFlowForm((prev) => ({ ...prev, dataClassification: e.target.value }))
+            }
+            placeholder="e.g. PII, Internal"
+          />
+          <Input
+            label="Protocol"
+            value={editFlowForm.protocol}
+            onChange={(e) => setEditFlowForm((prev) => ({ ...prev, protocol: e.target.value }))}
+            placeholder="e.g. REST, Kafka"
+          />
+          <Select
+            label="Direction"
+            value={editFlowForm.direction}
+            onChange={(e) => setEditFlowForm((prev) => ({ ...prev, direction: e.target.value }))}
+            options={[
+              { value: 'unidirectional', label: 'Unidirectional' },
+              { value: 'bidirectional', label: 'Bidirectional' },
+            ]}
+          />
+        </div>
+        <div className="mt-3">
+          <Textarea
+            label="Flow Notes"
+            value={editFlowForm.notes}
+            onChange={(e) => setEditFlowForm((prev) => ({ ...prev, notes: e.target.value }))}
             rows={2}
             placeholder="Optional flow context"
           />
