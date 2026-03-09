@@ -66,8 +66,10 @@ async function getProductForUser(productId, session) {
             select: {
               id: true,
               name: true,
+              description: true,
               companyId: true,
               status: true,
+              facing: true,
             },
           },
           componentType: {
@@ -95,6 +97,18 @@ async function getProductForUser(productId, session) {
           },
         },
       },
+      ingressPoints: {
+        orderBy: [{ createdAt: 'asc' }],
+        include: {
+          application: {
+            select: {
+              id: true,
+              name: true,
+              facing: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -111,6 +125,7 @@ function normalizeFlowInput(body) {
     dataClassification: body.dataClassification?.trim() || null,
     protocol: body.protocol?.trim() || null,
     direction: body.direction?.trim() || 'unidirectional',
+    requiresApiKey: Boolean(body.requiresApiKey),
     notes: body.notes?.trim() || null,
   };
 }
@@ -404,11 +419,14 @@ router.post('/:id/applications', requireAuth, async (req, res) => {
       componentTypeId,
       customComponentLabel,
       displayOrder,
+      markAsIngress,
+      ingressChannel,
       connectFromApplicationId,
       flowName,
       dataClassification,
       protocol,
       direction,
+      requiresApiKey,
       notes,
     } = req.body;
 
@@ -490,6 +508,7 @@ router.post('/:id/applications', requireAuth, async (req, res) => {
       });
 
       let createdFlow = null;
+      let createdIngress = null;
       if (connectFromApplicationId) {
         createdFlow = await tx.productDataFlow.create({
           data: {
@@ -500,6 +519,7 @@ router.post('/:id/applications', requireAuth, async (req, res) => {
             dataClassification: dataClassification?.trim() || null,
             protocol: protocol?.trim() || null,
             direction: direction?.trim() || 'unidirectional',
+            requiresApiKey: Boolean(requiresApiKey),
             notes: notes?.trim() || null,
           },
           include: {
@@ -509,7 +529,33 @@ router.post('/:id/applications', requireAuth, async (req, res) => {
         });
       }
 
-      return { mapping, createdFlow };
+      if (markAsIngress) {
+        createdIngress = await tx.productIngressPoint.upsert({
+          where: {
+            productId_applicationId_channel: {
+              productId: product.id,
+              applicationId,
+              channel: ingressChannel?.trim() || 'default',
+            },
+          },
+          update: {
+            requiresApiKey: Boolean(requiresApiKey),
+          },
+          create: {
+            productId: product.id,
+            applicationId,
+            channel: ingressChannel?.trim() || 'default',
+              requiresApiKey: Boolean(requiresApiKey),
+          },
+          include: {
+            application: {
+              select: { id: true, name: true, facing: true },
+            },
+          },
+        });
+      }
+
+      return { mapping, createdFlow, createdIngress };
     });
 
     return res.status(201).json(result);
@@ -612,14 +658,19 @@ router.delete('/:id/applications/:applicationId', requireAuth, async (req, res) 
       });
     }
 
-    await prisma.productApplication.delete({
-      where: {
-        productId_applicationId: {
-          productId: id,
-          applicationId,
+    await prisma.$transaction([
+      prisma.productIngressPoint.deleteMany({
+        where: { productId: id, applicationId },
+      }),
+      prisma.productApplication.delete({
+        where: {
+          productId_applicationId: {
+            productId: id,
+            applicationId,
+          },
         },
-      },
-    });
+      }),
+    ]);
 
     return res.json({ success: true });
   } catch (error) {
@@ -628,6 +679,120 @@ router.delete('/:id/applications/:applicationId', requireAuth, async (req, res) 
       return res.status(404).json({ error: 'Product application mapping not found' });
     }
     return res.status(500).json({ error: 'Failed to remove application from product' });
+  }
+});
+
+// List ingress points for a product
+router.get('/:id/ingress-points', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    if (!req.session.isAdmin && req.session.companyId !== product.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only view ingress points in your company',
+      });
+    }
+
+    const ingressPoints = await prisma.productIngressPoint.findMany({
+      where: { productId: id },
+      orderBy: [{ createdAt: 'asc' }],
+      include: {
+        application: {
+          select: { id: true, name: true, facing: true },
+        },
+      },
+    });
+
+    return res.json(ingressPoints);
+  } catch (error) {
+    console.error('Error fetching product ingress points:', error);
+    return res.status(500).json({ error: 'Failed to fetch product ingress points' });
+  }
+});
+
+// Add ingress point for a product (application must be mapped)
+router.post('/:id/ingress-points', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { applicationId, channel, requiresApiKey } = req.body;
+    if (!applicationId) return res.status(400).json({ error: 'applicationId is required' });
+
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    if (!req.session.isAdmin && req.session.companyId !== product.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only modify ingress points in your company',
+      });
+    }
+
+    const mapping = await prisma.productApplication.findFirst({
+      where: { productId: id, applicationId },
+      select: { id: true },
+    });
+    if (!mapping) {
+      return res.status(400).json({ error: 'Application must be mapped to this product first' });
+    }
+
+    const ingressPoint = await prisma.productIngressPoint.upsert({
+      where: {
+        productId_applicationId_channel: {
+          productId: id,
+          applicationId,
+          channel: channel?.trim() || 'default',
+        },
+      },
+      update: {
+        requiresApiKey: Boolean(requiresApiKey),
+      },
+      create: {
+        productId: id,
+        applicationId,
+        channel: channel?.trim() || 'default',
+        requiresApiKey: Boolean(requiresApiKey),
+      },
+      include: {
+        application: {
+          select: { id: true, name: true, facing: true },
+        },
+      },
+    });
+
+    return res.status(201).json(ingressPoint);
+  } catch (error) {
+    console.error('Error creating product ingress point:', error);
+    return res.status(500).json({ error: 'Failed to create product ingress point' });
+  }
+});
+
+// Remove ingress point for a product
+router.delete('/:id/ingress-points/:ingressId', requireAuth, async (req, res) => {
+  try {
+    const { id, ingressId } = req.params;
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    if (!req.session.isAdmin && req.session.companyId !== product.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only modify ingress points in your company',
+      });
+    }
+
+    const existing = await prisma.productIngressPoint.findUnique({ where: { id: ingressId } });
+    if (!existing || existing.productId !== id) {
+      return res.status(404).json({ error: 'Ingress point not found' });
+    }
+
+    await prisma.productIngressPoint.delete({ where: { id: ingressId } });
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting product ingress point:', error);
+    return res.status(500).json({ error: 'Failed to delete product ingress point' });
   }
 });
 

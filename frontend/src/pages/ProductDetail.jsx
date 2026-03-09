@@ -12,6 +12,17 @@ import { ProductDetailStickyBar } from '../components/product-detail/ProductDeta
 import { ProductMetadataCard } from '../components/product-detail/ProductMetadataCard.jsx';
 
 const OTHER_COMPONENT_VALUE = '__other__';
+const INGRESS_LIKE_TYPE_MATCHERS = ['frontend', 'gateway', 'mobile'];
+const APP_SOURCE_RULES = [
+  {
+    targetMatchers: ['backend api', 'internal api'],
+    sourceMatchers: ['frontend', 'gateway'],
+  },
+  {
+    targetMatchers: ['worker', 'job', 'data store', 'datastore'],
+    sourceMatchers: ['backend api', 'internal api', 'gateway'],
+  },
+];
 
 export function ProductDetail() {
   const { id } = useParams();
@@ -36,6 +47,7 @@ export function ProductDetail() {
   const [removeFlowModalOpen, setRemoveFlowModalOpen] = useState(false);
   const [flowToRemove, setFlowToRemove] = useState(null);
   const [removingFlow, setRemovingFlow] = useState(false);
+  const [removingIngressId, setRemovingIngressId] = useState(null);
   const [editFlowModalOpen, setEditFlowModalOpen] = useState(false);
   const [flowToEdit, setFlowToEdit] = useState(null);
   const [updatingFlow, setUpdatingFlow] = useState(false);
@@ -63,6 +75,7 @@ export function ProductDetail() {
     applicationId: '',
     componentTypeId: '',
     customComponentLabel: '',
+    markAsIngress: false,
     connectFromApplicationId: '',
     flowName: '',
     dataClassification: '',
@@ -78,7 +91,10 @@ export function ProductDetail() {
     dataClassification: '',
     protocol: '',
     direction: 'unidirectional',
+    requiresApiKey: false,
     notes: '',
+    markSourceAsIngress: false,
+    ingressChannel: '',
   });
   const [editFlowForm, setEditFlowForm] = useState({
     sourceApplicationId: '',
@@ -163,11 +179,27 @@ export function ProductDetail() {
     () => (product?.applications || []).map((item) => item.application).filter(Boolean),
     [product?.applications]
   );
+  const appTypeById = useMemo(() => {
+    const map = {};
+    (product?.applications || []).forEach((item) => {
+      if (!item?.applicationId) return;
+      map[item.applicationId] = item.componentType?.name || item.customComponentLabel || '';
+    });
+    return map;
+  }, [product?.applications]);
   const mappedAppOptions = useMemo(
     () => mappedApps.map((app) => ({ value: app.id, label: app.name })),
     [mappedApps]
   );
   const dataFlows = product?.dataFlows || [];
+  const ingressPoints = product?.ingressPoints || [];
+  const selectedFlowApiKeyApplicationId = newFlow.markSourceAsIngress
+    ? newFlow.sourceApplicationId
+    : newFlow.targetApplicationId;
+  const showApiKeyCheckbox = useMemo(() => {
+    const typeName = String(appTypeById[selectedFlowApiKeyApplicationId] || '').toLowerCase();
+    return typeName.includes('backend api') || typeName.includes('internal api') || typeName.includes('api');
+  }, [appTypeById, selectedFlowApiKeyApplicationId]);
 
   const unmappedApps = useMemo(
     () => availableApps.filter((app) => !mappedAppIds.has(app.id)),
@@ -185,6 +217,86 @@ export function ProductDetail() {
     newMapping.componentTypeId === OTHER_COMPONENT_VALUE
       ? 'grid-cols-1 md:grid-cols-3'
       : 'grid-cols-1 md:grid-cols-2';
+
+  const getTypeNameFromMapping = useCallback(
+    (mapping) =>
+      (
+        mapping?.componentType?.name ||
+        componentTypes.find((type) => type.id === mapping?.componentTypeId)?.name ||
+        mapping?.customComponentLabel ||
+        ''
+      ).toLowerCase(),
+    [componentTypes]
+  );
+
+  const getSelectedTypeName = useMemo(() => {
+    if (newMapping.componentTypeId === OTHER_COMPONENT_VALUE) {
+      return (newMapping.customComponentLabel || '').toLowerCase();
+    }
+    return (
+      componentTypes.find((type) => type.id === newMapping.componentTypeId)?.name || ''
+    ).toLowerCase();
+  }, [componentTypes, newMapping.componentTypeId, newMapping.customComponentLabel]);
+
+  const likelyIngressType = useMemo(
+    () => INGRESS_LIKE_TYPE_MATCHERS.some((matcher) => getSelectedTypeName.includes(matcher)),
+    [getSelectedTypeName]
+  );
+
+  const suggestSourceApplicationId = useCallback(
+    (targetTypeName) => {
+      if (!targetTypeName || !product?.applications?.length) return '';
+      for (const rule of APP_SOURCE_RULES) {
+        const matchesTarget = rule.targetMatchers.some((matcher) =>
+          targetTypeName.includes(matcher)
+        );
+        if (!matchesTarget) continue;
+        const candidate = product.applications.find((mapping) => {
+          const typeName = getTypeNameFromMapping(mapping);
+          return rule.sourceMatchers.some((matcher) => typeName.includes(matcher));
+        });
+        if (candidate?.applicationId) return candidate.applicationId;
+      }
+      return '';
+    },
+    [getTypeNameFromMapping, product?.applications]
+  );
+
+  const handleNewMappingComponentTypeChange = useCallback(
+    (selectedTypeValue) => {
+      setNewMapping((prev) => {
+        const next = {
+          ...prev,
+          componentTypeId: selectedTypeValue,
+          customComponentLabel:
+            selectedTypeValue === OTHER_COMPONENT_VALUE ? prev.customComponentLabel : '',
+        };
+
+        const resolvedTypeName =
+          selectedTypeValue === OTHER_COMPONENT_VALUE
+            ? next.customComponentLabel.toLowerCase()
+            : (componentTypes.find((type) => type.id === selectedTypeValue)?.name || '').toLowerCase();
+
+        const isIngress = INGRESS_LIKE_TYPE_MATCHERS.some((matcher) =>
+          resolvedTypeName.includes(matcher)
+        );
+        if (isIngress) {
+          next.markAsIngress = true;
+        }
+
+        if (!next.connectFromApplicationId && mappedApps.length > 0) {
+          const suggestedSource = suggestSourceApplicationId(resolvedTypeName);
+          if (suggestedSource) {
+            next.connectFromApplicationId = suggestedSource;
+            setShowInlineMappingFlowFields(true);
+          }
+        }
+
+        return next;
+      });
+    },
+    [componentTypes, mappedApps.length, suggestSourceApplicationId]
+  );
 
   const reloadAll = async () => {
     await loadProduct();
@@ -320,6 +432,7 @@ export function ProductDetail() {
           newMapping.componentTypeId === OTHER_COMPONENT_VALUE
             ? newMapping.customComponentLabel.trim()
             : null,
+        markAsIngress: Boolean(newMapping.markAsIngress),
         ...(newMapping.connectFromApplicationId && {
           connectFromApplicationId: newMapping.connectFromApplicationId,
           flowName: newMapping.flowName,
@@ -333,6 +446,7 @@ export function ProductDetail() {
         applicationId: '',
         componentTypeId: '',
         customComponentLabel: '',
+        markAsIngress: false,
         connectFromApplicationId: '',
         flowName: '',
         dataClassification: '',
@@ -468,18 +582,32 @@ export function ProductDetail() {
 
   const handleAddFlow = async () => {
     if (!product) return false;
-    if (!newFlow.sourceApplicationId || !newFlow.targetApplicationId) {
-      toast.error('Source and target applications are required');
+    if (!newFlow.sourceApplicationId) {
+      toast.error('Source application is required');
       return false;
     }
-    if (newFlow.sourceApplicationId === newFlow.targetApplicationId) {
+    const hasTarget = Boolean(newFlow.targetApplicationId);
+    if (hasTarget && newFlow.sourceApplicationId === newFlow.targetApplicationId) {
       toast.error('Source and target must be different applications');
+      return false;
+    }
+    if (!hasTarget && !newFlow.markSourceAsIngress) {
+      toast.error('Select a target application or mark source as ingress');
       return false;
     }
 
     try {
       setAddingFlow(true);
-      await api.createProductDataFlow(product.id, newFlow);
+      if (hasTarget) {
+        await api.createProductDataFlow(product.id, newFlow);
+      }
+      if (newFlow.markSourceAsIngress && newFlow.sourceApplicationId) {
+        await api.createProductIngressPoint(product.id, {
+          applicationId: newFlow.sourceApplicationId,
+          channel: newFlow.ingressChannel?.trim() || 'default',
+          requiresApiKey: Boolean(newFlow.requiresApiKey),
+        });
+      }
       await reloadAll();
       setNewFlow({
         sourceApplicationId: '',
@@ -488,9 +616,18 @@ export function ProductDetail() {
         dataClassification: '',
         protocol: '',
         direction: 'unidirectional',
+        requiresApiKey: false,
         notes: '',
+        markSourceAsIngress: false,
+        ingressChannel: '',
       });
-      toast.success('Data flow added');
+      if (hasTarget && newFlow.markSourceAsIngress) {
+        toast.success('Data flow and ingress point added');
+      } else if (hasTarget) {
+        toast.success('Data flow added');
+      } else {
+        toast.success('Ingress point added');
+      }
       return true;
     } catch (error) {
       toast.error(error.message || 'Failed to add data flow');
@@ -543,6 +680,28 @@ export function ProductDetail() {
     }
   };
 
+  const handleRemoveIngressPoint = async (ingressId) => {
+    if (!product || !ingressId) return false;
+    try {
+      setRemovingIngressId(ingressId);
+      await api.deleteProductIngressPoint(product.id, ingressId);
+      await reloadAll();
+      toast.success('Ingress point removed');
+      return true;
+    } catch (error) {
+      toast.error(error.message || 'Failed to remove ingress point');
+      return false;
+    } finally {
+      setRemovingIngressId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (showApiKeyCheckbox) return;
+    if (!newFlow.requiresApiKey) return;
+    setNewFlow((prev) => ({ ...prev, requiresApiKey: false }));
+  }, [newFlow.requiresApiKey, showApiKeyCheckbox]);
+
   if (loading) {
     return <LoadingPage message="Loading product..." />;
   }
@@ -585,7 +744,11 @@ export function ProductDetail() {
 
         <DataFlowsCard
           mappedApps={mappedApps}
+          appTypeById={appTypeById}
           dataFlows={dataFlows}
+          ingressPoints={ingressPoints}
+          handleRemoveIngressPoint={handleRemoveIngressPoint}
+          removingIngressId={removingIngressId}
           setShowAddFlowModal={setShowAddFlowModal}
           openRemoveFlowModal={openRemoveFlowModal}
           openEditFlowModal={openEditFlowModal}
@@ -621,6 +784,7 @@ export function ProductDetail() {
         setShowAddFlowModal={setShowAddFlowModal}
         addingFlow={addingFlow}
         newFlow={newFlow}
+        showApiKeyCheckbox={showApiKeyCheckbox}
         setNewFlow={setNewFlow}
         handleAddFlow={handleAddFlow}
         mappedAppOptions={mappedAppOptions}
@@ -630,6 +794,8 @@ export function ProductDetail() {
         setShowInlineMappingFlowFields={setShowInlineMappingFlowFields}
         newMapping={newMapping}
         setNewMapping={setNewMapping}
+        likelyIngressType={likelyIngressType}
+        handleNewMappingComponentTypeChange={handleNewMappingComponentTypeChange}
         handleAddMapping={handleAddMapping}
         addMappingGridCols={addMappingGridCols}
         unmappedApps={unmappedApps}

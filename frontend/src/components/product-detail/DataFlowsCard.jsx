@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from '../ui/Button.jsx';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card.jsx';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table.jsx';
@@ -5,11 +6,18 @@ import { ProductDataFlowGraph } from './ProductDataFlowGraph.jsx';
 
 export function DataFlowsCard({
   mappedApps,
+  appTypeById,
   dataFlows,
+  ingressPoints,
+  handleRemoveIngressPoint,
+  removingIngressId,
   setShowAddFlowModal,
   openRemoveFlowModal,
   openEditFlowModal,
 }) {
+  const [showIngressRows, setShowIngressRows] = useState(true);
+  const hasTableRows = dataFlows.length > 0 || (ingressPoints?.length || 0) > 0;
+
   return (
     <Card>
       <CardHeader>
@@ -20,51 +28,41 @@ export function DataFlowsCard({
             size="sm"
             onClick={() => setShowAddFlowModal(true)}
             className="whitespace-nowrap"
-            disabled={mappedApps.length < 2}
+            disabled={mappedApps.length < 1}
           >
             Add Data Flow
           </Button>
         </div>
       </CardHeader>
       <CardContent>
-        {mappedApps.length < 2 ? (
-          <p className="text-sm text-gray-500">
-            Add at least two application mappings before defining data flows.
-          </p>
+        {mappedApps.length === 0 ? (
+          <p className="text-sm text-gray-500">Add application mappings to begin architecture modeling.</p>
         ) : (
           <>
             <div className="mb-4">
               <ProductDataFlowGraph
                 mappedApps={mappedApps}
+                appTypeById={appTypeById}
                 dataFlows={dataFlows}
+                ingressPoints={ingressPoints}
                 onEdgeClickFlow={openEditFlowModal}
               />
             </div>
-            {dataFlows.length === 0 ? (
+            {!hasTableRows ? (
               <p className="text-sm text-gray-500 mb-4">No data flows defined yet.</p>
             ) : null}
-            {dataFlows.length > 0 ? (
+            {hasTableRows ? (
               <>
-                <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {dataFlows.map((flow) => (
-                    <div
-                      key={flow.id}
-                      className="rounded-lg border border-gray-200 p-3 bg-gray-50 cursor-pointer hover:border-blue-300"
-                      onClick={() => openEditFlowModal(flow.id)}
-                    >
-                      <div className="text-sm font-medium text-gray-900">
-                        {flow.sourceApplication?.name || 'Unknown'}{' '}
-                        {flow.direction === 'bidirectional' ? '<->' : '->'}{' '}
-                        {flow.targetApplication?.name || 'Unknown'}
-                      </div>
-                      <div className="text-xs text-gray-600 mt-1">
-                        {flow.flowName || 'Unnamed flow'}
-                        {flow.dataClassification ? ` | ${flow.dataClassification}` : ''}
-                        {flow.protocol ? ` | ${flow.protocol}` : ''}
-                        {flow.direction ? ` | ${flow.direction}` : ''}
-                      </div>
-                    </div>
-                  ))}
+                <div className="mb-2 flex items-center justify-end">
+                  <label className="inline-flex items-center gap-2 text-xs text-gray-600">
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300"
+                      checked={showIngressRows}
+                      onChange={(e) => setShowIngressRows(e.target.checked)}
+                    />
+                    Show ingress
+                  </label>
                 </div>
                 <Table>
                   <TableHeader>
@@ -79,6 +77,29 @@ export function DataFlowsCard({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    {showIngressRows &&
+                      (ingressPoints || []).map((ingress) => (
+                      <TableRow key={`ingress-${ingress.id}`}>
+                        <TableCell className="font-medium">Client</TableCell>
+                        <TableCell className="font-medium">
+                          {ingress.application?.name || '—'}
+                        </TableCell>
+                        <TableCell>Ingress</TableCell>
+                        <TableCell>—</TableCell>
+                        <TableCell>{ingress.channel || 'default'}</TableCell>
+                        <TableCell>unidirectional</TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            loading={removingIngressId === ingress.id}
+                            onClick={() => handleRemoveIngressPoint?.(ingress.id)}
+                          >
+                            Remove
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
                     {dataFlows.map((flow) => (
                       <TableRow
                         key={flow.id}

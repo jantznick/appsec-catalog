@@ -24,6 +24,7 @@ export function ProductDetailModals({
   setShowAddFlowModal,
   addingFlow,
   newFlow,
+  showApiKeyCheckbox,
   setNewFlow,
   handleAddFlow,
   mappedAppOptions,
@@ -33,6 +34,8 @@ export function ProductDetailModals({
   setShowInlineMappingFlowFields,
   newMapping,
   setNewMapping,
+  likelyIngressType,
+  handleNewMappingComponentTypeChange,
   handleAddMapping,
   addMappingGridCols,
   unmappedApps,
@@ -124,7 +127,10 @@ export function ProductDetailModals({
               dataClassification: '',
               protocol: '',
               direction: 'unidirectional',
+              requiresApiKey: false,
               notes: '',
+              markSourceAsIngress: false,
+              ingressChannel: '',
             });
           }
         }}
@@ -143,7 +149,10 @@ export function ProductDetailModals({
                   dataClassification: '',
                   protocol: '',
                   direction: 'unidirectional',
+                  requiresApiKey: false,
                   notes: '',
+                  markSourceAsIngress: false,
+                  ingressChannel: '',
                 });
               }}
               disabled={addingFlow}
@@ -172,50 +181,111 @@ export function ProductDetailModals({
             options={mappedAppOptions}
             placeholder="Select source"
           />
-          <Select
-            label="Target Application"
-            value={newFlow.targetApplicationId}
-            onChange={(e) => setNewFlow((prev) => ({ ...prev, targetApplicationId: e.target.value }))}
-            options={mappedAppOptions}
-            placeholder="Select target"
-          />
-          <Input
-            label="Flow Name"
-            value={newFlow.flowName}
-            onChange={(e) => setNewFlow((prev) => ({ ...prev, flowName: e.target.value }))}
-            placeholder="e.g. User Profile Sync"
-          />
-          <Input
-            label="Data Classification"
-            value={newFlow.dataClassification}
-            onChange={(e) => setNewFlow((prev) => ({ ...prev, dataClassification: e.target.value }))}
-            placeholder="e.g. PII, Internal"
-          />
-          <Input
-            label="Protocol"
-            value={newFlow.protocol}
-            onChange={(e) => setNewFlow((prev) => ({ ...prev, protocol: e.target.value }))}
-            placeholder="e.g. REST, Kafka"
-          />
-          <Select
-            label="Direction"
-            value={newFlow.direction}
-            onChange={(e) => setNewFlow((prev) => ({ ...prev, direction: e.target.value }))}
-            options={[
-              { value: 'unidirectional', label: 'Unidirectional' },
-              { value: 'bidirectional', label: 'Bidirectional' },
-            ]}
-          />
+          <div className="md:col-span-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                className="rounded border-gray-300"
+                checked={Boolean(newFlow.markSourceAsIngress)}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setNewFlow((prev) => ({
+                    ...prev,
+                    markSourceAsIngress: checked,
+                    ...(checked
+                      ? {
+                          targetApplicationId: '',
+                          flowName: '',
+                          dataClassification: '',
+                          protocol: '',
+                          direction: 'unidirectional',
+                          requiresApiKey: false,
+                          notes: '',
+                        }
+                      : {}),
+                  }));
+                }}
+              />
+              Mark source application as a client ingress point
+            </label>
+          </div>
+          {newFlow.markSourceAsIngress ? (
+            <div className="md:col-span-2">
+              <Input
+                label="Ingress Channel"
+                value={newFlow.ingressChannel}
+                onChange={(e) => setNewFlow((prev) => ({ ...prev, ingressChannel: e.target.value }))}
+                placeholder="web, mobile, etc..."
+              />
+            </div>
+          ) : (
+            <div className="md:col-span-2" />
+          )}
+          {showApiKeyCheckbox ? (
+            <div className="md:col-span-2">
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300"
+                  checked={Boolean(newFlow.requiresApiKey)}
+                  onChange={(e) =>
+                    setNewFlow((prev) => ({ ...prev, requiresApiKey: e.target.checked }))
+                  }
+                />
+                Requires API key
+              </label>
+            </div>
+          ) : null}
+          {!newFlow.markSourceAsIngress ? (
+            <>
+              <Select
+                label="Target Application"
+                value={newFlow.targetApplicationId}
+                onChange={(e) => setNewFlow((prev) => ({ ...prev, targetApplicationId: e.target.value }))}
+                options={mappedAppOptions}
+                placeholder="Select target"
+              />
+              <Input
+                label="Flow Name"
+                value={newFlow.flowName}
+                onChange={(e) => setNewFlow((prev) => ({ ...prev, flowName: e.target.value }))}
+                placeholder="e.g. User Profile Sync"
+              />
+              <Input
+                label="Data Classification"
+                value={newFlow.dataClassification}
+                onChange={(e) => setNewFlow((prev) => ({ ...prev, dataClassification: e.target.value }))}
+                placeholder="e.g. PII, Internal"
+              />
+              <Input
+                label="Protocol"
+                value={newFlow.protocol}
+                onChange={(e) => setNewFlow((prev) => ({ ...prev, protocol: e.target.value }))}
+                placeholder="e.g. REST, Kafka"
+              />
+              <Select
+                label="Direction"
+                value={newFlow.direction}
+                onChange={(e) => setNewFlow((prev) => ({ ...prev, direction: e.target.value }))}
+                options={[
+                  { value: 'unidirectional', label: 'Unidirectional' },
+                  { value: 'bidirectional', label: 'Bidirectional' },
+                ]}
+              />
+            </>
+          ) : null}
         </div>
-        <div className="mt-3">
-          <Textarea
-            label="Flow Notes"
-            value={newFlow.notes}
-            onChange={(e) => setNewFlow((prev) => ({ ...prev, notes: e.target.value }))}
-            rows={2}
-            placeholder="Optional flow context"
-          />
-        </div>
+        {!newFlow.markSourceAsIngress ? (
+          <div className="mt-3">
+            <Textarea
+              label="Flow Notes"
+              value={newFlow.notes}
+              onChange={(e) => setNewFlow((prev) => ({ ...prev, notes: e.target.value }))}
+              rows={2}
+              placeholder="Optional flow context"
+            />
+          </div>
+        ) : null}
       </Modal>
 
       <Modal
@@ -321,6 +391,7 @@ export function ProductDetailModals({
               applicationId: '',
               componentTypeId: '',
               customComponentLabel: '',
+              markAsIngress: false,
               connectFromApplicationId: '',
               flowName: '',
               dataClassification: '',
@@ -343,6 +414,7 @@ export function ProductDetailModals({
                   applicationId: '',
                   componentTypeId: '',
                   customComponentLabel: '',
+                  markAsIngress: false,
                   connectFromApplicationId: '',
                   flowName: '',
                   dataClassification: '',
@@ -380,14 +452,7 @@ export function ProductDetailModals({
           <Select
             label="Component Type"
             value={newMapping.componentTypeId}
-            onChange={(e) =>
-              setNewMapping((prev) => ({
-                ...prev,
-                componentTypeId: e.target.value,
-                customComponentLabel:
-                  e.target.value === otherComponentValue ? prev.customComponentLabel : '',
-              }))
-            }
+            onChange={(e) => handleNewMappingComponentTypeChange(e.target.value)}
             options={componentTypeOptions}
             placeholder="Select type"
           />
@@ -400,6 +465,21 @@ export function ProductDetailModals({
             />
           ) : null}
         </div>
+        {likelyIngressType && (
+          <div className="mt-3">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                className="rounded border-gray-300"
+                checked={Boolean(newMapping.markAsIngress)}
+                onChange={(e) =>
+                  setNewMapping((prev) => ({ ...prev, markAsIngress: e.target.checked }))
+                }
+              />
+              Mark this app as a client ingress point
+            </label>
+          </div>
+        )}
         {mappedApps.length > 0 && (
           <div className="mt-4 border-t border-gray-200 pt-4">
             <div className="flex items-center justify-between gap-3">

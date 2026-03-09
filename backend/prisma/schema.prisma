@@ -102,6 +102,7 @@ model Application {
   reviews                ApplicationMetadataReview[] // History of metadata reviews
   policyControlOverrides PolicyControlOverride[] // Manual overrides for policy controls
   productApplications    ProductApplication[]
+  ingressProducts        ProductIngressPoint[]
   outgoingProductFlows   ProductDataFlow[]            @relation("ProductFlowSource")
   incomingProductFlows   ProductDataFlow[]            @relation("ProductFlowTarget")
   description            String?
@@ -165,6 +166,7 @@ model Product {
   dataSensitivity     String?
   complianceNotes     String?              @db.Text
   applications        ProductApplication[]
+  ingressPoints       ProductIngressPoint[]
   dataFlows           ProductDataFlow[]
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
@@ -172,6 +174,22 @@ model Product {
   @@unique([companyId, name])
   @@index([companyId])
   @@index([status])
+}
+
+model ProductIngressPoint {
+  id            String      @id @default(cuid())
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  channel       String      @default("default")
+  requiresApiKey Boolean    @default(false)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([productId, applicationId, channel])
+  @@index([productId])
+  @@index([applicationId])
 }
 
 model ProductDataFlow {
@@ -186,6 +204,7 @@ model ProductDataFlow {
   dataClassification  String?
   protocol            String?
   direction           String      @default("unidirectional") // unidirectional, bidirectional
+  requiresApiKey      Boolean     @default(false)
   notes               String?     @db.Text
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt

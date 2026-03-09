@@ -410,6 +410,20 @@ export const api = {
       method: 'DELETE',
     }),
 
+  getProductIngressPoints: (productId) =>
+    apiRequest(`/api/products/${productId}/ingress-points`),
+
+  createProductIngressPoint: (productId, data) =>
+    apiRequest(`/api/products/${productId}/ingress-points`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  deleteProductIngressPoint: (productId, ingressId) =>
+    apiRequest(`/api/products/${productId}/ingress-points/${ingressId}`, {
+      method: 'DELETE',
+    }),
+
   // Domain management
   addDomainToApplication: (applicationId, domainName) =>
     apiRequest(`/api/applications/${applicationId}/domains`, {
