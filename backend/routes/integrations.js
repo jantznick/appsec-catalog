@@ -9,14 +9,19 @@ import {
 import {
   assertSupportedProvider,
   PROVIDER_TENABLE_IO,
+  PROVIDER_WIZ,
   SUPPORTED_PROVIDERS,
 } from '../integrations/constants.js';
 import {
   resolveIntegrationForCompany,
   validateTenableIoFilter,
   normalizeTenableIoFilter,
+  validateWizFilter,
+  normalizeWizFilter,
 } from '../integrations/resolve.js';
 import { listTenableIoTagValues } from '../integrations/tenableIo.js';
+import { listWizFolders, normalizeWizGraphqlUrl } from '../integrations/wiz.js';
+import { integrationLog } from '../integrations/log.js';
 
 const router = express.Router();
 
@@ -48,6 +53,7 @@ function canManageCredential(req, scope, companyId) {
 /**
  * PUT /api/integrations/credentials/:provider
  * body: { scope, companyId?, accessKey, secretKey, baseUrl? }
+ * Wiz: accessKey/secretKey → client ID/secret; baseUrl = required tenant GraphQL endpoint.
  */
 router.put('/integrations/credentials/:provider', requireAuth, async (req, res) => {
   try {
@@ -86,9 +92,36 @@ router.put('/integrations/credentials/:provider', requireAuth, async (req, res) 
       return res.status(400).json({ error: 'accessKey and secretKey are required' });
     }
 
-    const payloadObj = { accessKey, secretKey };
+    let payloadObj;
+    let hint;
+    let baseUrlStored = null;
+
+    if (provider === PROVIDER_WIZ) {
+      const graphqlUrl =
+        baseUrl && typeof baseUrl === 'string' && baseUrl.trim() ? baseUrl.trim() : '';
+      if (!graphqlUrl) {
+        return res.status(400).json({
+          error:
+            'GraphQL endpoint is required for Wiz (store your tenant API URL, e.g. https://api.<tenant>.app.wiz.io/graphql)',
+        });
+      }
+      try {
+        baseUrlStored = normalizeWizGraphqlUrl(graphqlUrl);
+      } catch (e) {
+        return res.status(400).json({ error: e.message || 'Invalid GraphQL URL' });
+      }
+      payloadObj = {
+        clientId: accessKey.trim(),
+        clientSecret: secretKey.trim(),
+      };
+      hint = maskAccessKeyHint(accessKey.trim());
+    } else {
+      payloadObj = { accessKey: accessKey.trim(), secretKey: secretKey.trim() };
+      hint = maskAccessKeyHint(accessKey.trim());
+      baseUrlStored = baseUrl && typeof baseUrl === 'string' ? baseUrl.trim() : null;
+    }
+
     const encryptedPayload = encryptIntegrationPayload(JSON.stringify(payloadObj));
-    const hint = maskAccessKeyHint(accessKey);
 
     const data = {
       provider,
@@ -96,7 +129,7 @@ router.put('/integrations/credentials/:provider', requireAuth, async (req, res) 
       companyId: scope === 'COMPANY' ? companyId : null,
       encryptedPayload,
       accessKeyHint: hint,
-      baseUrl: baseUrl && typeof baseUrl === 'string' ? baseUrl.trim() : null,
+      baseUrl: baseUrlStored,
       updatedByUserId: req.session.userId,
     };
 
@@ -316,11 +349,45 @@ router.get(
 
       if (provider === PROVIDER_TENABLE_IO) {
         const tags = await listTenableIoTagValues(resolved.decrypted, resolved.baseUrl);
+        integrationLog('info', {
+          layer: 'api',
+          op: 'GET_integration_tags',
+          provider,
+          companyId,
+          credentialScope: resolved.scope,
+          itemCount: tags.length,
+        });
+        return res.json({ tags });
+      }
+
+      if (provider === PROVIDER_WIZ) {
+        const folders = await listWizFolders(resolved.decrypted, resolved.baseUrl);
+        const tags = folders.map((f) => ({
+          uuid: f.id,
+          value: f.name,
+          category_uuid: null,
+        }));
+        integrationLog('info', {
+          layer: 'api',
+          op: 'GET_integration_tags',
+          provider,
+          companyId,
+          credentialScope: resolved.scope,
+          itemCount: tags.length,
+        });
         return res.json({ tags });
       }
 
       return res.status(400).json({ error: 'Provider not implemented' });
     } catch (error) {
+      integrationLog('error', {
+        layer: 'api',
+        op: 'GET_integration_tags',
+        provider: req.params.provider,
+        companyId: req.params.companyId,
+        error: error.message || String(error),
+        httpStatus: error.statusCode,
+      });
       console.error('List integration tags error:', error);
       if (error.statusCode === 400) {
         return res.status(400).json({ error: error.message });
@@ -344,7 +411,7 @@ router.get(
 
 /**
  * PUT /api/companies/:companyId/integrations/:provider/link
- * body: TENABLE_IO → { tagUuid, tagName?, categoryUuid? }
+ * body: TENABLE_IO → { tagUuid, tagName?, categoryUuid? } · WIZ → { folderId, folderName? }
  */
 router.put(
   '/companies/:companyId/integrations/:provider/link',
@@ -380,6 +447,13 @@ router.put(
       if (provider === PROVIDER_TENABLE_IO) {
         const normalized = normalizeTenableIoFilter(req.body);
         const v = validateTenableIoFilter(normalized);
+        if (!v.ok) {
+          return res.status(400).json({ error: v.message });
+        }
+        filter = normalized;
+      } else if (provider === PROVIDER_WIZ) {
+        const normalized = normalizeWizFilter(req.body);
+        const v = validateWizFilter(normalized);
         if (!v.ok) {
           return res.status(400).json({ error: v.message });
         }

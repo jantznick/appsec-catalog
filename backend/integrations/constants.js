@@ -1,8 +1,9 @@
-/** @typedef {'TENABLE_IO'} IntegrationProvider */
+/** @typedef {'TENABLE_IO' | 'WIZ'} IntegrationProvider */
 
 export const PROVIDER_TENABLE_IO = 'TENABLE_IO';
+export const PROVIDER_WIZ = 'WIZ';
 
-export const SUPPORTED_PROVIDERS = [PROVIDER_TENABLE_IO];
+export const SUPPORTED_PROVIDERS = [PROVIDER_TENABLE_IO, PROVIDER_WIZ];
 
 export function assertSupportedProvider(provider) {
   if (!SUPPORTED_PROVIDERS.includes(provider)) {

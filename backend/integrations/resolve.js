@@ -77,3 +77,31 @@ export function normalizeTenableIoFilter(body) {
     categoryUuid,
   };
 }
+
+/**
+ * Validate Wiz company link (folder binding).
+ * @param {unknown} filter
+ */
+export function validateWizFilter(filter) {
+  if (!filter || typeof filter !== 'object') {
+    return { ok: false, message: 'filter must be an object' };
+  }
+  const folderId = /** @type {{ folderId?: string }} */ (filter).folderId;
+  if (!folderId || typeof folderId !== 'string') {
+    return { ok: false, message: 'filter.folderId is required' };
+  }
+  return { ok: true };
+}
+
+/**
+ * @param {object} body
+ */
+export function normalizeWizFilter(body) {
+  const rawId = body.folderId;
+  const folderId = typeof rawId === 'string' ? rawId.trim() : rawId;
+  const folderName = typeof body.folderName === 'string' ? body.folderName.trim() : null;
+  return {
+    folderId,
+    folderName: folderName || null,
+  };
+}

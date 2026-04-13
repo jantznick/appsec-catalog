@@ -48,9 +48,15 @@ export function AddIntegrationModal({
     }
   }, [isOpen, defaultProvider, providerOptions]);
 
+  const isWiz = provider === 'WIZ';
+
   const handleSave = async () => {
     if (!accessKey.trim() || !secretKey.trim()) {
-      toast.error('Access key and secret key are required');
+      toast.error(isWiz ? 'Client ID and client secret are required' : 'Access key and secret key are required');
+      return;
+    }
+    if (isWiz && !baseUrl.trim()) {
+      toast.error('GraphQL endpoint is required for Wiz');
       return;
     }
     if (scope === 'COMPANY' && !companyId) {
@@ -114,25 +120,37 @@ export function AddIntegrationModal({
           onChange={(e) => setProvider(e.target.value)}
         />
         <Input
-          label="Access key"
+          label={isWiz ? 'Client ID' : 'Access key'}
           type="password"
           autoComplete="off"
           value={accessKey}
           onChange={(e) => setAccessKey(e.target.value)}
         />
         <Input
-          label="Secret key"
+          label={isWiz ? 'Client secret' : 'Secret key'}
           type="password"
           autoComplete="off"
           value={secretKey}
           onChange={(e) => setSecretKey(e.target.value)}
         />
         <Input
-          label="API base URL (optional)"
+          label={isWiz ? 'GraphQL endpoint' : 'API base URL (optional)'}
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder="https://cloud.tenable.com"
+          placeholder={
+            isWiz
+              ? 'https://api.<tenant>.app.wiz.io/graphql'
+              : 'https://cloud.tenable.com'
+          }
         />
+        {!isWiz ? (
+          <p className="text-xs text-gray-500">Leave base URL empty to use the vendor default.</p>
+        ) : (
+          <p className="text-xs text-gray-500">
+            Your tenant&apos;s Wiz GraphQL API URL (stored as the integration base URL). OAuth uses Wiz&apos;s
+            global token endpoint.
+          </p>
+        )}
       </div>
     </Modal>
   );

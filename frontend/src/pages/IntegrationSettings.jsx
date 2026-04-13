@@ -240,7 +240,14 @@ export function IntegrationSettings() {
         }}
         scope="ENTERPRISE"
         onSaved={load}
-        providerOptions={providerOptions.length ? providerOptions : [{ value: 'TENABLE_IO', label: 'Tenable.io' }]}
+        providerOptions={
+          providerOptions.length
+            ? providerOptions
+            : [
+                { value: 'TENABLE_IO', label: 'Tenable.io' },
+                { value: 'WIZ', label: 'Wiz' },
+              ]
+        }
         defaultProvider={addModalProviderPreset}
         title={addModalProviderPreset ? 'Update catalog-wide integration' : 'Add integration'}
         description="These credentials apply to the entire catalog (all companies). Per-company keys are added on each company Integrations page."

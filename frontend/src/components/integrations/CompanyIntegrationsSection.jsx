@@ -4,13 +4,15 @@ import { api } from '../../lib/api.js';
 import { toast } from '../ui/Toast.jsx';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card.jsx';
 import { Button } from '../ui/Button.jsx';
+import { Input } from '../ui/Input.jsx';
 import { Modal } from '../ui/Modal.jsx';
 import { Select } from '../ui/Select.jsx';
 import useAuthStore from '../../store/authStore.js';
 import { integrationProviderLabel } from '../../lib/integrationLabels.js';
 import { AddIntegrationModal } from './AddIntegrationModal.jsx';
 
-const TAG_LINK_PROVIDERS = new Set(['TENABLE_IO']);
+/** Providers that support a non-secret link in CompanyToolLink.filter (Tenable tag, Wiz folder). */
+const TOOL_LINK_PROVIDERS = new Set(['TENABLE_IO', 'WIZ']);
 
 /**
  * @param {{ companyId: string, company: object, onRefresh: () => Promise<void> }} props
@@ -29,6 +31,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
   const [tags, setTags] = useState([]);
   const [loadingTags, setLoadingTags] = useState(false);
   const [selectedTagUuid, setSelectedTagUuid] = useState('');
+  const [tagSearch, setTagSearch] = useState('');
   const [savingLink, setSavingLink] = useState(false);
   const [removeCompanyKeysProvider, setRemoveCompanyKeysProvider] = useState(null);
   const [removingCompanyKeys, setRemovingCompanyKeys] = useState(false);
@@ -110,12 +113,17 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
     setTagModalProvider(provider);
     setTagModalOpen(true);
     setSelectedTagUuid('');
+    setTagSearch('');
     setLoadingTags(true);
     const filter = links.find((l) => l.provider === provider)?.filter;
     try {
       const data = await api.getCompanyIntegrationTags(companyId, provider);
       setTags(Array.isArray(data.tags) ? data.tags : []);
-      if (filter?.tagUuid) {
+      if (provider === 'WIZ') {
+        if (filter?.folderId) {
+          setSelectedTagUuid(filter.folderId);
+        }
+      } else if (filter?.tagUuid) {
         setSelectedTagUuid(filter.tagUuid);
       }
     } catch (e) {
@@ -128,17 +136,24 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
 
   const saveTagLink = async () => {
     if (!tagModalProvider || !selectedTagUuid) {
-      toast.error('Select a tag');
+      toast.error(tagModalProvider === 'WIZ' ? 'Select a folder' : 'Select a tag');
       return;
     }
     const tag = tags.find((t) => t.uuid === selectedTagUuid);
     setSavingLink(true);
     try {
-      await api.putCompanyIntegrationLink(companyId, tagModalProvider, {
-        tagUuid: selectedTagUuid,
-        tagName: tag?.value || null,
-        categoryUuid: tag?.category_uuid || null,
-      });
+      if (tagModalProvider === 'WIZ') {
+        await api.putCompanyIntegrationLink(companyId, tagModalProvider, {
+          folderId: selectedTagUuid,
+          folderName: tag?.value || null,
+        });
+      } else {
+        await api.putCompanyIntegrationLink(companyId, tagModalProvider, {
+          tagUuid: selectedTagUuid,
+          tagName: tag?.value || null,
+          categoryUuid: tag?.category_uuid || null,
+        });
+      }
       toast.success('Link saved');
       setTagModalOpen(false);
       await onRefresh();
@@ -149,7 +164,17 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
     }
   };
 
-  const tagOptions = tags.map((t) => ({
+  const filteredTagsForPicker = useMemo(() => {
+    const q = tagSearch.trim().toLowerCase();
+    if (!q) return tags;
+    return tags.filter(
+      (t) =>
+        (t.value && t.value.toLowerCase().includes(q)) ||
+        (t.uuid && t.uuid.toLowerCase().includes(q)),
+    );
+  }, [tags, tagSearch]);
+
+  const tagOptions = filteredTagsForPicker.map((t) => ({
     value: t.uuid,
     label: t.value ? `${t.value} (${t.uuid.slice(0, 8)}…)` : t.uuid,
   }));
@@ -344,12 +369,29 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
                           </div>
                         </div>
 
-                        {TAG_LINK_PROVIDERS.has(provider) && (
+                        {TOOL_LINK_PROVIDERS.has(provider) && (
                           <div className="px-4 py-4 sm:px-5 border-t border-gray-100 bg-slate-50/70">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
                               <div className="min-w-0 space-y-1 flex-1">
-                                <p className="text-xs font-medium text-gray-500">Tag link</p>
-                                {filter?.tagUuid || filter?.tagName ? (
+                                <p className="text-xs font-medium text-gray-500">
+                                  {provider === 'WIZ' ? 'Folder link' : 'Tag link'}
+                                </p>
+                                {provider === 'WIZ' ? (
+                                  filter?.folderId || filter?.folderName ? (
+                                    <p className="text-sm text-gray-800">
+                                      <span className="font-medium text-gray-900">
+                                        {filter?.folderName || '—'}
+                                      </span>
+                                      {filter?.folderId ? (
+                                        <span className="block sm:inline sm:ml-2 mt-0.5 sm:mt-0 text-xs font-mono text-gray-500">
+                                          {filter.folderId}
+                                        </span>
+                                      ) : null}
+                                    </p>
+                                  ) : (
+                                    <p className="text-sm text-gray-600">No folder linked yet.</p>
+                                  )
+                                ) : filter?.tagUuid || filter?.tagName ? (
                                   <p className="text-sm text-gray-800">
                                     <span className="font-medium text-gray-900">
                                       {filter?.tagName || '—'}
@@ -366,7 +408,9 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
                                 {!canUseTagPicker(provider) && (
                                   <p className="text-xs text-gray-500 pt-1">
                                     {isAdmin()
-                                      ? 'Configure catalog-wide or company API keys to link a tag.'
+                                      ? provider === 'WIZ'
+                                        ? 'Configure catalog-wide or company API keys to link a folder.'
+                                        : 'Configure catalog-wide or company API keys to link a tag.'
                                       : 'Ask an admin to configure catalog-wide keys, or add company keys above.'}
                                   </p>
                                 )}
@@ -379,7 +423,13 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
                                     onClick={() => openTagModal(provider)}
                                     className="w-full sm:w-auto"
                                   >
-                                    {filter?.tagUuid ? 'Change tag…' : 'Link tag…'}
+                                    {provider === 'WIZ'
+                                      ? filter?.folderId
+                                        ? 'Change folder…'
+                                        : 'Link folder…'
+                                      : filter?.tagUuid
+                                        ? 'Change tag…'
+                                        : 'Link tag…'}
                                   </Button>
                                 </div>
                               )}
@@ -422,10 +472,17 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
         scope="COMPANY"
         companyId={companyId}
         onSaved={onRefresh}
-        providerOptions={providerOptions.length ? providerOptions : [{ value: 'TENABLE_IO', label: 'Tenable.io' }]}
+        providerOptions={
+          providerOptions.length
+            ? providerOptions
+            : [
+                { value: 'TENABLE_IO', label: 'Tenable.io' },
+                { value: 'WIZ', label: 'Wiz' },
+              ]
+        }
         defaultProvider={addModalProviderPreset}
         title={addModalProviderPreset ? 'Update company integration' : 'Add integration'}
-        description="Saves API keys for this company only. They are used first for this company's API calls; catalog-wide keys are unchanged and still apply elsewhere. Catalog-wide defaults: Integration settings (admins)."
+        description="Stores API keys for this company only. When present, the app uses them for this company&apos;s integration calls first. Keys shared across all companies are managed separately by admins only and are unchanged by what you enter here."
       />
 
       <Modal
@@ -463,7 +520,13 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
       <Modal
         isOpen={tagModalOpen}
         onClose={() => !savingLink && setTagModalOpen(false)}
-        title={tagModalProvider ? `Select tag — ${integrationProviderLabel(tagModalProvider)}` : 'Select tag'}
+        title={
+          tagModalProvider
+            ? tagModalProvider === 'WIZ'
+              ? `Select folder — ${integrationProviderLabel(tagModalProvider)}`
+              : `Select tag — ${integrationProviderLabel(tagModalProvider)}`
+            : 'Select'
+        }
         size="md"
         footer={
           <>
@@ -477,17 +540,35 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
         }
       >
         {loadingTags ? (
-          <p className="text-sm text-gray-600">Loading tags…</p>
+          <p className="text-sm text-gray-600">
+            {tagModalProvider === 'WIZ' ? 'Loading folders…' : 'Loading tags…'}
+          </p>
         ) : tags.length === 0 ? (
-          <p className="text-sm text-gray-600">No tags returned. Check API permissions for this tool.</p>
+          <p className="text-sm text-gray-600">
+            {tagModalProvider === 'WIZ'
+              ? 'No folders returned. Check API permissions and the GraphQL endpoint for this integration.'
+              : 'No tags returned. Check API permissions for this tool.'}
+          </p>
         ) : (
-          <Select
-            label="Tag"
-            placeholder="Choose a value"
-            options={tagOptions}
-            value={selectedTagUuid}
-            onChange={(e) => setSelectedTagUuid(e.target.value)}
-          />
+          <div className="space-y-3">
+            <Input
+              label="Search"
+              value={tagSearch}
+              onChange={(e) => setTagSearch(e.target.value)}
+              placeholder={tagModalProvider === 'WIZ' ? 'Filter by folder name or id…' : 'Filter by tag name or id…'}
+            />
+            {filteredTagsForPicker.length === 0 ? (
+              <p className="text-sm text-gray-600">No matching results. Try a different search.</p>
+            ) : (
+              <Select
+                label={tagModalProvider === 'WIZ' ? 'Folder' : 'Tag'}
+                placeholder={tagModalProvider === 'WIZ' ? 'Choose a folder' : 'Choose a value'}
+                options={tagOptions}
+                value={selectedTagUuid}
+                onChange={(e) => setSelectedTagUuid(e.target.value)}
+              />
+            )}
+          </div>
         )}
       </Modal>
     </>
