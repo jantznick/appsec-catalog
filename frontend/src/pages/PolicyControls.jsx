@@ -10,20 +10,7 @@ import { Select } from '../components/ui/Select.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import useAuthStore from '../store/authStore.js';
-
-const OPERATORS = [
-  { value: 'exists', label: 'Exists' },
-  { value: 'not_exists', label: 'Not Exists' },
-  { value: 'equals', label: 'Equals' },
-  { value: 'not_equals', label: 'Not Equals' },
-  { value: 'gte', label: 'Greater Than or Equal (≥)' },
-  { value: 'gt', label: 'Greater Than (>)' },
-  { value: 'lte', label: 'Less Than or Equal (≤)' },
-  { value: 'lt', label: 'Less Than (<)' },
-  { value: 'contains', label: 'Contains' },
-  { value: 'in', label: 'In (array)' },
-  { value: 'not_in', label: 'Not In (array)' },
-];
+import { POLICY_OPERATORS as OPERATORS } from '../lib/policyDisplay.js';
 
 // Get available operators for a field
 const getOperatorsForField = (fieldPath, availableFields) => {

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card.jsx';
 import { api } from '../../lib/api.js';
 
-export function ApplicablePoliciesView({ entityType, entityId, entityData }) {
+export function ApplicablePoliciesView({ entityType, entityId, entityData, embeddedInTab = false }) {
   const [policies, setPolicies] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -15,40 +16,36 @@ export function ApplicablePoliciesView({ entityType, entityId, entityData }) {
   const loadApplicablePolicies = async () => {
     try {
       setLoading(true);
+
+      // Company page: GET /api/policies?forCompany= (admin or that company’s members)
+      if (entityType === 'company') {
+        const policies = await api.getPolicies({ forCompany: entityId });
+        setPolicies(Array.isArray(policies) ? policies : []);
+        return;
+      }
+
       const allPolicies = await api.getPolicies();
-      
+
       // Filter policies that might be applicable
-      const candidatePolicies = allPolicies.filter(policy => {
+      const candidatePolicies = allPolicies.filter((policy) => {
         if (!policy.isActive) return false;
-        
+
         if (policy.scope === 'global') {
           return true;
         }
-        
-        if (entityType === 'company') {
-          if (policy.scope === 'company' || policy.scope === 'division') {
-            return true; // Will check relationships after fetching details
-          }
-          if (policy.scope === 'conditional') {
-            // Conditional policies depend on application data, skip for now
-            return false;
-          }
-        }
-        
+
         if (entityType === 'division') {
           if (policy.scope === 'division') {
-            return true; // Will check relationships after fetching details
+            return true;
           }
-          // Company and conditional policies don't apply at division level
           return false;
         }
-        
+
         return false;
       });
 
-      // Fetch full policy details to check relationships
       const applicablePolicies = [];
-      
+
       for (const policy of candidatePolicies) {
         try {
           const fullPolicy = await api.getPolicy(policy.id);
@@ -58,31 +55,10 @@ export function ApplicablePoliciesView({ entityType, entityId, entityData }) {
           if (fullPolicy.scope === 'global') {
             applies = true;
             reason = 'Applies to all';
-          } else if (entityType === 'company') {
-            if (fullPolicy.scope === 'company') {
-              const companyMatch = fullPolicy.companyPolicies?.some(
-                cp => cp.company.id === entityId
-              );
-              if (companyMatch) {
-                applies = true;
-                reason = 'Assigned to this company';
-              }
-            } else if (fullPolicy.scope === 'division' && entityData?.divisionId) {
-              const divisionMatch = fullPolicy.divisionPolicies?.some(
-                dp => dp.division.id === entityData.divisionId
-              );
-              if (divisionMatch) {
-                applies = true;
-                const division = fullPolicy.divisionPolicies.find(
-                  dp => dp.division.id === entityData.divisionId
-                );
-                reason = `Assigned to ${division?.division?.name || 'your'} division`;
-              }
-            }
           } else if (entityType === 'division') {
             if (fullPolicy.scope === 'division') {
               const divisionMatch = fullPolicy.divisionPolicies?.some(
-                dp => dp.division.id === entityId
+                (dp) => dp.division.id === entityId,
               );
               if (divisionMatch) {
                 applies = true;
@@ -145,7 +121,7 @@ export function ApplicablePoliciesView({ entityType, entityId, entityData }) {
   };
 
   return (
-    <Card className="mt-8">
+    <Card className={embeddedInTab ? '' : 'mt-8'}>
       <CardHeader>
         <CardTitle>Applicable Policies ({policies.length})</CardTitle>
       </CardHeader>
@@ -159,7 +135,12 @@ export function ApplicablePoliciesView({ entityType, entityId, entityData }) {
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-gray-800">{policy.name}</span>
+                    <Link
+                      to={`/policies/${policy.id}`}
+                      className="font-medium text-gray-800 hover:text-blue-700 hover:underline"
+                    >
+                      {policy.name}
+                    </Link>
                     <span className="px-2 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-800">
                       {scopeLabels[policy.scope] || policy.scope}
                     </span>

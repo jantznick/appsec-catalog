@@ -31,6 +31,8 @@ import { PendingApprovals } from './pages/PendingApprovals.jsx';
 import { Divisions } from './pages/Divisions.jsx';
 import { DivisionDetail } from './pages/DivisionDetail.jsx';
 import { PolicyControls } from './pages/PolicyControls.jsx';
+import { PolicyViewer } from './pages/PolicyViewer.jsx';
+import { IntegrationSettings } from './pages/IntegrationSettings.jsx';
 
 function CatchAllRedirect() {
   const { isAuthenticated, isVerified, loading } = useAuthStore();
@@ -295,6 +297,26 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <PolicyControls />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/policies/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <PolicyViewer />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/integrations"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <IntegrationSettings />
               </Layout>
             </ProtectedRoute>
           }

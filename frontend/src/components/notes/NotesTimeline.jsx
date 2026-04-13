@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { Button } from '../ui/Button.jsx';
+import { Modal } from '../ui/Modal.jsx';
 
 /**
  * Format a date to a readable string
@@ -37,6 +39,9 @@ export function NotesTimeline({
   showApplicationLabel = false,
   isAdmin = false,
 }) {
+  const [deleteTargetId, setDeleteTargetId] = useState(null);
+  const deleteTarget = deleteTargetId ? notes?.find((n) => n.id === deleteTargetId) : null;
+
   if (!notes || notes.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
@@ -46,6 +51,7 @@ export function NotesTimeline({
   }
 
   return (
+    <>
     <div className="space-y-4">
       {notes.map((note) => (
         <div
@@ -85,11 +91,7 @@ export function NotesTimeline({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => {
-                  if (window.confirm('Are you sure you want to delete this note?')) {
-                    onDeleteNote(note.id);
-                  }
-                }}
+                onClick={() => setDeleteTargetId(note.id)}
                 className="flex-shrink-0"
               >
                 Delete
@@ -99,6 +101,45 @@ export function NotesTimeline({
         </div>
       ))}
     </div>
+
+    {isAdmin && onDeleteNote && (
+      <Modal
+        isOpen={deleteTargetId != null}
+        onClose={() => setDeleteTargetId(null)}
+        title="Delete note?"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteTargetId(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                if (deleteTargetId) onDeleteNote(deleteTargetId);
+                setDeleteTargetId(null);
+              }}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      >
+        <p className="text-gray-700">
+          {deleteTarget ? (
+            <>
+              Delete this note? This cannot be undone.
+              <span className="block mt-3 text-sm text-gray-600 whitespace-pre-wrap break-words max-h-32 overflow-y-auto border border-gray-100 rounded p-2 bg-gray-50">
+                {deleteTarget.content}
+              </span>
+            </>
+          ) : (
+            'Delete this note? This cannot be undone.'
+          )}
+        </p>
+      </Modal>
+    )}
+    </>
   );
 }
 

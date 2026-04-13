@@ -2,7 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -30,8 +30,8 @@ router.get('/integration-levels', (req, res) => {
   }
 });
 
-// Get available application fields for policy control mapping - admin only
-router.get('/available-fields', requireAuth, requireAdmin, async (req, res) => {
+// Field metadata for policy / compliance UI (read-only; any authenticated user)
+router.get('/available-fields', requireAuth, async (req, res) => {
   try {
     // Load integration levels for dropdown options
     const integrationLevelsPath = path.join(__dirname, '../config/scoring/integrationLevels.json');

@@ -19,12 +19,16 @@ export function Dashboard() {
   };
 
   useEffect(() => {
-    // Only load company name for non-admin users with a company
-    if (user && !user.isAdmin && user.companyId) {
-      loadCompanyName(user.companyId);
-    } else {
+    if (!user || user.isAdmin || !user.companyId) {
       setCompanyName(null);
+      return;
     }
+    // Prefer name from /api/auth/me (avoids extra round-trip; works even if session lags DB briefly)
+    if (user.company?.name) {
+      setCompanyName(user.company.name);
+      return;
+    }
+    loadCompanyName(user.companyId);
   }, [user]);
 
   return (

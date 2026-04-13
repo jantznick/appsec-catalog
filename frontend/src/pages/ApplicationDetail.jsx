@@ -91,6 +91,8 @@ export function ApplicationDetail() {
   const [deploymentPage, setDeploymentPage] = useState(1);
   const deploymentsPerPage = 5;
   const [deploymentEnvironmentFilter, setDeploymentEnvironmentFilter] = useState('');
+  const [deleteDeploymentId, setDeleteDeploymentId] = useState(null);
+  const [deletingDeployment, setDeletingDeployment] = useState(false);
   const [deploymentTokens, setDeploymentTokens] = useState([]);
   const [loadingTokens, setLoadingTokens] = useState(false);
   const [newTokenName, setNewTokenName] = useState('');
@@ -266,6 +268,10 @@ export function ApplicationDetail() {
   const endIndex = startIndex + deploymentsPerPage;
   const deployments = filteredDeployments.slice(startIndex, endIndex);
 
+  const deploymentPendingDelete = deleteDeploymentId
+    ? allDeployments.find((d) => d.id === deleteDeploymentId)
+    : null;
+
   const handleCreateDeployment = async () => {
     if (!newDeployment.environment || !newDeployment.environment.trim()) {
       toast.error('Environment is required');
@@ -293,17 +299,18 @@ export function ApplicationDetail() {
     }
   };
 
-  const handleDeleteDeployment = async (deploymentId) => {
-    if (!confirm('Are you sure you want to delete this deployment?')) {
-      return;
-    }
-
+  const confirmDeleteDeployment = async () => {
+    if (!deleteDeploymentId) return;
+    setDeletingDeployment(true);
     try {
-      await api.deleteDeployment(id, deploymentId);
+      await api.deleteDeployment(id, deleteDeploymentId);
       toast.success('Deployment deleted successfully');
+      setDeleteDeploymentId(null);
       await loadDeployments();
     } catch (error) {
       toast.error(error.message || 'Failed to delete deployment');
+    } finally {
+      setDeletingDeployment(false);
     }
   };
 
@@ -1447,7 +1454,7 @@ export function ApplicationDetail() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleDeleteDeployment(deployment.id)}
+                          onClick={() => setDeleteDeploymentId(deployment.id)}
                           className="ml-4"
                         >
                           Delete
@@ -1997,6 +2004,43 @@ export function ApplicationDetail() {
             This action cannot be undone. All your changes will be lost.
           </p>
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={deleteDeploymentId != null}
+        onClose={() => !deletingDeployment && setDeleteDeploymentId(null)}
+        title="Delete deployment?"
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setDeleteDeploymentId(null)}
+              disabled={deletingDeployment}
+            >
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={confirmDeleteDeployment} loading={deletingDeployment}>
+              Delete
+            </Button>
+          </>
+        }
+      >
+        {deploymentPendingDelete && (
+          <div className="space-y-2 text-gray-700">
+            <p>
+              Remove this deployment record for{' '}
+              <strong>{deploymentPendingDelete.environment}</strong>
+              {deploymentPendingDelete.version ? (
+                <> (v{deploymentPendingDelete.version})</>
+              ) : null}
+              ?
+            </p>
+            <p className="text-sm text-gray-500">
+              {new Date(deploymentPendingDelete.deployedAt).toLocaleString()}
+            </p>
+          </div>
+        )}
       </Modal>
 
       {/* Delete Confirmation Modal */}

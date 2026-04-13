@@ -289,6 +289,88 @@ function evaluateConditionalTargeting(targetingRules, application) {
 }
 
 /**
+ * Active policies that apply to a given company (global, company-targeted, or division match).
+ * Used for company policy UI; same applicability rules as compliance evaluation.
+ * @returns {Array<{id,name,description,scope,isActive,reason}>} or null if company does not exist
+ */
+export async function getApplicablePolicySummariesForCompany(companyId) {
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { id: true, divisionId: true },
+  });
+  if (!company) {
+    return null;
+  }
+
+  const allPolicies = await prisma.policy.findMany({
+    where: { isActive: true },
+    include: {
+      divisionPolicies: {
+        include: {
+          division: {
+            select: { id: true, name: true },
+          },
+        },
+      },
+      companyPolicies: {
+        include: {
+          company: {
+            select: { id: true },
+          },
+        },
+      },
+    },
+    orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
+  });
+
+  const policies = [];
+
+  for (const policy of allPolicies) {
+    let reason = '';
+
+    if (policy.scope === 'global') {
+      reason = 'Applies to all';
+    } else if (policy.scope === 'company') {
+      const companyMatch = policy.companyPolicies?.some((cp) => cp.company.id === companyId);
+      if (companyMatch) {
+        reason = 'Assigned to this company';
+      }
+    } else if (policy.scope === 'division' && company.divisionId) {
+      const divisionMatch = policy.divisionPolicies?.find(
+        (dp) => dp.division.id === company.divisionId,
+      );
+      if (divisionMatch) {
+        reason = `Assigned to ${divisionMatch.division.name} division`;
+      }
+    }
+
+    if (reason) {
+      policies.push({
+        id: policy.id,
+        name: policy.name,
+        description: policy.description,
+        scope: policy.scope,
+        isActive: policy.isActive,
+        reason,
+      });
+    }
+  }
+
+  return policies;
+}
+
+/**
+ * Whether a company member is allowed to read policy details (must be an applicable policy).
+ */
+export async function canCompanyViewPolicy(policyId, companyId) {
+  const summaries = await getApplicablePolicySummariesForCompany(companyId);
+  if (summaries === null) {
+    return false;
+  }
+  return summaries.some((p) => p.id === policyId);
+}
+
+/**
  * Determine which policies apply to an application
  * @param {Object} application - Application object with company relation
  * @returns {Array} - Array of applicable Policy objects

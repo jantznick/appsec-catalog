@@ -3,10 +3,10 @@ import { api } from '../../lib/api.js';
 import { toast } from '../ui/Toast.jsx';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card.jsx';
 import { NoteInput } from './NoteInput.jsx';
-import { NotesTimeline } from './NotesTimeline.jsx';
 import { LoadingPage } from '../ui/Loading.jsx';
 import { Button } from '../ui/Button.jsx';
 import { Checkbox } from '../ui/Checkbox.jsx';
+import { Modal } from '../ui/Modal.jsx';
 
 export function NotesSection({ entityType, entityId, showApplicationLabels = false, refreshTrigger = 0 }) {
   const [notes, setNotes] = useState([]);
@@ -15,6 +15,8 @@ export function NotesSection({ entityType, entityId, showApplicationLabels = fal
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [editContent, setEditContent] = useState('');
   const [showApplicationNotes, setShowApplicationNotes] = useState(true);
+  const [deleteNoteId, setDeleteNoteId] = useState(null);
+  const [deletingNote, setDeletingNote] = useState(false);
 
   useEffect(() => {
     if (entityId) {
@@ -83,9 +85,22 @@ export function NotesSection({ entityType, entityId, showApplicationLabels = fal
       await api.deleteNote(noteId);
       await loadNotes();
       toast.success('Note deleted successfully');
+      return true;
     } catch (error) {
       console.error('Failed to delete note:', error);
       toast.error(error.message || 'Failed to delete note');
+      return false;
+    }
+  };
+
+  const confirmDeleteNote = async () => {
+    if (!deleteNoteId) return;
+    setDeletingNote(true);
+    try {
+      const ok = await handleDeleteNote(deleteNoteId);
+      if (ok) setDeleteNoteId(null);
+    } finally {
+      setDeletingNote(false);
     }
   };
 
@@ -117,7 +132,10 @@ export function NotesSection({ entityType, entityId, showApplicationLabels = fal
     ? notes.filter(note => !note.applicationId) // Only company notes
     : notes; // Show all notes
 
+  const deleteNoteTarget = deleteNoteId ? notes.find((n) => n.id === deleteNoteId) : null;
+
   return (
+    <>
     <Card>
       <CardHeader>
         <CardTitle>Notes & Timeline</CardTitle>
@@ -225,11 +243,7 @@ export function NotesSection({ entityType, entityId, showApplicationLabels = fal
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => {
-                                if (window.confirm('Are you sure you want to delete this note?')) {
-                                  handleDeleteNote(note.id);
-                                }
-                              }}
+                              onClick={() => setDeleteNoteId(note.id)}
                               className="flex-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50"
                             >
                               Delete
@@ -246,6 +260,33 @@ export function NotesSection({ entityType, entityId, showApplicationLabels = fal
         </div>
       </CardContent>
     </Card>
+
+      <Modal
+        isOpen={deleteNoteId != null}
+        onClose={() => !deletingNote && setDeleteNoteId(null)}
+        title="Delete note?"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteNoteId(null)} disabled={deletingNote}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={confirmDeleteNote} loading={deletingNote}>
+              Delete
+            </Button>
+          </>
+        }
+      >
+        <p className="text-gray-700">
+          Delete this note? This cannot be undone.
+          {deleteNoteTarget && (
+            <span className="block mt-3 text-sm text-gray-600 whitespace-pre-wrap break-words max-h-32 overflow-y-auto border border-gray-100 rounded p-2 bg-gray-50">
+              {deleteNoteTarget.content}
+            </span>
+          )}
+        </p>
+      </Modal>
+    </>
   );
 }
 

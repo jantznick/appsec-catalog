@@ -39,13 +39,17 @@ export function Layout({ children }) {
     }
   };
 
-  // Load company name for non-admin users
+  // Company label for non-admins: prefer /me payload, fallback to GET company (session must allow access)
   useEffect(() => {
-    if (user && user.companyId && !user.isAdmin) {
-      loadCompanyName(user.companyId);
-    } else {
+    if (!user || !user.companyId || user.isAdmin) {
       setCompanyName(null);
+      return;
     }
+    if (user.company?.name) {
+      setCompanyName(user.company.name);
+      return;
+    }
+    loadCompanyName(user.companyId);
   }, [user]);
 
 
@@ -150,6 +154,13 @@ export function Layout({ children }) {
                           }}
                         >
                           Policy Controls
+                        </DropdownItem>
+                        <DropdownItem
+                          onClick={() => {
+                            navigate('/settings/integrations');
+                          }}
+                        >
+                          Integration settings
                         </DropdownItem>
                       </>
                     ) : null}

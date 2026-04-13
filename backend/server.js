@@ -21,6 +21,7 @@ import notesRoutes from './routes/notes.js';
 import policyControlRoutes from './routes/policyControls.js';
 import policyRoutes from './routes/policies.js';
 import productRoutes from './routes/products.js';
+import integrationRoutes from './routes/integrations.js';
 
 dotenv.config();
 
@@ -141,6 +142,7 @@ app.use('/api/notes', notesRoutes);
 app.use('/api/policy-controls', policyControlRoutes);
 app.use('/api/policies', policyRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api', integrationRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

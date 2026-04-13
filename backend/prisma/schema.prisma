@@ -24,6 +24,7 @@ model User {
   approvedVersions       ApplicationVersion[]        @relation("VersionApprover") // Versions approved by this user
   applicationReviews     ApplicationMetadataReview[] // Reviews performed by this user
   policyControlOverrides PolicyControlOverride[] // Policy control overrides set by this user
+  integrationCredentialUpdates IntegrationCredential[] @relation("IntegrationCredentialUpdates")
 }
 
 model Division {
@@ -63,6 +64,8 @@ model Company {
   companyPolicies       CompanyPolicy[]
   products              Product[]
   productComponentTypes ProductComponentType[]
+  integrationCredentials IntegrationCredential[]
+  companyToolLinks      CompanyToolLink[]
 
   @@index([slug])
   @@index([divisionId])
@@ -708,4 +711,42 @@ model PolicyControlOverride {
   @@index([controlId])
   @@index([overriddenAt])
   @@index([noteId])
+}
+
+enum IntegrationScope {
+  ENTERPRISE
+  COMPANY
+}
+
+// Global or per-company API credentials for external tools (Tenable.io, future Wiz/Snyk/etc.)
+model IntegrationCredential {
+  id               String            @id @default(cuid())
+  provider         String // e.g. TENABLE_IO
+  scope            IntegrationScope
+  companyId        String?
+  company          Company?          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  encryptedPayload String            @db.Text
+  accessKeyHint    String? // Last chars of access key for display only
+  baseUrl          String? // Optional API base (e.g. https://cloud.tenable.com)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  updatedByUserId  String?
+  updatedBy        User?             @relation("IntegrationCredentialUpdates", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([provider])
+  @@index([companyId])
+}
+
+// Per-company filter metadata for a provider (e.g. Tenable tag UUID) — no secrets
+model CompanyToolLink {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  provider  String
+  filter    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, provider])
+  @@index([provider])
 }

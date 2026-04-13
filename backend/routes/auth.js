@@ -353,6 +353,12 @@ router.get('/me', requireAuth, async (req, res) => {
       });
     }
 
+    // Keep session in sync with the database (e.g. company assignment, admin flag) so API routes
+    // that rely on req.session.companyId / isAdmin match what the client got from /me.
+    req.session.companyId = user.companyId;
+    req.session.isAdmin = user.isAdmin;
+    req.session.verified = user.verifiedAccount;
+
     res.json({ user });
   } catch (error) {
     console.error('Get user error:', error);

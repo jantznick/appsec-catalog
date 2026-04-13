@@ -199,8 +199,12 @@ export const api = {
     }),
 
   // Policies endpoints
-  getPolicies: () =>
-    apiRequest('/api/policies'),
+  /** @param {{ forCompany?: string }} [opts] - Pass forCompany to list policies applicable to that company (non-admin OK). */
+  getPolicies: (opts = {}) => {
+    const forCompany = opts.forCompany;
+    const qs = forCompany ? `?forCompany=${encodeURIComponent(forCompany)}` : '';
+    return apiRequest(`/api/policies${qs}`);
+  },
 
   getPolicy: (id) =>
     apiRequest(`/api/policies/${id}`),
@@ -232,6 +236,7 @@ export const api = {
     apiRequest(`/api/divisions/${id}/stats`),
   getCompanyAverageScore: (id) =>
     apiRequest(`/api/companies/${id}/average-score`),
+
   getCompanyDomains: (id) =>
     apiRequest(`/api/companies/${id}/domains`),
   getCompanyBySlug: (slug) =>
@@ -596,5 +601,42 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ action, approvedFields, rejectionReason, approvalNotes }),
     }),
+
+  // External integrations (Tenable.io, etc.)
+  getIntegrationProviders: () =>
+    apiRequest('/api/integrations/providers'),
+
+  getIntegrationCredentials: (provider, { scope, companyId }) => {
+    const params = new URLSearchParams({ scope });
+    if (companyId) params.set('companyId', companyId);
+    return apiRequest(`/api/integrations/credentials/${provider}?${params.toString()}`);
+  },
+
+  putIntegrationCredentials: (provider, body) =>
+    apiRequest(`/api/integrations/credentials/${provider}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  deleteIntegrationCredentials: (provider, { scope, companyId }) => {
+    const params = new URLSearchParams({ scope });
+    if (companyId) params.set('companyId', companyId);
+    return apiRequest(`/api/integrations/credentials/${provider}?${params.toString()}`, {
+      method: 'DELETE',
+    });
+  },
+
+  getCompanyIntegrationTags: (companyId, provider) =>
+    apiRequest(`/api/companies/${companyId}/integrations/${provider}/tags`),
+
+  putCompanyIntegrationLink: (companyId, provider, body) =>
+    apiRequest(`/api/companies/${companyId}/integrations/${provider}/link`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  /** Admin: companies that have company-scoped integration credentials */
+  getIntegrationAdminCompanyOverview: () =>
+    apiRequest('/api/integrations/admin/company-overview'),
 };
 

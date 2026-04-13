@@ -127,6 +127,22 @@ export function Companies() {
       header: 'Applications',
       cell: ({ row }) => row.original._count?.applications || 0,
     },
+    ...(isAdmin() ? [{
+      id: 'companyIntegrations',
+      header: 'Company integrations',
+      cell: ({ row }) =>
+        row.original.hasCompanyScopedIntegrations ? (
+          <span
+            className="inline-flex text-xs font-medium text-amber-900 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded"
+            title="This company has its own integration API keys (not catalog-wide only)"
+          >
+            Custom keys
+          </span>
+        ) : (
+          <span className="text-xs text-gray-400">—</span>
+        ),
+      enableSorting: false,
+    }] : []),
     {
       accessorKey: 'score',
       header: 'Avg Score',

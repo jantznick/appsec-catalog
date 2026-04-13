@@ -1,12 +1,44 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import {
+  getApplicablePolicySummariesForCompany,
+  canCompanyViewPolicy,
+} from '../services/policy.js';
 
 const router = express.Router();
 
-// GET /api/policies - List all policies (admin only)
-router.get('/', requireAuth, requireAdmin, async (req, res) => {
+/**
+ * GET /api/policies
+ * - No query: full list (admin only), includes control counts — policy admin UI.
+ * - ?forCompany=<companyId>: policies applicable to that company (admin or member of that company).
+ */
+router.get('/', requireAuth, async (req, res) => {
   try {
+    const forCompany =
+      typeof req.query.forCompany === 'string' ? req.query.forCompany.trim() : '';
+
+    if (forCompany) {
+      if (!req.session.isAdmin && req.session.companyId !== forCompany) {
+        return res.status(403).json({
+          error: 'Permission denied',
+          message: 'You can only access your own company',
+        });
+      }
+      const policies = await getApplicablePolicySummariesForCompany(forCompany);
+      if (policies === null) {
+        return res.status(404).json({ error: 'Company not found' });
+      }
+      return res.json(policies);
+    }
+
+    if (!req.session.isAdmin) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'Admin access required',
+      });
+    }
+
     const policies = await prisma.policy.findMany({
       include: {
         _count: {
@@ -28,42 +60,103 @@ router.get('/', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-// GET /api/policies/:id - Get single policy with controls (admin only)
-router.get('/:id', requireAuth, requireAdmin, async (req, res) => {
+// GET /api/policies/:id — Full policy + controls (admin). Company members: same controls/fields
+// if this policy applies to their company (read-only; no targeting/assignment lists).
+router.get('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
+    if (req.session.isAdmin) {
+      const policy = await prisma.policy.findUnique({
+        where: { id },
+        include: {
+          controls: {
+            include: {
+              fields: {
+                orderBy: {
+                  displayOrder: 'asc',
+                },
+              },
+            },
+            orderBy: {
+              displayOrder: 'asc',
+            },
+          },
+          divisionPolicies: {
+            include: {
+              division: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+          companyPolicies: {
+            include: {
+              company: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!policy) {
+        return res.status(404).json({ error: 'Policy not found' });
+      }
+
+      return res.json(policy);
+    }
+
+    const companyId = req.session.companyId;
+    if (!companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'Company context is required to view policy details',
+      });
+    }
+
+    const allowed = await canCompanyViewPolicy(id, companyId);
+    if (!allowed) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'This policy does not apply to your organization',
+      });
+    }
+
     const policy = await prisma.policy.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        scope: true,
+        isActive: true,
+        displayOrder: true,
         controls: {
-          include: {
+          where: { isActive: true },
+          orderBy: { displayOrder: 'asc' },
+          select: {
+            id: true,
+            controlId: true,
+            name: true,
+            description: true,
+            category: true,
+            evaluationLogic: true,
+            displayOrder: true,
+            isActive: true,
             fields: {
-              orderBy: {
-                displayOrder: 'asc',
-              },
-            },
-          },
-          orderBy: {
-            displayOrder: 'asc',
-          },
-        },
-        divisionPolicies: {
-          include: {
-            division: {
+              orderBy: { displayOrder: 'asc' },
               select: {
                 id: true,
-                name: true,
-              },
-            },
-          },
-        },
-        companyPolicies: {
-          include: {
-            company: {
-              select: {
-                id: true,
-                name: true,
+                fieldPath: true,
+                operator: true,
+                value: true,
+                displayOrder: true,
               },
             },
           },
@@ -75,7 +168,7 @@ router.get('/:id', requireAuth, requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Policy not found' });
     }
 
-    res.json(policy);
+    res.json({ ...policy, readOnly: true });
   } catch (error) {
     console.error('Error fetching policy:', error);
     res.status(500).json({ error: 'Failed to fetch policy' });

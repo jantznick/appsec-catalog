@@ -1,0 +1,479 @@
+import express from 'express';
+import { prisma } from '../prisma/client.js';
+import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import {
+  encryptIntegrationPayload,
+  maskAccessKeyHint,
+  getIntegrationsKey,
+} from '../utils/integrationCrypto.js';
+import {
+  assertSupportedProvider,
+  PROVIDER_TENABLE_IO,
+  SUPPORTED_PROVIDERS,
+} from '../integrations/constants.js';
+import {
+  resolveIntegrationForCompany,
+  validateTenableIoFilter,
+  normalizeTenableIoFilter,
+} from '../integrations/resolve.js';
+import { listTenableIoTagValues } from '../integrations/tenableIo.js';
+
+const router = express.Router();
+
+function canAccessCompany(req, companyId) {
+  return req.session.isAdmin || req.session.companyId === companyId;
+}
+
+/** Enterprise tag list + link: admin only. Company credential: admin or member of company. */
+function canListOrSaveTags(req, companyId, resolved) {
+  if (!resolved) {
+    return false;
+  }
+  if (resolved.scope === 'ENTERPRISE') {
+    return !!req.session.isAdmin;
+  }
+  return canAccessCompany(req, companyId);
+}
+
+function canManageCredential(req, scope, companyId) {
+  if (scope === 'ENTERPRISE') {
+    return !!req.session.isAdmin;
+  }
+  if (!companyId) {
+    return false;
+  }
+  return req.session.isAdmin || req.session.companyId === companyId;
+}
+
+/**
+ * PUT /api/integrations/credentials/:provider
+ * body: { scope, companyId?, accessKey, secretKey, baseUrl? }
+ */
+router.put('/integrations/credentials/:provider', requireAuth, async (req, res) => {
+  try {
+    getIntegrationsKey();
+  } catch (e) {
+    return res.status(503).json({
+      error: 'Integration encryption not configured',
+      message: e.message,
+    });
+  }
+
+  try {
+    const { provider } = req.params;
+    assertSupportedProvider(provider);
+
+    const { scope, companyId, accessKey, secretKey, baseUrl } = req.body;
+
+    if (scope !== 'ENTERPRISE' && scope !== 'COMPANY') {
+      return res.status(400).json({ error: 'scope must be ENTERPRISE or COMPANY' });
+    }
+    if (scope === 'COMPANY' && !companyId) {
+      return res.status(400).json({ error: 'companyId is required for COMPANY scope' });
+    }
+    if (scope === 'ENTERPRISE' && companyId) {
+      return res.status(400).json({ error: 'companyId must not be set for ENTERPRISE scope' });
+    }
+
+    if (!canManageCredential(req, scope, companyId)) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You cannot manage this integration credential',
+      });
+    }
+
+    if (!accessKey || !secretKey || typeof accessKey !== 'string' || typeof secretKey !== 'string') {
+      return res.status(400).json({ error: 'accessKey and secretKey are required' });
+    }
+
+    const payloadObj = { accessKey, secretKey };
+    const encryptedPayload = encryptIntegrationPayload(JSON.stringify(payloadObj));
+    const hint = maskAccessKeyHint(accessKey);
+
+    const data = {
+      provider,
+      scope,
+      companyId: scope === 'COMPANY' ? companyId : null,
+      encryptedPayload,
+      accessKeyHint: hint,
+      baseUrl: baseUrl && typeof baseUrl === 'string' ? baseUrl.trim() : null,
+      updatedByUserId: req.session.userId,
+    };
+
+    if (scope === 'ENTERPRISE') {
+      const existing = await prisma.integrationCredential.findFirst({
+        where: { provider, scope: 'ENTERPRISE', companyId: null },
+      });
+      if (existing) {
+        const updated = await prisma.integrationCredential.update({
+          where: { id: existing.id },
+          data,
+        });
+        return res.json({
+          ok: true,
+          id: updated.id,
+          scope: updated.scope,
+          provider: updated.provider,
+          accessKeyHint: updated.accessKeyHint,
+          baseUrl: updated.baseUrl,
+        });
+      }
+      const created = await prisma.integrationCredential.create({ data });
+      return res.status(201).json({
+        ok: true,
+        id: created.id,
+        scope: created.scope,
+        provider: created.provider,
+        accessKeyHint: created.accessKeyHint,
+        baseUrl: created.baseUrl,
+      });
+    }
+
+    const existing = await prisma.integrationCredential.findFirst({
+      where: { provider, scope: 'COMPANY', companyId },
+    });
+    if (existing) {
+      const updated = await prisma.integrationCredential.update({
+        where: { id: existing.id },
+        data,
+      });
+      return res.json({
+        ok: true,
+        id: updated.id,
+        scope: updated.scope,
+        provider: updated.provider,
+        companyId: updated.companyId,
+        accessKeyHint: updated.accessKeyHint,
+        baseUrl: updated.baseUrl,
+      });
+    }
+    const created = await prisma.integrationCredential.create({ data });
+    return res.status(201).json({
+      ok: true,
+      id: created.id,
+      scope: created.scope,
+      provider: created.provider,
+      companyId: created.companyId,
+      accessKeyHint: created.accessKeyHint,
+      baseUrl: created.baseUrl,
+    });
+  } catch (error) {
+    console.error('Integration credential save error:', error);
+    if (error.statusCode === 400) {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: 'Failed to save integration credential' });
+  }
+});
+
+/**
+ * GET /api/integrations/credentials/:provider?scope=&companyId=
+ */
+router.get('/integrations/credentials/:provider', requireAuth, async (req, res) => {
+  try {
+    const { provider } = req.params;
+    assertSupportedProvider(provider);
+    const { scope, companyId } = req.query;
+
+    if (scope !== 'ENTERPRISE' && scope !== 'COMPANY') {
+      return res.status(400).json({ error: 'Query scope must be ENTERPRISE or COMPANY' });
+    }
+    if (scope === 'COMPANY' && !companyId) {
+      return res.status(400).json({ error: 'companyId query is required for COMPANY scope' });
+    }
+
+    if (!canManageCredential(req, scope, companyId || null)) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You cannot view this integration credential',
+      });
+    }
+
+    const row =
+      scope === 'ENTERPRISE'
+        ? await prisma.integrationCredential.findFirst({
+            where: { provider, scope: 'ENTERPRISE', companyId: null },
+          })
+        : await prisma.integrationCredential.findFirst({
+            where: { provider, scope: 'COMPANY', companyId },
+          });
+
+    if (!row) {
+      return res.json({
+        configured: false,
+        provider,
+        scope,
+        companyId: scope === 'COMPANY' ? companyId : null,
+      });
+    }
+
+    return res.json({
+      configured: true,
+      provider: row.provider,
+      scope: row.scope,
+      companyId: row.companyId,
+      accessKeyHint: row.accessKeyHint,
+      baseUrl: row.baseUrl,
+      updatedAt: row.updatedAt,
+    });
+  } catch (error) {
+    console.error('Integration credential get error:', error);
+    if (error.statusCode === 400) {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: 'Failed to load integration credential' });
+  }
+});
+
+/**
+ * DELETE /api/integrations/credentials/:provider?scope=&companyId=
+ */
+router.delete('/integrations/credentials/:provider', requireAuth, async (req, res) => {
+  try {
+    const { provider } = req.params;
+    assertSupportedProvider(provider);
+    const { scope, companyId } = req.query;
+
+    if (scope !== 'ENTERPRISE' && scope !== 'COMPANY') {
+      return res.status(400).json({ error: 'Query scope must be ENTERPRISE or COMPANY' });
+    }
+    if (scope === 'COMPANY' && !companyId) {
+      return res.status(400).json({ error: 'companyId query is required for COMPANY scope' });
+    }
+
+    if (!canManageCredential(req, scope, companyId || null)) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You cannot delete this integration credential',
+      });
+    }
+
+    const row =
+      scope === 'ENTERPRISE'
+        ? await prisma.integrationCredential.findFirst({
+            where: { provider, scope: 'ENTERPRISE', companyId: null },
+          })
+        : await prisma.integrationCredential.findFirst({
+            where: { provider, scope: 'COMPANY', companyId },
+          });
+
+    if (!row) {
+      return res.status(404).json({ error: 'Credential not found' });
+    }
+
+    await prisma.integrationCredential.delete({ where: { id: row.id } });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Integration credential delete error:', error);
+    if (error.statusCode === 400) {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: 'Failed to delete integration credential' });
+  }
+});
+
+/**
+ * GET /api/companies/:companyId/integrations/:provider/tags
+ */
+router.get(
+  '/companies/:companyId/integrations/:provider/tags',
+  requireAuth,
+  async (req, res) => {
+    try {
+      getIntegrationsKey();
+    } catch (e) {
+      return res.status(503).json({
+        error: 'Integration encryption not configured',
+        message: e.message,
+      });
+    }
+
+    try {
+      const { companyId, provider } = req.params;
+      assertSupportedProvider(provider);
+
+      if (!canAccessCompany(req, companyId)) {
+        return res.status(403).json({
+          error: 'Permission denied',
+          message: 'You cannot access this company',
+        });
+      }
+
+      const resolved = await resolveIntegrationForCompany(companyId, provider);
+      if (!resolved) {
+        return res.status(400).json({
+          error: 'No integration configured',
+          message: 'Save API credentials for this provider first (enterprise or company scope).',
+        });
+      }
+
+      if (!canListOrSaveTags(req, companyId, resolved)) {
+        return res.status(403).json({
+          error: 'Permission denied',
+          message: 'Only administrators can list tags for enterprise integrations',
+        });
+      }
+
+      if (provider === PROVIDER_TENABLE_IO) {
+        const tags = await listTenableIoTagValues(resolved.decrypted, resolved.baseUrl);
+        return res.json({ tags });
+      }
+
+      return res.status(400).json({ error: 'Provider not implemented' });
+    } catch (error) {
+      console.error('List integration tags error:', error);
+      if (error.statusCode === 400) {
+        return res.status(400).json({ error: error.message });
+      }
+      if (error.statusCode === 403) {
+        return res.status(403).json({
+          error: 'Vendor API denied',
+          message: error.message,
+        });
+      }
+      if (error.statusCode === 502) {
+        return res.status(502).json({
+          error: 'Vendor API error',
+          message: error.message,
+        });
+      }
+      res.status(500).json({ error: 'Failed to list tags' });
+    }
+  },
+);
+
+/**
+ * PUT /api/companies/:companyId/integrations/:provider/link
+ * body: TENABLE_IO → { tagUuid, tagName?, categoryUuid? }
+ */
+router.put(
+  '/companies/:companyId/integrations/:provider/link',
+  requireAuth,
+  async (req, res) => {
+    try {
+      const { companyId, provider } = req.params;
+      assertSupportedProvider(provider);
+
+      if (!canAccessCompany(req, companyId)) {
+        return res.status(403).json({
+          error: 'Permission denied',
+          message: 'You cannot access this company',
+        });
+      }
+
+      const resolved = await resolveIntegrationForCompany(companyId, provider);
+      if (!resolved) {
+        return res.status(400).json({
+          error: 'No integration configured',
+          message: 'Configure API credentials before setting a link.',
+        });
+      }
+
+      if (!canListOrSaveTags(req, companyId, resolved)) {
+        return res.status(403).json({
+          error: 'Permission denied',
+          message: 'Only administrators can set links for enterprise integrations',
+        });
+      }
+
+      let filter;
+      if (provider === PROVIDER_TENABLE_IO) {
+        const normalized = normalizeTenableIoFilter(req.body);
+        const v = validateTenableIoFilter(normalized);
+        if (!v.ok) {
+          return res.status(400).json({ error: v.message });
+        }
+        filter = normalized;
+      } else {
+        return res.status(400).json({ error: 'Provider not implemented' });
+      }
+
+      const link = await prisma.companyToolLink.upsert({
+        where: {
+          companyId_provider: { companyId, provider },
+        },
+        create: {
+          companyId,
+          provider,
+          filter,
+        },
+        update: { filter },
+      });
+
+      res.json({
+        ok: true,
+        link: {
+          id: link.id,
+          provider: link.provider,
+          filter: link.filter,
+          updatedAt: link.updatedAt,
+        },
+      });
+    } catch (error) {
+      console.error('Save integration link error:', error);
+      if (error.statusCode === 400) {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(500).json({ error: 'Failed to save integration link' });
+    }
+  },
+);
+
+/**
+ * GET /api/integrations/providers — supported provider ids for UI
+ */
+router.get('/integrations/providers', requireAuth, async (req, res) => {
+  res.json({ providers: SUPPORTED_PROVIDERS });
+});
+
+/**
+ * GET /api/integrations/admin/company-overview — admin: all companies with company-scoped API credentials
+ */
+router.get(
+  '/integrations/admin/company-overview',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const rows = await prisma.integrationCredential.findMany({
+        where: { scope: 'COMPANY', companyId: { not: null } },
+        select: {
+          provider: true,
+          accessKeyHint: true,
+          companyId: true,
+          company: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: [{ company: { name: 'asc' } }, { provider: 'asc' }],
+      });
+
+      const byCompany = new Map();
+      for (const r of rows) {
+        if (!r.company) continue;
+        const id = r.companyId;
+        if (!byCompany.has(id)) {
+          byCompany.set(id, {
+            companyId: id,
+            companyName: r.company.name,
+            integrations: [],
+          });
+        }
+        byCompany.get(id).integrations.push({
+          provider: r.provider,
+          accessKeyHint: r.accessKeyHint,
+        });
+      }
+
+      res.json({ companies: [...byCompany.values()] });
+    } catch (error) {
+      console.error('Company integration overview error:', error);
+      res.status(500).json({ error: 'Failed to load company integrations overview' });
+    }
+  },
+);
+
+export default router;
