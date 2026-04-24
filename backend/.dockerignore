@@ -1,0 +1,6 @@
+# Don’t copy host artifacts into the image (would override `npm ci` and Prisma from the build)
+node_modules
+.env
+.env.*
+npm-debug.log
+storage
