@@ -1,6 +1,12 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import {
+  getExportPreviewList,
+  buildSecurityFindingsCsv,
+  parseTimeRange,
+} from '../services/securityFindingsExportService.js';
+import { createJob, updateJob, getJob } from '../jobs/securityFindingsJobStore.js';
 
 const router = express.Router();
 
@@ -126,6 +132,77 @@ router.get('/applications', async (req, res) => {
     console.error('Error fetching admin applications:', error);
     res.status(500).json({ error: 'Failed to fetch applications' });
   }
+});
+
+// Security findings export (Tenable WAS + Wiz SAST) — real-time vendor calls, async job
+router.get('/security-findings/preview', async (req, res) => {
+  try {
+    const companies = await getExportPreviewList(prisma, { companyIds: null });
+    res.json({ companies });
+  } catch (error) {
+    console.error('security findings preview', error);
+    res.status(500).json({ error: 'Failed to build preview' });
+  }
+});
+
+router.post('/security-findings/jobs', async (req, res) => {
+  try {
+    const { companyIds, separateByApp, time } = req.body || {};
+    if (!Array.isArray(companyIds) || companyIds.length === 0) {
+      return res.status(400).json({ error: 'companyIds (non-empty array) is required' });
+    }
+    const tr = parseTimeRange(time);
+    const jobId = createJob();
+    updateJob(jobId, { status: 'running', message: 'Starting…' });
+    setImmediate(async () => {
+      try {
+        const csv = await buildSecurityFindingsCsv(
+          prisma,
+          {
+            companyIds,
+            timeRange: tr,
+            separateByApp: Boolean(separateByApp),
+            onProgress: (msg) => {
+              updateJob(jobId, { message: msg });
+            },
+          },
+        );
+        updateJob(jobId, { status: 'complete', message: 'Done', csv });
+      } catch (e) {
+        console.error('security findings job', e);
+        updateJob(jobId, { status: 'error', error: (e && e.message) || 'Export failed' });
+      }
+    });
+    res.status(202).json({ jobId, message: 'Export started' });
+  } catch (error) {
+    console.error('security findings start', error);
+    res.status(500).json({ error: 'Failed to start export' });
+  }
+});
+
+router.get('/security-findings/jobs/:id', (req, res) => {
+  const j = getJob(req.params.id);
+  if (!j) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  res.json({
+    status: j.status,
+    message: j.message,
+    error: j.error,
+  });
+});
+
+router.get('/security-findings/jobs/:id/csv', (req, res) => {
+  const j = getJob(req.params.id);
+  if (!j) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  if (j.status !== 'complete' || !j.csv) {
+    return res.status(409).json({ error: 'Not ready' });
+  }
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="security-findings-${req.params.id}.csv"`);
+  return res.send(j.csv);
 });
 
 export default router;

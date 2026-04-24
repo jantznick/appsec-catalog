@@ -6,6 +6,7 @@ import { toast } from '../components/ui/Toast.jsx';
 import { LoadingPage } from '../components/ui/Loading.jsx';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.jsx';
 import { Button } from '../components/ui/Button.jsx';
+import { SecurityFindingsExportModal } from '../components/integrations/SecurityFindingsExportModal.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { Select } from '../components/ui/Select.jsx';
 import useAuthStore from '../store/authStore.js';
@@ -21,6 +22,7 @@ export function Companies() {
   // Table state
   const [sorting, setSorting] = useState([]);
   const [globalFilter, setGlobalFilter] = useState('');
+  const [findingsOpen, setFindingsOpen] = useState(false);
 
   useEffect(() => {
     if (isAdmin()) {
@@ -225,6 +227,13 @@ export function Companies() {
 
   return (
     <div>
+      {isAdmin() && (
+        <SecurityFindingsExportModal
+          open={findingsOpen}
+          onClose={() => setFindingsOpen(false)}
+          mode="admin"
+        />
+      )}
       <div className="mb-8 flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-800 mb-2">Companies</h1>
@@ -232,11 +241,18 @@ export function Companies() {
             {isAdmin() ? 'Manage all companies' : 'View your company'}
           </p>
         </div>
-        {isAdmin() && (
-          <Link to="/companies/new">
-            <Button variant="primary">Create Company</Button>
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {isAdmin() && (
+            <Button type="button" variant="outline" onClick={() => setFindingsOpen(true)}>
+              Download security findings
+            </Button>
+          )}
+          {isAdmin() && (
+            <Link to="/companies/new">
+              <Button variant="primary">Create Company</Button>
+            </Link>
+          )}
+        </div>
       </div>
 
       {companies.length === 0 ? (

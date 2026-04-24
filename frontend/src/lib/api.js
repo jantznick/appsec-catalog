@@ -647,5 +647,42 @@ export const api = {
   /** Admin: companies that have company-scoped integration credentials */
   getIntegrationAdminCompanyOverview: () =>
     apiRequest('/api/integrations/admin/company-overview'),
+
+  // Security findings export (Tenable WAS + Wiz SAST)
+  getAdminSecurityFindingsPreview: () => apiRequest('/api/admin/security-findings/preview'),
+  startAdminSecurityFindingsJob: (body) =>
+    apiRequest('/api/admin/security-findings/jobs', { method: 'POST', body: JSON.stringify(body) }),
+  getAdminSecurityFindingsJob: (jobId) =>
+    apiRequest(`/api/admin/security-findings/jobs/${encodeURIComponent(jobId)}`),
+  getCompanySecurityFindingsPreview: (companyId) =>
+    apiRequest(`/api/companies/${encodeURIComponent(companyId)}/security-findings/preview`),
+  startCompanySecurityFindingsJob: (companyId, body) =>
+    apiRequest(`/api/companies/${encodeURIComponent(companyId)}/security-findings/jobs`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getCompanySecurityFindingsJob: (companyId, jobId) =>
+    apiRequest(
+      `/api/companies/${encodeURIComponent(companyId)}/security-findings/jobs/${encodeURIComponent(jobId)}`,
+    ),
+  /**
+   * @param {string} path e.g. `/api/admin/security-findings/jobs/UUID/csv`
+   */
+  fetchSecurityFindingsCsv: async (path) => {
+    const base = String(API_URL || '').replace(/\/$/, '');
+    const p = path.startsWith('/api') ? path : `/api${path}`.replace(/^\/+/, '/');
+    const r = await fetch(`${base}${p}`, { credentials: 'include' });
+    if (!r.ok) {
+      const t = new Error('Download failed');
+      try {
+        const j = await r.json();
+        t.message = j.error || t.message;
+      } catch {
+        // ignore
+      }
+      throw t;
+    }
+    return r.text();
+  },
 };
 

@@ -112,7 +112,7 @@ export async function fetchWizAccessToken(clientId, clientSecret) {
  * @param {string} query
  * @param {object} [variables]
  */
-async function wizGraphql(graphqlUrl, accessToken, query, variables = {}) {
+export async function wizGraphql(graphqlUrl, accessToken, query, variables = {}) {
   const started = Date.now();
   const graphqlHost = safeUrlHost(graphqlUrl);
   const res = await fetch(graphqlUrl, {

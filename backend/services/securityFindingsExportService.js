@@ -1,0 +1,463 @@
+import { prisma } from '../prisma/client.js';
+import { resolveIntegrationForCompany } from '../integrations/resolve.js';
+import { PROVIDER_TENABLE_IO, PROVIDER_WIZ } from '../integrations/constants.js';
+import { getTenableWasCountsByTag } from '../integrations/tenableWasFindings.js';
+import { getWizSastCountsForProject } from '../integrations/wizSastFindings.js';
+
+/**
+ * @param {string} v
+ */
+function esc(v) {
+  if (v == null) {
+    return '';
+  }
+  const s = String(v);
+  if (/[",\n#]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+/**
+ * @param {object} body
+ * @returns { object & { all?: boolean, from?: string, to?: string } }
+ */
+export function parseTimeRange(body) {
+  if (!body || body.type === 'all') {
+    return { all: true };
+  }
+  if (body.type === 'lastDays' && body.days) {
+    const d = Math.min(3650, Math.max(1, Number(body.days) || 30));
+    const to = new Date();
+    const from = new Date(to.getTime() - d * 86_400_000);
+    return { from: from.toISOString(), to: to.toISOString() };
+  }
+  return { all: true };
+}
+
+/**
+ * @param {string} p
+ */
+function labelProvider(p) {
+  if (p === PROVIDER_TENABLE_IO) {
+    return 'Tenable WAS';
+  }
+  if (p === PROVIDER_WIZ) {
+    return 'Wiz SAST';
+  }
+  return p;
+}
+
+/**
+ * @param {string[]} providers
+ */
+function sourceColumn(providers) {
+  if (!providers || providers.length === 0) {
+    return '—';
+  }
+  return providers.map(labelProvider).join(' + ');
+}
+
+/**
+ * @param {Record<string, number>} a
+ * @param {Record<string, number>|null|undefined} b
+ */
+function addSev(a, b) {
+  if (!b) {
+    return;
+  }
+  for (const k of ['critical', 'high', 'medium', 'low', 'info']) {
+    a[k] = (a[k] || 0) + (b[k] || 0);
+  }
+}
+
+/**
+ * @param {string} companyId
+ * @param {import('@prisma/client').Prisma.JsonValue} filter
+ * @param {object} tr
+ */
+async function tenableFor(companyId, filter, tr) {
+  const res = await resolveIntegrationForCompany(companyId, PROVIDER_TENABLE_IO);
+  if (!res) {
+    return {
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+      info: 0,
+      error: 'Tenable: no credentials for company',
+    };
+  }
+  const f = filter && typeof filter === 'object' && !Array.isArray(filter) ? filter : {};
+  const tagUuid = /** @type {{ tagUuid?: string }} */ (f).tagUuid;
+  if (!tagUuid) {
+    return { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: 'Tenable: no tag in link' };
+  }
+  return getTenableWasCountsByTag(res.decrypted, res.baseUrl, { tagUuid }, tr);
+}
+
+/**
+ * @param {string} companyId
+ * @param {import('@prisma/client').Prisma.JsonValue} filter
+ * @param {object} tr
+ */
+async function wizFor(companyId, filter, tr) {
+  const res = await resolveIntegrationForCompany(companyId, PROVIDER_WIZ);
+  if (!res) {
+    return {
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+      info: 0,
+      error: 'Wiz: no credentials for company',
+    };
+  }
+  const f = filter && typeof filter === 'object' && !Array.isArray(filter) ? filter : {};
+  const folderId = /** @type {{ folderId?: string }} */ (f).folderId;
+  if (!folderId) {
+    return { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: 'Wiz: no folder in link' };
+  }
+  return getWizSastCountsForProject(
+    { clientId: res.decrypted.accessKey, clientSecret: res.decrypted.secretKey },
+    res.baseUrl,
+    folderId,
+    tr,
+  );
+}
+
+/**
+ * @param {object} t
+ * @param {object} w
+ */
+function mergeSourceErrors(t, w) {
+  return [t?.error, w?.error].filter(Boolean).join(' | ') || '';
+}
+
+/**
+ * @param {object} t
+ * @param {object} w
+ * @param {string[]} pout
+ * @param {string} err
+ */
+function combinedRowData(t, w, pout, err) {
+  const row = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+  addSev(row, t);
+  addSev(row, w);
+  const notes = err || '';
+  return { ...row, sources: sourceColumn(pout), notes: notes || '—' };
+}
+
+/**
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {string} companyId
+ * @param { 'all' | { from?: string, to?: string, all?: boolean } } tr
+ * @param { (s: string) => void} [onProgress]
+ */
+export async function buildSecurityFindingsCsv(
+  prisma,
+  {
+    companyIds,
+    /** @type { 'all' | { from?: string, to?: string, all?: boolean } } */ timeRange,
+    /** @type { boolean } */ separateByApp,
+    /** @type { (s: string) => void } */ onProgress = () => {},
+  },
+) {
+  const tr = timeRange;
+  const ids = Array.isArray(companyIds) && companyIds.length > 0 ? companyIds : [];
+  if (ids.length === 0) {
+    return '# error: no companies selected\ncsv,empty\n';
+  }
+  const companies = await prisma.company.findMany({
+    where: { id: { in: ids } },
+    orderBy: { name: 'asc' },
+    include: {
+      _count: { select: { applications: true } },
+      companyToolLinks: { select: { provider: true, filter: true } },
+      applications: {
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          applicationToolLinks: { select: { provider: true, filter: true } },
+        },
+      },
+    },
+  });
+  const meta1 = {
+    type: 'security_findings',
+    generatedAt: new Date().toISOString(),
+    time: tr?.all ? 'all' : 'range',
+    timeFrom: tr?.all ? '' : (tr && tr.from) || '',
+    timeTo: tr?.all ? '' : (tr && tr.to) || '',
+    companies: companyIds.length,
+  };
+  const firstLine = `# ${JSON.stringify(meta1)}`;
+  const rows = /** @type {string[][]} */ ([
+    firstLine,
+    [
+      'Row',
+      'Application',
+      'Company',
+      'Applications count',
+      'Critical',
+      'High',
+      'Medium',
+      'Low',
+      'Info',
+      'Total findings',
+      'Sources used',
+      'Notes',
+    ],
+  ]);
+  const totals = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+  let cIdx = 0;
+  for (const co of companies) {
+    cIdx += 1;
+    onProgress(`${cIdx}/${companies.length} ${co.name}`);
+
+    const coTlink = co.companyToolLinks.find((l) => l.provider === PROVIDER_TENABLE_IO);
+    const coWlink = co.companyToolLinks.find((l) => l.provider === PROVIDER_WIZ);
+    if (!separateByApp) {
+      let t0 = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+      let w0 = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+      const p0 = /** @type {string[]} */ ([]);
+      if (coTlink) {
+        t0 = await tenableFor(co.id, coTlink.filter, tr);
+        p0.push(PROVIDER_TENABLE_IO);
+      } else {
+        for (const app of co.applications) {
+          const tL = app.applicationToolLinks.find((l) => l.provider === PROVIDER_TENABLE_IO);
+          if (tL) {
+            const part = await tenableFor(co.id, tL.filter, tr);
+            addSev(t0, part);
+            if (!p0.includes(PROVIDER_TENABLE_IO)) {
+              p0.push(PROVIDER_TENABLE_IO);
+            }
+          }
+        }
+      }
+      if (coWlink) {
+        w0 = await wizFor(co.id, coWlink.filter, tr);
+        p0.push(PROVIDER_WIZ);
+      } else {
+        for (const app of co.applications) {
+          const wL = app.applicationToolLinks.find((l) => l.provider === PROVIDER_WIZ);
+          if (wL) {
+            const part = await wizFor(co.id, wL.filter, tr);
+            addSev(w0, part);
+            if (!p0.includes(PROVIDER_WIZ)) {
+              p0.push(PROVIDER_WIZ);
+            }
+          }
+        }
+      }
+      const emsg = mergeSourceErrors(t0, w0);
+      const cd = combinedRowData(t0, w0, p0, emsg);
+      const total =
+        cd.critical + cd.high + cd.medium + cd.low + cd.info;
+      rows.push([
+        'Company (aggregated)',
+        '—',
+        co.name,
+        String(co._count.applications),
+        String(cd.critical),
+        String(cd.high),
+        String(cd.medium),
+        String(cd.low),
+        String(cd.info),
+        String(total),
+        cd.sources,
+        cd.notes,
+      ]);
+      addSev(totals, cd);
+      continue;
+    }
+    const appSubtot = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+    if (coTlink || coWlink) {
+      const t0 = coTlink ? await tenableFor(co.id, coTlink.filter, tr) : null;
+      const w0 = coWlink ? await wizFor(co.id, coWlink.filter, tr) : null;
+      const p0 = /** @type {string[]} */ ([]);
+      if (coTlink) p0.push(PROVIDER_TENABLE_IO);
+      if (coWlink) p0.push(PROVIDER_WIZ);
+      const tPart = t0 || { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
+      const wPart = w0 || { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
+      const emsg = mergeSourceErrors(tPart, wPart);
+      const cd = combinedRowData(
+        tPart,
+        wPart,
+        p0,
+        emsg,
+      );
+      const tot =
+        cd.critical + cd.high + cd.medium + cd.low + cd.info;
+      rows.push([
+        'Company (company-wide link)',
+        '—',
+        co.name,
+        '—',
+        String(cd.critical),
+        String(cd.high),
+        String(cd.medium),
+        String(cd.low),
+        String(cd.info),
+        String(tot),
+        cd.sources,
+        cd.notes,
+      ]);
+      addSev(totals, cd);
+    }
+    for (const app of co.applications) {
+      const tL = app.applicationToolLinks.find((l) => l.provider === PROVIDER_TENABLE_IO);
+      const wL = app.applicationToolLinks.find((l) => l.provider === PROVIDER_WIZ);
+      if (!tL && !wL) {
+        const z = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+        addSev(appSubtot, z);
+        addSev(totals, z);
+        rows.push([
+          'Application',
+          app.name,
+          co.name,
+          '1',
+          '0',
+          '0',
+          '0',
+          '0',
+          '0',
+          '0',
+          '—',
+          '—',
+        ]);
+        continue;
+      }
+      const t0 = tL
+        ? await tenableFor(co.id, tL.filter, tr)
+        : { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
+      const w0 = wL
+        ? await wizFor(co.id, wL.filter, tr)
+        : { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
+      const p0 = /** @type {string[]} */ ([]);
+      if (tL) {
+        p0.push(PROVIDER_TENABLE_IO);
+      }
+      if (wL) {
+        p0.push(PROVIDER_WIZ);
+      }
+      const emsg2 = mergeSourceErrors(t0, w0);
+      const cd = combinedRowData(
+        t0,
+        w0,
+        p0,
+        emsg2,
+      );
+      const tot =
+        cd.critical + cd.high + cd.medium + cd.low + cd.info;
+      rows.push([
+        'Application',
+        app.name,
+        co.name,
+        '1',
+        String(cd.critical),
+        String(cd.high),
+        String(cd.medium),
+        String(cd.low),
+        String(cd.info),
+        String(tot),
+        cd.sources,
+        cd.notes,
+      ]);
+      addSev(appSubtot, cd);
+      addSev(totals, cd);
+    }
+    if (co.applications.length > 0) {
+      const tsumA =
+        appSubtot.critical +
+        appSubtot.high +
+        appSubtot.medium +
+        appSubtot.low +
+        appSubtot.info;
+      rows.push([
+        'Subtotal (applications only)',
+        '—',
+        co.name,
+        String(co._count.applications),
+        String(appSubtot.critical),
+        String(appSubtot.high),
+        String(appSubtot.medium),
+        String(appSubtot.low),
+        String(appSubtot.info),
+        String(tsumA),
+        '—',
+        'Sum of all application lines above. Compare to the company line if you use both; vendors may not match.',
+      ]);
+    }
+  }
+  const tsum =
+    totals.critical + totals.high + totals.medium + totals.low + totals.info;
+  const gen = new Date().toISOString();
+  rows.push([
+    'Total (company + application data rows; excludes Subtotal and previous metadata lines only)',
+    '—',
+    '—',
+    '—',
+    String(totals.critical),
+    String(totals.high),
+    String(totals.medium),
+    String(totals.low),
+    String(totals.info),
+    String(tsum),
+    '—',
+    `Generated ${gen}`,
+  ]);
+  return rows.map((r) => r.map(esc).join(',')).join('\n') + '\n';
+}
+
+/**
+ * Admin preview: companies with # apps and linked tools (company + per-app)
+ */
+export async function getExportPreviewList(prisma, { companyIds }) {
+  const where = companyIds?.length
+    ? { id: { in: companyIds } }
+    : {};
+  const list = await prisma.company.findMany({
+    where: Object.keys(where).length ? where : undefined,
+    orderBy: { name: 'asc' },
+    include: {
+      _count: { select: { applications: true } },
+      companyToolLinks: { select: { provider: true } },
+    },
+  });
+  const cids = list.map((c) => c.id);
+  const appLinks = cids.length
+    ? await prisma.applicationToolLink.findMany({
+        where: { application: { companyId: { in: cids } } },
+        select: { provider: true, application: { select: { companyId: true } } },
+      })
+    : [];
+  const byCompany = new Map();
+  for (const al of appLinks) {
+    const id = al.application?.companyId;
+    if (!id) {
+      continue;
+    }
+    if (!byCompany.has(id)) {
+      byCompany.set(id, new Set());
+    }
+    byCompany.get(id).add(al.provider);
+  }
+  return list.map((c) => {
+    const s = new Set(c.companyToolLinks.map((l) => l.provider));
+    const a = byCompany.get(c.id);
+    if (a) {
+      for (const p of a) {
+        s.add(p);
+      }
+    }
+    return {
+      id: c.id,
+      name: c.name,
+      applicationCount: c._count.applications,
+      integrations: [...s].map(labelProvider),
+    };
+  });
+}

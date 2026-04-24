@@ -16,6 +16,7 @@ import { isClipboardAvailable, copyToClipboard } from '../utils/clipboard.js';
 import { NotesSection } from '../components/notes/NotesSection.jsx';
 import { ApplicablePoliciesView } from '../components/policy/ApplicablePoliciesView.jsx';
 import { CompanyIntegrationsSection } from '../components/integrations/CompanyIntegrationsSection.jsx';
+import { SecurityFindingsExportModal } from '../components/integrations/SecurityFindingsExportModal.jsx';
 
 export function CompanyDetail() {
   const { id } = useParams();
@@ -31,6 +32,7 @@ export function CompanyDetail() {
   const [averageScore, setAverageScore] = useState(null);
   const [scoreData, setScoreData] = useState(null);
   const [domains, setDomains] = useState([]);
+  const [findingsOpen, setFindingsOpen] = useState(false);
 
   const [divisions, setDivisions] = useState([]);
   const [loadingDivisions, setLoadingDivisions] = useState(false);
@@ -125,6 +127,7 @@ export function CompanyDetail() {
   const canEditCompany = () => {
     return isAdmin() || user?.companyId === id;
   };
+  const canExportSecurityFindings = () => isAdmin() || user?.companyId === id;
 
   const handleEditClick = () => {
     if (!canEditCompany()) return;
@@ -208,6 +211,15 @@ export function CompanyDetail() {
 
   return (
     <div className="pb-24 w-full">
+      {canExportSecurityFindings() && (
+        <SecurityFindingsExportModal
+          open={findingsOpen}
+          onClose={() => setFindingsOpen(false)}
+          mode="company"
+          companyId={id}
+          companyName={company.name}
+        />
+      )}
       <div className="mb-8 w-full max-w-5xl mx-auto">
         {!isAdmin() && (
           <button
@@ -217,7 +229,8 @@ export function CompanyDetail() {
             ← Back to Companies
           </button>
         )}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
           <h1 className="text-3xl font-bold text-gray-800">{company.name}</h1>
           {company.division && isAdmin() && (
             <Link
@@ -231,6 +244,12 @@ export function CompanyDetail() {
             <div className="text-sm text-gray-600">
               Division: {company.division.name}
             </div>
+          )}
+          </div>
+          {canExportSecurityFindings() && (
+            <Button type="button" variant="outline" onClick={() => setFindingsOpen(true)}>
+              Download security findings
+            </Button>
           )}
         </div>
         {/* Score Cards */}

@@ -10,6 +10,7 @@ import { initializeAdminUsers, initializeSystemUser } from './utils/adminInit.js
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import companyRoutes from './routes/companies.js';
+import companySecurityFindings from './routes/companySecurityFindings.js';
 import applicationRoutes from './routes/applications.js';
 import adminRoutes from './routes/admin.js';
 import divisionRoutes from './routes/divisions.js';
@@ -130,6 +131,7 @@ app.use(session(sessionConfig));
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/companies', companySecurityFindings);
 app.use('/api/companies', companyRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/admin', adminRoutes);
