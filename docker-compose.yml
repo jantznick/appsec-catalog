@@ -39,6 +39,14 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    # Optional: load env files into the container (e.g. if you don’t bake .env into the image).
+    # Do not set INTEGRATIONS_ENCRYPTION_KEY= in `environment` with an empty default — that
+    # blocks dotenv from filling it from a mounted/copied .env (dotenv won’t override set vars).
+    env_file:
+      - path: .env
+        required: false
+      - path: ./backend/.env
+        required: false
     ports:
       - "3001:3001"  # Keep for development, remove in production
     environment:
@@ -46,7 +54,6 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-appsec}:${POSTGRES_PASSWORD:-appsec_password}@postgres:5432/${POSTGRES_DB:-appsec_catalog}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
       - NODE_ENV=${NODE_ENV:-production}
-      - INTEGRATIONS_ENCRYPTION_KEY=${INTEGRATIONS_ENCRYPTION_KEY:-}
     volumes:
       - backend_storage:/app/storage
     depends_on:
