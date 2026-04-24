@@ -12,6 +12,10 @@ import {
   TableHead,
   TableCell,
 } from '../components/ui/Table.jsx';
+
+const JOBS_ERR_TOAST =
+  'Could not load jobs. If this continues, ask an administrator to check server logs.';
+
 function formatWhen(iso) {
   if (!iso) return '—';
   try {
@@ -86,8 +90,8 @@ export function SecurityFindingsExportJobs() {
       const d = await api.listMySecurityFindingsJobs();
       setJobs(d.jobs || []);
     } catch (e) {
-      const err = /** @type {Error} */ (e);
-      toast.error(err.message || 'Failed to load jobs');
+      console.error('[SecurityFindingsExportJobs] load failed', e);
+      toast.error(JOBS_ERR_TOAST);
     } finally {
       if (!silent) {
         setLoading(false);
@@ -117,8 +121,8 @@ export function SecurityFindingsExportJobs() {
       toast.success('Job cancelled');
       await load({ silent: true });
     } catch (e) {
-      const err = /** @type {Error} */ (e);
-      toast.error(err.message || 'Could not cancel job');
+      console.error('[SecurityFindingsExportJobs] cancel failed', e);
+      toast.error('Could not cancel the job. Try again or use server logs to investigate.');
     } finally {
       setCancellingId(null);
     }
@@ -137,8 +141,8 @@ export function SecurityFindingsExportJobs() {
       URL.revokeObjectURL(u);
       toast.success('Download started');
     } catch (e) {
-      const err = /** @type {Error} */ (e);
-      toast.error(err.message || 'Download failed');
+      console.error('[SecurityFindingsExportJobs] download failed', e);
+      toast.error('Could not download the file. If the job completed, try again; otherwise ask an administrator.');
     }
   };
 
@@ -214,14 +218,15 @@ export function SecurityFindingsExportJobs() {
                         <span className={`text-sm font-medium ${statusClass(st)}`}>
                           {st}
                         </span>
-                        {j.message && st !== 'complete' && (
+                        {j.message && st !== 'complete' && st !== 'error' && (
                           <div className="text-xs text-gray-600 max-w-sm mt-0.5" title={String(j.message)}>
                             {String(j.message)}
                           </div>
                         )}
-                        {st === 'error' && j.error && (
-                          <div className="text-xs text-red-800 max-w-sm mt-0.5" title={String(j.error)}>
-                            {String(j.error)}
+                        {st === 'error' && (
+                          <div className="text-xs text-red-800 max-w-sm mt-0.5">
+                            The export could not be completed. You can try again. Administrators can use server logs
+                            to investigate.
                           </div>
                         )}
                       </TableCell>

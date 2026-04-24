@@ -16,6 +16,9 @@ const TIME_OPTIONS = [
   { value: 'custom', label: 'Custom (days)…' },
 ];
 
+const TOAST_EXPORT_GENERIC =
+  'Something went wrong. If this continues, ask an administrator to check server logs.';
+
 /**
  * @param {object} p
  * @param {boolean} p.open
@@ -63,8 +66,8 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
         }
       }
     } catch (e) {
-      console.error(e);
-      toast.error('Failed to load companies for export');
+      console.error('[SecurityFindingsExportModal] load preview failed', e);
+      toast.error(TOAST_EXPORT_GENERIC);
     } finally {
       setLoadingPreview(false);
     }
@@ -143,10 +146,9 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
         poll(d.jobId);
       }
     } catch (e) {
-      const err = /** @type {Error} */ (e);
-      console.error(e);
+      console.error('[SecurityFindingsExportModal] start job failed', e);
       setExporting(false);
-      toast.error(err.message || 'Export failed');
+      toast.error(TOAST_EXPORT_GENERIC);
     }
   };
 
@@ -166,7 +168,8 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
         if (s.status === 'error') {
           clearPoll();
           setExporting(false);
-          toast.error(s.error || 'Export error');
+          console.error('[SecurityFindingsExportModal] job failed', { jobId: jid, error: s.error, message: s.message });
+          toast.error(TOAST_EXPORT_GENERIC);
           return;
         }
         if (s.status === 'complete') {
@@ -191,13 +194,13 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
           toast.success('Download started');
         }
       } catch (e) {
-        console.error(e);
+        console.error('[SecurityFindingsExportModal] poll or download failed', e);
         if (session !== pollSessionRef.current) {
           return;
         }
         clearPoll();
         setExporting(false);
-        toast.error(/** @type {Error} */(e).message);
+        toast.error(TOAST_EXPORT_GENERIC);
       }
     };
     void run();
@@ -216,7 +219,7 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
       <p className="text-sm text-gray-600 mb-2">
         Pulls <strong className="font-medium">Tenable.io WAS</strong> and{' '}
         <strong className="font-medium">Wiz SAST</strong> in real time (may take a while). No deduplication
-        between tools: critical/high/etc. are summed. First line of the file is JSON metadata, then a footer total.{' '}
+        between tools: critical/high/etc. are summed. The first line of the file is JSON metadata.{' '}
         <Link to="/export-jobs" className="text-blue-700 hover:underline font-medium">
           Export jobs
         </Link>

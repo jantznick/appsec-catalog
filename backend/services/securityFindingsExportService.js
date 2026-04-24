@@ -127,12 +127,23 @@ async function wizFor(companyId, filter, tr) {
   );
 }
 
+const USER_NOTE_INTEGRATION_INCOMPLETE =
+  'One or more integrations could not be reached; some counts may be zero. Server logs have the technical detail.';
+
 /**
+ * Logs raw provider errors to the server console only; CSV/Notes use a non-technical line.
  * @param {object} t
  * @param {object} w
  */
 function mergeSourceErrors(t, w) {
-  return [t?.error, w?.error].filter(Boolean).join(' | ') || '';
+  const raw = [t?.error, w?.error].filter(Boolean);
+  if (raw.length > 0) {
+    console.warn(
+      '[securityFindingsExport] integration error (not for end users, not raw in CSV):',
+      raw.join(' | '),
+    );
+  }
+  return raw.length > 0 ? USER_NOTE_INTEGRATION_INCOMPLETE : '';
 }
 
 /**
@@ -195,7 +206,7 @@ export async function buildSecurityFindingsCsv(
   };
   const firstLine = `# ${JSON.stringify(meta1)}`;
   const rows = /** @type {string[][]} */ ([
-    firstLine,
+    [firstLine],
     [
       'Row',
       'Application',

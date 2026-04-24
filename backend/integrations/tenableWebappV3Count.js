@@ -9,6 +9,11 @@ const DEFAULT_BASE = 'https://cloud.tenable.com';
 
 const V3_COUNT_PATH = '/api/v3/findings/vulnerabilities/webapp/search/count';
 
+/** Shown in CSV/UX; full detail goes to `console` / integration logs. */
+const USER_TENABLE_COUNT_FAILED = 'Tenable: could not load counts (see server logs)';
+
+const LOG = '[Tenable webapp v3 count]';
+
 /**
  * Tenable v3 `severity` filter (numeric per webapp count API) → export buckets. One `severity` `eq` per count request.
  */
@@ -150,6 +155,12 @@ export async function getTenableWasCountsByTag(keys, baseUrl, filter, timeRange,
       data = null;
     }
     if (!res.ok) {
+      console.error(LOG, 'HTTP error', {
+        findingsFor,
+        severity: bucket,
+        httpStatus: res.status,
+        body: data !== null ? data : text?.slice(0, 2000) ?? null,
+      });
       const msg = (data && (/** @type {object} */(data).message || /** @type {object} */(data).error)) || text?.slice(0, 200) || `HTTP ${res.status}`;
       const err = new Error(`Tenable v3 count ${res.status}: ${String(msg).slice(0, 200)}`);
       err.statusCode = 502;
@@ -157,6 +168,7 @@ export async function getTenableWasCountsByTag(keys, baseUrl, filter, timeRange,
       throw err;
     }
     const n = readCountValue(data);
+    console.log(LOG, 'ok', { findingsFor, severity: bucket, body: data });
     result[bucket] = n;
     return n;
   };
@@ -165,7 +177,12 @@ export async function getTenableWasCountsByTag(keys, baseUrl, filter, timeRange,
     await Promise.all(SEV_ORDER.map(({ key, n }) => oneCount(n, key)));
   } catch (e) {
     const err = /** @type {Error} */(e);
-    result.error = err.message || 'Tenable v3 webapp count failed';
+    console.error(LOG, 'batch failed (user-facing message is generic)', {
+      findingsFor,
+      technical: err.message,
+      stack: err.stack,
+    });
+    result.error = USER_TENABLE_COUNT_FAILED;
     integrationLog('error', {
       provider: 'TENABLE_IO',
       op: 'webapp_v3_search_count',
