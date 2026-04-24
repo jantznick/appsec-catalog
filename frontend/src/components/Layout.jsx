@@ -199,6 +199,13 @@ export function Layout({ children }) {
                     >
                       Users
                     </DropdownItem>
+                    <DropdownItem
+                      onClick={() => {
+                        navigate('/export-jobs');
+                      }}
+                    >
+                      Security export jobs
+                    </DropdownItem>
                     {isAdmin() && (
                       <>
                         <DropdownItem divider />

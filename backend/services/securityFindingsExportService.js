@@ -214,7 +214,9 @@ export async function buildSecurityFindingsCsv(
   let cIdx = 0;
   for (const co of companies) {
     cIdx += 1;
-    onProgress(`${cIdx}/${companies.length} ${co.name}`);
+    onProgress(
+      `Processing ${co.name} (${cIdx} of ${companies.length}) — Tenable/Wiz in progress, may take minutes…`,
+    );
 
     const coTlink = co.companyToolLinks.find((l) => l.provider === PROVIDER_TENABLE_IO);
     const coWlink = co.companyToolLinks.find((l) => l.provider === PROVIDER_WIZ);
@@ -391,6 +393,11 @@ export async function buildSecurityFindingsCsv(
         'Sum of all application lines above. Compare to the company line if you use both; vendors may not match.',
       ]);
     }
+    onProgress(
+      cIdx < companies.length
+        ? `Finished ${co.name} — continuing…`
+        : `Finished ${co.name} — building CSV file…`,
+    );
   }
   const tsum =
     totals.critical + totals.high + totals.medium + totals.low + totals.info;

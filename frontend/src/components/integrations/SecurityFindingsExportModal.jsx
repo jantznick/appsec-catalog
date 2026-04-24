@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { toast } from '../ui/Toast.jsx';
 import { Button } from '../ui/Button.jsx';
@@ -35,6 +36,9 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
   const [jobStatus, setJobStatus] = useState(/** @type {string} */ (''));
   const [exporting, setExporting] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
+  const pollIntervalRef = useRef(/** @type {ReturnType<typeof setInterval> | null} */ (null));
+  /** Bumped whenever polling should stop; in-flight fetches check this and skip updates. */
+  const pollSessionRef = useRef(0);
 
   const load = useCallback(async () => {
     if (!open) {
@@ -70,14 +74,36 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
     load();
   }, [load]);
 
+  const clearPoll = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    pollSessionRef.current += 1;
+  }, []);
+
+  const handleRequestClose = useCallback(() => {
+    if (exporting && !downloaded) {
+      toast.info(
+        'Closing stops auto-download. The job keeps running; open Export jobs to download when it finishes.',
+        7000,
+      );
+    }
+    clearPoll();
+    onClose();
+  }, [clearPoll, onClose, exporting, downloaded]);
+
   useEffect(() => {
     if (!open) {
+      clearPoll();
       setJobId(null);
       setJobStatus('');
       setExporting(false);
       setDownloaded(false);
     }
-  }, [open]);
+  }, [open, clearPoll]);
+
+  useEffect(() => () => clearPoll(), [clearPoll]);
 
   const buildTimeBody = () => {
     if (timeMode === 'all') {
@@ -108,19 +134,13 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
         const d = await api.startAdminSecurityFindingsJob({ companyIds, separateByApp, time: t });
         setJobId(d.jobId);
         setJobStatus('queued');
-        poll(
-          d.jobId,
-          (j) => `/api/admin/security-findings/jobs/${j}/csv`,
-        );
+        poll(d.jobId);
       } else {
         const t = buildTimeBody();
         const d = await api.startCompanySecurityFindingsJob(companyId, { separateByApp: true, time: t });
         setJobId(d.jobId);
         setJobStatus('queued');
-        poll(
-          d.jobId,
-          (j) => `/api/companies/${encodeURIComponent(companyId)}/security-findings/jobs/${j}/csv`,
-        );
+        poll(d.jobId);
       }
     } catch (e) {
       const err = /** @type {Error} */ (e);
@@ -130,39 +150,37 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
     }
   };
 
-  const poll = (jid, getCsvPath) => {
-    let int = 0;
-    let finished = false;
+  const poll = (jid) => {
+    clearPoll();
+    const session = pollSessionRef.current;
     const run = async () => {
-      if (finished) {
+      if (session !== pollSessionRef.current) {
         return;
       }
       try {
-        let s;
-        if (mode === 'admin') {
-          s = await api.getAdminSecurityFindingsJob(jid);
-        } else {
-          s = await api.getCompanySecurityFindingsJob(companyId, jid);
+        const s = await api.getMySecurityFindingsJob(jid);
+        if (session !== pollSessionRef.current) {
+          return;
         }
         setJobStatus(s.message || s.status || '…');
         if (s.status === 'error') {
-          if (int) {
-            clearInterval(int);
-          }
-          finished = true;
+          clearPoll();
           setExporting(false);
           toast.error(s.error || 'Export error');
           return;
         }
         if (s.status === 'complete') {
-          if (int) {
-            clearInterval(int);
+          clearPoll();
+          if (session !== pollSessionRef.current) {
+            return;
           }
-          finished = true;
           setExporting(false);
           setDownloaded(true);
-          const p = getCsvPath(jid);
+          const p = `/api/security-findings/jobs/${encodeURIComponent(jid)}/csv`;
           const text = await api.fetchSecurityFindingsCsv(p);
+          if (session !== pollSessionRef.current) {
+            return;
+          }
           const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
           const u = URL.createObjectURL(blob);
           const a = document.createElement('a');
@@ -174,16 +192,16 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
         }
       } catch (e) {
         console.error(e);
-        if (int) {
-          clearInterval(int);
+        if (session !== pollSessionRef.current) {
+          return;
         }
-        finished = true;
+        clearPoll();
         setExporting(false);
         toast.error(/** @type {Error} */(e).message);
       }
     };
     void run();
-    int = window.setInterval(() => {
+    pollIntervalRef.current = window.setInterval(() => {
       void run();
     }, 2000);
   };
@@ -191,14 +209,18 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
   return (
     <Modal
       isOpen={open}
-      onClose={onClose}
+      onClose={handleRequestClose}
       title={mode === 'admin' ? 'Export security findings' : 'Export security findings'}
       size="lg"
     >
-      <p className="text-sm text-gray-600 mb-3">
+      <p className="text-sm text-gray-600 mb-2">
         Pulls <strong className="font-medium">Tenable.io WAS</strong> and{' '}
         <strong className="font-medium">Wiz SAST</strong> in real time (may take a while). No deduplication
-        between tools: critical/high/etc. are summed. First line of the file is JSON metadata, then a footer total.
+        between tools: critical/high/etc. are summed. First line of the file is JSON metadata, then a footer total.{' '}
+        <Link to="/export-jobs" className="text-blue-700 hover:underline font-medium">
+          Export jobs
+        </Link>
+        {` `}lists past runs; download the CSV when status is complete.
       </p>
       {mode === 'company' && companyName && (
         <p className="text-sm text-gray-800 mb-2">
@@ -282,7 +304,7 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
       )}
 
       <div className="flex justify-end gap-2 mt-6">
-        <Button type="button" variant="ghost" onClick={onClose}>
+        <Button type="button" variant="ghost" onClick={handleRequestClose}>
           Close
         </Button>
         <Button type="button" variant="primary" onClick={startExport} disabled={exporting || loadingPreview}>

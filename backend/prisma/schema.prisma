@@ -25,6 +25,28 @@ model User {
   applicationReviews     ApplicationMetadataReview[] // Reviews performed by this user
   policyControlOverrides PolicyControlOverride[] // Policy control overrides set by this user
   integrationCredentialUpdates IntegrationCredential[] @relation("IntegrationCredentialUpdates")
+  securityFindingsJobs      SecurityFindingsJob[]
+}
+
+/// User-driven Tenable/Wiz CSV export. Completed CSV is kept until row is deleted; no automatic expiry (see ops).
+model SecurityFindingsJob {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scope          String    // ADMIN_MULTI | SINGLE_COMPANY
+  companyId      String?   // set for SINGLE_COMPANY (access check)
+  requestPayload Json      // { companyIds?, separateByApp, time }
+  status         String    @default("running") // running | complete | error
+  message        String?   @db.Text
+  error          String?   @db.Text
+  resultCsv      String?   @db.Text
+  runStartedAt   DateTime? // when the worker started (after queue)
+  durationMs     Int?      // wall-clock ms of the export run (success or error)
+  createdAt      DateTime  @default(now())
+  completedAt    DateTime?
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model Division {

@@ -654,6 +654,10 @@ export const api = {
     apiRequest('/api/admin/security-findings/jobs', { method: 'POST', body: JSON.stringify(body) }),
   getAdminSecurityFindingsJob: (jobId) =>
     apiRequest(`/api/admin/security-findings/jobs/${encodeURIComponent(jobId)}`),
+  /** User-scoped job (any export you started); use for polling and the jobs page. */
+  getMySecurityFindingsJob: (jobId) =>
+    apiRequest(`/api/security-findings/jobs/${encodeURIComponent(jobId)}`),
+  listMySecurityFindingsJobs: () => apiRequest('/api/security-findings/jobs'),
   getCompanySecurityFindingsPreview: (companyId) =>
     apiRequest(`/api/companies/${encodeURIComponent(companyId)}/security-findings/preview`),
   startCompanySecurityFindingsJob: (companyId, body) =>

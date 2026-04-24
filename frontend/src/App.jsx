@@ -33,6 +33,7 @@ import { DivisionDetail } from './pages/DivisionDetail.jsx';
 import { PolicyControls } from './pages/PolicyControls.jsx';
 import { PolicyViewer } from './pages/PolicyViewer.jsx';
 import { IntegrationSettings } from './pages/IntegrationSettings.jsx';
+import { SecurityFindingsExportJobs } from './pages/SecurityFindingsExportJobs.jsx';
 
 function CatchAllRedirect() {
   const { isAuthenticated, isVerified, loading } = useAuthStore();
@@ -317,6 +318,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <IntegrationSettings />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/export-jobs"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <SecurityFindingsExportJobs />
               </Layout>
             </ProtectedRoute>
           }
