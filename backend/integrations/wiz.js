@@ -1,4 +1,4 @@
-import { integrationLog, isIntegrationsVerbose, safeUrlHost } from './log.js';
+import { graphQlOpNameFromQuery, integrationLog, isIntegrationsVerbose, logExportVendorRequest, safeUrlHost } from './log.js';
 
 const WIZ_AUTH_URL = 'https://auth.app.wiz.io/oauth/token';
 const WIZ_AUDIENCE = 'wiz-api';
@@ -44,6 +44,12 @@ export async function fetchWizAccessToken(clientId, clientSecret) {
     client_secret: clientSecret,
   });
 
+  logExportVendorRequest({
+    provider: 'WIZ',
+    method: 'POST',
+    url: WIZ_AUTH_URL,
+    label: 'OAuth2 client_credentials (wiz-api)',
+  });
   const res = await fetch(WIZ_AUTH_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
@@ -115,6 +121,13 @@ export async function fetchWizAccessToken(clientId, clientSecret) {
 export async function wizGraphql(graphqlUrl, accessToken, query, variables = {}) {
   const started = Date.now();
   const graphqlHost = safeUrlHost(graphqlUrl);
+  const opName = graphQlOpNameFromQuery(query);
+  logExportVendorRequest({
+    provider: 'WIZ',
+    method: 'POST',
+    url: graphqlUrl,
+    label: opName ? `GraphQL ${opName}` : 'GraphQL',
+  });
   const res = await fetch(graphqlUrl, {
     method: 'POST',
     headers: {

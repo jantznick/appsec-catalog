@@ -1,4 +1,4 @@
-import { integrationLog, safeUrlHost } from './log.js';
+import { integrationLog, logExportVendorRequest, safeUrlHost } from './log.js';
 
 const DEFAULT_BASE = 'https://cloud.tenable.com';
 
@@ -26,6 +26,12 @@ async function loadTenableIoCategoryNameMap(keys, base) {
   const limit = 200;
   for (;;) {
     const url = `${base}/tags/categories?limit=${limit}&offset=${offset}`;
+    logExportVendorRequest({
+      provider: 'TENABLE_IO',
+      method: 'GET',
+      url,
+      label: `tags/categories (category name map) offset=${offset} limit=${limit}`,
+    });
     const res = await fetch(url, { headers });
     if (!res.ok) {
       // Older tenants may not expose categories; fall back to value-only display
@@ -63,6 +69,12 @@ export async function listTenableIoTagValues(keys, baseUrl) {
     for (;;) {
       page += 1;
       const url = `${base}/tags/values?limit=${limit}&offset=${offset}`;
+      logExportVendorRequest({
+        provider: 'TENABLE_IO',
+        method: 'GET',
+        url,
+        label: `tags/values (list tag list for export) page=${page} offset=${offset} limit=${limit}`,
+      });
       const res = await fetch(url, { headers });
       if (!res.ok) {
         const text = await res.text();

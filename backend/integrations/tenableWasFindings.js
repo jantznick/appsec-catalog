@@ -1,4 +1,4 @@
-import { integrationLog, safeUrlHost } from './log.js';
+import { integrationLog, logExportVendorRequest, safeUrlHost } from './log.js';
 import { listTenableIoTagValues } from './tenableIo.js';
 
 const DEFAULT_BASE = 'https://cloud.tenable.com';
@@ -48,6 +48,12 @@ async function pluginIdToBucket(keys, base, pluginId) {
     return /** @type {'critical'|'high'|'medium'|'low'|'info'} */ (pluginCache.get(cacheKey));
   }
   const url = `${base}/plugins/plugin/${pluginId}`;
+  logExportVendorRequest({
+    provider: 'TENABLE_IO',
+    method: 'GET',
+    url,
+    label: `plugin risk bucket pluginId=${pluginId}`,
+  });
   const res = await fetch(url, { headers: authHeaders(keys, base) });
   if (!res.ok) {
     pluginCache.set(cacheKey, 'info');
@@ -79,6 +85,12 @@ async function listAssetIdsByWorkbenchTag(keys, base, categoryName, value) {
     u.searchParams.set('filter.0.filter', filterKey);
     u.searchParams.set('filter.0.quality', 'eq');
     u.searchParams.set('filter.0.value', value);
+    logExportVendorRequest({
+      provider: 'TENABLE_IO',
+      method: 'GET',
+      url: u.href,
+      label: `workbench assets by tag offset=${offset} limit=200`,
+    });
     const res = await fetch(u.href, { headers: authHeaders(keys, base) });
     if (!res.ok) {
       const text = await res.text();
@@ -151,6 +163,12 @@ async function runWasSearch(keys, base, wasBody) {
     const url = new URL(`${base}/was/v2/vulnerabilities/search`);
     url.searchParams.set('limit', '200');
     url.searchParams.set('offset', String(offset));
+    logExportVendorRequest({
+      provider: 'TENABLE_IO',
+      method: 'POST',
+      url: url.href,
+      label: `WAS vulner search offset=${offset} limit=200 (body: asset+time filter)`,
+    });
     const res = await fetch(url, {
       method: 'POST',
       headers: { ...authHeaders(keys, base), 'Content-Type': 'application/json' },
