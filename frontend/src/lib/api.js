@@ -635,6 +635,15 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  getApplicationIntegrationTags: (applicationId, provider) =>
+    apiRequest(`/api/applications/${applicationId}/integrations/${provider}/tags`),
+
+  putApplicationIntegrationLink: (applicationId, provider, body) =>
+    apiRequest(`/api/applications/${applicationId}/integrations/${provider}/link`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
   /** Admin: companies that have company-scoped integration credentials */
   getIntegrationAdminCompanyOverview: () =>
     apiRequest('/api/integrations/admin/company-overview'),

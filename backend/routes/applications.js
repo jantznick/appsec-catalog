@@ -7,6 +7,23 @@ import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { getApexDomain } from '../utils/domainApex.js';
 import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
 import { createApplicationVersion, createVersionFromData, applyApprovedVersion } from '../utils/applicationVersion.js';
+import { buildIntegrationSummaryForCompanyId } from '../integrations/summaryForCompany.js';
+import { getIntegrationsKey } from '../utils/integrationCrypto.js';
+import {
+  assertSupportedProvider,
+  PROVIDER_TENABLE_IO,
+  PROVIDER_WIZ,
+} from '../integrations/constants.js';
+import {
+  resolveIntegrationForCompany,
+  validateTenableIoFilter,
+  normalizeTenableIoFilter,
+  validateWizFilter,
+  normalizeWizFilter,
+} from '../integrations/resolve.js';
+import { listTenableIoTagValues } from '../integrations/tenableIo.js';
+import { listWizFolders } from '../integrations/wiz.js';
+import { integrationLog } from '../integrations/log.js';
 
 /**
  * Get or create system user for automated notes
@@ -1021,6 +1038,166 @@ router.delete('/:id/policy-overrides/:controlId', requireAuth, requireAdmin, asy
   }
 });
 
+// Application–integration tag/folder list (uses company’s API credentials; must be before GET /:id)
+router.get('/:id/integrations/:provider/tags', requireAuth, async (req, res) => {
+  try {
+    getIntegrationsKey();
+  } catch (e) {
+    return res.status(503).json({ error: 'Integration encryption not configured', message: e.message });
+  }
+  try {
+    const { id: applicationId, provider } = req.params;
+    assertSupportedProvider(provider);
+
+    const app = await prisma.application.findUnique({
+      where: { id: applicationId },
+      select: { id: true, companyId: true },
+    });
+    if (!app) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+    if (!req.session.isAdmin && req.session.companyId !== app.companyId) {
+      return res.status(403).json({ error: 'Permission denied', message: 'You cannot access this application' });
+    }
+
+    const companyId = app.companyId;
+    const resolved = await resolveIntegrationForCompany(companyId, provider);
+    if (!resolved) {
+      return res.status(400).json({
+        error: 'No integration configured',
+        message: 'Save API credentials for this provider (enterprise or company) first.',
+      });
+    }
+    if (!(req.session.isAdmin || req.session.companyId === companyId)) {
+      return res.status(403).json({ error: 'Permission denied', message: 'You cannot list tags for this application' });
+    }
+
+    if (provider === PROVIDER_TENABLE_IO) {
+      const tags = await listTenableIoTagValues(resolved.decrypted, resolved.baseUrl);
+      integrationLog('info', {
+        layer: 'api',
+        op: 'GET_application_integration_tags',
+        provider,
+        applicationId,
+        companyId,
+        itemCount: tags.length,
+      });
+      return res.json({ tags });
+    }
+    if (provider === PROVIDER_WIZ) {
+      const folders = await listWizFolders(resolved.decrypted, resolved.baseUrl);
+      const tags = folders.map((f) => ({
+        uuid: f.id,
+        value: f.name,
+        display_label: f.name,
+        category_uuid: null,
+      }));
+      integrationLog('info', {
+        layer: 'api',
+        op: 'GET_application_integration_tags',
+        provider,
+        applicationId,
+        companyId,
+        itemCount: tags.length,
+      });
+      return res.json({ tags });
+    }
+    return res.status(400).json({ error: 'Provider not implemented' });
+  } catch (error) {
+    integrationLog('error', {
+      layer: 'api',
+      op: 'GET_application_integration_tags',
+      provider: req.params.provider,
+      applicationId: req.params.id,
+      error: error.message || String(error),
+      httpStatus: error.statusCode,
+    });
+    console.error('List application integration tags error:', error);
+    if (error.statusCode === 400) return res.status(400).json({ error: error.message });
+    if (error.statusCode === 403) {
+      return res.status(403).json({ error: 'Vendor API denied', message: error.message });
+    }
+    if (error.statusCode === 502) {
+      return res.status(502).json({ error: 'Vendor API error', message: error.message });
+    }
+    res.status(500).json({ error: 'Failed to list tags' });
+  }
+});
+
+router.put('/:id/integrations/:provider/link', requireAuth, async (req, res) => {
+  try {
+    const { id: applicationId, provider } = req.params;
+    assertSupportedProvider(provider);
+
+    const app = await prisma.application.findUnique({
+      where: { id: applicationId },
+      select: { id: true, companyId: true },
+    });
+    if (!app) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+    if (!req.session.isAdmin && req.session.companyId !== app.companyId) {
+      return res.status(403).json({ error: 'Permission denied', message: 'You cannot access this application' });
+    }
+
+    const companyId = app.companyId;
+    const resolved = await resolveIntegrationForCompany(companyId, provider);
+    if (!resolved) {
+      return res.status(400).json({
+        error: 'No integration configured',
+        message: 'Configure API credentials before setting a link.',
+      });
+    }
+    if (!(req.session.isAdmin || req.session.companyId === companyId)) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You cannot set an integration link for this application',
+      });
+    }
+
+    let filter;
+    if (provider === PROVIDER_TENABLE_IO) {
+      const normalized = normalizeTenableIoFilter(req.body);
+      const v = validateTenableIoFilter(normalized);
+      if (!v.ok) {
+        return res.status(400).json({ error: v.message });
+      }
+      filter = normalized;
+    } else if (provider === PROVIDER_WIZ) {
+      const normalized = normalizeWizFilter(req.body);
+      const v = validateWizFilter(normalized);
+      if (!v.ok) {
+        return res.status(400).json({ error: v.message });
+      }
+      filter = normalized;
+    } else {
+      return res.status(400).json({ error: 'Provider not implemented' });
+    }
+
+    const link = await prisma.applicationToolLink.upsert({
+      where: { applicationId_provider: { applicationId, provider } },
+      create: { applicationId, provider, filter },
+      update: { filter },
+    });
+
+    res.json({
+      ok: true,
+      link: {
+        id: link.id,
+        provider: link.provider,
+        filter: link.filter,
+        updatedAt: link.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error('Save application integration link error:', error);
+    if (error.statusCode === 400) {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: 'Failed to save application integration link' });
+  }
+});
+
 // APP-4: Get application detail
 router.get('/:id', requireAuth, async (req, res) => {
   try {
@@ -1033,6 +1210,14 @@ router.get('/:id', requireAuth, async (req, res) => {
           select: {
             id: true,
             name: true,
+          },
+        },
+        applicationToolLinks: {
+          select: {
+            id: true,
+            provider: true,
+            filter: true,
+            updatedAt: true,
           },
         },
         contacts: true,
@@ -1092,6 +1277,13 @@ router.get('/:id', requireAuth, async (req, res) => {
         message: 'You can only access applications in your company',
       });
     }
+
+    const integrationSummary = await buildIntegrationSummaryForCompanyId(
+      prisma,
+      application.companyId,
+      !!req.session.isAdmin,
+    );
+    application.integrationSummary = integrationSummary;
 
     // Auto-populate current deployment info from most recent deployment
     if (application.deployments && application.deployments.length > 0) {

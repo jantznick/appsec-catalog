@@ -19,6 +19,7 @@ import { NotesSection } from '../components/notes/NotesSection.jsx';
 import { VersionHistory } from '../components/versions/VersionHistory.jsx';
 import { Tabs, Tab, TabPanel } from '../components/ui/Tabs.jsx';
 import { PolicyComplianceView } from '../components/policy/PolicyComplianceView.jsx';
+import { ApplicationIntegrationsSection } from '../components/integrations/ApplicationIntegrationsSection.jsx';
 
 export function ApplicationDetail() {
   const { id } = useParams();
@@ -845,6 +846,10 @@ export function ApplicationDetail() {
             showBreakdownByDefault={true}
           />
         </div>
+      )}
+
+      {application && (
+        <ApplicationIntegrationsSection application={application} onRefresh={loadApplication} />
       )}
 
       {/* Tabs for organized content */}

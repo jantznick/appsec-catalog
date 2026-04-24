@@ -365,6 +365,7 @@ router.get(
         const tags = folders.map((f) => ({
           uuid: f.id,
           value: f.name,
+          display_label: f.name,
           category_uuid: null,
         }));
         integrationLog('info', {

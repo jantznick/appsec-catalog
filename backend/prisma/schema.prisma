@@ -105,6 +105,7 @@ model Application {
   reviews                ApplicationMetadataReview[] // History of metadata reviews
   policyControlOverrides PolicyControlOverride[] // Manual overrides for policy controls
   productApplications    ProductApplication[]
+  applicationToolLinks  ApplicationToolLink[]
   ingressProducts        ProductIngressPoint[]
   outgoingProductFlows   ProductDataFlow[]            @relation("ProductFlowSource")
   incomingProductFlows   ProductDataFlow[]            @relation("ProductFlowTarget")
@@ -748,5 +749,19 @@ model CompanyToolLink {
   updatedAt DateTime @updatedAt
 
   @@unique([companyId, provider])
+  @@index([provider])
+}
+
+// Per-application filter for a provider (e.g. Tenable tag) — no secrets; credentials come from the app’s company
+model ApplicationToolLink {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  provider      String
+  filter        Json
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([applicationId, provider])
   @@index([provider])
 }

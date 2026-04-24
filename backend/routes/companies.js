@@ -2,7 +2,7 @@ import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { generateSlug, ensureUniqueSlug } from '../utils/slug.js';
-import { SUPPORTED_PROVIDERS } from '../integrations/constants.js';
+import { buildIntegrationSummaryForCompanyId } from '../integrations/summaryForCompany.js';
 
 const router = express.Router();
 
@@ -347,52 +347,7 @@ router.get('/:id', requireAuth, async (req, res) => {
     }
 
     const isAdminSession = !!req.session.isAdmin;
-    const credRows = await prisma.integrationCredential.findMany({
-      where: {
-        provider: { in: [...SUPPORTED_PROVIDERS] },
-        OR: [
-          { scope: 'ENTERPRISE', companyId: null },
-          { scope: 'COMPANY', companyId: id },
-        ],
-      },
-      select: {
-        provider: true,
-        scope: true,
-        accessKeyHint: true,
-        baseUrl: true,
-      },
-    });
-
-    const integrationSummary = {};
-    for (const provider of SUPPORTED_PROVIDERS) {
-      const entRow = credRows.find(
-        (c) => c.provider === provider && c.scope === 'ENTERPRISE',
-      );
-      const coRow = credRows.find(
-        (c) => c.provider === provider && c.scope === 'COMPANY',
-      );
-
-      integrationSummary[provider] = {
-        enterprise: {
-          configured: !!entRow,
-          ...(isAdminSession && entRow
-            ? {
-                accessKeyHint: entRow.accessKeyHint,
-                baseUrl: entRow.baseUrl,
-              }
-            : {}),
-        },
-        company: {
-          configured: !!coRow,
-          ...(coRow
-            ? {
-                accessKeyHint: coRow.accessKeyHint,
-                baseUrl: coRow.baseUrl,
-              }
-            : {}),
-        },
-      };
-    }
+    const integrationSummary = await buildIntegrationSummaryForCompanyId(prisma, id, isAdminSession);
 
     res.json({ ...company, integrationSummary });
   } catch (error) {

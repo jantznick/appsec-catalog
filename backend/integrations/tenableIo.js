@@ -15,10 +15,39 @@ function authHeaders(accessKey, secretKey, baseUrl) {
 }
 
 /**
+ * @param {{ accessKey: string, secretKey: string }} keys
+ * @param {string} base
+ * @returns {Promise<Map<string, string>>} category uuid -> name
+ */
+async function loadTenableIoCategoryNameMap(keys, base) {
+  const headers = authHeaders(keys.accessKey, keys.secretKey, base);
+  const map = new Map();
+  let offset = 0;
+  const limit = 200;
+  for (;;) {
+    const url = `${base}/tags/categories?limit=${limit}&offset=${offset}`;
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      // Older tenants may not expose categories; fall back to value-only display
+      return map;
+    }
+    const data = await res.json();
+    const list = Array.isArray(data.categories) ? data.categories : [];
+    for (const c of list) {
+      if (c?.uuid && c?.name) map.set(c.uuid, c.name);
+    }
+    if (list.length < limit) break;
+    offset += limit;
+  }
+  return map;
+}
+
+/**
  * List all tag values (paginated) from Tenable.io.
+ * Adds `category_name` and `display_label` for UI (Tenable: "Category: value" style).
  * @param {{ accessKey: string, secretKey: string }} keys
  * @param {string | null | undefined} baseUrl
- * @returns {Promise<Array<{ uuid: string, value?: string, category_uuid?: string }>>}
+ * @returns {Promise<Array<{ uuid: string, value?: string, category_uuid?: string, category_name?: string, display_label: string }>>}
  */
 export async function listTenableIoTagValues(keys, baseUrl) {
   const started = Date.now();
@@ -51,11 +80,25 @@ export async function listTenableIoTagValues(keys, baseUrl) {
       offset += limit;
     }
 
-    const mapped = all.map((v) => ({
-      uuid: v.uuid,
-      value: v.value,
-      category_uuid: v.category_uuid,
-    }));
+    const categoryNameByUuid = await loadTenableIoCategoryNameMap(keys, base);
+    const mapped = all.map((v) => {
+      const value = v.value;
+      const categoryUuid = v.category_uuid;
+      const categoryName = categoryUuid ? categoryNameByUuid.get(categoryUuid) : undefined;
+      const displayLabel =
+        categoryName && (value != null && value !== '')
+          ? `${categoryName}: ${value}`
+          : (value != null && value !== '')
+            ? String(value)
+            : (categoryName || v.uuid);
+      return {
+        uuid: v.uuid,
+        value: v.value,
+        category_uuid: v.category_uuid,
+        category_name: categoryName,
+        display_label: displayLabel,
+      };
+    });
 
     integrationLog('info', {
       provider: 'TENABLE_IO',
