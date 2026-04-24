@@ -848,10 +848,6 @@ export function ApplicationDetail() {
         </div>
       )}
 
-      {application && (
-        <ApplicationIntegrationsSection application={application} onRefresh={loadApplication} />
-      )}
-
       {/* Tabs for organized content */}
       <Tabs defaultTab={0}>
         <Tab>App Data</Tab>
@@ -860,6 +856,7 @@ export function ApplicationDetail() {
         <Tab>Security</Tab>
         <Tab>Infosec Policy Compliance</Tab>
         {isAdmin() && <Tab badge={pendingVersionsCount}>Application Metadata History</Tab>}
+        <Tab>Integrations</Tab>
 
         {/* App Data Tab */}
         <TabPanel>
@@ -1799,6 +1796,12 @@ export function ApplicationDetail() {
             />
           </TabPanel>
         )}
+
+        <TabPanel>
+          {application && (
+            <ApplicationIntegrationsSection application={application} onRefresh={loadApplication} />
+          )}
+        </TabPanel>
       </Tabs>
 
       {/* Add Deployment Modal */}
