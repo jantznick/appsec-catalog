@@ -29,13 +29,13 @@ function canAccessCompany(req, companyId) {
   return req.session.isAdmin || req.session.companyId === companyId;
 }
 
-/** Enterprise tag list + link: admin only. Company credential: admin or member of company. */
+/**
+ * List tags / save link: same people who can open the company (admin or member of that company),
+ * for both catalog-wide and company-scoped credentials.
+ */
 function canListOrSaveTags(req, companyId, resolved) {
   if (!resolved) {
     return false;
-  }
-  if (resolved.scope === 'ENTERPRISE') {
-    return !!req.session.isAdmin;
   }
   return canAccessCompany(req, companyId);
 }
@@ -343,7 +343,7 @@ router.get(
       if (!canListOrSaveTags(req, companyId, resolved)) {
         return res.status(403).json({
           error: 'Permission denied',
-          message: 'Only administrators can list tags for enterprise integrations',
+          message: 'You cannot list tags for this company',
         });
       }
 
@@ -439,7 +439,7 @@ router.put(
       if (!canListOrSaveTags(req, companyId, resolved)) {
         return res.status(403).json({
           error: 'Permission denied',
-          message: 'Only administrators can set links for enterprise integrations',
+          message: 'You cannot set an integration link for this company',
         });
       }
 

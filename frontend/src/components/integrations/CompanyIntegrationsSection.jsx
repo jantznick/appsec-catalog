@@ -20,7 +20,10 @@ const TOOL_LINK_PROVIDERS = new Set(['TENABLE_IO', 'WIZ']);
 export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
   const { isAdmin, user } = useAuthStore();
   const isMemberOfCompany = user?.companyId === companyId;
-  const canManageCompanyCredential = isAdmin() || isMemberOfCompany;
+  const isAdminUser = isAdmin();
+  /** Same as company page access: admin or member of this company */
+  const canViewThisCompany = isAdminUser || isMemberOfCompany;
+  const canManageCompanyCredential = isAdminUser || isMemberOfCompany;
 
   const [providerOptions, setProviderOptions] = useState([]);
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -62,15 +65,22 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
   const summary = company?.integrationSummary || {};
   const links = company?.companyToolLinks || [];
 
-  /** Company-specific: own API keys and/or saved links (e.g. tag) for this company. */
+  /**
+   * Rows under “This company”: per-company keys, existing tag/folder links, **or** (for admins)
+   * catalog-wide-only + linkable tool (Tenable/Wiz) so the Tag/Folder link UI is reachable when
+   * there are no company-specific API keys.
+   */
   const companyScopedProviders = useMemo(() => {
-    const keys = Object.keys(summary);
-    return keys.filter((p) => {
+    const list = Object.keys(summary);
+    return list.filter((p) => {
       const co = summary[p]?.company;
+      const ent = summary[p]?.enterprise;
       const hasLink = links.some((l) => l.provider === p);
-      return co?.configured || hasLink;
+      if (co?.configured || hasLink) return true;
+      if (TOOL_LINK_PROVIDERS.has(p) && ent?.configured && canViewThisCompany) return true;
+      return false;
     });
-  }, [summary, links]);
+  }, [summary, links, canViewThisCompany]);
 
   /** Catalog-wide (enterprise) credentials exist — everyone on this page should see this. */
   const catalogWideProviders = useMemo(() => {
@@ -81,7 +91,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
     const co = summary[provider]?.company;
     const ent = summary[provider]?.enterprise;
     return (
-      (co?.configured && canManageCompanyCredential) || (ent?.configured && isAdmin())
+      (co?.configured && canManageCompanyCredential) || (ent?.configured && canViewThisCompany)
     );
   };
 
@@ -201,7 +211,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
                 for <strong>this company only</strong>. When present, the app uses them for this
                 company&apos;s API calls to the tool first; catalog-wide keys stay in place for other
                 companies.
-                {isAdmin() && (
+                {isAdminUser && (
                   <>
                     {' '}
                     Admins can add keys here when helping a team use its own tenant. Catalog-wide keys for
@@ -254,7 +264,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
                       <p className="text-sm text-gray-700 mt-2">
                         <span className="text-green-800 font-medium">Active</span>
                         {' — '}
-                        {isAdmin() ? (
+                        {isAdminUser ? (
                           <>
                             shared API access for every company
                             {ent?.accessKeyHint ? (
@@ -268,7 +278,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
                           'your organization uses shared credentials for this integration.'
                         )}
                       </p>
-                      {isAdmin() && (
+                      {isAdminUser && (
                         <p className="text-xs text-gray-600 mt-2">
                           Manage keys in{' '}
                           <Link
@@ -407,7 +417,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
                                 )}
                                 {!canUseTagPicker(provider) && (
                                   <p className="text-xs text-gray-500 pt-1">
-                                    {isAdmin()
+                                    {isAdminUser
                                       ? provider === 'WIZ'
                                         ? 'Configure catalog-wide or company API keys to link a folder.'
                                         : 'Configure catalog-wide or company API keys to link a tag.'
@@ -444,7 +454,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
             </div>
           )}
 
-          {isAdmin() && !showGlobalEmpty && (
+          {isAdminUser && !showGlobalEmpty && (
             <p className="text-xs text-gray-500 pt-2 border-t border-gray-100">
               View all company-level integrations under{' '}
               <Link
