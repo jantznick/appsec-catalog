@@ -1,7 +1,12 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth } from '../middleware/auth.js';
-import { getExportPreviewList, parseTimeRange } from '../services/securityFindingsExportService.js';
+import {
+  getExportPreviewList,
+  parseTimeRange,
+  parseExportProviders,
+  assertAtLeastOneProvider,
+} from '../services/securityFindingsExportService.js';
 import { createSecurityFindingsJob } from '../services/securityFindingsJobRunner.js';
 
 const router = express.Router();
@@ -34,19 +39,25 @@ router.post('/:companyId/security-findings/jobs', requireAuth, async (req, res) 
     return res.status(403).json({ error: 'Not allowed' });
   }
   try {
-    const { separateByApp, time } = req.body || {};
+    const { separateByApp, time, providers: providersBody } = req.body || {};
     parseTimeRange(time);
+    const providers = parseExportProviders(providersBody);
+    assertAtLeastOneProvider(providers);
     const userId = req.session.userId;
     const jobId = await createSecurityFindingsJob({
       prisma,
       userId,
       scope: 'SINGLE_COMPANY',
       companyId,
-      requestPayload: { separateByApp: separateByApp !== false, time },
+      requestPayload: { separateByApp: separateByApp !== false, time, providers },
     });
     res.status(202).json({ jobId, message: 'Export started' });
   } catch (e) {
-    res.status(500).json({ error: 'Failed to start' });
+    const err = /** @type {Error & { statusCode?: number }} */(e);
+    if (err.statusCode === 400) {
+      return res.status(400).json({ error: err.message || 'Invalid request' });
+    }
+    return res.status(500).json({ error: 'Failed to start' });
   }
 });
 

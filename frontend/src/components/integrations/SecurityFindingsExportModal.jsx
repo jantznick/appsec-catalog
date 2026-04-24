@@ -19,6 +19,24 @@ const TIME_OPTIONS = [
 const TOAST_EXPORT_GENERIC =
   'Something went wrong. If this continues, ask an administrator to check server logs.';
 
+/** Resumes in-flight or completed jobs when the modal reopens. */
+const PENDING_EXPORT_JOB_ID_KEY = 'appsec:securityFindings:pendingJobId';
+
+/**
+ * @param {string} jobId
+ */
+async function downloadCsvForJobId(jobId) {
+  const p = `/api/security-findings/jobs/${encodeURIComponent(jobId)}/csv`;
+  const text = await api.fetchSecurityFindingsCsv(p);
+  const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+  const u = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = u;
+  a.download = `security-findings-${jobId.slice(0, 8)}.csv`;
+  a.click();
+  URL.revokeObjectURL(u);
+}
+
 /**
  * @param {object} p
  * @param {boolean} p.open
@@ -31,8 +49,9 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [companies, setCompanies] = useState(/** @type {Array<{ id: string, name: string, applicationCount: number, integrations: string[] }>} */ ([]));
   const [selected, setSelected] = useState(/** @type {Record<string, boolean>} */ ({}));
-  /** Company export is always "by application" (company row + per-app + app subtotal). */
   const [separateByApp, setSeparateByApp] = useState(true);
+  const [includeTenable, setIncludeTenable] = useState(true);
+  const [includeWiz, setIncludeWiz] = useState(true);
   const [timeMode, setTimeMode] = useState('all');
   const [customDays, setCustomDays] = useState('30');
   const [jobId, setJobId] = useState(/** @type {string | null} */ (null));
@@ -40,8 +59,15 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
   const [exporting, setExporting] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
   const pollIntervalRef = useRef(/** @type {ReturnType<typeof setInterval> | null} */ (null));
-  /** Bumped whenever polling should stop; in-flight fetches check this and skip updates. */
   const pollSessionRef = useRef(0);
+
+  const buildProvidersBody = useCallback(
+    () => ({
+      TENABLE_IO: includeTenable,
+      WIZ: includeWiz,
+    }),
+    [includeTenable, includeWiz],
+  );
 
   const load = useCallback(async () => {
     if (!open) {
@@ -58,11 +84,21 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
             return a;
           }, /** @type {Record<string, boolean>} */ ({})),
         );
+        setIncludeTenable(true);
+        setIncludeWiz(true);
       } else {
         const d = await api.getCompanySecurityFindingsPreview(companyId);
         setCompanies(d.companies || []);
         if (d.companies?.[0]) {
           setSelected({ [d.companies[0].id]: true });
+          const int = d.companies[0].integrations || [];
+          if (int.length > 0) {
+            setIncludeTenable(int.includes('Tenable WAS'));
+            setIncludeWiz(int.includes('Wiz SAST'));
+          } else {
+            setIncludeTenable(true);
+            setIncludeWiz(true);
+          }
         }
       }
     } catch (e) {
@@ -119,12 +155,147 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
     return { type: 'lastDays', days: parseInt(timeMode, 10) };
   };
 
+  /**
+   * @param {string} jid
+   * @param {{ skipSetStorage?: boolean }} [opts]
+   */
+  const poll = useCallback(
+    (jid, opts = {}) => {
+      if (!opts.skipSetStorage) {
+        sessionStorage.setItem(PENDING_EXPORT_JOB_ID_KEY, jid);
+      }
+      clearPoll();
+      const session = pollSessionRef.current;
+      const run = async () => {
+        if (session !== pollSessionRef.current) {
+          return;
+        }
+        try {
+          const s = await api.getMySecurityFindingsJob(jid);
+          if (session !== pollSessionRef.current) {
+            return;
+          }
+          setJobStatus(s.message || s.status || '…');
+          if (s.status === 'error') {
+            clearPoll();
+            setExporting(false);
+            sessionStorage.removeItem(PENDING_EXPORT_JOB_ID_KEY);
+            console.error('[SecurityFindingsExportModal] job failed', {
+              jobId: jid,
+              error: s.error,
+              message: s.message,
+            });
+            toast.error(TOAST_EXPORT_GENERIC);
+            return;
+          }
+          if (s.status === 'complete') {
+            clearPoll();
+            if (session !== pollSessionRef.current) {
+              return;
+            }
+            setExporting(false);
+            setDownloaded(true);
+            try {
+              await downloadCsvForJobId(jid);
+              if (session !== pollSessionRef.current) {
+                return;
+              }
+              sessionStorage.removeItem(PENDING_EXPORT_JOB_ID_KEY);
+              toast.success('Download started');
+            } catch (e) {
+              console.error('[SecurityFindingsExportModal] poll or download failed', e);
+              if (session !== pollSessionRef.current) {
+                return;
+              }
+              setDownloaded(false);
+              toast.error(TOAST_EXPORT_GENERIC);
+            }
+          }
+        } catch (e) {
+          console.error('[SecurityFindingsExportModal] poll or download failed', e);
+          if (session !== pollSessionRef.current) {
+            return;
+          }
+          clearPoll();
+          setExporting(false);
+          sessionStorage.removeItem(PENDING_EXPORT_JOB_ID_KEY);
+          toast.error(TOAST_EXPORT_GENERIC);
+        }
+      };
+      void run();
+      pollIntervalRef.current = window.setInterval(() => {
+        void run();
+      }, 2000);
+    },
+    [clearPoll],
+  );
+
+  /** Reopen: resume completed job (auto-download) or running job (poll), using session key. */
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      const pending = sessionStorage.getItem(PENDING_EXPORT_JOB_ID_KEY);
+      if (!pending) {
+        return;
+      }
+      if (pollIntervalRef.current) {
+        return;
+      }
+      try {
+        const s = await api.getMySecurityFindingsJob(pending);
+        if (cancelled) {
+          return;
+        }
+        if (s.status === 'complete') {
+          if (sessionStorage.getItem(PENDING_EXPORT_JOB_ID_KEY) !== pending) {
+            return;
+          }
+          sessionStorage.removeItem(PENDING_EXPORT_JOB_ID_KEY);
+          try {
+            await downloadCsvForJobId(pending);
+            if (cancelled) {
+              return;
+            }
+            setJobId(pending);
+            setJobStatus('Complete');
+            setDownloaded(true);
+            toast.success('Report downloaded');
+          } catch (e) {
+            console.error('[SecurityFindingsExportModal] resume download failed', e);
+            toast.error(TOAST_EXPORT_GENERIC);
+          }
+        } else if (s.status === 'error' || s.status === 'cancelled') {
+          sessionStorage.removeItem(PENDING_EXPORT_JOB_ID_KEY);
+        } else if (s.status === 'running') {
+          setJobId(pending);
+          setExporting(true);
+          setJobStatus(s.message || s.status);
+          void poll(pending, { skipSetStorage: true });
+        }
+      } catch (e) {
+        console.error('[SecurityFindingsExportModal] resume job check', e);
+        sessionStorage.removeItem(PENDING_EXPORT_JOB_ID_KEY);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, poll]);
+
   const startExport = async () => {
     if (exporting) {
       return;
     }
+    if (!includeTenable && !includeWiz) {
+      toast.error('Select at least one integration');
+      return;
+    }
     setExporting(true);
     setDownloaded(false);
+    const providers = buildProvidersBody();
     try {
       if (mode === 'admin') {
         const companyIds = companies.filter((c) => selected[c.id]).map((c) => c.id);
@@ -134,16 +305,16 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
           return;
         }
         const t = buildTimeBody();
-        const d = await api.startAdminSecurityFindingsJob({ companyIds, separateByApp, time: t });
+        const d = await api.startAdminSecurityFindingsJob({ companyIds, separateByApp, time: t, providers });
         setJobId(d.jobId);
         setJobStatus('queued');
-        poll(d.jobId);
+        void poll(d.jobId);
       } else {
         const t = buildTimeBody();
-        const d = await api.startCompanySecurityFindingsJob(companyId, { separateByApp: true, time: t });
+        const d = await api.startCompanySecurityFindingsJob(companyId, { separateByApp: true, time: t, providers });
         setJobId(d.jobId);
         setJobStatus('queued');
-        poll(d.jobId);
+        void poll(d.jobId);
       }
     } catch (e) {
       console.error('[SecurityFindingsExportModal] start job failed', e);
@@ -152,62 +323,7 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
     }
   };
 
-  const poll = (jid) => {
-    clearPoll();
-    const session = pollSessionRef.current;
-    const run = async () => {
-      if (session !== pollSessionRef.current) {
-        return;
-      }
-      try {
-        const s = await api.getMySecurityFindingsJob(jid);
-        if (session !== pollSessionRef.current) {
-          return;
-        }
-        setJobStatus(s.message || s.status || '…');
-        if (s.status === 'error') {
-          clearPoll();
-          setExporting(false);
-          console.error('[SecurityFindingsExportModal] job failed', { jobId: jid, error: s.error, message: s.message });
-          toast.error(TOAST_EXPORT_GENERIC);
-          return;
-        }
-        if (s.status === 'complete') {
-          clearPoll();
-          if (session !== pollSessionRef.current) {
-            return;
-          }
-          setExporting(false);
-          setDownloaded(true);
-          const p = `/api/security-findings/jobs/${encodeURIComponent(jid)}/csv`;
-          const text = await api.fetchSecurityFindingsCsv(p);
-          if (session !== pollSessionRef.current) {
-            return;
-          }
-          const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
-          const u = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = u;
-          a.download = `security-findings-${jid.slice(0, 8)}.csv`;
-          a.click();
-          URL.revokeObjectURL(u);
-          toast.success('Download started');
-        }
-      } catch (e) {
-        console.error('[SecurityFindingsExportModal] poll or download failed', e);
-        if (session !== pollSessionRef.current) {
-          return;
-        }
-        clearPoll();
-        setExporting(false);
-        toast.error(TOAST_EXPORT_GENERIC);
-      }
-    };
-    void run();
-    pollIntervalRef.current = window.setInterval(() => {
-      void run();
-    }, 2000);
-  };
+  const atLeastOneIntegration = includeTenable || includeWiz;
 
   return (
     <Modal
@@ -217,21 +333,39 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
       size="lg"
     >
       <p className="text-sm text-gray-600 mb-2">
-        Pulls <strong className="font-medium">Tenable.io WAS</strong> and{' '}
-        <strong className="font-medium">Wiz SAST</strong> in real time (may take a while). No deduplication
-        between tools: critical/high/etc. are summed. The first line of the file is JSON metadata.{' '}
+        Pulls selected tools in real time (may take a while). No deduplication between tools: critical/high/etc. are
+        summed when both are included. The first line of the file is JSON metadata.{' '}
         <Link to="/export-jobs" className="text-blue-700 hover:underline font-medium">
           Export jobs
         </Link>
-        {` `}lists past runs; download the CSV when status is complete.
+        {` `}lists past runs; completed reports can download automatically when you return to this window.
       </p>
       {mode === 'company' && companyName && (
         <p className="text-sm text-gray-800 mb-2">
           <span className="font-medium">Company: </span>
-          {companyName}. Rows are: company-scoped tag/folder (if any), one line per app, a subtotal of
-          app lines (compare to the company line if you like), then the file footer total.
+          {companyName}. Rows: company line (if configured), one line per app, then &quot;Applications total&quot; when
+          breaking down by app.
         </p>
       )}
+
+      <div className="mb-3 p-3 rounded-md border border-gray-200 bg-gray-50">
+        <p className="text-sm font-medium text-gray-800 mb-2">Include in this export</p>
+        <label className="flex items-start gap-2 text-sm text-gray-800 cursor-pointer">
+          <Checkbox
+            checked={includeTenable}
+            onChange={(e) => setIncludeTenable(e.target.checked)}
+          />
+          <span>
+            <span className="font-medium">Tenable.io WAS</span> (tag-based counts)
+          </span>
+        </label>
+        <label className="flex items-start gap-2 text-sm text-gray-800 cursor-pointer mt-1.5">
+          <Checkbox checked={includeWiz} onChange={(e) => setIncludeWiz(e.target.checked)} />
+          <span>
+            <span className="font-medium">Wiz SAST</span> (per linked folder)
+          </span>
+        </label>
+      </div>
 
       <div className="mb-3">
         <Select
@@ -292,7 +426,7 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
         </div>
       ) : (
         <div className="text-sm text-gray-600 py-1">
-          This export includes only <strong>this</strong> company&apos;s applications. Integrations:{' '}
+          This export includes only <strong>this</strong> company&apos;s applications. Configured tools:{' '}
           {companies[0]?.integrations?.length ? companies[0].integrations.join(', ') : '—'}
         </div>
       )}
@@ -310,7 +444,12 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
         <Button type="button" variant="ghost" onClick={handleRequestClose}>
           Close
         </Button>
-        <Button type="button" variant="primary" onClick={startExport} disabled={exporting || loadingPreview}>
+        <Button
+          type="button"
+          variant="primary"
+          onClick={startExport}
+          disabled={exporting || loadingPreview || !atLeastOneIntegration}
+        >
           {exporting ? 'Exporting…' : 'Export CSV'}
         </Button>
       </div>

@@ -1,7 +1,12 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
-import { getExportPreviewList, parseTimeRange } from '../services/securityFindingsExportService.js';
+import {
+  getExportPreviewList,
+  parseTimeRange,
+  parseExportProviders,
+  assertAtLeastOneProvider,
+} from '../services/securityFindingsExportService.js';
 import { createSecurityFindingsJob } from '../services/securityFindingsJobRunner.js';
 
 const router = express.Router();
@@ -143,23 +148,29 @@ router.get('/security-findings/preview', async (req, res) => {
 
 router.post('/security-findings/jobs', async (req, res) => {
   try {
-    const { companyIds, separateByApp, time } = req.body || {};
+    const { companyIds, separateByApp, time, providers: providersBody } = req.body || {};
     if (!Array.isArray(companyIds) || companyIds.length === 0) {
       return res.status(400).json({ error: 'companyIds (non-empty array) is required' });
     }
     parseTimeRange(time);
+    const providers = parseExportProviders(providersBody);
+    assertAtLeastOneProvider(providers);
     const userId = req.session.userId;
     const jobId = await createSecurityFindingsJob({
       prisma,
       userId,
       scope: 'ADMIN_MULTI',
       companyId: null,
-      requestPayload: { companyIds, separateByApp: Boolean(separateByApp), time },
+      requestPayload: { companyIds, separateByApp: Boolean(separateByApp), time, providers },
     });
     res.status(202).json({ jobId, message: 'Export started' });
   } catch (error) {
+    const err = /** @type {Error & { statusCode?: number }} */(error);
+    if (err.statusCode === 400) {
+      return res.status(400).json({ error: err.message || 'Invalid request' });
+    }
     console.error('security findings start', error);
-    res.status(500).json({ error: 'Failed to start export' });
+    return res.status(500).json({ error: 'Failed to start export' });
   }
 });
 

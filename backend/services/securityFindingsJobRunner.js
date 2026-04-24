@@ -1,4 +1,9 @@
-import { buildSecurityFindingsCsv, parseTimeRange } from './securityFindingsExportService.js';
+import {
+  buildSecurityFindingsCsv,
+  parseTimeRange,
+  parseExportProviders,
+  assertAtLeastOneProvider,
+} from './securityFindingsExportService.js';
 
 const LOG = 'securityFindingsJob';
 
@@ -56,7 +61,11 @@ export async function runSecurityFindingsJob({ prisma, jobId }) {
     where: { id: jobId },
     data: { runStartedAt: new Date() },
   });
-  const { separateByApp, time } = /** @type {{ separateByApp?: boolean, time?: object }} */ (job.requestPayload);
+  const { separateByApp, time, providers: providersRaw } = /** @type {{ separateByApp?: boolean, time?: object, providers?: object }} */ (
+    job.requestPayload
+  );
+  const exportProviders = parseExportProviders(providersRaw);
+  assertAtLeastOneProvider(exportProviders);
   let companyIds;
   if (job.scope === 'SINGLE_COMPANY') {
     if (!job.companyId) {
@@ -118,6 +127,7 @@ export async function runSecurityFindingsJob({ prisma, jobId }) {
       companyIds,
       timeRange: tr,
       separateByApp: Boolean(separateByApp),
+      providers: exportProviders,
       onProgress: async (msg) => {
         const cur = await prisma.securityFindingsJob.findUnique({
           where: { id: jobId },
