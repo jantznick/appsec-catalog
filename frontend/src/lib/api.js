@@ -658,6 +658,10 @@ export const api = {
   getMySecurityFindingsJob: (jobId) =>
     apiRequest(`/api/security-findings/jobs/${encodeURIComponent(jobId)}`),
   listMySecurityFindingsJobs: () => apiRequest('/api/security-findings/jobs'),
+  cancelMySecurityFindingsJob: (jobId) =>
+    apiRequest(`/api/security-findings/jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: 'POST',
+    }),
   getCompanySecurityFindingsPreview: (companyId) =>
     apiRequest(`/api/companies/${encodeURIComponent(companyId)}/security-findings/preview`),
   startCompanySecurityFindingsJob: (companyId, body) =>

@@ -75,8 +75,9 @@ function addSev(a, b) {
  * @param {string} companyId
  * @param {import('@prisma/client').Prisma.JsonValue} filter
  * @param {object} tr
+ * @param {string} [findingsFor] — Tenable server log context (company / app)
  */
-async function tenableFor(companyId, filter, tr) {
+async function tenableFor(companyId, filter, tr, findingsFor) {
   const res = await resolveIntegrationForCompany(companyId, PROVIDER_TENABLE_IO);
   if (!res) {
     return {
@@ -93,7 +94,7 @@ async function tenableFor(companyId, filter, tr) {
   if (!tagUuid) {
     return { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: 'Tenable: no tag in link' };
   }
-  return getTenableWasCountsByTag(res.decrypted, res.baseUrl, { tagUuid }, tr);
+  return getTenableWasCountsByTag(res.decrypted, res.baseUrl, { tagUuid }, tr, findingsFor ? { findingsFor } : {});
 }
 
 /**
@@ -152,7 +153,7 @@ function combinedRowData(t, w, pout, err) {
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string} companyId
  * @param { 'all' | { from?: string, to?: string, all?: boolean } } tr
- * @param { (s: string) => void} [onProgress]
+ * @param { (s: string) => void | Promise<void> } [onProgress]
  */
 export async function buildSecurityFindingsCsv(
   prisma,
@@ -160,7 +161,7 @@ export async function buildSecurityFindingsCsv(
     companyIds,
     /** @type { 'all' | { from?: string, to?: string, all?: boolean } } */ timeRange,
     /** @type { boolean } */ separateByApp,
-    /** @type { (s: string) => void } */ onProgress = () => {},
+    /** @type { (s: string) => void | Promise<void> } */ onProgress = () => {},
   },
 ) {
   const tr = timeRange;
@@ -210,12 +211,18 @@ export async function buildSecurityFindingsCsv(
       'Notes',
     ],
   ]);
-  const totals = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
   let cIdx = 0;
+  await Promise.resolve(
+    onProgress(
+      `Starting export for ${companies.length} company/companies — Tenable/Wiz may take many minutes…`,
+    ),
+  );
   for (const co of companies) {
     cIdx += 1;
-    onProgress(
-      `Processing ${co.name} (${cIdx} of ${companies.length}) — Tenable/Wiz in progress, may take minutes…`,
+    await Promise.resolve(
+      onProgress(
+        `Processing ${co.name} (${cIdx} of ${companies.length}) — Tenable/Wiz in progress, may take minutes…`,
+      ),
     );
 
     const coTlink = co.companyToolLinks.find((l) => l.provider === PROVIDER_TENABLE_IO);
@@ -225,13 +232,23 @@ export async function buildSecurityFindingsCsv(
       let w0 = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
       const p0 = /** @type {string[]} */ ([]);
       if (coTlink) {
-        t0 = await tenableFor(co.id, coTlink.filter, tr);
+        t0 = await tenableFor(
+          co.id,
+          coTlink.filter,
+          tr,
+          `Aggregated: ${co.name} (Tenable company link)`,
+        );
         p0.push(PROVIDER_TENABLE_IO);
       } else {
         for (const app of co.applications) {
           const tL = app.applicationToolLinks.find((l) => l.provider === PROVIDER_TENABLE_IO);
           if (tL) {
-            const part = await tenableFor(co.id, tL.filter, tr);
+            const part = await tenableFor(
+              co.id,
+              tL.filter,
+              tr,
+              `Aggregated: ${co.name} (Tenable app: ${app.name})`,
+            );
             addSev(t0, part);
             if (!p0.includes(PROVIDER_TENABLE_IO)) {
               p0.push(PROVIDER_TENABLE_IO);
@@ -272,12 +289,18 @@ export async function buildSecurityFindingsCsv(
         cd.sources,
         cd.notes,
       ]);
-      addSev(totals, cd);
       continue;
     }
     const appSubtot = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
     if (coTlink || coWlink) {
-      const t0 = coTlink ? await tenableFor(co.id, coTlink.filter, tr) : null;
+      const t0 = coTlink
+        ? await tenableFor(
+            co.id,
+            coTlink.filter,
+            tr,
+            `By app table: ${co.name} (Tenable company link)`,
+          )
+        : null;
       const w0 = coWlink ? await wizFor(co.id, coWlink.filter, tr) : null;
       const p0 = /** @type {string[]} */ ([]);
       if (coTlink) p0.push(PROVIDER_TENABLE_IO);
@@ -307,7 +330,6 @@ export async function buildSecurityFindingsCsv(
         cd.sources,
         cd.notes,
       ]);
-      addSev(totals, cd);
     }
     for (const app of co.applications) {
       const tL = app.applicationToolLinks.find((l) => l.provider === PROVIDER_TENABLE_IO);
@@ -315,7 +337,6 @@ export async function buildSecurityFindingsCsv(
       if (!tL && !wL) {
         const z = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
         addSev(appSubtot, z);
-        addSev(totals, z);
         rows.push([
           'Application',
           app.name,
@@ -333,7 +354,12 @@ export async function buildSecurityFindingsCsv(
         continue;
       }
       const t0 = tL
-        ? await tenableFor(co.id, tL.filter, tr)
+        ? await tenableFor(
+            co.id,
+            tL.filter,
+            tr,
+            `By app table: ${co.name} (Tenable app: ${app.name})`,
+          )
         : { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
       const w0 = wL
         ? await wizFor(co.id, wL.filter, tr)
@@ -369,7 +395,6 @@ export async function buildSecurityFindingsCsv(
         cd.notes,
       ]);
       addSev(appSubtot, cd);
-      addSev(totals, cd);
     }
     if (co.applications.length > 0) {
       const tsumA =
@@ -379,7 +404,7 @@ export async function buildSecurityFindingsCsv(
         appSubtot.low +
         appSubtot.info;
       rows.push([
-        'Subtotal (applications only)',
+        'Applications total',
         '—',
         co.name,
         String(co._count.applications),
@@ -390,32 +415,17 @@ export async function buildSecurityFindingsCsv(
         String(appSubtot.info),
         String(tsumA),
         '—',
-        'Sum of all application lines above. Compare to the company line if you use both; vendors may not match.',
+        'Sum of application lines above. Compare to the company line if you use both; vendors may not match.',
       ]);
     }
-    onProgress(
-      cIdx < companies.length
-        ? `Finished ${co.name} — continuing…`
-        : `Finished ${co.name} — building CSV file…`,
+    await Promise.resolve(
+      onProgress(
+        cIdx < companies.length
+          ? `Finished ${co.name} — continuing…`
+          : `Finished ${co.name} — building CSV file…`,
+      ),
     );
   }
-  const tsum =
-    totals.critical + totals.high + totals.medium + totals.low + totals.info;
-  const gen = new Date().toISOString();
-  rows.push([
-    'Total (company + application data rows; excludes Subtotal and previous metadata lines only)',
-    '—',
-    '—',
-    '—',
-    String(totals.critical),
-    String(totals.high),
-    String(totals.medium),
-    String(totals.low),
-    String(totals.info),
-    String(tsum),
-    '—',
-    `Generated ${gen}`,
-  ]);
   return rows.map((r) => r.map(esc).join(',')).join('\n') + '\n';
 }
 

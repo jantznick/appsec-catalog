@@ -118,15 +118,24 @@ export async function runSecurityFindingsJob({ prisma, jobId }) {
       companyIds,
       timeRange: tr,
       separateByApp: Boolean(separateByApp),
-      onProgress: (msg) => {
+      onProgress: async (msg) => {
+        const cur = await prisma.securityFindingsJob.findUnique({
+          where: { id: jobId },
+          select: { status: true },
+        });
+        if (cur?.status === 'cancelled') {
+          const e = new Error('JOB_CANCELLED');
+          e.code = 'JOB_CANCELLED';
+          throw e;
+        }
         logInfo({ event: 'progress', jobId, message: String(msg).slice(0, 200) });
-        setMsg(msg).catch((e) => console.error(`[${LOG}] job message update`, e));
+        await setMsg(msg);
       },
     });
     const durationMs = Date.now() - workStart;
     const byteLen = Buffer.byteLength(csv, 'utf8');
-    await prisma.securityFindingsJob.update({
-      where: { id: jobId },
+    const saved = await prisma.securityFindingsJob.updateMany({
+      where: { id: jobId, status: 'running' },
       data: {
         status: 'complete',
         message: 'Complete',
@@ -136,6 +145,10 @@ export async function runSecurityFindingsJob({ prisma, jobId }) {
         durationMs,
       },
     });
+    if (saved.count === 0) {
+      logInfo({ event: 'complete_skipped', jobId, reason: 'job not in running state (e.g. cancelled)' });
+      return;
+    }
     logInfo({
       event: 'complete',
       jobId,
@@ -144,7 +157,17 @@ export async function runSecurityFindingsJob({ prisma, jobId }) {
       csvBytes: byteLen,
     });
   } catch (e) {
-    const err = /** @type {Error} */ (e);
+    const err = /** @type {Error & { code?: string }} */ (e);
+    if (err.code === 'JOB_CANCELLED' || err.message === 'JOB_CANCELLED') {
+      const cur = await prisma.securityFindingsJob.findUnique({
+        where: { id: jobId },
+        select: { status: true },
+      });
+      if (cur?.status === 'cancelled') {
+        logInfo({ event: 'run_stopped_cancelled', jobId });
+        return;
+      }
+    }
     logInfo({
       event: 'error',
       jobId,
@@ -164,13 +187,16 @@ export async function runSecurityFindingsJob({ prisma, jobId }) {
  * @param {{ alreadyLogged?: boolean }} [o]
  */
 async function failJob(prisma, jobId, workStart, err, o = {}) {
+  if (err?.code === 'JOB_CANCELLED' || err?.message === 'JOB_CANCELLED') {
+    return;
+  }
   const durationMs = Date.now() - workStart;
   if (!o.alreadyLogged) {
     logInfo({ event: 'error', jobId, err: err.message });
   }
   console.error(`[${LOG}] job ${jobId} failed:`, err);
-  await prisma.securityFindingsJob.update({
-    where: { id: jobId },
+  const u = await prisma.securityFindingsJob.updateMany({
+    where: { id: jobId, status: 'running' },
     data: {
       status: 'error',
       error: err.message || 'Export failed',
@@ -179,4 +205,7 @@ async function failJob(prisma, jobId, workStart, err, o = {}) {
       durationMs,
     },
   });
+  if (u.count === 0) {
+    logInfo({ event: 'failJob_skipped', jobId, reason: 'not running' });
+  }
 }

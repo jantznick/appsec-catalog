@@ -86,6 +86,50 @@ router.get('/jobs/:id', async (req, res) => {
   }
 });
 
+/** POST /api/security-findings/jobs/:id/cancel — best-effort stop; worker checks between steps */
+router.post('/jobs/:id/cancel', async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const id = req.params.id;
+    const job = await prisma.securityFindingsJob.findFirst({
+      where: { id, userId },
+      select: { id: true, status: true, runStartedAt: true, createdAt: true },
+    });
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    if (job.status !== 'running') {
+      return res.status(409).json({ error: 'Job is not running', status: job.status });
+    }
+    const t0 = job.runStartedAt ? job.runStartedAt.getTime() : job.createdAt.getTime();
+    const durationMs = Math.max(0, Date.now() - t0);
+    await prisma.securityFindingsJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'cancelled',
+        message: 'Cancelled by user',
+        completedAt: new Date(),
+        durationMs,
+        error: null,
+      },
+    });
+    const full = await prisma.securityFindingsJob.findFirst({
+      where: { id, userId },
+      select: listSelect,
+    });
+    if (!full) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    const companyName = full.companyId
+      ? (await prisma.company.findUnique({ where: { id: full.companyId }, select: { name: true } }))?.name ?? null
+      : null;
+    return res.json({ job: jobToJson(full, companyName) });
+  } catch (e) {
+    console.error('security findings job cancel', e);
+    return res.status(500).json({ error: 'Failed to cancel job' });
+  }
+});
+
 /** GET /api/security-findings/jobs/:id/csv */
 router.get('/jobs/:id/csv', async (req, res) => {
   try {

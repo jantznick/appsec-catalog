@@ -136,3 +136,44 @@ export async function listTenableIoTagValues(keys, baseUrl) {
     throw e;
   }
 }
+
+/**
+ * O(1) tag lookup for exports — avoids listing the entire /tags/values catalog.
+ * @param {{ accessKey: string, secretKey: string }} keys
+ * @param {string | null | undefined} baseUrl
+ * @param {string} tagValueUuid
+ * @returns {Promise<{ uuid: string, value?: string, category_uuid?: string, category_name?: string, display_label: string } | null>}
+ */
+export async function getTenableTagValueByUuid(keys, baseUrl, tagValueUuid) {
+  const base = (baseUrl || DEFAULT_BASE).replace(/\/$/, '');
+  const url = `${base}/tags/values/${encodeURIComponent(tagValueUuid)}`;
+  // Per-request line is logged by security export (`hitting api endpoint: …`); avoid duplicate.
+  const headers = authHeaders(keys.accessKey, keys.secretKey, base);
+  const res = await fetch(url, { headers });
+  if (res.status === 404) {
+    return null;
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    const err = new Error(`Tenable.io tag value request failed: ${res.status}`);
+    err.statusCode = res.status === 401 || res.status === 403 ? 403 : 502;
+    err.detail = text?.slice(0, 500);
+    throw err;
+  }
+  const v = await res.json();
+  const categoryName = v.category_name;
+  const value = v.value;
+  const displayLabel =
+    categoryName && (value != null && value !== '')
+      ? `${categoryName}: ${value}`
+      : value != null && value !== ''
+        ? String(value)
+        : (categoryName || v.uuid);
+  return {
+    uuid: v.uuid,
+    value: v.value,
+    category_uuid: v.category_uuid,
+    category_name: categoryName,
+    display_label: displayLabel,
+  };
+}

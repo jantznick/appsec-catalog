@@ -24,6 +24,7 @@ function formatWhen(iso) {
 function statusClass(status) {
   if (status === 'complete') return 'text-green-700';
   if (status === 'error') return 'text-red-700';
+  if (status === 'cancelled') return 'text-gray-600';
   return 'text-amber-800';
 }
 
@@ -46,12 +47,15 @@ function formatDurationMs(ms) {
  * @param {string} st
  */
 function RunTimeCell({ j, st }) {
-  if (st === 'complete' || st === 'error') {
+  if (st === 'complete' || st === 'error' || st === 'cancelled') {
     return j.durationMs != null ? formatDurationMs(/** @type {number} */(j.durationMs)) : '—';
   }
   if (st === 'running' && j.runStartedAt) {
     return (
-      <span className="text-amber-900" title="Worker is running; refresh to update">
+      <span
+        className="text-amber-900"
+        title="Export in progress — this page refreshes status every few seconds while a job is running"
+      >
         In progress
         <span className="block text-xs text-gray-600">
           since {formatWhen(/** @type {string} */(j.runStartedAt))}
@@ -71,23 +75,54 @@ function RunTimeCell({ j, st }) {
 export function SecurityFindingsExportJobs() {
   const [jobs, setJobs] = useState(/** @type {Array<Record<string, unknown>>} */ ([]));
   const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState(/** @type {string | null} */ (null));
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (/** @type {{ silent?: boolean }} */ opts = {}) => {
+    const silent = Boolean(opts.silent);
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       const d = await api.listMySecurityFindingsJobs();
       setJobs(d.jobs || []);
     } catch (e) {
       const err = /** @type {Error} */ (e);
       toast.error(err.message || 'Failed to load jobs');
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const hasRunning = jobs.some((j) => j.status === 'running');
+  useEffect(() => {
+    if (!hasRunning) {
+      return undefined;
+    }
+    const t = setInterval(() => {
+      void load({ silent: true });
+    }, 5000);
+    return () => clearInterval(t);
+  }, [hasRunning, load]);
+
+  const cancelJob = async (jobId) => {
+    try {
+      setCancellingId(jobId);
+      await api.cancelMySecurityFindingsJob(jobId);
+      toast.success('Job cancelled');
+      await load({ silent: true });
+    } catch (e) {
+      const err = /** @type {Error} */ (e);
+      toast.error(err.message || 'Could not cancel job');
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   const download = async (jobId) => {
     const path = `/api/security-findings/jobs/${encodeURIComponent(jobId)}/csv`;
@@ -111,14 +146,16 @@ export function SecurityFindingsExportJobs() {
     <div className="max-w-5xl mx-auto p-4 sm:p-6">
       <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-semibold text-gray-900">Security export jobs</h1>
-        <Button type="button" variant="secondary" onClick={() => void load()}>
+        <Button type="button" variant="secondary" onClick={() => void load({ silent: hasRunning })}>
           Refresh
         </Button>
       </div>
       <p className="text-sm text-gray-600 mb-4 max-w-3xl">
-        Tenable and Wiz CSV exports you started. While a job is running, vendor API calls can take many minutes.         When
-        status is <span className="text-green-700">complete</span>, download the file here (or it auto-downloads if
-        the export window stayed open). <strong>Retention:</strong> there is no automatic expiry; completed results
+        Tenable and Wiz CSV exports you started. While a job is running, vendor API calls can take many minutes; this
+        list refreshes every few seconds until no job is running. You can <strong>Cancel</strong> a running job; the
+        worker stops at the next internal step (a long in-flight vendor call may still need to finish). When status is{' '}
+        <span className="text-green-700">complete</span>, download the file here (or it auto-downloads if the export
+        window stayed open). <strong>Retention:</strong> there is no automatic expiry; completed results
         stay in the database until the row is removed (for example with user deletion) or a future admin cleanup job
         is added. Plan storage accordingly.
       </p>
@@ -141,7 +178,7 @@ export function SecurityFindingsExportJobs() {
                   <TableHead>Company / detail</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Run time</TableHead>
-                  <TableHead className="w-36"> </TableHead>
+                  <TableHead className="w-44 min-w-[10rem]"> </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -192,11 +229,24 @@ export function SecurityFindingsExportJobs() {
                         <RunTimeCell j={j} st={st} />
                       </TableCell>
                       <TableCell>
-                        {st === 'complete' && (
-                          <Button type="button" variant="primary" size="sm" onClick={() => void download(id)}>
-                            Download CSV
-                          </Button>
-                        )}
+                        <div className="flex flex-col gap-1.5 items-stretch sm:items-end">
+                          {st === 'running' && (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              disabled={cancellingId === id}
+                              onClick={() => void cancelJob(id)}
+                            >
+                              {cancellingId === id ? 'Cancelling…' : 'Cancel'}
+                            </Button>
+                          )}
+                          {st === 'complete' && (
+                            <Button type="button" variant="primary" size="sm" onClick={() => void download(id)}>
+                              Download CSV
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
