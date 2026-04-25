@@ -19,9 +19,6 @@ const TIME_OPTIONS = [
 const TOAST_EXPORT_GENERIC =
   'Something went wrong. If this continues, ask an administrator to check server logs.';
 
-/** Resumes in-flight or completed jobs when the modal reopens. */
-const PENDING_EXPORT_JOB_ID_KEY = 'appsec:securityFindings:pendingJobId';
-
 /**
  * @param {string} jobId
  */
@@ -155,15 +152,8 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
     return { type: 'lastDays', days: parseInt(timeMode, 10) };
   };
 
-  /**
-   * @param {string} jid
-   * @param {{ skipSetStorage?: boolean }} [opts]
-   */
   const poll = useCallback(
-    (jid, opts = {}) => {
-      if (!opts.skipSetStorage) {
-        sessionStorage.setItem(PENDING_EXPORT_JOB_ID_KEY, jid);
-      }
+    (jid) => {
       clearPoll();
       const session = pollSessionRef.current;
       const run = async () => {
@@ -175,11 +165,10 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
           if (session !== pollSessionRef.current) {
             return;
           }
-          setJobStatus(s.message || s.status || '…');
+          setJobStatus(s.message || s.status || '...');
           if (s.status === 'error') {
             clearPoll();
             setExporting(false);
-            sessionStorage.removeItem(PENDING_EXPORT_JOB_ID_KEY);
             console.error('[SecurityFindingsExportModal] job failed', {
               jobId: jid,
               error: s.error,
@@ -200,7 +189,6 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
               if (session !== pollSessionRef.current) {
                 return;
               }
-              sessionStorage.removeItem(PENDING_EXPORT_JOB_ID_KEY);
               toast.success('Download started');
             } catch (e) {
               console.error('[SecurityFindingsExportModal] poll or download failed', e);
@@ -218,7 +206,6 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
           }
           clearPoll();
           setExporting(false);
-          sessionStorage.removeItem(PENDING_EXPORT_JOB_ID_KEY);
           toast.error(TOAST_EXPORT_GENERIC);
         }
       };
@@ -229,61 +216,6 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
     },
     [clearPoll],
   );
-
-  /** Reopen: resume completed job (auto-download) or running job (poll), using session key. */
-  useEffect(() => {
-    if (!open) {
-      return undefined;
-    }
-    let cancelled = false;
-    (async () => {
-      const pending = sessionStorage.getItem(PENDING_EXPORT_JOB_ID_KEY);
-      if (!pending) {
-        return;
-      }
-      if (pollIntervalRef.current) {
-        return;
-      }
-      try {
-        const s = await api.getMySecurityFindingsJob(pending);
-        if (cancelled) {
-          return;
-        }
-        if (s.status === 'complete') {
-          if (sessionStorage.getItem(PENDING_EXPORT_JOB_ID_KEY) !== pending) {
-            return;
-          }
-          sessionStorage.removeItem(PENDING_EXPORT_JOB_ID_KEY);
-          try {
-            await downloadCsvForJobId(pending);
-            if (cancelled) {
-              return;
-            }
-            setJobId(pending);
-            setJobStatus('Complete');
-            setDownloaded(true);
-            toast.success('Report downloaded');
-          } catch (e) {
-            console.error('[SecurityFindingsExportModal] resume download failed', e);
-            toast.error(TOAST_EXPORT_GENERIC);
-          }
-        } else if (s.status === 'error' || s.status === 'cancelled') {
-          sessionStorage.removeItem(PENDING_EXPORT_JOB_ID_KEY);
-        } else if (s.status === 'running') {
-          setJobId(pending);
-          setExporting(true);
-          setJobStatus(s.message || s.status);
-          void poll(pending, { skipSetStorage: true });
-        }
-      } catch (e) {
-        console.error('[SecurityFindingsExportModal] resume job check', e);
-        sessionStorage.removeItem(PENDING_EXPORT_JOB_ID_KEY);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [open, poll]);
 
   const startExport = async () => {
     if (exporting) {
@@ -338,7 +270,8 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
         <Link to="/export-jobs" className="text-blue-700 hover:underline font-medium">
           Export jobs
         </Link>
-        {` `}lists past runs; completed reports can download automatically when you return to this window.
+        {` `}lists past runs and downloads. Closing this window does not stop the job; get the file there if you closed
+        before it finished.
       </p>
       {mode === 'company' && companyName && (
         <p className="text-sm text-gray-800 mb-2">
@@ -350,18 +283,18 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
 
       <div className="mb-3 p-3 rounded-md border border-gray-200 bg-gray-50">
         <p className="text-sm font-medium text-gray-800 mb-2">Include in this export</p>
-        <label className="flex items-start gap-2 text-sm text-gray-800 cursor-pointer">
+        <label className="flex items-start gap-2 text-sm text-gray-800 cursor-pointer max-w-full">
           <Checkbox
             checked={includeTenable}
             onChange={(e) => setIncludeTenable(e.target.checked)}
           />
-          <span>
+          <span className="min-w-0 flex-1 leading-snug">
             <span className="font-medium">Tenable.io WAS</span> (tag-based counts)
           </span>
         </label>
-        <label className="flex items-start gap-2 text-sm text-gray-800 cursor-pointer mt-1.5">
+        <label className="flex items-start gap-2 text-sm text-gray-800 cursor-pointer mt-1.5 max-w-full">
           <Checkbox checked={includeWiz} onChange={(e) => setIncludeWiz(e.target.checked)} />
-          <span>
+          <span className="min-w-0 flex-1 leading-snug">
             <span className="font-medium">Wiz SAST</span> (per linked folder)
           </span>
         </label>
@@ -377,7 +310,7 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
         {timeMode === 'custom' && (
           <div className="mt-2">
             <Input
-              label="Days (1–3650)"
+              label="Days (1-3650)"
               value={customDays}
               onChange={(e) => setCustomDays(e.target.value)}
               type="number"
@@ -388,12 +321,14 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
 
       {mode === 'admin' && (
         <div className="mb-3">
-          <label className="inline-flex items-center gap-2 text-sm text-gray-800">
+          <label className="flex items-start gap-2 text-sm text-gray-800 cursor-pointer max-w-full">
             <Checkbox
               checked={separateByApp}
               onChange={(e) => setSeparateByApp(e.target.checked)}
             />
-            <span>Separate by application (company row, each app, app subtotal; off = one line per company)</span>
+            <span className="min-w-0 flex-1 leading-snug">
+              Separate by application (company row, each app, app subtotal; off = one line per company)
+            </span>
           </label>
         </div>
       )}
@@ -405,7 +340,7 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
           {companies.map((c) => (
             <label
               key={c.id}
-              className="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
+              className="flex items-start gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm max-w-full"
             >
               <Checkbox
                 checked={!!selected[c.id]}
@@ -413,13 +348,15 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
                   setSelected((s) => ({ ...s, [c.id]: !s[c.id] }));
                 }}
               />
-              <span>
+              <span className="min-w-0 flex-1 leading-snug">
                 <span className="font-medium text-gray-900">{c.name}</span>
                 <span className="text-gray-500">
                   {' '}
-                  — {c.applicationCount} app{c.applicationCount !== 1 ? 's' : ''}
+                  - {c.applicationCount} app{c.applicationCount !== 1 ? 's' : ''}
                 </span>
-                <span className="text-gray-600"> — {c.integrations.length ? c.integrations.join(', ') : '—'}</span>
+                {c.integrations.length > 0 && (
+                  <span className="text-gray-600"> - {c.integrations.join(', ')}</span>
+                )}
               </span>
             </label>
           ))}
@@ -427,7 +364,7 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
       ) : (
         <div className="text-sm text-gray-600 py-1">
           This export includes only <strong>this</strong> company&apos;s applications. Configured tools:{' '}
-          {companies[0]?.integrations?.length ? companies[0].integrations.join(', ') : '—'}
+          {companies[0]?.integrations?.length ? companies[0].integrations.join(', ') : 'none yet'}
         </div>
       )}
 

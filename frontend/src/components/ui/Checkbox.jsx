@@ -5,8 +5,10 @@ export function Checkbox({
   className = '',
   ...props
 }) {
+  // Without `label`, the control is often used inside a flex row; `w-full` there steals space and
+  // shoves the sibling text to the far right.
   return (
-    <div className="w-full">
+    <div className={label ? 'w-full' : 'w-auto shrink-0'}>
       <div className="flex items-start">
         <input
           type="checkbox"

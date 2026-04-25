@@ -130,6 +130,29 @@ router.post('/jobs/:id/cancel', async (req, res) => {
   }
 });
 
+/** DELETE /api/security-findings/jobs/:id — own jobs only; not while running (cancel first) */
+router.delete('/jobs/:id', async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const id = req.params.id;
+    const existing = await prisma.securityFindingsJob.findFirst({
+      where: { id, userId },
+      select: { status: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    if (existing.status === 'running') {
+      return res.status(409).json({ error: 'Cancel the job first, or wait until it finishes' });
+    }
+    await prisma.securityFindingsJob.deleteMany({ where: { id, userId } });
+    return res.status(204).send();
+  } catch (e) {
+    console.error('security findings job delete', e);
+    return res.status(500).json({ error: 'Failed to delete job' });
+  }
+});
+
 /** GET /api/security-findings/jobs/:id/csv */
 router.get('/jobs/:id/csv', async (req, res) => {
   try {

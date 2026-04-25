@@ -7,8 +7,41 @@ import {
 
 const LOG = 'securityFindingsJob';
 
+/** Drop this user’s non-running jobs older than this (days) when they start a new export. */
+const SECURITY_FINDINGS_JOB_RETENTION_DAYS = 30;
+
 function logInfo(payload) {
   console.log(`[${LOG}]`, JSON.stringify({ ...payload, t: new Date().toISOString() }));
+}
+
+/**
+ * Best-effort: remove old completed/failed/cancelled jobs for this user to cap DB growth.
+ * Skips `running` rows so an in-flight export is never removed.
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {string} userId
+ */
+async function pruneOldSecurityFindingsJobsForUser(prisma, userId) {
+  const cutoff = new Date(Date.now() - SECURITY_FINDINGS_JOB_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  try {
+    const r = await prisma.securityFindingsJob.deleteMany({
+      where: {
+        userId,
+        createdAt: { lt: cutoff },
+        status: { not: 'running' },
+      },
+    });
+    if (r.count > 0) {
+      logInfo({
+        event: 'pruned_old_jobs',
+        userId,
+        removed: r.count,
+        cutoff: cutoff.toISOString(),
+        retentionDays: SECURITY_FINDINGS_JOB_RETENTION_DAYS,
+      });
+    }
+  } catch (e) {
+    console.error(`[${LOG}] prune old jobs failed`, e);
+  }
 }
 
 /** @typedef {'ADMIN_MULTI' | 'SINGLE_COMPANY'} JobScope */
@@ -39,6 +72,7 @@ export async function createSecurityFindingsJob({ prisma, userId, scope, company
     scope,
     companyId,
   });
+  void pruneOldSecurityFindingsJobsForUser(prisma, userId);
   setImmediate(() => runSecurityFindingsJob({ prisma, jobId: job.id }).catch((e) => {
     console.error(`[${LOG}] run async failure`, e);
   }));

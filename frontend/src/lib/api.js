@@ -15,13 +15,15 @@ async function apiRequest(endpoint, options = {}) {
   };
 
   const response = await fetch(url, config);
-  const data = await response.json();
 
   if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
     throw new Error(data.message || data.error || 'An error occurred');
   }
-
-  return data;
+  if (response.status === 204) {
+    return {};
+  }
+  return response.json();
 }
 
 export const api = {
@@ -662,6 +664,8 @@ export const api = {
     apiRequest(`/api/security-findings/jobs/${encodeURIComponent(jobId)}/cancel`, {
       method: 'POST',
     }),
+  deleteMySecurityFindingsJob: (jobId) =>
+    apiRequest(`/api/security-findings/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE' }),
   getCompanySecurityFindingsPreview: (companyId) =>
     apiRequest(`/api/companies/${encodeURIComponent(companyId)}/security-findings/preview`),
   startCompanySecurityFindingsJob: (companyId, body) =>

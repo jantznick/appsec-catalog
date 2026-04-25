@@ -80,6 +80,7 @@ export function SecurityFindingsExportJobs() {
   const [jobs, setJobs] = useState(/** @type {Array<Record<string, unknown>>} */ ([]));
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState(/** @type {string | null} */ (null));
+  const [deletingId, setDeletingId] = useState(/** @type {string | null} */ (null));
 
   const load = useCallback(async (/** @type {{ silent?: boolean }} */ opts = {}) => {
     const silent = Boolean(opts.silent);
@@ -128,6 +129,27 @@ export function SecurityFindingsExportJobs() {
     }
   };
 
+  const deleteJob = async (jobId) => {
+    if (
+      !window.confirm(
+        'Delete this job and its stored result from the server? This cannot be undone.',
+      )
+    ) {
+      return;
+    }
+    try {
+      setDeletingId(jobId);
+      await api.deleteMySecurityFindingsJob(jobId);
+      toast.success('Job removed');
+      await load({ silent: true });
+    } catch (e) {
+      console.error('[SecurityFindingsExportJobs] delete failed', e);
+      toast.error('Could not delete the job. Try again or use server logs to investigate.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const download = async (jobId) => {
     const path = `/api/security-findings/jobs/${encodeURIComponent(jobId)}/csv`;
     try {
@@ -157,11 +179,10 @@ export function SecurityFindingsExportJobs() {
       <p className="text-sm text-gray-600 mb-4 max-w-3xl">
         Tenable and Wiz CSV exports you started. While a job is running, vendor API calls can take many minutes; this
         list refreshes every few seconds until no job is running. You can <strong>Cancel</strong> a running job; the
-        worker stops at the next internal step (a long in-flight vendor call may still need to finish). When status is{' '}
-        <span className="text-green-700">complete</span>, download the file here (or it auto-downloads if the export
-        window stayed open). <strong>Retention:</strong> there is no automatic expiry; completed results
-        stay in the database until the row is removed (for example with user deletion) or a future admin cleanup job
-        is added. Plan storage accordingly.
+        worker stops at the next internal step (a long in-flight vendor call may still need to finish).         When status is <span className="text-green-700">complete</span>, use <strong>Download CSV</strong>. You can
+        <strong> Delete</strong> finished or failed jobs to free space (not available while a job is still running — use
+        <strong> Cancel</strong> first if needed). <strong>Retention:</strong> when you start a new export, we remove your
+        completed or failed jobs that are more than 30 days old. Running jobs are never auto-deleted.
       </p>
 
       <Card>
@@ -182,7 +203,7 @@ export function SecurityFindingsExportJobs() {
                   <TableHead>Company / detail</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Run time</TableHead>
-                  <TableHead className="w-44 min-w-[10rem]"> </TableHead>
+                  <TableHead className="w-52 min-w-[12rem]"> </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -249,6 +270,18 @@ export function SecurityFindingsExportJobs() {
                           {st === 'complete' && (
                             <Button type="button" variant="primary" size="sm" onClick={() => void download(id)}>
                               Download CSV
+                            </Button>
+                          )}
+                          {st !== 'running' && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-700 hover:text-red-800 hover:bg-red-50"
+                              disabled={deletingId === id}
+                              onClick={() => void deleteJob(id)}
+                            >
+                              {deletingId === id ? 'Deleting…' : 'Delete'}
                             </Button>
                           )}
                         </div>
