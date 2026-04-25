@@ -4,6 +4,7 @@ import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.jsx';
 import { Button } from '../components/ui/Button.jsx';
+import { Modal } from '../components/ui/Modal.jsx';
 import {
   Table,
   TableHeader,
@@ -81,6 +82,7 @@ export function SecurityFindingsExportJobs() {
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState(/** @type {string | null} */ (null));
   const [deletingId, setDeletingId] = useState(/** @type {string | null} */ (null));
+  const [deleteConfirmJobId, setDeleteConfirmJobId] = useState(/** @type {string | null} */ (null));
 
   const load = useCallback(async (/** @type {{ silent?: boolean }} */ opts = {}) => {
     const silent = Boolean(opts.silent);
@@ -129,14 +131,7 @@ export function SecurityFindingsExportJobs() {
     }
   };
 
-  const deleteJob = async (jobId) => {
-    if (
-      !window.confirm(
-        'Delete this job and its stored result from the server? This cannot be undone.',
-      )
-    ) {
-      return;
-    }
+  const runDeleteJob = async (jobId) => {
     try {
       setDeletingId(jobId);
       await api.deleteMySecurityFindingsJob(jobId);
@@ -184,6 +179,39 @@ export function SecurityFindingsExportJobs() {
         <strong> Cancel</strong> first if needed). <strong>Retention:</strong> when you start a new export, we remove your
         completed or failed jobs that are more than 30 days old. Running jobs are never auto-deleted.
       </p>
+
+      <Modal
+        isOpen={deleteConfirmJobId != null}
+        onClose={() => setDeleteConfirmJobId(null)}
+        title="Delete this job?"
+        size="sm"
+        closeOnOverlayClick
+        closeOnEscape
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setDeleteConfirmJobId(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => {
+                const id = deleteConfirmJobId;
+                if (!id) return;
+                setDeleteConfirmJobId(null);
+                void runDeleteJob(id);
+              }}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-gray-700">
+          This removes the job and its stored result from the server. It cannot be undone.
+        </p>
+      </Modal>
 
       <Card>
         <CardHeader>
@@ -279,7 +307,7 @@ export function SecurityFindingsExportJobs() {
                               size="sm"
                               className="text-red-700 hover:text-red-800 hover:bg-red-50"
                               disabled={deletingId === id}
-                              onClick={() => void deleteJob(id)}
+                              onClick={() => setDeleteConfirmJobId(id)}
                             >
                               {deletingId === id ? 'Deleting…' : 'Delete'}
                             </Button>
