@@ -153,11 +153,11 @@ export function Domains() {
               to={`/companies/${domain.companyId}`}
               className="text-gray-700 hover:text-blue-600"
             >
-              {domain.company?.name || '—'}
+              {domain.company?.name || '-'}
             </Link>
           );
         }
-        return <span>{domain.company?.name || '—'}</span>;
+        return <span>{domain.company?.name || '-'}</span>;
       },
       enableSorting: isAdmin(),
     },
@@ -169,7 +169,7 @@ export function Domains() {
     {
       accessorKey: 'owner',
       header: 'Owner',
-      cell: ({ row }) => row.original.owner || '—',
+      cell: ({ row }) => row.original.owner || '-',
     },
     {
       accessorKey: 'status',
@@ -189,7 +189,7 @@ export function Domains() {
       cell: ({ row }) => {
         const latestSnapshot = Array.isArray(row.original.dnsSnapshots) ? row.original.dnsSnapshots[0] : null;
         if (!latestSnapshot || latestSnapshot.totalSecurityScore === null || latestSnapshot.totalSecurityScore === undefined) {
-          return '—';
+          return '-';
         }
         return (
           <span className={`px-2 py-1 text-xs font-medium rounded ${getScoreBadgeClasses(latestSnapshot.totalSecurityScore)}`}>
@@ -201,7 +201,7 @@ export function Domains() {
     {
       accessorKey: 'apexDomain',
       header: 'Apex Group',
-      cell: ({ row }) => row.original.apexDomain || '—',
+      cell: ({ row }) => row.original.apexDomain || '-',
     },
     {
       accessorKey: 'createdAt',

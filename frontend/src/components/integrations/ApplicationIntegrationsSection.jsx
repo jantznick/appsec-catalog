@@ -207,7 +207,7 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
                                 {provider === 'WIZ' ? (
                                   filter?.folderId || filter?.folderName ? (
                                     <p className="text-sm text-gray-800">
-                                      <span className="font-medium">{filter?.folderName || '—'}</span>
+                                      <span className="font-medium">{filter?.folderName || '-'}</span>
                                       {filter?.folderId ? (
                                         <span className="block text-xs font-mono text-gray-500">
                                           {filter.folderId}
@@ -219,7 +219,7 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
                                   )
                                 ) : filter?.tagUuid || filter?.tagName ? (
                                   <p className="text-sm text-gray-800">
-                                    <span className="font-medium">{filter?.tagName || '—'}</span>
+                                    <span className="font-medium">{filter?.tagName || '-'}</span>
                                     {filter?.tagUuid ? (
                                       <span className="block text-xs font-mono text-gray-500">
                                         {filter.tagUuid}
@@ -265,8 +265,8 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
         title={
           tagModalProvider
             ? tagModalProvider === 'WIZ'
-              ? `Select folder — ${integrationProviderLabel(tagModalProvider)}`
-              : `Select tag — ${integrationProviderLabel(tagModalProvider)}`
+              ? `Select folder - ${integrationProviderLabel(tagModalProvider)}`
+              : `Select tag - ${integrationProviderLabel(tagModalProvider)}`
             : 'Select'
         }
         isWiz={tagModalProvider === 'WIZ'}

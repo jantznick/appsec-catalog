@@ -10,7 +10,7 @@ const router = express.Router();
 
 /**
  * GET /api/policies
- * - No query: full list (admin only), includes control counts — policy admin UI.
+ * - No query: full list (admin only), includes control counts - policy admin UI.
  * - ?forCompany=<companyId>: policies applicable to that company (admin or member of that company).
  */
 router.get('/', requireAuth, async (req, res) => {
@@ -60,7 +60,7 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/policies/:id — Full policy + controls (admin). Company members: same controls/fields
+// GET /api/policies/:id - Full policy + controls (admin). Company members: same controls/fields
 // if this policy applies to their company (read-only; no targeting/assignment lists).
 router.get('/:id', requireAuth, async (req, res) => {
   try {

@@ -8,6 +8,7 @@ import {
   assertAtLeastOneProvider,
 } from '../services/securityFindingsExportService.js';
 import { createSecurityFindingsJob } from '../services/securityFindingsJobRunner.js';
+import { securityOverviewCsvFilename } from '../utils/securityOverviewFilename.js';
 
 const router = express.Router();
 
@@ -102,8 +103,13 @@ router.get('/:companyId/security-findings/jobs/:id/csv', requireAuth, async (req
   if (j.status !== 'complete' || !j.resultCsv) {
     return res.status(409).json({ error: 'Not ready' });
   }
+  const companyName = (await prisma.company.findUnique({
+    where: { id: req.params.companyId },
+    select: { name: true },
+  }))?.name;
+  const filename = securityOverviewCsvFilename({ scope: 'SINGLE_COMPANY', companyName: companyName ?? null });
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="security-findings-${req.params.id}.csv"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   return res.send(j.resultCsv);
 });
 

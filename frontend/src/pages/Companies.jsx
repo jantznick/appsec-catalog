@@ -98,7 +98,7 @@ export function Companies() {
     {
       accessorKey: 'domains',
       header: 'Email Domains',
-      cell: ({ row }) => row.original.domains || <span className="text-gray-400">—</span>,
+      cell: ({ row }) => row.original.domains || <span className="text-gray-400">-</span>,
     },
     {
       accessorKey: 'division',
@@ -116,7 +116,7 @@ export function Companies() {
             </Link>
           );
         }
-        return <span className="text-gray-400">—</span>;
+        return <span className="text-gray-400">-</span>;
       },
     },
     {
@@ -141,7 +141,7 @@ export function Companies() {
             Custom keys
           </span>
         ) : (
-          <span className="text-xs text-gray-400">—</span>
+          <span className="text-xs text-gray-400">-</span>
         ),
       enableSorting: false,
     }] : []),
@@ -161,7 +161,7 @@ export function Companies() {
             </span>
           );
         }
-        return <span className="text-xs text-gray-400">—</span>;
+        return <span className="text-xs text-gray-400">-</span>;
       },
       enableSorting: true,
       sortingFn: (rowA, rowB) => {

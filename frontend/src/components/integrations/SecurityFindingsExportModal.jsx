@@ -7,13 +7,14 @@ import { Modal } from '../ui/Modal.jsx';
 import { Checkbox } from '../ui/Checkbox.jsx';
 import { Input } from '../ui/Input.jsx';
 import { Select } from '../ui/Select.jsx';
+import { securityOverviewCsvFilename } from '../../lib/securityOverviewFilename.js';
 
 const TIME_OPTIONS = [
   { value: 'all', label: 'All time' },
   { value: '7', label: 'Last 7 days' },
   { value: '30', label: 'Last 30 days' },
   { value: '90', label: 'Last 90 days' },
-  { value: 'custom', label: 'Custom (days)…' },
+  { value: 'custom', label: 'Custom (days)...' },
 ];
 
 const TOAST_EXPORT_GENERIC =
@@ -21,15 +22,16 @@ const TOAST_EXPORT_GENERIC =
 
 /**
  * @param {string} jobId
+ * @param {{ scope: 'ADMIN_MULTI' | 'SINGLE_COMPANY', companyName?: string | null }} o
  */
-async function downloadCsvForJobId(jobId) {
+async function downloadCsvForJobId(jobId, o) {
   const p = `/api/security-findings/jobs/${encodeURIComponent(jobId)}/csv`;
   const text = await api.fetchSecurityFindingsCsv(p);
   const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
   const u = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = u;
-  a.download = `security-findings-${jobId.slice(0, 8)}.csv`;
+  a.download = securityOverviewCsvFilename({ scope: o.scope, companyName: o.companyName ?? null });
   a.click();
   URL.revokeObjectURL(u);
 }
@@ -118,6 +120,13 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
     pollSessionRef.current += 1;
   }, []);
 
+  const stopPollIntervalOnly = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }, []);
+
   const handleRequestClose = useCallback(() => {
     if (exporting && !downloaded) {
       toast.info(
@@ -178,14 +187,18 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
             return;
           }
           if (s.status === 'complete') {
-            clearPoll();
             if (session !== pollSessionRef.current) {
               return;
             }
+            // Do not call clearPoll() here: it bumps pollSessionRef and would skip the download.
+            stopPollIntervalOnly();
             setExporting(false);
             setDownloaded(true);
             try {
-              await downloadCsvForJobId(jid);
+              await downloadCsvForJobId(jid, {
+                scope: mode === 'admin' ? 'ADMIN_MULTI' : 'SINGLE_COMPANY',
+                companyName: mode === 'company' ? companyName : null,
+              });
               if (session !== pollSessionRef.current) {
                 return;
               }
@@ -214,7 +227,7 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
         void run();
       }, 2000);
     },
-    [clearPoll],
+    [clearPoll, stopPollIntervalOnly, mode, companyName],
   );
 
   const startExport = async () => {
@@ -277,7 +290,7 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
         <p className="text-sm text-gray-800 mb-2">
           <span className="font-medium">Company: </span>
           {companyName}. Rows: company line (if configured), one line per app, then &quot;Applications total&quot; when
-          breaking down by app.
+          breaking down by app. Multi-company (admin) by-app reports list all company rows first, then all applications.
         </p>
       )}
 
@@ -327,14 +340,15 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
               onChange={(e) => setSeparateByApp(e.target.checked)}
             />
             <span className="min-w-0 flex-1 leading-snug">
-              Separate by application (company row, each app, app subtotal; off = one line per company)
+              Separate by application (multi-company: all company rows, then all apps, no &quot;Applications total&quot;
+              row; one company: by app plus subtotal; off: one line per company)
             </span>
           </label>
         </div>
       )}
 
       {loadingPreview ? (
-        <p className="text-sm text-gray-500 py-4">Loading companies…</p>
+        <p className="text-sm text-gray-500 py-4">Loading companies...</p>
       ) : mode === 'admin' ? (
         <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-md divide-y">
           {companies.map((c) => (
@@ -370,7 +384,7 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
 
       {exporting && (
         <p className="text-sm text-blue-800 mt-3" role="status">
-          {jobStatus || 'Preparing…'}
+          {jobStatus || 'Preparing...'}
         </p>
       )}
       {downloaded && (
@@ -387,7 +401,7 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
           onClick={startExport}
           disabled={exporting || loadingPreview || !atLeastOneIntegration}
         >
-          {exporting ? 'Exporting…' : 'Export CSV'}
+          {exporting ? 'Exporting...' : 'Export CSV'}
         </Button>
       </div>
     </Modal>

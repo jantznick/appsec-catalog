@@ -13,7 +13,7 @@ export function ProductDetailHeader({ product, onBack, isAdmin, onDelete }) {
           <p className="text-gray-600">
             Company:{' '}
             <Link to={`/companies/${product.company.id}`} className="text-blue-600 hover:text-blue-700">
-              {product.company?.name || '—'}
+              {product.company?.name || '-'}
             </Link>
           </p>
         </div>

@@ -140,7 +140,7 @@ export function PolicyViewer() {
                         <div className="flex-1 min-w-0">
                           <div className="flex flex-wrap items-center gap-2 mb-2">
                             <CardTitle className="text-base text-gray-900">
-                              {control.controlId} — {control.name}
+                              {control.controlId} - {control.name}
                             </CardTitle>
                             {!control.isActive && (
                               <span className="px-2 py-1 text-xs font-medium rounded bg-gray-200 text-gray-700">
@@ -169,7 +169,7 @@ export function PolicyViewer() {
                             Field mappings
                           </span>
                           <p className="text-xs text-gray-500 mb-3">
-                            Combined with <strong>{control.evaluationLogic || 'AND'}</strong> —{' '}
+                            Combined with <strong>{control.evaluationLogic || 'AND'}</strong> -{' '}
                             {control.evaluationLogic === 'OR'
                               ? 'at least one check must pass.'
                               : 'all checks must pass.'}
@@ -213,7 +213,7 @@ export function PolicyViewer() {
                       <CardContent>
                         <div className="border-t border-gray-200 pt-4 mt-2">
                           <p className="text-sm text-gray-500">
-                            No field mappings — compliance may rely on admin overrides or other rules.
+                            No field mappings - compliance may rely on admin overrides or other rules.
                           </p>
                         </div>
                       </CardContent>

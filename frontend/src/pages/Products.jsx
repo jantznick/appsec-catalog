@@ -331,9 +331,9 @@ export function Products() {
                 {filteredProducts.map((product) => (
                   <TableRow key={product.id} onClick={() => navigate(`/products/${product.id}`)}>
                     <TableCell className="font-medium text-blue-700">{product.name}</TableCell>
-                    <TableCell>{product.company?.name || '—'}</TableCell>
-                    <TableCell>{product.status || '—'}</TableCell>
-                    <TableCell>{product.facing || '—'}</TableCell>
+                    <TableCell>{product.company?.name || '-'}</TableCell>
+                    <TableCell>{product.status || '-'}</TableCell>
+                    <TableCell>{product.facing || '-'}</TableCell>
                     <TableCell>{product._count?.applications ?? 0}</TableCell>
                   </TableRow>
                 ))}

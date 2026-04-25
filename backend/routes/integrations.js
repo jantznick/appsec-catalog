@@ -495,14 +495,14 @@ router.put(
 );
 
 /**
- * GET /api/integrations/providers — supported provider ids for UI
+ * GET /api/integrations/providers - supported provider ids for UI
  */
 router.get('/integrations/providers', requireAuth, async (req, res) => {
   res.json({ providers: SUPPORTED_PROVIDERS });
 });
 
 /**
- * GET /api/integrations/admin/company-overview — admin: all companies with company-scoped API credentials
+ * GET /api/integrations/admin/company-overview - admin: all companies with company-scoped API credentials
  */
 router.get(
   '/integrations/admin/company-overview',

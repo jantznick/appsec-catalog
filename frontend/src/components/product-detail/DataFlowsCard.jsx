@@ -82,10 +82,10 @@ export function DataFlowsCard({
                       <TableRow key={`ingress-${ingress.id}`}>
                         <TableCell className="font-medium">Client</TableCell>
                         <TableCell className="font-medium">
-                          {ingress.application?.name || '—'}
+                          {ingress.application?.name || '-'}
                         </TableCell>
                         <TableCell>Ingress</TableCell>
-                        <TableCell>—</TableCell>
+                        <TableCell>-</TableCell>
                         <TableCell>{ingress.channel || 'default'}</TableCell>
                         <TableCell>unidirectional</TableCell>
                         <TableCell>
@@ -106,12 +106,12 @@ export function DataFlowsCard({
                         className="cursor-pointer"
                         onClick={() => openEditFlowModal(flow.id)}
                       >
-                        <TableCell className="font-medium">{flow.sourceApplication?.name || '—'}</TableCell>
-                        <TableCell className="font-medium">{flow.targetApplication?.name || '—'}</TableCell>
-                        <TableCell>{flow.flowName || '—'}</TableCell>
-                        <TableCell>{flow.dataClassification || '—'}</TableCell>
-                        <TableCell>{flow.protocol || '—'}</TableCell>
-                        <TableCell>{flow.direction || '—'}</TableCell>
+                        <TableCell className="font-medium">{flow.sourceApplication?.name || '-'}</TableCell>
+                        <TableCell className="font-medium">{flow.targetApplication?.name || '-'}</TableCell>
+                        <TableCell>{flow.flowName || '-'}</TableCell>
+                        <TableCell>{flow.dataClassification || '-'}</TableCell>
+                        <TableCell>{flow.protocol || '-'}</TableCell>
+                        <TableCell>{flow.direction || '-'}</TableCell>
                         <TableCell>
                           <Button
                             size="sm"

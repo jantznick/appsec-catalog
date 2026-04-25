@@ -760,7 +760,7 @@ model IntegrationCredential {
   @@index([companyId])
 }
 
-// Per-company filter metadata for a provider (e.g. Tenable tag UUID) — no secrets
+// Per-company filter metadata for a provider (e.g. Tenable tag UUID) - no secrets
 model CompanyToolLink {
   id        String   @id @default(cuid())
   companyId String
@@ -774,7 +774,7 @@ model CompanyToolLink {
   @@index([provider])
 }
 
-// Per-application filter for a provider (e.g. Tenable tag) — no secrets; credentials come from the app’s company
+// Per-application filter for a provider (e.g. Tenable tag) - no secrets; credentials come from the app’s company
 model ApplicationToolLink {
   id            String      @id @default(cuid())
   applicationId String

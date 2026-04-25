@@ -138,7 +138,7 @@ export async function listTenableIoTagValues(keys, baseUrl) {
 }
 
 /**
- * O(1) tag lookup for exports — avoids listing the entire /tags/values catalog.
+ * O(1) tag lookup for exports - avoids listing the entire /tags/values catalog.
  * @param {{ accessKey: string, secretKey: string }} keys
  * @param {string | null | undefined} baseUrl
  * @param {string} tagValueUuid

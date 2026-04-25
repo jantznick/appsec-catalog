@@ -75,7 +75,7 @@ function addSev(a, b) {
  * @param {string} companyId
  * @param {import('@prisma/client').Prisma.JsonValue} filter
  * @param {object} tr
- * @param {string} [findingsFor] — Tenable server log context (company / app)
+ * @param {string} [findingsFor] - Tenable server log context (company / app)
  */
 async function tenableFor(companyId, filter, tr, findingsFor) {
   const res = await resolveIntegrationForCompany(companyId, PROVIDER_TENABLE_IO);
@@ -201,7 +201,7 @@ function combinedRowData(t, w, pout, err) {
  * @param {string} companyId
  * @param { 'all' | { from?: string, to?: string, all?: boolean } } tr
  * @param { (s: string) => void | Promise<void> } [onProgress]
- * @param { { TENABLE_IO?: boolean, WIZ?: boolean } } [providers] — omit both in practice disallowed; defaults both true
+ * @param { { TENABLE_IO?: boolean, WIZ?: boolean } } [providers] - omit both in practice disallowed; defaults both true
  */
 export async function buildSecurityFindingsCsv(
   prisma,
@@ -237,6 +237,8 @@ export async function buildSecurityFindingsCsv(
       },
     },
   });
+  /** Admin, multiple companies, separate by app: company summary rows first, then all app rows; no "Applications total". */
+  const isAdminMultiByApp = separateByApp && ids.length > 1;
   const meta1 = {
     type: 'security_findings',
     generatedAt: new Date().toISOString(),
@@ -252,6 +254,7 @@ export async function buildSecurityFindingsCsv(
   const firstLine = `# ${JSON.stringify(meta1)}`;
   const rows = /** @type {string[][]} */ ([
     [firstLine],
+    [],
     [
       'Row',
       'Application',
@@ -270,14 +273,152 @@ export async function buildSecurityFindingsCsv(
   let cIdx = 0;
   await Promise.resolve(
     onProgress(
-      `Starting export for ${companies.length} company/companies — Tenable/Wiz may take many minutes…`,
+      `Starting export for ${companies.length} company/companies - Tenable/Wiz may take many minutes...`,
     ),
   );
+  if (isAdminMultiByApp) {
+    const companyBlock = /** @type {string[][]} */ ([]);
+    const appBlock = /** @type {string[][]} */ ([]);
+    for (const co of companies) {
+      cIdx += 1;
+      await Promise.resolve(
+        onProgress(
+          `Processing ${co.name} (${cIdx} of ${companies.length}) - Tenable/Wiz in progress, may take minutes...`,
+        ),
+      );
+      const coTlink = co.companyToolLinks.find((l) => l.provider === PROVIDER_TENABLE_IO);
+      const coWlink = co.companyToolLinks.find((l) => l.provider === PROVIDER_WIZ);
+      if (coTlink || coWlink) {
+        const t0 =
+          coTlink && includeTenable
+            ? await tenableFor(
+                co.id,
+                coTlink.filter,
+                tr,
+                `By app table: ${co.name} (Tenable company link)`,
+              )
+            : coTlink
+              ? emptySev()
+              : null;
+        const w0 =
+          coWlink && includeWiz
+            ? await wizFor(co.id, coWlink.filter, tr)
+            : coWlink
+              ? emptySev()
+              : null;
+        const p0 = /** @type {string[]} */ ([]);
+        if (coTlink && includeTenable) p0.push(PROVIDER_TENABLE_IO);
+        if (coWlink && includeWiz) p0.push(PROVIDER_WIZ);
+        const tPart = t0 || { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
+        const wPart = w0 || { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
+        const emsg = mergeSourceErrors(tPart, wPart);
+        const cd = combinedRowData(
+          tPart,
+          wPart,
+          p0,
+          emsg,
+        );
+        const tot = cd.critical + cd.high + cd.medium + cd.low + cd.info;
+        companyBlock.push([
+          co.name,
+          '',
+          co.name,
+          '',
+          String(cd.critical),
+          String(cd.high),
+          String(cd.medium),
+          String(cd.low),
+          String(cd.info),
+          String(tot),
+          cd.sources,
+          cd.notes,
+        ]);
+      }
+      for (const app of co.applications) {
+        const tL = app.applicationToolLinks.find((l) => l.provider === PROVIDER_TENABLE_IO);
+        const wL = app.applicationToolLinks.find((l) => l.provider === PROVIDER_WIZ);
+        if (!tL && !wL) {
+          appBlock.push([
+            'Application',
+            app.name,
+            co.name,
+            '1',
+            '0',
+            '0',
+            '0',
+            '0',
+            '0',
+            '0',
+            '',
+            '',
+          ]);
+          continue;
+        }
+        const t0 = tL
+          ? (includeTenable
+              ? await tenableFor(
+                  co.id,
+                  tL.filter,
+                  tr,
+                  `By app table: ${co.name} (Tenable app: ${app.name})`,
+                )
+              : emptySev())
+          : { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
+        const w0 = wL
+          ? (includeWiz
+              ? await wizFor(co.id, wL.filter, tr)
+              : emptySev())
+          : { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
+        const p0 = /** @type {string[]} */ ([]);
+        if (tL && includeTenable) {
+          p0.push(PROVIDER_TENABLE_IO);
+        }
+        if (wL && includeWiz) {
+          p0.push(PROVIDER_WIZ);
+        }
+        const emsg2 = mergeSourceErrors(t0, w0);
+        const cd = combinedRowData(
+          t0,
+          w0,
+          p0,
+          emsg2,
+        );
+        const tot2 = cd.critical + cd.high + cd.medium + cd.low + cd.info;
+        appBlock.push([
+          'Application',
+          app.name,
+          co.name,
+          '1',
+          String(cd.critical),
+          String(cd.high),
+          String(cd.medium),
+          String(cd.low),
+          String(cd.info),
+          String(tot2),
+          cd.sources,
+          cd.notes,
+        ]);
+      }
+      await Promise.resolve(
+        onProgress(
+          cIdx < companies.length
+            ? `Finished ${co.name} - continuing...`
+            : `Finished ${co.name} - building CSV file...`,
+        ),
+      );
+    }
+    for (const r of companyBlock) {
+      rows.push(r);
+    }
+    for (const r of appBlock) {
+      rows.push(r);
+    }
+  } else {
   for (const co of companies) {
     cIdx += 1;
     await Promise.resolve(
       onProgress(
-        `Processing ${co.name} (${cIdx} of ${companies.length}) — Tenable/Wiz in progress, may take minutes…`,
+        `Processing ${co.name} (${cIdx} of ${companies.length}) - Tenable/Wiz in progress, may take minutes...`,
       ),
     );
 
@@ -389,7 +530,7 @@ export async function buildSecurityFindingsCsv(
       const tot =
         cd.critical + cd.high + cd.medium + cd.low + cd.info;
       rows.push([
-        'Company (company-wide link)',
+        co.name,
         '',
         co.name,
         '',
@@ -497,10 +638,11 @@ export async function buildSecurityFindingsCsv(
     await Promise.resolve(
       onProgress(
         cIdx < companies.length
-          ? `Finished ${co.name} — continuing…`
-          : `Finished ${co.name} — building CSV file…`,
+          ? `Finished ${co.name} - continuing...`
+          : `Finished ${co.name} - building CSV file...`,
       ),
     );
+  }
   }
   return '\uFEFF' + rows.map((r) => r.map(esc).join(',')).join('\n') + '\n';
 }

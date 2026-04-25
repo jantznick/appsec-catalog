@@ -80,7 +80,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
     });
   }, [summary, links, canViewThisCompany]);
 
-  /** Catalog-wide (enterprise) credentials exist — everyone on this page should see this. */
+  /** Catalog-wide (enterprise) credentials exist - everyone on this page should see this. */
   const catalogWideProviders = useMemo(() => {
     return Object.keys(summary).filter((p) => summary[p]?.enterprise?.configured);
   }, [summary]);
@@ -222,7 +222,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
             </div>
           ) : null}
 
-          {/* 2 — Catalog-wide (enterprise): visible to all viewers of this page */}
+          {/* 2 - Catalog-wide (enterprise): visible to all viewers of this page */}
           {!showGlobalEmpty && catalogWideProviders.length > 0 && (
             <div>
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
@@ -245,7 +245,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
                       </div>
                       <p className="text-sm text-gray-700 mt-2">
                         <span className="text-green-800 font-medium">Active</span>
-                        {' — '}
+                        {' - '}
                         {isAdminUser ? (
                           <>
                             shared API access for every company
@@ -279,7 +279,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
             </div>
           )}
 
-          {/* 3 — Company-scoped rows */}
+          {/* 3 - Company-scoped rows */}
           {!showGlobalEmpty && (
             <div>
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
@@ -372,7 +372,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
                                   filter?.folderId || filter?.folderName ? (
                                     <p className="text-sm text-gray-800">
                                       <span className="font-medium text-gray-900">
-                                        {filter?.folderName || '—'}
+                                        {filter?.folderName || '-'}
                                       </span>
                                       {filter?.folderId ? (
                                         <span className="block sm:inline sm:ml-2 mt-0.5 sm:mt-0 text-xs font-mono text-gray-500">
@@ -386,7 +386,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
                                 ) : filter?.tagUuid || filter?.tagName ? (
                                   <p className="text-sm text-gray-800">
                                     <span className="font-medium text-gray-900">
-                                      {filter?.tagName || '—'}
+                                      {filter?.tagName || '-'}
                                     </span>
                                     {filter?.tagUuid ? (
                                       <span className="block sm:inline sm:ml-2 mt-0.5 sm:mt-0 text-xs font-mono text-gray-500">
@@ -515,8 +515,8 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
         title={
           tagModalProvider
             ? tagModalProvider === 'WIZ'
-              ? `Select folder — ${integrationProviderLabel(tagModalProvider)}`
-              : `Select tag — ${integrationProviderLabel(tagModalProvider)}`
+              ? `Select folder - ${integrationProviderLabel(tagModalProvider)}`
+              : `Select tag - ${integrationProviderLabel(tagModalProvider)}`
             : 'Select'
         }
         isWiz={tagModalProvider === 'WIZ'}

@@ -62,7 +62,7 @@ export async function createSecurityFindingsJob({ prisma, userId, scope, company
       companyId,
       requestPayload,
       status: 'running',
-      message: 'Queued — starting…',
+      message: 'Queued - starting...',
     },
   });
   logInfo({
@@ -156,7 +156,7 @@ export async function runSecurityFindingsJob({ prisma, jobId }) {
   };
 
   try {
-    await setMsg('Running — contacting vendor APIs (this can take several minutes)…');
+    await setMsg('Running - contacting vendor APIs (this can take several minutes)...');
     const csv = await buildSecurityFindingsCsv(prisma, {
       companyIds,
       timeRange: tr,

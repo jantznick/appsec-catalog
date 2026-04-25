@@ -1,5 +1,5 @@
 /**
- * Structured integration logs — one JSON line per event, prefix `[integrations]`.
+ * Structured integration logs - one JSON line per event, prefix `[integrations]`.
  * Never log secrets, tokens, API keys, or raw Authorization headers.
  *
  * Set INTEGRATIONS_VERBOSE=1 (or "true") for extra detail (per-page fetches, fallbacks).

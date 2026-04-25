@@ -3,7 +3,7 @@
  */
 
 /**
- * @param {string} company — user-visible scope, e.g. "Acme — Tenable app: my-api"
+ * @param {string} company - user-visible scope, e.g. "Acme - Tenable app: my-api"
  */
 export function logFetchingFindingsFor(company) {
   console.log(`fetching findings for ${company}`);
@@ -34,7 +34,7 @@ export function logPaginationDiscovered(v) {
  * @param {object} o
  * @param {number} o.workbenchAssetCount
  * @param {number} o.uniqueVulnCount
- * @param {string} o.counts — e.g. c=0 h=1 m=2
+ * @param {string} o.counts - e.g. c=0 h=1 m=2
  */
 export function logTenableResultSummary(label, error, o) {
   const e = error ? ` error=${String(error).slice(0, 200)}` : '';

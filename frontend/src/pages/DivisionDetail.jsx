@@ -300,7 +300,7 @@ export function DivisionDetail() {
                           {company.averageScore}/100
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-400">—</span>
+                        <span className="text-xs text-gray-400">-</span>
                       )}
                     </TableCell>
                     <TableCell>{company.applicationCount}</TableCell>

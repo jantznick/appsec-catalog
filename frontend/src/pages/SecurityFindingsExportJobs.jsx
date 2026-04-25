@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
+import { securityOverviewCsvFilename } from '../lib/securityOverviewFilename.js';
 import { toast } from '../components/ui/Toast.jsx';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.jsx';
 import { Button } from '../components/ui/Button.jsx';
@@ -18,7 +19,7 @@ const JOBS_ERR_TOAST =
   'Could not load jobs. If this continues, ask an administrator to check server logs.';
 
 function formatWhen(iso) {
-  if (!iso) return '—';
+  if (!iso) return '-';
   try {
     return new Date(iso).toLocaleString();
   } catch {
@@ -34,7 +35,7 @@ function statusClass(status) {
 }
 
 function formatDurationMs(ms) {
-  if (ms == null || Number.isNaN(/** @type {number} */(ms))) return '—';
+  if (ms == null || Number.isNaN(/** @type {number} */(ms))) return '-';
   const n = Number(ms);
   if (n < 1000) {
     return `${n} ms`;
@@ -53,13 +54,13 @@ function formatDurationMs(ms) {
  */
 function RunTimeCell({ j, st }) {
   if (st === 'complete' || st === 'error' || st === 'cancelled') {
-    return j.durationMs != null ? formatDurationMs(/** @type {number} */(j.durationMs)) : '—';
+    return j.durationMs != null ? formatDurationMs(/** @type {number} */(j.durationMs)) : '-';
   }
   if (st === 'running' && j.runStartedAt) {
     return (
       <span
         className="text-amber-900"
-        title="Export in progress — this page refreshes status every few seconds while a job is running"
+        title="Export in progress - this page refreshes status every few seconds while a job is running"
       >
         In progress
         <span className="block text-xs text-gray-600">
@@ -71,7 +72,7 @@ function RunTimeCell({ j, st }) {
   if (st === 'running') {
     return <span className="text-gray-600" title="Waiting for worker to start">Queued</span>;
   }
-  return '—';
+  return '-';
 }
 
 /**
@@ -145,7 +146,7 @@ export function SecurityFindingsExportJobs() {
     }
   };
 
-  const download = async (jobId) => {
+  const download = async (jobId, job) => {
     const path = `/api/security-findings/jobs/${encodeURIComponent(jobId)}/csv`;
     try {
       const text = await api.fetchSecurityFindingsCsv(path);
@@ -153,7 +154,10 @@ export function SecurityFindingsExportJobs() {
       const u = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = u;
-      a.download = `security-findings-${String(jobId).slice(0, 8)}.csv`;
+      a.download = securityOverviewCsvFilename({
+        scope: String(job?.scope || ''),
+        companyName: job?.companyName,
+      });
       a.click();
       URL.revokeObjectURL(u);
       toast.success('Download started');
@@ -174,8 +178,9 @@ export function SecurityFindingsExportJobs() {
       <p className="text-sm text-gray-600 mb-4 max-w-3xl">
         Tenable and Wiz CSV exports you started. While a job is running, vendor API calls can take many minutes; this
         list refreshes every few seconds until no job is running. You can <strong>Cancel</strong> a running job; the
-        worker stops at the next internal step (a long in-flight vendor call may still need to finish).         When status is <span className="text-green-700">complete</span>, use <strong>Download CSV</strong>. You can
-        <strong> Delete</strong> finished or failed jobs to free space (not available while a job is still running — use
+        worker stops at the next internal step (a long in-flight vendor call may still need to finish). When status
+        is <span className="text-green-700">complete</span>, use <strong>Download CSV</strong>. You can
+        <strong> Delete</strong> finished or failed jobs to free space (not available while a job is still running - use
         <strong> Cancel</strong> first if needed). <strong>Retention:</strong> when you start a new export, we remove your
         completed or failed jobs that are more than 30 days old. Running jobs are never auto-deleted.
       </p>
@@ -219,7 +224,7 @@ export function SecurityFindingsExportJobs() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p className="text-sm text-gray-500">Loading…</p>
+            <p className="text-sm text-gray-500">Loading...</p>
           ) : jobs.length === 0 ? (
             <p className="text-sm text-gray-600">No jobs yet. Start an export from company integrations or admin.</p>
           ) : (
@@ -260,7 +265,7 @@ export function SecurityFindingsExportJobs() {
                         ) : companyId ? (
                           <span className="text-gray-600 font-mono text-xs">{companyId}</span>
                         ) : (
-                          '—'
+                          '-'
                         )}
                       </TableCell>
                       <TableCell>
@@ -292,11 +297,16 @@ export function SecurityFindingsExportJobs() {
                               disabled={cancellingId === id}
                               onClick={() => void cancelJob(id)}
                             >
-                              {cancellingId === id ? 'Cancelling…' : 'Cancel'}
+                              {cancellingId === id ? 'Cancelling...' : 'Cancel'}
                             </Button>
                           )}
                           {st === 'complete' && (
-                            <Button type="button" variant="primary" size="sm" onClick={() => void download(id)}>
+                            <Button
+                              type="button"
+                              variant="primary"
+                              size="sm"
+                              onClick={() => void download(id, j)}
+                            >
                               Download CSV
                             </Button>
                           )}
@@ -309,7 +319,7 @@ export function SecurityFindingsExportJobs() {
                               disabled={deletingId === id}
                               onClick={() => setDeleteConfirmJobId(id)}
                             >
-                              {deletingId === id ? 'Deleting…' : 'Delete'}
+                              {deletingId === id ? 'Deleting...' : 'Delete'}
                             </Button>
                           )}
                         </div>

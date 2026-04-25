@@ -40,7 +40,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     # Optional: load env files into the container (e.g. if you don’t bake .env into the image).
-    # Do not set INTEGRATIONS_ENCRYPTION_KEY= in `environment` with an empty default — that
+    # Do not set INTEGRATIONS_ENCRYPTION_KEY= in `environment` with an empty default - that
     # blocks dotenv from filling it from a mounted/copied .env (dotenv won’t override set vars).
     env_file:
       - path: .env

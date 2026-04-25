@@ -270,18 +270,18 @@ export function Applications() {
               }}
               className="text-gray-700 hover:text-blue-600 cursor-pointer"
             >
-              {app.company?.name || '—'}
+              {app.company?.name || '-'}
             </span>
           );
         }
-        return <span>{app.company?.name || '—'}</span>;
+        return <span>{app.company?.name || '-'}</span>;
       },
       enableSorting: isAdmin(),
     },
     {
       accessorKey: 'owner',
       header: 'Owner',
-      cell: ({ row }) => row.original.owner || '—',
+      cell: ({ row }) => row.original.owner || '-',
     },
     {
       accessorKey: 'status',
@@ -327,7 +327,7 @@ export function Applications() {
             </span>
           );
         }
-        return <span className="text-xs text-gray-400">—</span>;
+        return <span className="text-xs text-gray-400">-</span>;
       },
       enableSorting: true,
       sortingFn: (rowA, rowB) => {

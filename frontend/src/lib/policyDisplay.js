@@ -19,7 +19,7 @@ export function getOperatorLabel(operator) {
 
 export function getPolicyFieldLabel(availableFields, fieldPath) {
   if (!Array.isArray(availableFields) || !fieldPath) {
-    return fieldPath || '—';
+    return fieldPath || '-';
   }
   const field = availableFields.find((f) => f.path === fieldPath);
   return field ? field.label : fieldPath;

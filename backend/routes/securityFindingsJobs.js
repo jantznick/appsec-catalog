@@ -1,6 +1,7 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth } from '../middleware/auth.js';
+import { securityOverviewCsvFilename } from '../utils/securityOverviewFilename.js';
 
 const router = express.Router();
 router.use(requireAuth);
@@ -41,7 +42,7 @@ function jobToJson(job, companyName) {
   };
 }
 
-/** GET /api/security-findings/jobs — list current user's jobs (newest first) */
+/** GET /api/security-findings/jobs - list current user's jobs (newest first) */
 router.get('/jobs', async (req, res) => {
   try {
     const userId = req.session.userId;
@@ -86,7 +87,7 @@ router.get('/jobs/:id', async (req, res) => {
   }
 });
 
-/** POST /api/security-findings/jobs/:id/cancel — best-effort stop; worker checks between steps */
+/** POST /api/security-findings/jobs/:id/cancel - best-effort stop; worker checks between steps */
 router.post('/jobs/:id/cancel', async (req, res) => {
   try {
     const userId = req.session.userId;
@@ -130,7 +131,7 @@ router.post('/jobs/:id/cancel', async (req, res) => {
   }
 });
 
-/** DELETE /api/security-findings/jobs/:id — own jobs only; not while running (cancel first) */
+/** DELETE /api/security-findings/jobs/:id - own jobs only; not while running (cancel first) */
 router.delete('/jobs/:id', async (req, res) => {
   try {
     const userId = req.session.userId;
@@ -159,7 +160,7 @@ router.get('/jobs/:id/csv', async (req, res) => {
     const userId = req.session.userId;
     const job = await prisma.securityFindingsJob.findFirst({
       where: { id: req.params.id, userId },
-      select: { status: true, resultCsv: true },
+      select: { status: true, resultCsv: true, scope: true, companyId: true },
     });
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
@@ -167,8 +168,13 @@ router.get('/jobs/:id/csv', async (req, res) => {
     if (job.status !== 'complete' || !job.resultCsv) {
       return res.status(409).json({ error: 'Not ready' });
     }
+    let companyName = null;
+    if (job.scope === 'SINGLE_COMPANY' && job.companyId) {
+      companyName = (await prisma.company.findUnique({ where: { id: job.companyId }, select: { name: true } }))?.name ?? null;
+    }
+    const filename = securityOverviewCsvFilename({ scope: job.scope, companyName });
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="security-findings-${req.params.id}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return res.send(job.resultCsv);
   } catch (e) {
     console.error('security findings job csv', e);

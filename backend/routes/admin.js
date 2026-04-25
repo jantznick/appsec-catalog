@@ -8,6 +8,7 @@ import {
   assertAtLeastOneProvider,
 } from '../services/securityFindingsExportService.js';
 import { createSecurityFindingsJob } from '../services/securityFindingsJobRunner.js';
+import { securityOverviewCsvFilename } from '../utils/securityOverviewFilename.js';
 
 const router = express.Router();
 
@@ -135,7 +136,7 @@ router.get('/applications', async (req, res) => {
   }
 });
 
-// Security findings export (Tenable WAS + Wiz SAST) — real-time vendor calls, async job
+// Security findings export (Tenable WAS + Wiz SAST) - real-time vendor calls, async job
 router.get('/security-findings/preview', async (req, res) => {
   try {
     const companies = await getExportPreviewList(prisma, { companyIds: null });
@@ -192,7 +193,7 @@ router.get('/security-findings/jobs/:id', async (req, res) => {
 router.get('/security-findings/jobs/:id/csv', async (req, res) => {
   const j = await prisma.securityFindingsJob.findFirst({
     where: { id: req.params.id, userId: req.session.userId },
-    select: { status: true, resultCsv: true },
+    select: { status: true, resultCsv: true, scope: true, companyId: true },
   });
   if (!j) {
     return res.status(404).json({ error: 'Job not found' });
@@ -200,8 +201,13 @@ router.get('/security-findings/jobs/:id/csv', async (req, res) => {
   if (j.status !== 'complete' || !j.resultCsv) {
     return res.status(409).json({ error: 'Not ready' });
   }
+  let companyName = null;
+  if (j.scope === 'SINGLE_COMPANY' && j.companyId) {
+    companyName = (await prisma.company.findUnique({ where: { id: j.companyId }, select: { name: true } }))?.name ?? null;
+  }
+  const filename = securityOverviewCsvFilename({ scope: j.scope, companyName });
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="security-findings-${req.params.id}.csv"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   return res.send(j.resultCsv);
 });
 

@@ -464,7 +464,7 @@ export function DomainDetail() {
                 </Link>
               </p>
             ) : (
-              <p className="text-gray-600">Company: —</p>
+              <p className="text-gray-600">Company: -</p>
             )}
           </div>
           {isAdmin() && (
@@ -603,7 +603,7 @@ export function DomainDetail() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   ) : (
-                    <p className="text-gray-900">{domain.name || '—'}</p>
+                    <p className="text-gray-900">{domain.name || '-'}</p>
                   )}
                 </div>
 
@@ -620,7 +620,7 @@ export function DomainDetail() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   ) : (
-                    <p className="text-gray-900">{domain.owner || '—'}</p>
+                    <p className="text-gray-900">{domain.owner || '-'}</p>
                   )}
                 </div>
 
@@ -653,14 +653,14 @@ export function DomainDetail() {
                 >
                   <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Apex Domain Group</p>
                   <p className={apexDomainRecord?.id ? 'text-blue-600' : 'text-gray-900'}>
-                    {domain.apexDomain || '—'}
+                    {domain.apexDomain || '-'}
                   </p>
                 </div>
 
                 <div className="p-2 text-left">
                   <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Updated</p>
                   <p className="text-gray-900">
-                    {domain.updatedAt ? new Date(domain.updatedAt).toLocaleString() : '—'}
+                    {domain.updatedAt ? new Date(domain.updatedAt).toLocaleString() : '-'}
                   </p>
                 </div>
 
@@ -743,7 +743,7 @@ export function DomainDetail() {
                             <td className="px-4 py-2 text-sm text-gray-900">
                               {relatedDomain._count?.applicationDomains || 0}
                             </td>
-                            <td className="px-4 py-2 text-sm text-gray-900">{relatedDomain.owner || '—'}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{relatedDomain.owner || '-'}</td>
                             <td className="px-4 py-2 text-sm">
                               <span className={`px-2 py-1 text-xs font-medium rounded ${getStatusBadgeClasses(relatedDomain.status)}`}>
                                 {relatedDomain.status || 'unknown'}
@@ -1113,7 +1113,7 @@ export function DomainDetail() {
                             {application.name}
                           </Link>
                         </TableCell>
-                        <TableCell>{application.owner || '—'}</TableCell>
+                        <TableCell>{application.owner || '-'}</TableCell>
                         {isAdmin() && (
                           <TableCell>
                             {application.company ? (
@@ -1124,7 +1124,7 @@ export function DomainDetail() {
                                 {application.company.name}
                               </Link>
                             ) : (
-                              '—'
+                              '-'
                             )}
                           </TableCell>
                         )}
@@ -1278,8 +1278,8 @@ export function DomainDetail() {
               <p><span className="font-medium text-gray-700">Status:</span> {selectedWebSnapshot.error ? 'failed' : 'captured'}</p>
               <p><span className="font-medium text-gray-700">Attempted:</span> {selectedWebSnapshot.urlAttempted}</p>
               <p><span className="font-medium text-gray-700">Protocol:</span> {selectedWebSnapshot.usedHttpFallback ? 'http fallback' : 'https'}</p>
-              <p><span className="font-medium text-gray-700">HTTP Status:</span> {selectedWebSnapshot.statusCode || '—'}</p>
-              <p><span className="font-medium text-gray-700">Load Time:</span> {selectedWebSnapshot.loadTimeMs ? `${selectedWebSnapshot.loadTimeMs}ms` : '—'}</p>
+              <p><span className="font-medium text-gray-700">HTTP Status:</span> {selectedWebSnapshot.statusCode || '-'}</p>
+              <p><span className="font-medium text-gray-700">Load Time:</span> {selectedWebSnapshot.loadTimeMs ? `${selectedWebSnapshot.loadTimeMs}ms` : '-'}</p>
             </div>
 
             {selectedWebSnapshot.title && (

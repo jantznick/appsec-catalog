@@ -208,7 +208,7 @@ export function DeploymentTokens() {
                     <li><strong>Single Purpose:</strong> These tokens can <strong>only</strong> log deployment records for applications. They cannot read, modify, or delete any other data.</li>
                     <li><strong>Application-Specific:</strong> Each token is locked down to specific applications you choose. A token can only log deployments for the applications it's explicitly associated with.</li>
                     <li><strong>Limited Scope:</strong> Unlike full API tokens, deployment tokens have no access to application details, user data, company information, or any other system resources.</li>
-                    <li><strong>Final Reiteration:</strong> These tokens are intentionally limited in scope. If a token is compromised, the worst-case scenario is unauthorized deployment records being logged for the associated applications—they cannot access or modify any other data.</li>
+                    <li><strong>Final Reiteration:</strong> These tokens are intentionally limited in scope. If a token is compromised, the worst-case scenario is unauthorized deployment records being logged for the associated applications-they cannot access or modify any other data.</li>
                   </ul>
                   <p className="mt-3 text-gray-600">
                     Use these tokens in your CI/CD pipelines to automatically record deployments when code is deployed to your environments.
@@ -319,7 +319,7 @@ export function DeploymentTokens() {
                               {token.company.name}
                             </Link>
                           ) : (
-                            <span className="text-sm text-gray-400">—</span>
+                            <span className="text-sm text-gray-400">-</span>
                           )}
                         </TableCell>
                       )}

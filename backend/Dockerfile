@@ -23,12 +23,12 @@ RUN npm ci
 # Install Chrome runtime used by Puppeteer snapshots
 RUN npx puppeteer browsers install chrome
 
-# All app source (including prisma/schema and migrations) — must come before `prisma generate`
+# All app source (including prisma/schema and migrations) - must come before `prisma generate`
 COPY . .
 
 # Client must be generated from the *final* schema and migrations, not an earlier layer.
 # (Previously, generate ran only after `COPY prisma`, then `COPY . .` could leave schema/migrations
-# ahead of a stale @prisma/client — same symptom as “had to run generate in the running container”.)
+# ahead of a stale @prisma/client - same symptom as “had to run generate in the running container”.)
 RUN chmod +x docker-entrypoint.sh
 RUN npx prisma generate
 

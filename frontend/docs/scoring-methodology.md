@@ -25,7 +25,7 @@ Your app's importance changes how the two scores are weighted. More important ap
 - 40% Knowledge Sharing / 60% Tool Usage
 - Focus on security tools
 
-**Note:** If you don't provide information about your app's criticality, deployment frequency, or facing status, we assume high importance. This encourages you to share complete information—accurate data might actually lower your importance score and give you better weighting.
+**Note:** If you don't provide information about your app's criticality, deployment frequency, or facing status, we assume high importance. This encourages you to share complete information-accurate data might actually lower your importance score and give you better weighting.
 
 ---
 
