@@ -33,6 +33,7 @@ export function CompanyDetail() {
   const [scoreData, setScoreData] = useState(null);
   const [domains, setDomains] = useState([]);
   const [findingsOpen, setFindingsOpen] = useState(false);
+  const [downloadingTechFormLinks, setDownloadingTechFormLinks] = useState(false);
 
   const [divisions, setDivisions] = useState([]);
   const [loadingDivisions, setLoadingDivisions] = useState(false);
@@ -128,6 +129,27 @@ export function CompanyDetail() {
     return isAdmin() || user?.companyId === id;
   };
   const canExportSecurityFindings = () => isAdmin() || user?.companyId === id;
+
+  const handleDownloadTechnicalFormLinks = async () => {
+    if (!id) return;
+    try {
+      setDownloadingTechFormLinks(true);
+      const { text, filename } = await api.downloadCompanyTechnicalOnboardingFormLinks(id);
+      const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = window.URL.createObjectURL(blob);
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(link.href);
+      toast.success('Technical form link CSV downloaded');
+    } catch (err) {
+      toast.error(err.message || 'Failed to download CSV');
+    } finally {
+      setDownloadingTechFormLinks(false);
+    }
+  };
 
   const handleEditClick = () => {
     if (!canEditCompany()) return;
@@ -247,9 +269,19 @@ export function CompanyDetail() {
           )}
           </div>
           {canExportSecurityFindings() && (
-            <Button type="button" variant="outline" onClick={() => setFindingsOpen(true)}>
-              Download security findings
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" onClick={() => setFindingsOpen(true)}>
+                Download security findings
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleDownloadTechnicalFormLinks}
+                disabled={downloadingTechFormLinks}
+              >
+                {downloadingTechFormLinks ? 'Preparing…' : 'Download technical form links (CSV)'}
+              </Button>
+            </div>
           )}
         </div>
         {/* Score Cards */}

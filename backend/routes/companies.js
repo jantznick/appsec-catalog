@@ -280,6 +280,86 @@ router.get('/:id/average-score', requireAuth, async (req, res) => {
   }
 });
 
+function safeAsciiFilename(s) {
+  if (!s || typeof s !== 'string') {
+    return 'company';
+  }
+  const t = s
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return (t || 'company').slice(0, 80);
+}
+
+function escapeCsvField(value) {
+  const s = value == null ? '' : String(value);
+  if (/[",\n\r]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+/** Admin or company members: CSV of app name and technical onboarding form URL for each application. */
+router.get('/:id/technical-onboarding-form-links', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!req.session.isAdmin && req.session.companyId !== id) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only access your own company',
+      });
+    }
+
+    let company = await prisma.company.findUnique({
+      where: { id },
+      select: { id: true, name: true, slug: true },
+    });
+
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    if (!company.slug) {
+      const baseSlug = generateSlug(company.name);
+      const slug = await ensureUniqueSlug(baseSlug, company.id);
+      company = await prisma.company.update({
+        where: { id: company.id },
+        data: { slug },
+        select: { id: true, name: true, slug: true },
+      });
+    }
+
+    const applications = await prisma.application.findMany({
+      where: { companyId: id },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const rows = [
+      'app name,form link',
+      ...applications.map(
+        (app) =>
+          `${escapeCsvField(app.name)},${escapeCsvField(
+            `${frontendUrl}/onboard/${company.slug}/application/${app.id}`,
+          )}`,
+      ),
+    ];
+    const csv = `${rows.join('\r\n')}\r\n`;
+
+    const base = safeAsciiFilename(company.name);
+    const filename = `technical-onboarding-form-links-${base}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(csv);
+  } catch (error) {
+    console.error('Error building technical onboarding form links CSV:', error);
+    res.status(500).json({ error: 'Failed to build CSV' });
+  }
+});
+
 // COMP-2: Get company detail
 router.get('/:id', requireAuth, async (req, res) => {
   try {

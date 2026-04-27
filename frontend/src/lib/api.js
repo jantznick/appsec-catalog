@@ -125,6 +125,27 @@ export const api = {
   getCompany: (id) =>
     apiRequest(`/api/companies/${id}`),
 
+  /**
+   * Fetches CSV (app name + technical onboarding form URL per application). Same auth as company detail.
+   * @returns {Promise<{ text: string, filename: string }>}
+   */
+  downloadCompanyTechnicalOnboardingFormLinks: async (companyId) => {
+    const url = `${API_URL}/api/companies/${encodeURIComponent(companyId)}/technical-onboarding-form-links`;
+    const response = await fetch(url, { credentials: 'include' });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || data.error || 'An error occurred');
+    }
+    const text = await response.text();
+    const dispo = response.headers.get('Content-Disposition');
+    let filename = 'technical-onboarding-form-links.csv';
+    if (dispo) {
+      const m = /filename="([^"]+)"/.exec(dispo);
+      if (m) filename = m[1];
+    }
+    return { text, filename };
+  },
+
   // Division management
   getDivisions: () =>
     apiRequest('/api/divisions'),
