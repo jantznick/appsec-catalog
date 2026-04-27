@@ -69,19 +69,24 @@ export function ApplicationDetail() {
     securityTestingDescription: '',
     sastTool: '',
     sastIntegrationLevel: '',
+    sastIncludesSca: false,
     dastTool: '',
     dastIntegrationLevel: '',
+    scaTool: '',
+    scaIntegrationLevel: '',
     appFirewallTool: '',
     appFirewallIntegrationLevel: '',
     apiSecurityTool: '',
     apiSecurityIntegrationLevel: '',
     apiSecurityNA: false,
+    appFirewallNA: false,
     status: 'onboarded',
     currentVersion: '',
     deploymentEnvironment: '',
     gitBranch: '',
     lastDastScanDate: '',
     lastSastScanDate: '',
+    lastScaScanDate: '',
   });
 
   const [allDeployments, setAllDeployments] = useState([]);
@@ -499,19 +504,24 @@ export function ApplicationDetail() {
         securityTestingDescription: data.securityTestingDescription || '',
         sastTool: data.sastTool || '',
         sastIntegrationLevel: data.sastIntegrationLevel?.toString() || '',
+        sastIncludesSca: !!data.sastIncludesSca,
         dastTool: data.dastTool || '',
         dastIntegrationLevel: data.dastIntegrationLevel?.toString() || '',
+        scaTool: data.scaTool || '',
+        scaIntegrationLevel: data.scaIntegrationLevel?.toString() || '',
         appFirewallTool: data.appFirewallTool || '',
         appFirewallIntegrationLevel: data.appFirewallIntegrationLevel?.toString() || '',
         apiSecurityTool: data.apiSecurityTool || '',
         apiSecurityIntegrationLevel: data.apiSecurityIntegrationLevel?.toString() || '',
         apiSecurityNA: data.apiSecurityNA || false,
+        appFirewallNA: data.appFirewallNA || false,
         status: data.status || 'onboarded',
         currentVersion: data.currentVersion || '',
         deploymentEnvironment: data.deploymentEnvironment || '',
         gitBranch: data.gitBranch || '',
         lastDastScanDate: data.lastDastScanDate ? new Date(data.lastDastScanDate).toISOString().split('T')[0] : '',
         lastSastScanDate: data.lastSastScanDate ? new Date(data.lastSastScanDate).toISOString().split('T')[0] : '',
+        lastScaScanDate: data.lastScaScanDate ? new Date(data.lastScaScanDate).toISOString().split('T')[0] : '',
       };
       setFormData(newFormData);
       setInterfaces(interfaceNames);
@@ -1076,16 +1086,11 @@ export function ApplicationDetail() {
                             value={formData.framework}
                             onChange={(e) => handleFieldChange('framework', e.target.value)}
                           />
-                          <Select
+                          <Input
                             label="Server Environment"
                             value={formData.serverEnvironment || ''}
                             onChange={(e) => handleFieldChange('serverEnvironment', e.target.value)}
-                            options={[
-                              { value: '', label: 'Select environment' },
-                              { value: 'Cloud', label: 'Cloud' },
-                              { value: 'On-prem', label: 'On-prem' },
-                              { value: 'Both', label: 'Both' },
-                            ]}
+                            placeholder="e.g. cloud, on-premises, hybrid"
                           />
                         </div>
                       </div>
@@ -1584,6 +1589,15 @@ export function ApplicationDetail() {
                             value={formData.lastSastScanDate}
                             onChange={(e) => handleFieldChange('lastSastScanDate', e.target.value)}
                           />
+                          <Checkbox
+                            id="sastIncludesSca"
+                            label="SAST output includes SCA (dependency) scanning"
+                            checked={formData.sastIncludesSca}
+                            onChange={(e) => handleFieldChange('sastIncludesSca', e.target.checked)}
+                          />
+                          <p className="text-xs text-gray-600">
+                            When enabled, SCA is scored with the same tool, integration level, and last scan date as SAST.
+                          </p>
                         </div>
                       </div>
 
@@ -1614,6 +1628,39 @@ export function ApplicationDetail() {
                         </div>
                       </div>
 
+                      {/* SCA Section */}
+                      <div className="bg-teal-50 rounded-lg p-4 border border-teal-200">
+                        <h5 className="text-sm font-semibold text-teal-900 mb-3">SCA (Software Composition / Dependencies)</h5>
+                        {formData.sastIncludesSca ? (
+                          <p className="text-sm text-teal-800">
+                            SCA is covered by your SAST configuration above (same tool, level, and last scan as SAST).
+                          </p>
+                        ) : (
+                          <div className="space-y-3">
+                            <Input
+                              label="Tool"
+                              value={formData.scaTool}
+                              onChange={(e) => handleFieldChange('scaTool', e.target.value)}
+                            />
+                            <Select
+                              label="Integration Level"
+                              value={formData.scaIntegrationLevel}
+                              onChange={(e) => handleFieldChange('scaIntegrationLevel', e.target.value)}
+                              options={[
+                                { value: '', label: 'Select level' },
+                                ...integrationLevels,
+                              ]}
+                            />
+                            <Input
+                              label="Last Scan Date"
+                              type="date"
+                              value={formData.lastScaScanDate}
+                              onChange={(e) => handleFieldChange('lastScaScanDate', e.target.value)}
+                            />
+                          </div>
+                        )}
+                      </div>
+
                       {/* App Firewall Section */}
                       <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
                         <h5 className="text-sm font-semibold text-purple-900 mb-3">Application Firewall</h5>
@@ -1631,6 +1678,12 @@ export function ApplicationDetail() {
                               { value: '', label: 'Select level' },
                               ...integrationLevels,
                             ]}
+                          />
+                          <Checkbox
+                            id="appFirewallNA"
+                            label="Not Applicable"
+                            checked={formData.appFirewallNA}
+                            onChange={(e) => handleFieldChange('appFirewallNA', e.target.checked)}
                           />
                         </div>
                       </div>
@@ -1689,6 +1742,10 @@ export function ApplicationDetail() {
                               {formData.lastSastScanDate ? new Date(formData.lastSastScanDate).toLocaleDateString() : <span className="text-gray-400 italic">Not set</span>}
                             </p>
                           </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">SAST includes SCA:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">{formData.sastIncludesSca ? 'Yes' : 'No'}</p>
+                          </div>
                         </div>
                       </div>
 
@@ -1720,6 +1777,40 @@ export function ApplicationDetail() {
                         </div>
                       </div>
 
+                      {/* SCA Section (read-only) */}
+                      <div className="bg-teal-50 rounded-lg p-4 border border-teal-200">
+                        <h5 className="text-sm font-semibold text-teal-900 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          SCA (Software Composition)
+                        </h5>
+                        {formData.sastIncludesSca ? (
+                          <p className="text-sm text-teal-900">
+                            Same as SAST: tool, integration level, and last scan as shown under SAST above.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            <div>
+                              <span className="text-xs font-medium text-gray-600">Tool:</span>
+                              <p className="text-sm text-gray-900 mt-0.5">{formData.scaTool || <span className="text-gray-400 italic">Not set</span>}</p>
+                            </div>
+                            <div>
+                              <span className="text-xs font-medium text-gray-600">Integration Level:</span>
+                              <p className="text-sm text-gray-900 mt-0.5">
+                                {getIntegrationLevelName(formData.scaIntegrationLevel) || <span className="text-gray-400 italic">Not set</span>}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-xs font-medium text-gray-600">Last Scan Date:</span>
+                              <p className="text-sm text-gray-900 mt-0.5">
+                                {formData.lastScaScanDate ? new Date(formData.lastScaScanDate).toLocaleDateString() : <span className="text-gray-400 italic">Not set</span>}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
                       {/* App Firewall Section */}
                       <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
                         <h5 className="text-sm font-semibold text-purple-900 mb-3 flex items-center gap-2">
@@ -1738,6 +1829,10 @@ export function ApplicationDetail() {
                             <p className="text-sm text-gray-900 mt-0.5">
                               {getIntegrationLevelName(formData.appFirewallIntegrationLevel) || <span className="text-gray-400 italic">Not set</span>}
                             </p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Not Applicable:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">{formData.appFirewallNA ? 'Yes' : 'No'}</p>
                           </div>
                         </div>
                       </div>

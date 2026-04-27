@@ -27,13 +27,17 @@ const APPLICATION_FIELDS = [
   { key: 'additionalNotes', label: 'Additional Notes', required: false, dataType: 'string' },
   { key: 'sastTool', label: 'SAST Tool', required: false, dataType: 'string' },
   { key: 'sastIntegrationLevel', label: 'SAST Integration Level', required: false, dataType: 'number' },
+  { key: 'sastIncludesSca', label: 'SAST includes SCA', required: false, dataType: 'boolean' },
   { key: 'dastTool', label: 'DAST Tool', required: false, dataType: 'string' },
   { key: 'dastIntegrationLevel', label: 'DAST Integration Level', required: false, dataType: 'number' },
+  { key: 'scaTool', label: 'SCA Tool', required: false, dataType: 'string' },
+  { key: 'scaIntegrationLevel', label: 'SCA Integration Level', required: false, dataType: 'number' },
   { key: 'appFirewallTool', label: 'App Firewall Tool', required: false, dataType: 'string' },
   { key: 'appFirewallIntegrationLevel', label: 'App Firewall Integration Level', required: false, dataType: 'number' },
   { key: 'apiSecurityTool', label: 'API Security Tool', required: false, dataType: 'string' },
   { key: 'apiSecurityIntegrationLevel', label: 'API Security Integration Level', required: false, dataType: 'number' },
   { key: 'apiSecurityNA', label: 'API Security N/A', required: false, dataType: 'boolean' },
+  { key: 'appFirewallNA', label: 'App Firewall N/A', required: false, dataType: 'boolean' },
 ];
 
 // Infer data type from CSV column values

@@ -9,19 +9,22 @@ export function ScoreCard({ knowledgeScore, toolScore, totalScore, breakdown, on
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [markingReviewed, setMarkingReviewed] = useState(false);
 
+  const isToolStatusQuickWin = (status) =>
+    status === 'missing' ||
+    status === 'low' ||
+    status === 'missing-scan' ||
+    status === 'stale';
+
   // Check if Quick Wins section should be shown
   const hasQuickWins = breakdown && (() => {
     const recommendations = [];
     if (breakdown.tools) {
-      const missingTools = breakdown.tools.filter(t => t.status === 'missing');
-      if (missingTools.length > 0) recommendations.push({});
+      if (breakdown.tools.some(t => isToolStatusQuickWin(t.status))) {
+        recommendations.push({});
+      }
     }
     if (breakdown.knowledgeSharing?.missingFields && breakdown.knowledgeSharing.missingFields.length > 0) {
       recommendations.push({});
-    }
-    if (breakdown.tools) {
-      const lowIntegration = breakdown.tools.find(t => t.status === 'low');
-      if (lowIntegration) recommendations.push({});
     }
     if (breakdown.reviewRecommendation && recommendations.length < 2) {
       recommendations.push({});
@@ -133,7 +136,7 @@ export function ScoreCard({ knowledgeScore, toolScore, totalScore, breakdown, on
                     </div>
                     {breakdown?.knowledgeSharing && (
                       <div className="text-xs text-gray-600 mt-1.5">
-                        {breakdown.knowledgeSharing.fieldsFilled || 0} of {breakdown.knowledgeSharing.totalFields || 8} fields filled
+                        {breakdown.knowledgeSharing.fieldsFilled ?? 0} of {breakdown.knowledgeSharing.totalFields ?? 0} fields filled
                         {breakdown.knowledgeSharing.lastReviewed ? (
                           <span className="text-gray-500"> • Last reviewed {new Date(breakdown.knowledgeSharing.lastReviewed).toLocaleDateString()}</span>
                         ) : (
@@ -170,13 +173,20 @@ export function ScoreCard({ knowledgeScore, toolScore, totalScore, breakdown, on
                         }}
                       />
                     </div>
-                    {breakdown?.configuredTools && (
-                      <div className="text-xs text-gray-600 mt-1.5">
-                        {breakdown.configuredTools.length > 0 ? (
-                          `Security tools: ${breakdown.configuredTools.join(', ')}`
-                        ) : (
-                          'No security tools configured'
+                    {breakdown && (
+                      <div className="text-xs text-gray-600 mt-1.5 space-y-0.5">
+                        {(breakdown.configuredTools?.length ?? 0) > 0 && (
+                          <div>Security tools: {breakdown.configuredTools.join(', ')}</div>
                         )}
+                        {(breakdown.notApplicableToolCategories?.length ?? 0) > 0 && (
+                          <div className="text-gray-500">
+                            Not required (N/A): {breakdown.notApplicableToolCategories.join(', ')}
+                          </div>
+                        )}
+                        {(breakdown.configuredTools?.length ?? 0) === 0 &&
+                          (breakdown.notApplicableToolCategories?.length ?? 0) === 0 && (
+                            <div>No security tools configured</div>
+                          )}
                       </div>
                     )}
                   </div>
@@ -232,7 +242,7 @@ export function ScoreCard({ knowledgeScore, toolScore, totalScore, breakdown, on
             {breakdown && (() => {
                   const recommendations = [];
                   
-                  // Priority 1: Missing tools (highest impact)
+                  // Priority 1: Missing tool + level, or (if none) first scan / staleness issue — includes SCA, SAST, DAST, etc.
                   if (breakdown.tools) {
                     const missingTools = breakdown.tools.filter(t => t.status === 'missing');
                     if (missingTools.length > 0) {
@@ -250,6 +260,25 @@ export function ScoreCard({ knowledgeScore, toolScore, totalScore, breakdown, on
                         message: message,
                         impact: 'This will significantly improve your security score',
                       });
+                    } else {
+                      const scanOrStale = breakdown.tools.filter(
+                        t => t.status === 'missing-scan' || t.status === 'stale',
+                      );
+                      if (scanOrStale.length > 0) {
+                        const first = scanOrStale[0];
+                        const label = first.category || 'Security';
+                        const message =
+                          first.recommendation ||
+                          (first.status === 'stale'
+                            ? `Update ${label} to align with deployments`
+                            : `Add a ${label} scan date`);
+                        recommendations.push({
+                          priority: 1,
+                          type: 'tool',
+                          message,
+                          impact: 'Updating scan dates and integration levels is a quick way to raise your tool score',
+                        });
+                      }
                     }
                   }
 
@@ -308,7 +337,7 @@ export function ScoreCard({ knowledgeScore, toolScore, totalScore, breakdown, on
                           <div className="flex items-start gap-2">
                             <span className="text-blue-600 mt-0.5 font-bold">•</span>
                             <div>
-                              <div className="font-medium">Set up security tools (SAST, DAST, WAF, or API Security) to start earning points</div>
+                              <div className="font-medium">Set up security tools (SAST, SCA, DAST, WAF, or API Security) to start earning points</div>
                               <div className="text-gray-600 text-xs mt-1">Each tool you configure will improve your security score</div>
                             </div>
                           </div>

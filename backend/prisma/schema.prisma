@@ -147,14 +147,18 @@ model Application {
   // Scoring fields
   sastTool                    String?
   sastIntegrationLevel        Int?
+  sastIncludesSca             Boolean? @default(false)
   dastTool                    String?
   dastIntegrationLevel        Int?
+  scaTool                     String?
+  scaIntegrationLevel         Int?
   appFirewallTool             String?
   appFirewallIntegrationLevel Int?
   apiSecurityTool             String?
   apiSecurityIntegrationLevel Int?
 
-  apiSecurityNA Boolean? @default(false)
+  apiSecurityNA  Boolean? @default(false)
+  appFirewallNA  Boolean? @default(false)
 
   metadataLastReviewed DateTime?
 
@@ -164,6 +168,7 @@ model Application {
   gitBranch             String? // Current git branch or tag (e.g., "main", "v1.2.3", "release/2024-01")
   lastDastScanDate      DateTime? // Date/time of last DAST (Dynamic Application Security Testing) scan
   lastSastScanDate      DateTime? // Date/time of last SAST (Static Application Security Testing) scan
+  lastScaScanDate       DateTime? // SCA (dependency) scan; ignored for scoring when sastIncludesSca (uses lastSastScanDate)
 
   // Interfaces with other applications (stored as JSON array of application IDs/names)
   interfaces String? // JSON array of application names/IDs
@@ -587,18 +592,23 @@ model ApplicationVersion {
   additionalNotes             String?
   sastTool                    String?
   sastIntegrationLevel        Int?
+  sastIncludesSca            Boolean?
   dastTool                    String?
   dastIntegrationLevel        Int?
+  scaTool                    String?
+  scaIntegrationLevel         Int?
   appFirewallTool             String?
   appFirewallIntegrationLevel Int?
   apiSecurityTool             String?
   apiSecurityIntegrationLevel Int?
   apiSecurityNA               Boolean?
+  appFirewallNA               Boolean?
   currentVersion              String?
   deploymentEnvironment       String?
   gitBranch                   String?
   lastDastScanDate            DateTime?
   lastSastScanDate            DateTime?
+  lastScaScanDate             DateTime?
   interfaces                  String? // JSON array
 
   @@index([applicationId])

@@ -1,7 +1,13 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
-import { calculateApplicationScore } from '../services/scoring.js';
+import {
+  calculateApplicationScore,
+  getKnowledgeSharingFieldBreakdown,
+  isMetadataValueNA,
+  isSecurityToolCategoryNotApplicable,
+  resolveCategoryToolInputs,
+} from '../services/scoring.js';
 import { evaluateAllControls } from '../services/policy.js';
 import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { getApexDomain } from '../utils/domainApex.js';
@@ -348,13 +354,17 @@ router.put('/public/:id', async (req, res) => {
       additionalNotes,
       sastTool,
       sastIntegrationLevel,
+      sastIncludesSca,
       dastTool,
       dastIntegrationLevel,
+      scaTool,
+      scaIntegrationLevel,
       appFirewallTool,
       appFirewallIntegrationLevel,
       apiSecurityTool,
       apiSecurityIntegrationLevel,
       apiSecurityNA,
+      appFirewallNA,
     } = req.body;
 
     // Validate required email
@@ -493,18 +503,29 @@ router.put('/public/:id', async (req, res) => {
       additionalNotes: existing.additionalNotes,
       sastTool: sastTool?.trim() || existing.sastTool,
       sastIntegrationLevel: sastIntegrationLevel ? parseInt(sastIntegrationLevel) : existing.sastIntegrationLevel,
+      sastIncludesSca:
+        sastIncludesSca === undefined
+          ? existing.sastIncludesSca
+          : sastIncludesSca === true || sastIncludesSca === 'true',
       dastTool: dastTool?.trim() || existing.dastTool,
       dastIntegrationLevel: dastIntegrationLevel ? parseInt(dastIntegrationLevel) : existing.dastIntegrationLevel,
+      scaTool: scaTool?.trim() || existing.scaTool,
+      scaIntegrationLevel: scaIntegrationLevel
+        ? parseInt(scaIntegrationLevel)
+        : existing.scaIntegrationLevel,
       appFirewallTool: appFirewallTool?.trim() || existing.appFirewallTool,
       appFirewallIntegrationLevel: appFirewallIntegrationLevel ? parseInt(appFirewallIntegrationLevel) : existing.appFirewallIntegrationLevel,
       apiSecurityTool: apiSecurityTool?.trim() || existing.apiSecurityTool,
       apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : existing.apiSecurityIntegrationLevel,
       apiSecurityNA: apiSecurityNA === true || apiSecurityNA === 'true' || existing.apiSecurityNA,
+      appFirewallNA:
+        appFirewallNA === true || appFirewallNA === 'true' || existing.appFirewallNA,
       currentVersion: existing.currentVersion,
       deploymentEnvironment: existing.deploymentEnvironment,
       gitBranch: existing.gitBranch,
       lastDastScanDate: existing.lastDastScanDate,
       lastSastScanDate: existing.lastSastScanDate,
+      lastScaScanDate: existing.lastScaScanDate,
     };
 
     // Create pending version instead of updating application
@@ -545,13 +566,17 @@ router.put('/public/:id', async (req, res) => {
         additionalNotes: 'Additional Notes',
         sastTool: 'SAST Tool',
         sastIntegrationLevel: 'SAST Integration Level',
+        sastIncludesSca: 'SAST includes SCA',
         dastTool: 'DAST Tool',
         dastIntegrationLevel: 'DAST Integration Level',
+        scaTool: 'SCA Tool',
+        scaIntegrationLevel: 'SCA Integration Level',
         appFirewallTool: 'App Firewall Tool',
         appFirewallIntegrationLevel: 'App Firewall Integration Level',
         apiSecurityTool: 'API Security Tool',
         apiSecurityIntegrationLevel: 'API Security Integration Level',
         apiSecurityNA: 'API Security N/A',
+        appFirewallNA: 'App Firewall N/A',
       };
       
       const providedFields = getProvidedFields(req.body, fieldMapping);
@@ -628,49 +653,59 @@ router.get('/:id/score', requireAuth, async (req, res) => {
       console.error('Error saving score to database:', error);
     }
 
-    // Calculate breakdown for knowledge sharing
-    const knowledgeFields = [
-      { key: 'description', label: 'Description' },
-      { key: 'devTeamContact', label: 'Development Team Contact' },
-      { key: 'repoUrl', label: 'Repository URL' },
-      { key: 'language', label: 'Language' },
-      { key: 'framework', label: 'Framework' },
-      { key: 'serverEnvironment', label: 'Server Environment' },
-      { key: 'authProfiles', label: 'Authentication Profiles' },
-      { key: 'dataTypes', label: 'Data Types' },
-    ];
-    const fieldsFilled = knowledgeFields.filter(field => application[field.key]).length;
-    const missingFields = knowledgeFields.filter(field => !application[field.key]).map(f => f.label);
+    // Calculate breakdown for knowledge sharing (same rules as calculateKnowledgeSharingScore, including "NA" exclusions)
+    const { totalScorable, fieldsFilled, missingFields } =
+      getKnowledgeSharingFieldBreakdown(application);
+    const completenessFor40 =
+      totalScorable > 0
+        ? Math.round((fieldsFilled / totalScorable) * 40)
+        : 0;
 
     // Calculate tool recommendations
     const toolCategories = [
       { key: 'sast', label: 'SAST', toolField: 'sastTool', levelField: 'sastIntegrationLevel', scanField: 'lastSastScanDate' },
       { key: 'dast', label: 'DAST', toolField: 'dastTool', levelField: 'dastIntegrationLevel', scanField: 'lastDastScanDate' },
+      { key: 'sca', label: 'SCA', toolField: 'scaTool', levelField: 'scaIntegrationLevel', scanField: 'lastScaScanDate' },
       { key: 'appFirewall', label: 'Application Firewall', toolField: 'appFirewallTool', levelField: 'appFirewallIntegrationLevel', scanField: null },
       { key: 'apiSecurity', label: 'API Security', toolField: 'apiSecurityTool', levelField: 'apiSecurityIntegrationLevel', scanField: null },
     ];
 
-    const toolRecommendations = toolCategories.map(category => {
-      const tool = application[category.toolField];
-      const level = application[category.levelField];
-      const scanDate = category.scanField ? application[category.scanField] : null;
-      const isNA = category.key === 'apiSecurity' && application.apiSecurityNA;
-
-      // Determine if tool is configured
-      const isConfigured = isNA || (tool && typeof tool === 'string' && tool.trim() !== '' && level !== null && level !== undefined);
+    const toolRecommendations = toolCategories.map((category) => {
+      const displayLabel =
+        category.key === 'sca' && application.sastIncludesSca
+          ? 'SCA (same as SAST)'
+          : category.label;
+      const resolved = resolveCategoryToolInputs(application, category.key);
+      const tool = resolved.tool;
+      const level = resolved.level;
+      const scanField = resolved.scanField;
+      const scanDate = scanField ? application[scanField] : null;
+      const isNotApplicable = isSecurityToolCategoryNotApplicable(
+        application,
+        category.key,
+      );
+      const isRealToolConfig =
+        !isNotApplicable &&
+        tool &&
+        typeof tool === 'string' &&
+        tool.trim() !== '' &&
+        !isMetadataValueNA(tool) &&
+        level !== null &&
+        level !== undefined;
 
       let status = 'complete';
       let recommendation = null;
 
-      if (isNA) {
+      if (isNotApplicable) {
         status = 'complete';
+        recommendation = null;
       } else if (!tool || level === null || level === undefined) {
         status = 'missing';
-        recommendation = `Add ${category.label} tool and integration level`;
+        recommendation = `Add ${displayLabel} tool and integration level`;
       } else if (level < 2) {
         status = 'low';
-        recommendation = `Increase ${category.label} integration level (currently level ${level})`;
-      } else if (category.scanField && scanDate) {
+        recommendation = `Increase ${displayLabel} integration level (currently level ${level})`;
+      } else if (scanField && scanDate) {
         // Check if scan is recent relative to deployments
         if (application.deployments && application.deployments.length > 0) {
           const lastDeployment = application.deployments[0];
@@ -680,28 +715,33 @@ router.get('/:id/score', requireAuth, async (req, res) => {
           
           if (daysDiff < -1 || daysDiff > 1) {
             status = 'stale';
-            recommendation = `Update ${category.label} scan date (should be within 1 day of last deployment)`;
+            recommendation = `Update ${displayLabel} scan date (should be within 1 day of last deployment)`;
           }
         }
-      } else if (category.scanField && !scanDate) {
+      } else if (scanField && !scanDate) {
         status = 'missing-scan';
-        recommendation = `Add ${category.label} scan date`;
+        recommendation = `Add ${displayLabel} scan date`;
       }
 
       return {
-        category: category.label,
+        category: displayLabel,
         tool,
         level,
         status,
         recommendation,
-        isConfigured,
+        isNotApplicable,
+        isRealToolConfig,
       };
     });
 
-    // Extract list of configured tools for easy frontend display
+    // Tools with a real product + level (excludes "NA" / not-applicable rows)
     const configuredTools = toolRecommendations
-      .filter(t => t.isConfigured)
-      .map(t => t.category);
+      .filter((t) => t.isRealToolConfig)
+      .map((t) => t.category);
+
+    const notApplicableToolCategories = toolRecommendations
+      .filter((t) => t.isNotApplicable)
+      .map((t) => t.category);
 
     // Check metadata review status
     let reviewRecommendation = null;
@@ -723,21 +763,27 @@ router.get('/:id/score', requireAuth, async (req, res) => {
       { key: 'deploymentType', label: 'Deployment Type' },
       { key: 'facing', label: 'Facing (Internal/External)' },
     ];
-    const missingImportanceFields = importanceFields.filter(field => !application[field.key]).map(f => f.label);
+    const missingImportanceFields = importanceFields
+      .filter(
+        (field) =>
+          !isMetadataValueNA(application[field.key]) && !application[field.key],
+      )
+      .map((f) => f.label);
 
     res.json({
       ...scores,
       breakdown: {
         knowledgeSharing: {
           fieldsFilled,
-          totalFields: knowledgeFields.length,
-          completenessScore: Math.round((fieldsFilled / knowledgeFields.length) * 40),
-          reviewScore: scores.knowledgeScore - Math.round((fieldsFilled / knowledgeFields.length) * 40),
+          totalFields: totalScorable,
+          completenessScore: completenessFor40,
+          reviewScore: scores.knowledgeScore - completenessFor40,
           lastReviewed: application.metadataLastReviewed,
           missingFields,
         },
         tools: toolRecommendations,
-        configuredTools: configuredTools || [], // Always return an array
+        configuredTools: configuredTools || [],
+        notApplicableToolCategories: notApplicableToolCategories || [],
         reviewRecommendation,
         missingImportanceFields: missingImportanceFields.length > 0 ? missingImportanceFields : null,
         importance: {
@@ -1414,18 +1460,23 @@ router.post('/', requireAuth, async (req, res) => {
       additionalNotes,
       sastTool,
       sastIntegrationLevel,
+      sastIncludesSca,
       dastTool,
       dastIntegrationLevel,
+      scaTool,
+      scaIntegrationLevel,
       appFirewallTool,
       appFirewallIntegrationLevel,
       apiSecurityTool,
       apiSecurityIntegrationLevel,
       apiSecurityNA,
+      appFirewallNA,
       currentVersion,
       deploymentEnvironment,
       gitBranch,
       lastDastScanDate,
       lastSastScanDate,
+      lastScaScanDate,
     } = req.body;
 
     // Validate required fields
@@ -1525,18 +1576,23 @@ router.post('/', requireAuth, async (req, res) => {
         additionalNotes: additionalNotes?.trim() || null,
         sastTool: sastTool?.trim() || null,
         sastIntegrationLevel: sastIntegrationLevel ? parseInt(sastIntegrationLevel) : null,
+        sastIncludesSca: sastIncludesSca === true || sastIncludesSca === 'true',
         dastTool: dastTool?.trim() || null,
         dastIntegrationLevel: dastIntegrationLevel ? parseInt(dastIntegrationLevel) : null,
+        scaTool: scaTool?.trim() || null,
+        scaIntegrationLevel: scaIntegrationLevel ? parseInt(scaIntegrationLevel) : null,
         appFirewallTool: appFirewallTool?.trim() || null,
         appFirewallIntegrationLevel: appFirewallIntegrationLevel ? parseInt(appFirewallIntegrationLevel) : null,
         apiSecurityTool: apiSecurityTool?.trim() || null,
         apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null,
         apiSecurityNA: apiSecurityNA || false,
+        appFirewallNA: appFirewallNA || false,
         currentVersion: currentVersion?.trim() || null,
         deploymentEnvironment: deploymentEnvironment?.trim() || null,
         gitBranch: gitBranch?.trim() || null,
         lastDastScanDate: lastDastScanDate ? new Date(lastDastScanDate) : null,
         lastSastScanDate: lastSastScanDate ? new Date(lastSastScanDate) : null,
+        lastScaScanDate: lastScaScanDate ? new Date(lastScaScanDate) : null,
         status: 'onboarded',
       },
       include: {
@@ -1582,19 +1638,24 @@ router.put('/:id', requireAuth, async (req, res) => {
       additionalNotes,
       sastTool,
       sastIntegrationLevel,
+      sastIncludesSca,
       dastTool,
       dastIntegrationLevel,
+      scaTool,
+      scaIntegrationLevel,
       appFirewallTool,
       appFirewallIntegrationLevel,
       apiSecurityTool,
       apiSecurityIntegrationLevel,
       apiSecurityNA,
+      appFirewallNA,
       status,
       currentVersion,
       deploymentEnvironment,
       gitBranch,
       lastDastScanDate,
       lastSastScanDate,
+      lastScaScanDate,
     } = req.body;
 
     // Check if application exists
@@ -1685,18 +1746,25 @@ router.put('/:id', requireAuth, async (req, res) => {
         ...(additionalNotes !== undefined && { additionalNotes: additionalNotes?.trim() || null }),
         ...(sastTool !== undefined && { sastTool: sastTool?.trim() || null }),
         ...(sastIntegrationLevel !== undefined && { sastIntegrationLevel: sastIntegrationLevel ? parseInt(sastIntegrationLevel) : null }),
+        ...(sastIncludesSca !== undefined && {
+          sastIncludesSca: sastIncludesSca === true || sastIncludesSca === 'true',
+        }),
         ...(dastTool !== undefined && { dastTool: dastTool?.trim() || null }),
         ...(dastIntegrationLevel !== undefined && { dastIntegrationLevel: dastIntegrationLevel ? parseInt(dastIntegrationLevel) : null }),
+        ...(scaTool !== undefined && { scaTool: scaTool?.trim() || null }),
+        ...(scaIntegrationLevel !== undefined && { scaIntegrationLevel: scaIntegrationLevel ? parseInt(scaIntegrationLevel) : null }),
         ...(appFirewallTool !== undefined && { appFirewallTool: appFirewallTool?.trim() || null }),
         ...(appFirewallIntegrationLevel !== undefined && { appFirewallIntegrationLevel: appFirewallIntegrationLevel ? parseInt(appFirewallIntegrationLevel) : null }),
         ...(apiSecurityTool !== undefined && { apiSecurityTool: apiSecurityTool?.trim() || null }),
         ...(apiSecurityIntegrationLevel !== undefined && { apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null }),
         ...(apiSecurityNA !== undefined && { apiSecurityNA: apiSecurityNA }),
+        ...(appFirewallNA !== undefined && { appFirewallNA: appFirewallNA }),
         ...(currentVersion !== undefined && { currentVersion: currentVersion?.trim() || null }),
         ...(deploymentEnvironment !== undefined && { deploymentEnvironment: deploymentEnvironment?.trim() || null }),
         ...(gitBranch !== undefined && { gitBranch: gitBranch?.trim() || null }),
         ...(lastDastScanDate !== undefined && { lastDastScanDate: lastDastScanDate ? new Date(lastDastScanDate) : null }),
         ...(lastSastScanDate !== undefined && { lastSastScanDate: lastSastScanDate ? new Date(lastSastScanDate) : null }),
+        ...(lastScaScanDate !== undefined && { lastScaScanDate: lastScaScanDate ? new Date(lastScaScanDate) : null }),
         ...(status !== undefined && { status }),
       },
       include: {
@@ -2145,13 +2213,17 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
           additionalNotes: app.additionalNotes?.trim() || null,
           sastTool: app.sastTool?.trim() || null,
           sastIntegrationLevel: app.sastIntegrationLevel ? parseInt(app.sastIntegrationLevel) : null,
+          sastIncludesSca: app.sastIncludesSca === true || app.sastIncludesSca === 'true',
           dastTool: app.dastTool?.trim() || null,
           dastIntegrationLevel: app.dastIntegrationLevel ? parseInt(app.dastIntegrationLevel) : null,
+          scaTool: app.scaTool?.trim() || null,
+          scaIntegrationLevel: app.scaIntegrationLevel ? parseInt(app.scaIntegrationLevel) : null,
           appFirewallTool: app.appFirewallTool?.trim() || null,
           appFirewallIntegrationLevel: app.appFirewallIntegrationLevel ? parseInt(app.appFirewallIntegrationLevel) : null,
           apiSecurityTool: app.apiSecurityTool?.trim() || null,
           apiSecurityIntegrationLevel: app.apiSecurityIntegrationLevel ? parseInt(app.apiSecurityIntegrationLevel) : null,
           apiSecurityNA: app.apiSecurityNA || false,
+          appFirewallNA: app.appFirewallNA || false,
           status: 'onboarded',
         };
 
@@ -2244,13 +2316,17 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
         additionalNotes: 'Additional Notes',
         sastTool: 'SAST Tool',
         sastIntegrationLevel: 'SAST Integration Level',
+        sastIncludesSca: 'SAST includes SCA',
         dastTool: 'DAST Tool',
         dastIntegrationLevel: 'DAST Integration Level',
+        scaTool: 'SCA Tool',
+        scaIntegrationLevel: 'SCA Integration Level',
         appFirewallTool: 'App Firewall Tool',
         appFirewallIntegrationLevel: 'App Firewall Integration Level',
         apiSecurityTool: 'API Security Tool',
         apiSecurityIntegrationLevel: 'API Security Integration Level',
         apiSecurityNA: 'API Security N/A',
+        appFirewallNA: 'App Firewall N/A',
         hostingDomains: 'Hosting Domains',
         domains: 'Domains',
       };

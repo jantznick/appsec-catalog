@@ -550,17 +550,12 @@ export function OnboardManager() {
               </div>
 
               <div>
-                <Select
+                <Input
                   label="Where is it hosted? *"
                   value={currentForm.serverEnvironment || ''}
                   onChange={(e) => setCurrentForm({ ...currentForm, serverEnvironment: e.target.value })}
                   required
-                  options={[
-                    { value: '', label: 'Select hosting location' },
-                    { value: 'Cloud', label: 'Cloud' },
-                    { value: 'On-Prem', label: 'On-Prem' },
-                    { value: 'Both', label: 'Both' },
-                  ]}
+                  placeholder="e.g. cloud, on-premises, hybrid"
                 />
               </div>
 

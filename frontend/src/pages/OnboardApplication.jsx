@@ -47,13 +47,17 @@ export function OnboardApplication() {
     additionalNotes: '',
     sastTool: '',
     sastIntegrationLevel: '',
+    sastIncludesSca: false,
     dastTool: '',
     dastIntegrationLevel: '',
+    scaTool: '',
+    scaIntegrationLevel: '',
     appFirewallTool: '',
     appFirewallIntegrationLevel: '',
     apiSecurityTool: '',
     apiSecurityIntegrationLevel: '',
     apiSecurityNA: false,
+    appFirewallNA: false,
   });
 
   useEffect(() => {
@@ -130,13 +134,17 @@ export function OnboardApplication() {
         additionalNotes: app.additionalNotes || '',
         sastTool: app.sastTool || '',
         sastIntegrationLevel: app.sastIntegrationLevel?.toString() || '',
+        sastIncludesSca: !!app.sastIncludesSca,
         dastTool: app.dastTool || '',
         dastIntegrationLevel: app.dastIntegrationLevel?.toString() || '',
+        scaTool: app.scaTool || '',
+        scaIntegrationLevel: app.scaIntegrationLevel?.toString() || '',
         appFirewallTool: app.appFirewallTool || '',
         appFirewallIntegrationLevel: app.appFirewallIntegrationLevel?.toString() || '',
         apiSecurityTool: app.apiSecurityTool || '',
         apiSecurityIntegrationLevel: app.apiSecurityIntegrationLevel?.toString() || '',
         apiSecurityNA: app.apiSecurityNA || false,
+        appFirewallNA: app.appFirewallNA || false,
       }));
       
       // Load interfaces if they exist
@@ -239,13 +247,17 @@ export function OnboardApplication() {
           additionalNotes: formData.additionalNotes,
           sastTool: formData.sastTool,
           sastIntegrationLevel: formData.sastIntegrationLevel,
+          sastIncludesSca: formData.sastIncludesSca,
           dastTool: formData.dastTool,
           dastIntegrationLevel: formData.dastIntegrationLevel,
+          scaTool: formData.scaTool,
+          scaIntegrationLevel: formData.scaIntegrationLevel,
           appFirewallTool: formData.appFirewallTool,
           appFirewallIntegrationLevel: formData.appFirewallIntegrationLevel,
           apiSecurityTool: formData.apiSecurityTool,
           apiSecurityIntegrationLevel: formData.apiSecurityIntegrationLevel,
           apiSecurityNA: formData.apiSecurityNA,
+          appFirewallNA: formData.appFirewallNA,
         });
         toast.success('Application technical details updated successfully!');
       } else {
@@ -640,7 +652,7 @@ export function OnboardApplication() {
                     name="hasSecurityTesting"
                     value="No"
                     checked={formData.hasSecurityTesting === 'No'}
-                    onChange={(e) => setFormData({ ...formData, hasSecurityTesting: e.target.value, securityTestingDescription: '', sastTool: '', sastIntegrationLevel: '', dastTool: '', dastIntegrationLevel: '', appFirewallTool: '', appFirewallIntegrationLevel: '', apiSecurityTool: '', apiSecurityIntegrationLevel: '', apiSecurityNA: false })}
+                    onChange={(e) => setFormData({ ...formData, hasSecurityTesting: e.target.value, securityTestingDescription: '', sastTool: '', sastIntegrationLevel: '', sastIncludesSca: false, dastTool: '', dastIntegrationLevel: '', scaTool: '', scaIntegrationLevel: '', appFirewallTool: '', appFirewallIntegrationLevel: '', appFirewallNA: false, apiSecurityTool: '', apiSecurityIntegrationLevel: '', apiSecurityNA: false })}
                     label="No"
                   />
                 </RadioGroup>
@@ -672,6 +684,12 @@ export function OnboardApplication() {
                             ]}
                           />
                         </div>
+                        <Checkbox
+                          id="sastIncludesScaOnboard"
+                          label="SAST output includes SCA (dependency) scanning"
+                          checked={formData.sastIncludesSca}
+                          onChange={(e) => setFormData({ ...formData, sastIncludesSca: e.target.checked })}
+                        />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <Input
                             label="DAST Tool"
@@ -688,21 +706,52 @@ export function OnboardApplication() {
                             ]}
                           />
                         </div>
+                        {!formData.sastIncludesSca && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Input
+                              label="SCA Tool"
+                              value={formData.scaTool}
+                              onChange={(e) => setFormData({ ...formData, scaTool: e.target.value })}
+                            />
+                            <Select
+                              label="SCA Integration Level"
+                              value={formData.scaIntegrationLevel}
+                              onChange={(e) => setFormData({ ...formData, scaIntegrationLevel: e.target.value })}
+                              options={[
+                                { value: '', label: 'Select level' },
+                                ...integrationLevels,
+                              ]}
+                            />
+                          </div>
+                        )}
+                        {formData.sastIncludesSca && (
+                          <p className="text-sm text-gray-600">SCA will be scored the same as SAST (tool and level).</p>
+                        )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <Input
                             label="WAF Tool"
                             value={formData.appFirewallTool}
                             onChange={(e) => setFormData({ ...formData, appFirewallTool: e.target.value })}
                           />
-                          <Select
-                            label="WAF Integration Level"
-                            value={formData.appFirewallIntegrationLevel}
-                            onChange={(e) => setFormData({ ...formData, appFirewallIntegrationLevel: e.target.value })}
-                            options={[
-                              { value: '', label: 'Select level' },
-                              ...integrationLevels,
-                            ]}
-                          />
+                          <div>
+                            <Select
+                              label="WAF Integration Level"
+                              value={formData.appFirewallIntegrationLevel}
+                              onChange={(e) => setFormData({ ...formData, appFirewallIntegrationLevel: e.target.value })}
+                              options={[
+                                { value: '', label: 'Select level' },
+                                ...integrationLevels,
+                              ]}
+                            />
+                            <div className="mt-2">
+                              <Checkbox
+                                id="appFirewallNA"
+                                label="N/A"
+                                checked={formData.appFirewallNA}
+                                onChange={(e) => setFormData({ ...formData, appFirewallNA: e.target.checked })}
+                              />
+                            </div>
+                          </div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <Input

@@ -1,18 +1,27 @@
 /**
+ * If a field is exactly the text "NA" (after trim), do not count it in completeness totals
+ * (matches backend knowledge scoring: empty still counts; "NA" opts out of that field).
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isStringNA(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value !== 'string') return false;
+  return value.trim() === 'NA';
+}
+
+/**
  * Calculate the completeness percentage of an application
  * @param {Object} application - The application object
  * @returns {Object} - { filled, total, percentage }
  */
 export function calculateCompleteness(application) {
-  // List of all fields that should be filled for a complete application
+  const includeStandaloneSca = !application.sastIncludesSca;
   const fields = [
-    // Basic info
-    'name',           // Required, always filled
+    'name',
     'description',
     'owner',
     'repoUrl',
-    
-    // Application details
     'language',
     'framework',
     'serverEnvironment',
@@ -20,74 +29,86 @@ export function calculateCompleteness(application) {
     'deploymentType',
     'authProfiles',
     'dataTypes',
-    
-    // Security tools
     'sastTool',
     'sastIntegrationLevel',
     'dastTool',
     'dastIntegrationLevel',
+    ...(includeStandaloneSca ? ['scaTool', 'scaIntegrationLevel'] : []),
     'appFirewallTool',
     'appFirewallIntegrationLevel',
     'apiSecurityTool',
     'apiSecurityIntegrationLevel',
     'apiSecurityNA',
-    
-    // Interfaces (count as 1 field if present)
+    'appFirewallNA',
     'interfaces',
   ];
-  
+
   let filled = 0;
-  const total = fields.length;
-  
-  fields.forEach(field => {
+  let total = 0;
+
+  for (const field of fields) {
     const value = application[field];
-    
+
     if (field === 'interfaces') {
-      // Interfaces is a JSON string, count as filled if it exists and is not empty
+      if (isStringNA(value)) continue;
       if (value) {
         try {
           const parsed = JSON.parse(value);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            filled++;
+            total += 1;
+            filled += 1;
+            continue;
           }
         } catch {
-          // If it's not valid JSON, don't count it
+          // invalid JSON, count as not filled but still in total
         }
+        total += 1;
+        continue;
       }
-    } else if (field === 'apiSecurityNA') {
-      // Boolean field - count as filled if explicitly set (true or false)
-      if (value !== null && value !== undefined) {
-        filled++;
-      }
-    } else if (field === 'sastIntegrationLevel' || 
-               field === 'dastIntegrationLevel' || 
-               field === 'appFirewallIntegrationLevel' || 
-               field === 'apiSecurityIntegrationLevel') {
-      // Integration levels are numbers, count if not null/undefined
-      if (value !== null && value !== undefined) {
-        filled++;
-      }
-    } else {
-      // String fields - count if not null, undefined, or empty string
-      if (value !== null && value !== undefined && value !== '') {
-        filled++;
-      }
+      total += 1;
+      continue;
     }
-  });
-  
-  const percentage = Math.round((filled / total) * 100);
-  
+
+    if (field === 'apiSecurityNA' || field === 'appFirewallNA') {
+      if (isStringNA(value)) continue;
+      total += 1;
+      if (value !== null && value !== undefined) {
+        filled += 1;
+      }
+      continue;
+    }
+
+    if (
+      field === 'sastIntegrationLevel' ||
+      field === 'dastIntegrationLevel' ||
+      field === 'scaIntegrationLevel' ||
+      field === 'appFirewallIntegrationLevel' ||
+      field === 'apiSecurityIntegrationLevel'
+    ) {
+      if (isStringNA(value)) continue;
+      total += 1;
+      if (value !== null && value !== undefined) {
+        filled += 1;
+      }
+      continue;
+    }
+
+    if (isStringNA(value)) {
+      continue;
+    }
+
+    total += 1;
+
+    if (value !== null && value !== undefined && value !== '') {
+      filled += 1;
+    }
+  }
+
+  const percentage = total > 0 ? Math.round((filled / total) * 100) : 0;
+
   return {
     filled,
     total,
     percentage,
   };
 }
-
-
-
-
-
-
-
-

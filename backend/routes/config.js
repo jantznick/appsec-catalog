@@ -189,6 +189,18 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         }
       },
       { 
+        path: 'scaIntegrationLevel', 
+        label: 'SCA Integration Level', 
+        category: 'Security Tools', 
+        fieldType: 'number',
+        allowedOperators: ['gte', 'gt'],
+        valueType: 'dropdown',
+        valueOptions: integrationLevelOptions,
+        validationRules: {
+          description: 'Minimum integration level required (0-4 scale)'
+        }
+      },
+      { 
         path: 'appFirewallIntegrationLevel', 
         label: 'Application Firewall Integration Level', 
         category: 'Security Tools', 
@@ -225,6 +237,14 @@ router.get('/available-fields', requireAuth, async (req, res) => {
       { 
         path: 'dastTool', 
         label: 'DAST Tool', 
+        category: 'Security Tools', 
+        fieldType: 'string',
+        allowedOperators: ['exists', 'not_exists'],
+        valueType: 'text'
+      },
+      { 
+        path: 'scaTool', 
+        label: 'SCA Tool', 
         category: 'Security Tools', 
         fieldType: 'string',
         allowedOperators: ['exists', 'not_exists'],
@@ -270,11 +290,46 @@ router.get('/available-fields', requireAuth, async (req, res) => {
           description: 'Compare against deployment date or relative time (e.g., "1 day ago")'
         }
       },
+      { 
+        path: 'lastScaScanDate', 
+        label: 'Last SCA Scan Date', 
+        category: 'Security Tools', 
+        fieldType: 'date',
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt'],
+        valueType: 'date',
+        validationRules: {
+          description: 'Compare against deployment date or relative time (e.g., "1 day ago")'
+        }
+      },
       
       // Security Tools - Boolean
       { 
+        path: 'sastIncludesSca', 
+        label: 'SAST includes SCA (SCA same as SAST)', 
+        category: 'Security Tools', 
+        fieldType: 'boolean',
+        allowedOperators: ['equals', 'not_equals'],
+        valueType: 'boolean',
+        valueOptions: [
+          { value: true, label: 'True' },
+          { value: false, label: 'False' }
+        ]
+      },
+      { 
         path: 'apiSecurityNA', 
         label: 'API Security Not Applicable', 
+        category: 'Security Tools', 
+        fieldType: 'boolean',
+        allowedOperators: ['equals', 'not_equals'],
+        valueType: 'boolean',
+        valueOptions: [
+          { value: true, label: 'True (N/A)' },
+          { value: false, label: 'False (Applicable)' }
+        ]
+      },
+      { 
+        path: 'appFirewallNA', 
+        label: 'App Firewall Not Applicable', 
         category: 'Security Tools', 
         fieldType: 'boolean',
         allowedOperators: ['equals', 'not_equals'],

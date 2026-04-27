@@ -30,6 +30,124 @@ const SCAN_GRACE_PERIOD_DAYS = 1; // Grace period after deployment before scan i
 const METADATA_REVIEW_MAX_DAYS = 180; // 6 months in days
 const METADATA_REVIEW_MAX_POINTS = 10; // Maximum points for metadata review
 
+/** The eight text metadata fields that contribute to knowledge-sharing completeness. */
+export const KNOWLEDGE_SCORING_FIELDS = [
+  { key: 'description', label: 'Description' },
+  { key: 'devTeamContact', label: 'Development Team Contact' },
+  { key: 'repoUrl', label: 'Repository URL' },
+  { key: 'language', label: 'Language' },
+  { key: 'framework', label: 'Framework' },
+  { key: 'serverEnvironment', label: 'Server Environment' },
+  { key: 'authProfiles', label: 'Authentication Profiles' },
+  { key: 'dataTypes', label: 'Data Types' },
+];
+
+/**
+ * If a metadata field is exactly the text "NA" (after trim), it is excluded from scoring for that field.
+ * Empty values still count toward the total fields and score as "missing" as before.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+export function isMetadataValueNA(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value !== 'string') return false;
+  return value.trim() === 'NA';
+}
+
+/**
+ * A knowledge field is counted as "filled" for the 40pt completeness if it has real content; empty and "NA" are not filled.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+export function isKnowledgeFieldFilledForScore(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') {
+    const t = value.trim();
+    if (t === '' || t === 'NA') return false;
+    return true;
+  }
+  return Boolean(value);
+}
+
+/**
+ * @param {Object} app
+ * @returns {{ totalScorable: number, fieldsFilled: number, missingFields: string[] }}
+ */
+export function getKnowledgeSharingFieldBreakdown(app) {
+  let totalScorable = 0;
+  let fieldsFilled = 0;
+  const missingFields = [];
+  for (const { key, label } of KNOWLEDGE_SCORING_FIELDS) {
+    const v = app[key];
+    if (isMetadataValueNA(v)) {
+      continue;
+    }
+    totalScorable += 1;
+    if (isKnowledgeFieldFilledForScore(v)) {
+      fieldsFilled += 1;
+    } else {
+      missingFields.push(label);
+    }
+  }
+  return { totalScorable, fieldsFilled, missingFields };
+}
+
+/**
+ * Security tool category is excluded from integration/scan scoring (receives full category credit):
+ * API Security "N/A" boolean, or the tool name is exactly "NA" (see isMetadataValueNA).
+ * @param {Object} app
+ * @param {string} category - sast | dast | sca | appFirewall | apiSecurity
+ * @returns {boolean}
+ */
+export function isSecurityToolCategoryNotApplicable(app, category) {
+  if (category === 'apiSecurity' && app.apiSecurityNA) {
+    return true;
+  }
+  if (category === 'appFirewall' && app.appFirewallNA) {
+    return true;
+  }
+  if (category === 'sast' || category === 'dast') {
+    return false;
+  }
+  if (category === 'sca' && app.sastIncludesSca) {
+    return false;
+  }
+  if (category === 'sca' && !app.sastIncludesSca) {
+    return isMetadataValueNA(app.scaTool);
+  }
+  const tool = app[`${category}Tool`];
+  return isMetadataValueNA(tool);
+}
+
+/**
+ * Effective tool/level/scan field for scoring and recommendations.
+ * When SAST includes SCA, the SCA category reuses SAST's tool, level, and lastSast scan date.
+ * @param {Object} app
+ * @param {string} category
+ * @returns {{ tool: unknown, level: unknown, scanField: string|null, mirrorFromSast: boolean }}
+ */
+export function resolveCategoryToolInputs(app, category) {
+  if (category === 'sca' && app.sastIncludesSca) {
+    return {
+      tool: app.sastTool,
+      level: app.sastIntegrationLevel,
+      scanField: 'lastSastScanDate',
+      mirrorFromSast: true,
+    };
+  }
+  const scanByCategory = {
+    sast: 'lastSastScanDate',
+    dast: 'lastDastScanDate',
+    sca: 'lastScaScanDate',
+  };
+  return {
+    tool: app[`${category}Tool`],
+    level: app[`${category}IntegrationLevel`],
+    scanField: scanByCategory[category] || null,
+    mirrorFromSast: false,
+  };
+}
+
 /**
  * Calculate application importance score (0-1 scale)
  * Based on: businessCriticality, criticalAspects, deploymentType/frequency, interfaces, facing
@@ -66,7 +184,7 @@ function calculateImportanceScore(app) {
   }
   
   // Critical Aspects (count aspects) → contributes 0-0.2
-  if (app.criticalAspects) {
+  if (app.criticalAspects && !isMetadataValueNA(app.criticalAspects)) {
     const aspects = app.criticalAspects.split(',').map(a => a.trim()).filter(a => a);
     if (aspects.length > 0) {
       const contribution = Math.min(aspects.length * 0.05, 0.2);
@@ -99,7 +217,7 @@ function calculateImportanceScore(app) {
   }
   
   // Deployment Type/Frequency → contributes 0-0.2
-  if (app.deploymentType) {
+  if (app.deploymentType && !isMetadataValueNA(app.deploymentType)) {
     const deploymentLower = app.deploymentType.toLowerCase();
     let contribution = 0;
     let frequencyDesc = '';
@@ -137,7 +255,7 @@ function calculateImportanceScore(app) {
   }
   
   // Interfaces (count) → contributes 0-0.15
-  if (app.interfaces) {
+  if (app.interfaces && !isMetadataValueNA(app.interfaces)) {
     try {
       const interfaceIds = JSON.parse(app.interfaces);
       if (Array.isArray(interfaceIds) && interfaceIds.length > 0) {
@@ -181,7 +299,16 @@ function calculateImportanceScore(app) {
   }
   
   // Facing (External = more important) → contributes 0-0.15
-  if (app.facing === 'External') {
+  if (isMetadataValueNA(app.facing)) {
+    // Treat as missing: assume external (same as else branch below)
+    importance += 0.15;
+    factors.push({
+      type: 'facing',
+      description: 'External-facing (assumed - data not provided or marked N/A)',
+      contributed: false,
+      value: null
+    });
+  } else if (app.facing === 'External') {
     importance += 0.15;
     factors.push({
       type: 'facing',
@@ -210,7 +337,7 @@ function calculateImportanceScore(app) {
   }
   
   // Data Types (PII, PCI, etc.) → check if they contribute to risk
-  if (app.dataTypes) {
+  if (app.dataTypes && !isMetadataValueNA(app.dataTypes)) {
     const dataTypesLower = app.dataTypes.toLowerCase();
     const hasPII = dataTypesLower.includes('pii') || dataTypesLower.includes('personal');
     const hasPCI = dataTypesLower.includes('pci') || dataTypesLower.includes('payment');
@@ -247,26 +374,19 @@ function calculateImportanceScore(app) {
 
 /**
  * Calculate Knowledge Sharing Score (0-50 points)
- * - 40 points for metadata completeness (8 fields)
+ * - 40 points for metadata completeness (up to 8 scorable text fields; values of exactly "NA" are excluded)
  * - 10 points if metadata reviewed within last 6 months
  */
 export function calculateKnowledgeSharingScore(app) {
   let score = 0;
-  const totalFields = 8; // Number of metadata fields we are scoring on
-  let fieldsFilled = 0;
+  const { totalScorable, fieldsFilled } = getKnowledgeSharingFieldBreakdown(app);
 
-  // Count filled metadata fields
-  if (app.description) fieldsFilled++;
-  if (app.devTeamContact) fieldsFilled++;
-  if (app.repoUrl) fieldsFilled++;
-  if (app.language) fieldsFilled++;
-  if (app.framework) fieldsFilled++;
-  if (app.serverEnvironment) fieldsFilled++;
-  if (app.authProfiles) fieldsFilled++;
-  if (app.dataTypes) fieldsFilled++;
-
-  // Completeness is 80% of the score (40 points max)
-  score = (fieldsFilled / totalFields) * (MAX_SCORE_PER_CATEGORY * 0.8);
+  // Completeness is 80% of the score (40 points max). Fields set to "NA" are excluded from the fraction.
+  const completenessPoints =
+    totalScorable > 0
+      ? (fieldsFilled / totalScorable) * (MAX_SCORE_PER_CATEGORY * 0.8)
+      : 0;
+  score = completenessPoints;
 
   // Freshness is 20% of the score (10 points max) - sliding scale based on days since review
   if (app.metadataLastReviewed) {
@@ -288,12 +408,12 @@ export function calculateKnowledgeSharingScore(app) {
 
 /**
  * Calculate Tool Usage Score (0-50 points)
- * Based on 4 tool categories with risk-adjusted scoring
+ * Based on 5 tool categories (SAST, DAST, SCA, app firewall, API security) with risk-adjusted scoring
  */
 export function calculateToolUsageScore(app) {
-  const toolCategories = ['sast', 'dast', 'appFirewall', 'apiSecurity'];
+  const toolCategories = ['sast', 'dast', 'sca', 'appFirewall', 'apiSecurity'];
   const MAX_TOOL_SCORE = 50;
-  const BASE_POINTS_PER_CATEGORY = MAX_TOOL_SCORE / toolCategories.length; // 12.5
+  const BASE_POINTS_PER_CATEGORY = MAX_TOOL_SCORE / toolCategories.length; // 10
 
   let totalAchievedPoints = 0;
   let totalPossiblePoints = 0;
@@ -327,7 +447,7 @@ export function calculateToolUsageScore(app) {
     }
     
     // Fall back to parsing dataTypes string if boolean fields not available
-    if (!hasPCI && !hasPII && !hasPHI && app.dataTypes) {
+    if (!hasPCI && !hasPII && !hasPHI && app.dataTypes && !isMetadataValueNA(app.dataTypes)) {
       const dataTypesArray = app.dataTypes.split(',').map(dt => dt.trim());
       dataTypesArray.forEach(dt => {
         if (dt.toUpperCase().includes('PCI')) hasPCI = true;
@@ -352,19 +472,14 @@ export function calculateToolUsageScore(app) {
     // 2. Add to total possible points for normalization
     totalPossiblePoints += categoryMaxPoints;
 
-    // 3. Check if tool is marked as N/A (only for API Security)
-    const isNA = category === 'apiSecurity' && app.apiSecurityNA;
-    if (isNA) {
-      // If Not Applicable, the app achieves the full possible points for this category
+    // 3. N/A: API Security flag, or any category with tool set to the plain text "NA" — full credit, no level/scan
+    if (isSecurityToolCategoryNotApplicable(app, category)) {
       totalAchievedPoints += categoryMaxPoints;
       continue;
     }
 
     // 4. Calculate achieved points based on implementation
-    const toolField = `${category}Tool`;
-    const levelField = `${category}IntegrationLevel`;
-    const tool = app[toolField];
-    const level = app[levelField];
+    const { tool, level, scanField } = resolveCategoryToolInputs(app, category);
 
     if (!tool || level === null || level === undefined) {
       continue; // No tool, so 0 achieved points for this category
@@ -382,11 +497,10 @@ export function calculateToolUsageScore(app) {
       toolWeight = toolQuality.approvedUnmanaged[tool];
     }
 
-    // Check scan date freshness for SAST and DAST tools based on last deployment
+    // Check scan date freshness (SAST, DAST, SCA / SCA-via-SAST) relative to last deployment
     let scanDateWeight = 1.0; // Default: full points
-    if (category === 'sast' || category === 'dast') {
-      const scanDateField = category === 'sast' ? 'lastSastScanDate' : 'lastDastScanDate';
-      const scanDate = app[scanDateField] ? new Date(app[scanDateField]) : null;
+    if (scanField) {
+      const scanDate = app[scanField] ? new Date(app[scanField]) : null;
       
       // Get last deployment date
       let lastDeploymentDate = null;

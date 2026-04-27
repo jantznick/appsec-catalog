@@ -145,16 +145,11 @@ export function CompanyNew() {
                   value={formData.framework}
                   onChange={(e) => setFormData({ ...formData, framework: e.target.value })}
                 />
-                <Select
+                <Input
                   label="Server Environment"
                   value={formData.serverEnvironment || ''}
                   onChange={(e) => setFormData({ ...formData, serverEnvironment: e.target.value })}
-                  options={[
-                    { value: '', label: 'Select environment' },
-                    { value: 'Cloud', label: 'Cloud' },
-                    { value: 'On-prem', label: 'On-prem' },
-                    { value: 'Both', label: 'Both' },
-                  ]}
+                  placeholder="e.g. cloud, on-premises, hybrid"
                 />
                 <Select
                   label="Facing"

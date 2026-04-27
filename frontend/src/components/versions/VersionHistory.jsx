@@ -72,11 +72,12 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
               'name', 'description', 'owner', 'repoUrl', 'language', 'framework',
               'serverEnvironment', 'facing', 'deploymentType', 'authProfiles', 'dataTypes',
               'status', 'businessCriticality', 'criticalAspects', 'devTeamContact',
-              'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel',
-              'dastTool', 'dastIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
+              'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel', 'sastIncludesSca',
+              'dastTool', 'dastIntegrationLevel', 'scaTool', 'scaIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
               'apiSecurityTool', 'apiSecurityIntegrationLevel', 'apiSecurityNA',
+              'appFirewallNA',
               'currentVersion', 'deploymentEnvironment', 'gitBranch',
-              'lastDastScanDate', 'lastSastScanDate', 'interfaces',
+              'lastDastScanDate', 'lastSastScanDate', 'lastScaScanDate', 'interfaces',
             ];
             changedFields = fieldsToCheck.filter(field => latestVersion[field] !== null && latestVersion[field] !== undefined);
           }
@@ -173,11 +174,12 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
               'name', 'description', 'owner', 'repoUrl', 'language', 'framework',
               'serverEnvironment', 'facing', 'deploymentType', 'authProfiles', 'dataTypes',
               'status', 'businessCriticality', 'criticalAspects', 'devTeamContact',
-              'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel',
-              'dastTool', 'dastIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
+              'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel', 'sastIncludesSca',
+              'dastTool', 'dastIntegrationLevel', 'scaTool', 'scaIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
               'apiSecurityTool', 'apiSecurityIntegrationLevel', 'apiSecurityNA',
+              'appFirewallNA',
               'currentVersion', 'deploymentEnvironment', 'gitBranch',
-              'lastDastScanDate', 'lastSastScanDate', 'interfaces',
+              'lastDastScanDate', 'lastSastScanDate', 'lastScaScanDate', 'interfaces',
             ];
             
             for (const field of fieldsToCompare) {
@@ -319,18 +321,23 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
       additionalNotes: 'Additional Notes',
       sastTool: 'SAST Tool',
       sastIntegrationLevel: 'SAST Integration Level',
+      sastIncludesSca: 'SAST includes SCA',
       dastTool: 'DAST Tool',
       dastIntegrationLevel: 'DAST Integration Level',
+      scaTool: 'SCA Tool',
+      scaIntegrationLevel: 'SCA Integration Level',
       appFirewallTool: 'App Firewall Tool',
       appFirewallIntegrationLevel: 'App Firewall Integration Level',
       apiSecurityTool: 'API Security Tool',
       apiSecurityIntegrationLevel: 'API Security Integration Level',
       apiSecurityNA: 'API Security N/A',
+      appFirewallNA: 'App Firewall N/A',
       currentVersion: 'Current Version',
       deploymentEnvironment: 'Deployment Environment',
       gitBranch: 'Git Branch',
       lastDastScanDate: 'Last DAST Scan Date',
       lastSastScanDate: 'Last SAST Scan Date',
+      lastScaScanDate: 'Last SCA Scan Date',
       interfaces: 'Interfaces',
     };
     return labels[field] || field.replace(/([A-Z])/g, ' $1').trim();

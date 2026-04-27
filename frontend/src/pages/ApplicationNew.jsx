@@ -43,13 +43,17 @@ export function ApplicationNew() {
     additionalNotes: '',
     sastTool: '',
     sastIntegrationLevel: '',
+    sastIncludesSca: false,
     dastTool: '',
     dastIntegrationLevel: '',
+    scaTool: '',
+    scaIntegrationLevel: '',
     appFirewallTool: '',
     appFirewallIntegrationLevel: '',
     apiSecurityTool: '',
     apiSecurityIntegrationLevel: '',
     apiSecurityNA: false,
+    appFirewallNA: false,
   });
 
   useEffect(() => {
@@ -280,16 +284,11 @@ export function ApplicationNew() {
                   value={formData.framework}
                   onChange={(e) => setFormData({ ...formData, framework: e.target.value })}
                 />
-                <Select
+                <Input
                   label="Server Environment"
                   value={formData.serverEnvironment || ''}
                   onChange={(e) => setFormData({ ...formData, serverEnvironment: e.target.value })}
-                  options={[
-                    { value: '', label: 'Select environment' },
-                    { value: 'Cloud', label: 'Cloud' },
-                    { value: 'On-prem', label: 'On-prem' },
-                    { value: 'Both', label: 'Both' },
-                  ]}
+                  placeholder="e.g. cloud, on-premises, hybrid"
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
@@ -520,6 +519,12 @@ export function ApplicationNew() {
                     ]}
                   />
                 </div>
+                <Checkbox
+                  id="sastIncludesScaNew"
+                  label="SAST output includes SCA (dependency) scanning"
+                  checked={formData.sastIncludesSca}
+                  onChange={(e) => setFormData({ ...formData, sastIncludesSca: e.target.checked })}
+                />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
                     label="DAST Tool"
@@ -536,6 +541,27 @@ export function ApplicationNew() {
                     ]}
                   />
                 </div>
+                {!formData.sastIncludesSca && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="SCA Tool"
+                      value={formData.scaTool}
+                      onChange={(e) => setFormData({ ...formData, scaTool: e.target.value })}
+                    />
+                    <Select
+                      label="SCA Integration Level"
+                      value={formData.scaIntegrationLevel}
+                      onChange={(e) => setFormData({ ...formData, scaIntegrationLevel: e.target.value })}
+                      options={[
+                        { value: '', label: 'Select level' },
+                        ...integrationLevels,
+                      ]}
+                    />
+                  </div>
+                )}
+                {formData.sastIncludesSca && (
+                  <p className="text-sm text-gray-600">SCA will use the same tool and level as SAST for scoring.</p>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
                     label="App Firewall Tool"
@@ -552,6 +578,12 @@ export function ApplicationNew() {
                     ]}
                   />
                 </div>
+                <Checkbox
+                  id="appFirewallNA"
+                  label="Application Firewall Not Applicable"
+                  checked={formData.appFirewallNA}
+                  onChange={(e) => setFormData({ ...formData, appFirewallNA: e.target.checked })}
+                />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
                     label="API Security Tool"
