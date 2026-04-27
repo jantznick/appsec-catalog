@@ -34,6 +34,8 @@ export function CompanyDetail() {
   const [domains, setDomains] = useState([]);
   const [findingsOpen, setFindingsOpen] = useState(false);
   const [downloadingTechFormLinks, setDownloadingTechFormLinks] = useState(false);
+  const [editingHeaderDivision, setEditingHeaderDivision] = useState(false);
+  const [savingHeaderDivision, setSavingHeaderDivision] = useState(false);
 
   const [divisions, setDivisions] = useState([]);
   const [loadingDivisions, setLoadingDivisions] = useState(false);
@@ -63,6 +65,12 @@ export function CompanyDetail() {
       loadDivisions();
     }
   }, [id, isAdmin]);
+
+  useEffect(() => {
+    if (isEditing) {
+      setEditingHeaderDivision(false);
+    }
+  }, [isEditing]);
 
   const loadDivisions = async () => {
     try {
@@ -201,6 +209,31 @@ export function CompanyDetail() {
     }
   };
 
+  const handleHeaderDivisionChange = async (e) => {
+    if (!isAdmin() || !id) return;
+    const newId = e.target.value ? e.target.value : null;
+    setSavingHeaderDivision(true);
+    try {
+      await api.updateCompany(id, { divisionId: newId || null });
+      const newDivision = newId ? divisions.find((d) => d.id === newId) : null;
+      setCompany((prev) =>
+        prev && {
+          ...prev,
+          divisionId: newId,
+          division: newDivision,
+        },
+      );
+      setFormData((fd) => ({ ...fd, divisionId: newId || '' }));
+      setOriginalFormData((o) => (o ? { ...o, divisionId: newId || '' } : o));
+      setEditingHeaderDivision(false);
+      toast.success('Division updated');
+    } catch (err) {
+      toast.error(err.message || 'Failed to update division');
+    } finally {
+      setSavingHeaderDivision(false);
+    }
+  };
+
   const handleSave = async () => {
     // Check if user has access (admin or member of company)
     if (!isAdmin() && user?.companyId !== id) {
@@ -254,17 +287,77 @@ export function CompanyDetail() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
           <h1 className="text-3xl font-bold text-gray-800">{company.name}</h1>
-          {company.division && isAdmin() && (
-            <Link
-              to={`/divisions/${company.division.id}`}
-              className="px-3 py-1 text-sm font-medium text-blue-700 bg-blue-100 rounded-full hover:bg-blue-200 transition-colors"
-            >
-              {company.division.name}
-            </Link>
+          {isAdmin() && (
+            <>
+              {editingHeaderDivision ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="w-auto min-w-[12rem] max-w-xs">
+                    <Select
+                      id="header-division"
+                      className="w-full"
+                      value={formData.divisionId || ''}
+                      onChange={handleHeaderDivisionChange}
+                      disabled={loadingDivisions || savingHeaderDivision}
+                      options={[
+                        { value: '', label: 'No division' },
+                        ...divisions.map((d) => ({ value: d.id, label: d.name })),
+                      ]}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditingHeaderDivision(false)}
+                    className="text-sm text-gray-600 hover:text-gray-900"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditingHeaderDivision(true)}
+                    className={
+                      company.division
+                        ? 'px-3 py-1 text-sm font-medium text-blue-700 bg-blue-100 rounded-full hover:bg-blue-200 transition-colors'
+                        : 'px-3 py-1 text-sm font-medium text-gray-600 bg-gray-100 border border-dashed border-gray-300 rounded-full hover:bg-gray-200 transition-colors'
+                    }
+                    title="Change division"
+                  >
+                    {company.division ? company.division.name : 'No division'}
+                  </button>
+                  {company.division && (
+                    <Link
+                      to={`/divisions/${company.division.id}`}
+                      className="p-0.5 rounded text-blue-600 hover:text-blue-800 hover:bg-blue-50/80"
+                      title="View division"
+                      aria-label="View division page"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                        />
+                      </svg>
+                    </Link>
+                  )}
+                </div>
+              )}
+            </>
           )}
           {!isAdmin() && (
             <div className="text-sm text-gray-600">
-              Division: {company.division.name}
+              {company.division
+                ? `Division: ${company.division.name}`
+                : 'No division'}
             </div>
           )}
           </div>
@@ -453,15 +546,19 @@ export function CompanyDetail() {
                           </p>
                         </div>
                       </div>
-                      {isAdmin() && company.division && (
+                      {isAdmin() && (
                         <div>
                           <label className="block text-sm font-medium text-gray-600 mb-1">Division</label>
-                          <Link
-                            to={`/divisions/${company.division.id}`}
-                            className="inline-block px-3 py-1 text-sm font-medium text-blue-700 bg-blue-100 rounded-full hover:bg-blue-200 transition-colors"
-                          >
-                            {company.division.name}
-                          </Link>
+                          {company.division ? (
+                            <Link
+                              to={`/divisions/${company.division.id}`}
+                              className="inline-block px-3 py-1 text-sm font-medium text-blue-700 bg-blue-100 rounded-full hover:bg-blue-200 transition-colors"
+                            >
+                              {company.division.name}
+                            </Link>
+                          ) : (
+                            <p className="text-sm text-gray-500">No division</p>
+                          )}
                         </div>
                       )}
                       <div>
