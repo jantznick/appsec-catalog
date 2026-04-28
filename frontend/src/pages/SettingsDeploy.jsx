@@ -42,7 +42,7 @@ export function SettingsDeploy() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Settings • Deploy</h1>
         <p className="text-sm text-gray-600 mt-1">
-          Admin-only. Triggers a production deploy on this VM.
+          Admin-only. Triggers a production git pull + deploy on this VM.
         </p>
       </div>
 
