@@ -96,20 +96,6 @@ export function SettingsDeploy() {
           </CardContent>
         </Card>
       )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Prerequisites</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-gray-700 space-y-2">
-          <div>
-            The backend container must be able to start a short-lived docker runner container. In compose, this is enabled by mounting the docker socket.
-          </div>
-          <div>
-            Set <code className="px-1 py-0.5 bg-gray-100 rounded">DEPLOY_HOST_WORKDIR</code> to the absolute path of this repo on the VM (e.g. <code className="px-1 py-0.5 bg-gray-100 rounded">/opt/appsec-catalog</code>).
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
