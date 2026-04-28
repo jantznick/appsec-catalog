@@ -250,8 +250,8 @@ router.delete('/:tokenId', requireAuth, async (req, res) => {
   }
 });
 
-// Public endpoint: Create deployment via token
-// POST /api/deployments
+// Public endpoint: Create deployment via token (no auth; body must include valid token)
+// POST /api/deployment-tokens
 router.post('/', async (req, res) => {
   try {
     const { token, applicationId, deployedAt, environment, version, gitBranch, deployedBy, notes } = req.body;

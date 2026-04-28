@@ -551,7 +551,7 @@ function TokenInfoModal({ token, selectedApplicationId, setSelectedApplicationId
 
   const generateCurlCommand = () => {
     if (!selectedApplicationId) return '';
-    const apiUrl = `${frontendUrl}/api/applications/deployments`;
+    const apiUrl = `${frontendUrl}/api/deployment-tokens`;
     
     return `curl -X POST ${apiUrl} \\
   -H "Content-Type: application/json" \\
@@ -569,7 +569,7 @@ function TokenInfoModal({ token, selectedApplicationId, setSelectedApplicationId
 
   const generateWgetCommand = () => {
     if (!selectedApplicationId) return '';
-    const apiUrl = `${frontendUrl}/api/applications/deployments`;
+    const apiUrl = `${frontendUrl}/api/deployment-tokens`;
     
     return `wget --method=POST \\
   --header="Content-Type: application/json" \\

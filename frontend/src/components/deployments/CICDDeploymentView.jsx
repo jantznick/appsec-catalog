@@ -117,7 +117,7 @@ export function CICDDeploymentView({
 
   // Generate curl command
   const generateCurlCommand = () => {
-    const apiUrl = `${frontendUrl}/api/applications/deployments`;
+    const apiUrl = `${frontendUrl}/api/deployment-tokens`;
     const token = tokenValue;
     
     return `curl -X POST ${apiUrl} \\
@@ -136,7 +136,7 @@ export function CICDDeploymentView({
 
   // Generate wget command
   const generateWgetCommand = () => {
-    const apiUrl = `${frontendUrl}/api/applications/deployments`;
+    const apiUrl = `${frontendUrl}/api/deployment-tokens`;
     const token = tokenValue;
     
     return `wget --method=POST \\
