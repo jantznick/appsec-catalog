@@ -27,7 +27,6 @@ export function Applications() {
     companyId: searchParams.get('companyId') || '',
     divisionId: '',
     status: '',
-    search: '',
   });
 
   // Table state
@@ -61,11 +60,11 @@ export function Applications() {
   };
 
   useEffect(() => {
-    // Only reload when filters change if admin (regular users don't have filters)
+    // Only refetch when server-side filters change; text search is client-side (globalFilter).
     if (isAdmin()) {
       loadApplications();
     }
-  }, [filters]);
+  }, [filters.companyId, filters.divisionId, filters.status]);
 
   // Update filter when companyId changes in URL
   useEffect(() => {
@@ -90,8 +89,12 @@ export function Applications() {
       let data;
       
       if (isAdmin()) {
-        // Use admin endpoint with server-side filtering
-        data = await api.getAdminApplications(filters);
+        // Server filters only; search text is applied client-side to avoid refetch + score storms.
+        data = await api.getAdminApplications({
+          companyId: filters.companyId,
+          divisionId: filters.divisionId,
+          status: filters.status,
+        });
       } else {
         // Use regular endpoint (backend filters by user's company)
         data = await api.getApplications();
@@ -399,16 +402,9 @@ export function Applications() {
       if (filters.divisionId) {
         data = data.filter(app => app.company?.divisionId === filters.divisionId);
       }
-      if (filters.search) {
-        const searchLower = filters.search.toLowerCase();
-        data = data.filter(app => 
-          app.name?.toLowerCase().includes(searchLower) ||
-          app.description?.toLowerCase().includes(searchLower)
-        );
-      }
     }
 
-    // Apply global filter (for client-side search)
+    // Client-side search (admin and non-admin)
     if (globalFilter) {
       const filterLower = globalFilter.toLowerCase();
       data = data.filter(app =>
@@ -474,9 +470,9 @@ export function Applications() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <Input
                 label="Search"
-                value={filters.search}
-                onChange={(e) => handleFilterChange('search', e.target.value)}
-                placeholder="Search by name or description..."
+                value={globalFilter}
+                onChange={(e) => setGlobalFilter(e.target.value)}
+                placeholder="Search by name, description, or owner..."
               />
               <Select
                 label="Division"

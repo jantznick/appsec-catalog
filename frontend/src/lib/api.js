@@ -589,7 +589,6 @@ export const api = {
     if (filters.companyId) params.append('companyId', filters.companyId);
     if (filters.divisionId) params.append('divisionId', filters.divisionId);
     if (filters.status) params.append('status', filters.status);
-    if (filters.search) params.append('search', filters.search);
     const queryString = params.toString();
     return apiRequest(`/api/admin/applications${queryString ? `?${queryString}` : ''}`);
   },
