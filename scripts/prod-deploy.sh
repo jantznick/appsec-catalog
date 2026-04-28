@@ -1,12 +1,12 @@
 #!/bin/sh
 set -eu
 
-TARGET="${1:-both}" # frontend | backend | both
+TARGET="${1:-both}" # frontend | backend | both | auto
 
 case "$TARGET" in
-  frontend|backend|both) ;;
+  frontend|backend|both|auto) ;;
   *)
-    echo "Usage: $0 [frontend|backend|both]" >&2
+    echo "Usage: $0 [frontend|backend|both|auto]" >&2
     exit 2
     ;;
 esac
@@ -49,6 +49,50 @@ if command -v git >/dev/null 2>&1; then
   fi
 else
   echo "[deploy] git not installed; skipping git fetch/pull"
+fi
+
+# auto: infer frontend-only / backend-only / both from files changed between pre-pull and post-pull SHAs
+if [ "$TARGET" = "auto" ]; then
+  # If we cannot see a before/after pair (no git in repo, etc.), deploy both.
+  if [ -z "${BEFORE:-}" ] || [ -z "${AFTER:-}" ]; then
+    echo "[deploy] auto: missing git SHAs; deploying both (safe default)"
+    TARGET=both
+  else
+    NEED_F=0
+    NEED_B=0
+    DIFF_TMP="/tmp/appsec-catalog-deploy-diff-$$"
+    git diff --name-only "$BEFORE" "$AFTER" >"$DIFF_TMP" 2>/dev/null || true
+    while IFS= read -r f || [ -n "$f" ]; do
+      [ -z "$f" ] && continue
+      case "$f" in
+        frontend/*|frontend)
+          NEED_F=1
+          ;;
+        backend/*|backend)
+          NEED_B=1
+          ;;
+        docker-compose.yml|docker-compose.yaml|docker-compose.*.yml|docker-compose.*.yaml|compose.yml|compose.yaml|scripts/prod-deploy.sh)
+          NEED_F=1
+          NEED_B=1
+          ;;
+        *)
+          ;;
+      esac
+    done <"$DIFF_TMP"
+    rm -f "$DIFF_TMP"
+
+    if [ "$NEED_F" = 1 ] && [ "$NEED_B" = 1 ]; then
+      TARGET=both
+    elif [ "$NEED_F" = 1 ]; then
+      TARGET=frontend
+    elif [ "$NEED_B" = 1 ]; then
+      TARGET=backend
+    else
+      echo "[deploy] auto: no changes under frontend/, backend/, or compose files; skipping docker build/up"
+      exit 0
+    fi
+    echo "[deploy] auto: resolved target=$TARGET (from git diff ${BEFORE}..${AFTER})"
+  fi
 fi
 
 SERVICES=""
@@ -125,12 +169,11 @@ EOF
 )"
 
   echo "[deploy] recording deployment for ${COMPONENT} appId=${APP_ID}"
-  # Use wget for maximum compatibility in minimal images.
+  # BusyBox wget (Alpine/docker:cli) does not support GNU --method/--body-data; use --post-data.
   wget -qO- \
-    --method=POST \
     --header="Content-Type: application/json" \
-    --body-data="$BODY" \
-    "${APPSEC_CATALOG_API_URL}" >/dev/null || true
+    --post-data="$BODY" \
+    "${APPSEC_CATALOG_API_URL}" >/dev/null 2>&1 || true
 }
 
 if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "both" ]; then

@@ -10,7 +10,7 @@ import { toast } from '../components/ui/Toast.jsx';
 
 export function SettingsDeploy() {
   const { isAdmin } = useAuthStore();
-  const [target, setTarget] = useState('both');
+  const [target, setTarget] = useState('auto');
   const [version, setVersion] = useState('');
   const [deploying, setDeploying] = useState(false);
   const [lastResult, setLastResult] = useState(null);
@@ -42,7 +42,10 @@ export function SettingsDeploy() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Settings • Deploy</h1>
         <p className="text-sm text-gray-600 mt-1">
-          Admin-only. Triggers a production git pull + deploy on this VM.
+          Admin-only. Triggers a production git pull + deploy on this VM. Auto uses the commit
+          before pull versus after pull (not the running container image) and rebuilds only what
+          changed under <code className="text-xs">frontend/</code>, <code className="text-xs">backend/</code>, or
+          compose / <code className="text-xs">scripts/prod-deploy.sh</code>.
         </p>
       </div>
 
@@ -57,6 +60,10 @@ export function SettingsDeploy() {
               value={target}
               onChange={(e) => setTarget(e.target.value)}
               options={[
+                {
+                  value: 'auto',
+                  label: 'Auto (git diff: frontend / backend / both)',
+                },
                 { value: 'frontend', label: 'Frontend only' },
                 { value: 'backend', label: 'Backend only' },
                 { value: 'both', label: 'Frontend + Backend' },

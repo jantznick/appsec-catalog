@@ -15,9 +15,17 @@ async function apiRequest(endpoint, options = {}) {
   };
 
   const response = await fetch(url, config);
+  const text = await response.text();
 
   if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
+    let data = {};
+    if (text.trim()) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { error: text.slice(0, 500) };
+      }
+    }
     const err = new Error(data.message || data.error || 'An error occurred');
     // Attach structured fields for callers (e.g. deploy stdout/stderr)
     err.status = response.status;
@@ -25,10 +33,17 @@ async function apiRequest(endpoint, options = {}) {
     err.body = data;
     throw err;
   }
-  if (response.status === 204) {
+  if (response.status === 204 || !text.trim()) {
     return {};
   }
-  return response.json();
+  try {
+    return JSON.parse(text);
+  } catch {
+    const err = new Error('Server returned non-JSON response');
+    err.status = response.status;
+    err.body = text.slice(0, 2000);
+    throw err;
+  }
 }
 
 export const api = {

@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 
-const VALID_TARGETS = new Set(['frontend', 'backend', 'both']);
+const VALID_TARGETS = new Set(['frontend', 'backend', 'both', 'auto']);
 
 /**
  * Triggers a production deploy by launching a short-lived docker runner container
@@ -97,15 +97,28 @@ export async function triggerProdDeploy({ target, version }) {
     });
 
     child.on('error', (err) => reject(err));
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
+      const out = stdout.trim();
+      const errText = stderr.trim();
+      // Docker and git often write progress to stderr even on success; surface both in the UI.
+      const combined =
+        out && errText ? `${out}\n\n[stderr]\n${errText}` : out || errText || '';
       if (code === 0) {
-        resolve({ ok: true, target: t, output: stdout.trim() });
+        resolve({
+          ok: true,
+          target: t,
+          output: combined,
+          stdout: out,
+          stderr: errText,
+        });
       } else {
-        const error = new Error(`Deploy failed (exit ${code})`);
+        const reason =
+          code != null ? `Deploy failed (exit ${code})` : `Deploy failed (signal ${signal || 'unknown'})`;
+        const error = new Error(reason);
         // @ts-ignore
         error.statusCode = 500;
         // @ts-ignore
-        error.details = { stdout, stderr };
+        error.details = { stdout, stderr, output: combined };
         reject(error);
       }
     });
