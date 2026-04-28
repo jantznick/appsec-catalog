@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { toast } from '../components/ui/Toast.jsx';
 import { LoadingPage } from '../components/ui/Loading.jsx';
 import { api } from '../lib/api.js';
@@ -713,6 +713,18 @@ export function ProductDetail() {
 
   if (!product) return null;
 
+  const getScoreColor = (score) => {
+    if (score >= 76) return 'text-green-600';
+    if (score >= 51) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  const getScoreBgColor = (score) => {
+    if (score >= 76) return 'bg-green-100';
+    if (score >= 51) return 'bg-yellow-100';
+    return 'bg-red-100';
+  };
+
   return (
     <div className={isEditing ? 'pb-24' : ''}>
       <ProductDetailHeader
@@ -723,48 +735,74 @@ export function ProductDetail() {
       />
 
       <div className="space-y-6">
-        {productScore && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="text-xs text-gray-600">Product score (avg)</div>
-              <div className="text-3xl font-bold text-gray-900 mt-1">{productScore.avgTotalScore}</div>
-              <div className="text-xs text-gray-500 mt-1">
-                {productScore.applicationCount} app{productScore.applicationCount === 1 ? '' : 's'}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {productScore ? (
+            <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-lg p-5 border-2 border-gray-200 shadow-sm lg:col-span-1">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-xs text-gray-600">Product Security Score</div>
+                  <div className={`text-5xl font-bold ${getScoreColor(productScore.avgTotalScore)} mt-1`}>
+                    {productScore.avgTotalScore}
+                  </div>
+                  <div className="text-sm text-gray-600">average of mapped application scores</div>
+                  <div className="mt-2">
+                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${getScoreBgColor(productScore.avgTotalScore)} ${getScoreColor(productScore.avgTotalScore)}`}>
+                      {productScore.avgTotalScore >= 76 ? 'Excellent' : productScore.avgTotalScore >= 51 ? 'Good' : 'Needs Improvement'}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-gray-600">Apps included</div>
+                  <a
+                    href="#product-applications"
+                    className="inline-block text-2xl font-bold text-blue-700 hover:text-blue-800 mt-1"
+                    title="Jump to application mappings"
+                  >
+                    {productScore.applicationCount}
+                  </a>
+                  {productScore.calculatedAt && (
+                    <div className="text-xs text-gray-600 mt-3">
+                      Updated {new Date(productScore.calculatedAt).toLocaleString()}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="text-xs text-gray-600">Avg knowledge</div>
-              <div className="text-2xl font-bold text-gray-900 mt-1">{productScore.avgKnowledgeScore}</div>
+          ) : (
+            <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-lg p-5 border-2 border-gray-200 shadow-sm lg:col-span-1">
+              <div className="text-xs text-gray-600">Product Security Score</div>
+              <div className="text-sm text-gray-600 mt-1">No applications mapped yet.</div>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="text-xs text-gray-600">Avg tool usage</div>
-              <div className="text-2xl font-bold text-gray-900 mt-1">{productScore.avgToolScore}</div>
-            </div>
-          </div>
-        )}
-        <ProductMetadataCard
-          isEditing={isEditing}
-          canEdit={canEdit()}
-          handleFieldClick={handleFieldClick}
-          formData={formData}
-          handleFieldChange={handleFieldChange}
-        />
+          )}
 
-        <ApplicationMappingsCard
-          product={product}
-          componentTypes={componentTypes}
-          componentTypeOptions={componentTypeOptions}
-          editingMappingId={editingMappingId}
-          setEditingMappingId={setEditingMappingId}
-          getRowEdit={getRowEdit}
-          setEditForRow={setEditForRow}
-          hasMappingChanges={hasMappingChanges}
-          handleSaveRow={handleSaveRow}
-          openRemoveMappingModal={openRemoveMappingModal}
-          setShowTypeSettingsModal={setShowTypeSettingsModal}
-          setShowAddMappingModal={setShowAddMappingModal}
-          otherComponentValue={OTHER_COMPONENT_VALUE}
-        />
+          <div className="lg:col-span-2">
+            <ProductMetadataCard
+              isEditing={isEditing}
+              canEdit={canEdit()}
+              handleFieldClick={handleFieldClick}
+              formData={formData}
+              handleFieldChange={handleFieldChange}
+            />
+          </div>
+        </div>
+
+        <div id="product-applications">
+          <ApplicationMappingsCard
+            product={product}
+            componentTypes={componentTypes}
+            componentTypeOptions={componentTypeOptions}
+            editingMappingId={editingMappingId}
+            setEditingMappingId={setEditingMappingId}
+            getRowEdit={getRowEdit}
+            setEditForRow={setEditForRow}
+            hasMappingChanges={hasMappingChanges}
+            handleSaveRow={handleSaveRow}
+            openRemoveMappingModal={openRemoveMappingModal}
+            setShowTypeSettingsModal={setShowTypeSettingsModal}
+            setShowAddMappingModal={setShowAddMappingModal}
+            otherComponentValue={OTHER_COMPONENT_VALUE}
+          />
+        </div>
 
         <DataFlowsCard
           mappedApps={mappedApps}
