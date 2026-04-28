@@ -5,8 +5,17 @@ import { Input } from '../ui/Input.jsx';
 import { Select } from '../ui/Select.jsx';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table.jsx';
 
+function bandClass0to100(value) {
+  if (value == null || Number.isNaN(Number(value))) return 'text-gray-400';
+  const n = Number(value);
+  if (n >= 76) return 'text-green-600 font-semibold tabular-nums';
+  if (n >= 51) return 'text-yellow-600 font-semibold tabular-nums';
+  return 'text-red-600 font-semibold tabular-nums';
+}
+
 export function ApplicationMappingsCard({
   product,
+  appMetricsByApplicationId = {},
   componentTypes,
   componentTypeOptions,
   editingMappingId,
@@ -53,6 +62,8 @@ export function ApplicationMappingsCard({
             <TableHeader>
               <TableRow>
                 <TableHead>Application</TableHead>
+                <TableHead className="text-right whitespace-nowrap">Security score</TableHead>
+                <TableHead className="text-right whitespace-nowrap">Policy Compliance</TableHead>
                 <TableHead>Component Type</TableHead>
                 <TableHead></TableHead>
               </TableRow>
@@ -63,6 +74,9 @@ export function ApplicationMappingsCard({
                 const isRowEditing = editingMappingId === mapping.applicationId;
                 const typeName = componentTypes.find((t) => t.id === mapping.componentTypeId)?.name;
                 const displayType = typeName || `Other: ${mapping.customComponentLabel || 'Custom'}`;
+                const metrics = appMetricsByApplicationId[mapping.applicationId];
+                const totalScore = metrics?.totalScore;
+                const policyPct = metrics?.policyCompliancePercent;
 
                 return (
                   <TableRow
@@ -83,6 +97,12 @@ export function ApplicationMappingsCard({
                       ) : (
                         mapping.application?.name || mapping.applicationId
                       )}
+                    </TableCell>
+                    <TableCell className={`text-right ${bandClass0to100(totalScore)}`}>
+                      {totalScore != null ? totalScore : '—'}
+                    </TableCell>
+                    <TableCell className={`text-right ${bandClass0to100(policyPct)}`}>
+                      {policyPct != null ? `${policyPct}%` : '—'}
                     </TableCell>
                     <TableCell>
                       {isRowEditing ? (

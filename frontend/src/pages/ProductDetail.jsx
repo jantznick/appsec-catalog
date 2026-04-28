@@ -196,6 +196,16 @@ export function ProductDetail() {
     () => mappedApps.map((app) => ({ value: app.id, label: app.name })),
     [mappedApps]
   );
+  const appMetricsByApplicationId = useMemo(() => {
+    const map = {};
+    for (const row of productScore?.applications ?? []) {
+      map[row.applicationId] = {
+        totalScore: row.totalScore,
+        policyCompliancePercent: row.policyCompliancePercent,
+      };
+    }
+    return map;
+  }, [productScore]);
   const dataFlows = product?.dataFlows || [];
   const ingressPoints = product?.ingressPoints || [];
   const selectedFlowApiKeyApplicationId = newFlow.markSourceAsIngress
@@ -750,6 +760,17 @@ export function ProductDetail() {
                       {productScore.avgTotalScore >= 76 ? 'Excellent' : productScore.avgTotalScore >= 51 ? 'Good' : 'Needs Improvement'}
                     </span>
                   </div>
+                  {productScore.avgPolicyCompliancePercent != null && (
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <div className="text-xs text-gray-600">Average policy compliance</div>
+                      <div className={`text-2xl font-semibold ${getScoreColor(productScore.avgPolicyCompliancePercent)} mt-0.5`}>
+                        {productScore.avgPolicyCompliancePercent}%
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        Mean of each mapped app&apos;s compliance with applicable controls
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-gray-600">Apps included</div>
@@ -789,6 +810,7 @@ export function ProductDetail() {
         <div id="product-applications">
           <ApplicationMappingsCard
             product={product}
+            appMetricsByApplicationId={appMetricsByApplicationId}
             componentTypes={componentTypes}
             componentTypeOptions={componentTypeOptions}
             editingMappingId={editingMappingId}

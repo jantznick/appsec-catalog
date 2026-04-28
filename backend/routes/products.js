@@ -2,6 +2,7 @@ import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { calculateApplicationScore } from '../services/scoring.js';
+import { evaluateAllControls } from '../services/policy.js';
 
 const router = express.Router();
 
@@ -352,6 +353,7 @@ router.get('/:id/score', requireAuth, async (req, res) => {
         avgKnowledgeScore: 0,
         avgToolScore: 0,
         avgTotalScore: 0,
+        avgPolicyCompliancePercent: null,
         calculatedAt: saved.calculatedAt,
       });
     }
@@ -360,6 +362,12 @@ router.get('/:id/score', requireAuth, async (req, res) => {
     const apps = await prisma.application.findMany({
       where: { id: { in: applicationIds } },
       include: {
+        company: {
+          select: {
+            id: true,
+            divisionId: true,
+          },
+        },
         deployments: {
           orderBy: { deployedAt: 'desc' },
           take: 1,
@@ -368,14 +376,22 @@ router.get('/:id/score', requireAuth, async (req, res) => {
     });
 
     const byId = new Map(apps.map((a) => [a.id, a]));
-    const scored = applicationIds
-      .map((id) => byId.get(id))
-      .filter(Boolean)
-      .map((app) => ({
-        applicationId: app.id,
-        name: app.name,
-        ...calculateApplicationScore(app),
-      }));
+    const orderedApps = applicationIds.map((id) => byId.get(id)).filter(Boolean);
+
+    const complianceResults = await Promise.all(
+      orderedApps.map((app) => evaluateAllControls(app)),
+    );
+    const policyPercents = complianceResults.map((r) => r.summary.compliance_percentage);
+    const avgPolicyCompliancePercent =
+      policyPercents.length > 0
+        ? Math.round(policyPercents.reduce((a, b) => a + b, 0) / policyPercents.length)
+        : null;
+
+    const scored = orderedApps.map((app) => ({
+      applicationId: app.id,
+      name: app.name,
+      ...calculateApplicationScore(app),
+    }));
 
     const sum = scored.reduce(
       (acc, s) => {
@@ -406,11 +422,13 @@ router.get('/:id/score', requireAuth, async (req, res) => {
       avgKnowledgeScore,
       avgToolScore,
       avgTotalScore,
+      avgPolicyCompliancePercent,
       calculatedAt: saved.calculatedAt,
-      applications: scored.map((s) => ({
+      applications: scored.map((s, i) => ({
         applicationId: s.applicationId,
         name: s.name,
         totalScore: s.totalScore,
+        policyCompliancePercent: policyPercents[i] ?? null,
       })),
     });
   } catch (error) {
