@@ -11,6 +11,8 @@ case "$TARGET" in
     ;;
 esac
 
+PROJECT_NAME="${COMPOSE_PROJECT_NAME:-appsec-catalog}"
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "docker is required" >&2
   exit 2
@@ -58,8 +60,13 @@ else
   SERVICES="frontend backend"
 fi
 
-echo "[deploy] docker compose up -d --build $SERVICES"
-docker compose up -d --build $SERVICES
+# IMPORTANT:
+# - For frontend/backend deploys we do NOT want docker compose to recreate dependencies like postgres.
+# - In this repo, postgres has a fixed `container_name: appsec-catalog-db`. If compose tries to create
+#   a new postgres container (even transiently) it can conflict with the existing one.
+# - `--no-deps` prevents compose from attempting to start/recreate dependencies.
+echo "[deploy] docker compose -p $PROJECT_NAME up -d --build --no-deps $SERVICES"
+docker compose -p "$PROJECT_NAME" up -d --build --no-deps $SERVICES
 
 # Optional: reclaim disk space (volume-safe; never prunes volumes).
 # Enable by setting: DOCKER_PRUNE=true

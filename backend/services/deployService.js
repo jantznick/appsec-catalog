@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import path from 'node:path';
 
 const VALID_TARGETS = new Set(['frontend', 'backend', 'both']);
 
@@ -26,8 +27,11 @@ export async function triggerProdDeploy({ target, version }) {
   }
 
   const runnerImage = process.env.DEPLOY_RUNNER_IMAGE || 'docker:cli';
+  const composeProjectName =
+    process.env.COMPOSE_PROJECT_NAME || path.basename(hostWorkdir) || 'appsec-catalog';
 
   const envPairs = [
+    ['COMPOSE_PROJECT_NAME', composeProjectName],
     ['APPSEC_CATALOG_API_URL', process.env.APPSEC_CATALOG_API_URL],
     ['APPSEC_CATALOG_DEPLOYMENT_TOKEN', process.env.APPSEC_CATALOG_DEPLOYMENT_TOKEN],
     ['APPSEC_CATALOG_DEPLOY_ENV', process.env.APPSEC_CATALOG_DEPLOY_ENV],
