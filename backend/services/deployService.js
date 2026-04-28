@@ -48,8 +48,33 @@ export async function triggerProdDeploy({ target, version }) {
     ...envPairs.flatMap(([k, v]) => ['-e', `${k}=${v}`]),
     runnerImage,
     'sh',
-    'scripts/prod-deploy.sh',
-    t,
+    '-lc',
+    // Ensure runner has prerequisites. `docker compose` is a plugin on Alpine via docker-cli-compose.
+    // Also install `git` (for fetch/pull) and `wget` (for optional deployment recording).
+    [
+      'set -eu',
+      'apk add --no-cache git docker-cli-compose wget >/dev/null 2>&1 || true',
+      // Git may refuse to operate on a bind-mounted repo owned by a different UID (dubious ownership).
+      // This is safe in the ephemeral runner container and avoids false "not a repo" detection.
+      'git config --global --add safe.directory /workspace >/dev/null 2>&1 || true',
+      // If the host repo is behind (e.g. new file added), pull before trying to run.
+      'if [ ! -f scripts/prod-deploy.sh ]; then',
+      '  echo "[deploy] scripts/prod-deploy.sh missing; attempting git fetch/pull in host workdir"',
+      '  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then',
+      '    git fetch --prune || true',
+      '    git pull --ff-only || true',
+      '  else',
+      '    echo "[deploy] not a git repo; cannot auto-pull updates" >&2',
+      '  fi',
+      'fi',
+      'if [ ! -f scripts/prod-deploy.sh ]; then',
+      '  echo "[deploy] still missing scripts/prod-deploy.sh at $(pwd)" >&2',
+      '  echo "[deploy] contents of scripts/:" >&2',
+      '  ls -la scripts 2>/dev/null || true',
+      '  exit 2',
+      'fi',
+      `sh scripts/prod-deploy.sh ${t}`,
+    ].join('; '),
   ];
 
   return await new Promise((resolve, reject) => {

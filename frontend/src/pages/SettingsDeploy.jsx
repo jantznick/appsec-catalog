@@ -13,6 +13,7 @@ export function SettingsDeploy() {
   const [target, setTarget] = useState('both');
   const [version, setVersion] = useState('');
   const [deploying, setDeploying] = useState(false);
+  const [lastResult, setLastResult] = useState(null);
 
   if (!isAdmin()) {
     return <Navigate to="/dashboard" replace />;
@@ -21,12 +22,15 @@ export function SettingsDeploy() {
   const triggerDeploy = async () => {
     try {
       setDeploying(true);
-      await api.adminTriggerDeploy({
+      setLastResult(null);
+      const result = await api.adminTriggerDeploy({
         target,
         version: version?.trim() || undefined,
       });
-      toast.success('Deploy triggered. This may take a few minutes.');
+      setLastResult(result || null);
+      toast.success(result?.output ? 'Deploy finished. See output below.' : 'Deploy triggered.');
     } catch (e) {
+      setLastResult(e?.details ? { ok: false, ...e.details } : null);
       toast.error(e?.message || 'Failed to trigger deploy');
     } finally {
       setDeploying(false);
@@ -78,6 +82,20 @@ export function SettingsDeploy() {
           </div>
         </CardContent>
       </Card>
+
+      {lastResult && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Last deploy output</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <pre className="text-xs bg-gray-50 border border-gray-200 rounded-lg p-3 overflow-auto max-h-96 whitespace-pre-wrap">
+              {lastResult.output || lastResult.stdout || ''}
+              {lastResult.stderr ? `\n\n[stderr]\n${lastResult.stderr}` : ''}
+            </pre>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
