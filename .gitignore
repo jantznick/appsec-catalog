@@ -36,6 +36,9 @@ lerna-debug.log*
 *.sln
 *.sw?
 
+# Local DB dumps (backend/scripts/db-backup.sh)
+backend/backups/
+
 # Prisma
 # Note: migrations/ should be committed for production deployments
 # Only ignore migration backups
