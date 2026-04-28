@@ -74,7 +74,7 @@ export async function triggerProdDeploy({ target, version }) {
       '  exit 2',
       'fi',
       `sh scripts/prod-deploy.sh ${t}`,
-    ].join('; '),
+    ].join('\n'),
   ];
 
   return await new Promise((resolve, reject) => {
