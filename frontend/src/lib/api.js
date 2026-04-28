@@ -383,6 +383,9 @@ export const api = {
   getProduct: (id) =>
     apiRequest(`/api/products/${id}`),
 
+  getProductScore: (id) =>
+    apiRequest(`/api/products/${id}/score`),
+
   createProduct: (data) =>
     apiRequest('/api/products', {
       method: 'POST',

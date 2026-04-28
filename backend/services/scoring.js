@@ -423,8 +423,10 @@ export function calculateToolUsageScore(app) {
     let riskWeight = 1.0;
     
     // Apply facing risk factor
-    if (app.facing && riskFactors.facing[app.facing]) {
-      riskWeight = Math.max(riskWeight, riskFactors.facing[app.facing]);
+    // Important: missing/NA facing should not be a scoring loophole. Assume External when not provided.
+    const facingValue = isMetadataValueNA(app.facing) || !app.facing ? 'External' : app.facing;
+    if (riskFactors.facing[facingValue]) {
+      riskWeight = Math.max(riskWeight, riskFactors.facing[facingValue]);
     }
     
     // Apply data type risk factors using boolean fields (more accurate)
@@ -465,6 +467,15 @@ export function calculateToolUsageScore(app) {
     }
     if (hasPHI && riskFactors.dataTypes['PHI']) {
       riskWeight = Math.max(riskWeight, riskFactors.dataTypes['PHI']);
+    }
+    // If no data type info was provided at all, assume worst-case (so omission can't inflate score).
+    if (!hasPCI && !hasPII && !hasPHI && (!app.dataTypes || isMetadataValueNA(app.dataTypes))) {
+      const worstCaseDataTypeRisk = Math.max(
+        riskFactors.dataTypes?.PCI || 1.0,
+        riskFactors.dataTypes?.PII || 1.0,
+        riskFactors.dataTypes?.PHI || 1.0,
+      );
+      riskWeight = Math.max(riskWeight, worstCaseDataTypeRisk);
     }
     
     const categoryMaxPoints = BASE_POINTS_PER_CATEGORY * riskWeight;
@@ -540,14 +551,7 @@ export function calculateToolUsageScore(app) {
           }
         }
       } else {
-        // If tool is configured but no scan date, apply a penalty
-        if (lastDeploymentDate) {
-          // If there are deployments but no scan, significant penalty
-          scanDateWeight = 0.3; // 70% penalty for missing scan dates when deployments exist
-        } else {
-          // No deployments and no scan date - smaller penalty
-          scanDateWeight = 0.8; // 20% penalty for missing scan dates
-        }
+        scanDateWeight = 0.3; // 70% penalty for missing scan dates
       }
     }
 

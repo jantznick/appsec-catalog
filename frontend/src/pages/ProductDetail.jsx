@@ -56,6 +56,7 @@ export function ProductDetail() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [editingMappingId, setEditingMappingId] = useState(null);
   const [product, setProduct] = useState(null);
+  const [productScore, setProductScore] = useState(null);
   const [availableApps, setAvailableApps] = useState([]);
   const [componentTypes, setComponentTypes] = useState([]);
   const [rowEdits, setRowEdits] = useState({});
@@ -127,8 +128,12 @@ export function ProductDetail() {
     if (!id) return;
     try {
       setLoading(true);
-      const data = await api.getProduct(id);
+      const [data, scoreData] = await Promise.all([
+        api.getProduct(id),
+        api.getProductScore(id).catch(() => null),
+      ]);
       setProduct(data);
+      setProductScore(scoreData);
       syncForm(data);
     } catch (error) {
       toast.error(error.message || 'Failed to load product');
@@ -718,6 +723,25 @@ export function ProductDetail() {
       />
 
       <div className="space-y-6">
+        {productScore && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="text-xs text-gray-600">Product score (avg)</div>
+              <div className="text-3xl font-bold text-gray-900 mt-1">{productScore.avgTotalScore}</div>
+              <div className="text-xs text-gray-500 mt-1">
+                {productScore.applicationCount} app{productScore.applicationCount === 1 ? '' : 's'}
+              </div>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="text-xs text-gray-600">Avg knowledge</div>
+              <div className="text-2xl font-bold text-gray-900 mt-1">{productScore.avgKnowledgeScore}</div>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="text-xs text-gray-600">Avg tool usage</div>
+              <div className="text-2xl font-bold text-gray-900 mt-1">{productScore.avgToolScore}</div>
+            </div>
+          </div>
+        )}
         <ProductMetadataCard
           isEditing={isEditing}
           canEdit={canEdit()}

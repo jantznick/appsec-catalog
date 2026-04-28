@@ -1,6 +1,7 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { calculateApplicationScore } from '../services/scoring.js';
 
 const router = express.Router();
 
@@ -319,6 +320,105 @@ router.post('/component-types', requireAuth, async (req, res) => {
 });
 
 // Get single product
+// Get product score (average of mapped application scores)
+router.get('/:id/score', requireAuth, async (req, res) => {
+  try {
+    const product = await getProductForUser(req.params.id, req.session);
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+    if (product === 'forbidden') {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only view products in your company',
+      });
+    }
+
+    const applicationIds = (product.applications || [])
+      .map((a) => a.applicationId)
+      .filter(Boolean);
+
+    if (applicationIds.length === 0) {
+      // Persist a score record (0/0/0) for history consistency
+      const saved = await prisma.productScore.create({
+        data: {
+          productId: product.id,
+          avgKnowledgeScore: 0,
+          avgToolScore: 0,
+          avgTotalScore: 0,
+        },
+      });
+      return res.json({
+        productId: product.id,
+        applicationCount: 0,
+        avgKnowledgeScore: 0,
+        avgToolScore: 0,
+        avgTotalScore: 0,
+        calculatedAt: saved.calculatedAt,
+      });
+    }
+
+    // Fetch applications with the minimal related data needed for scoring (deployments affect scan freshness).
+    const apps = await prisma.application.findMany({
+      where: { id: { in: applicationIds } },
+      include: {
+        deployments: {
+          orderBy: { deployedAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    const byId = new Map(apps.map((a) => [a.id, a]));
+    const scored = applicationIds
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((app) => ({
+        applicationId: app.id,
+        name: app.name,
+        ...calculateApplicationScore(app),
+      }));
+
+    const sum = scored.reduce(
+      (acc, s) => {
+        acc.knowledge += s.totalScore !== undefined ? s.knowledgeScore : 0;
+        acc.tool += s.totalScore !== undefined ? s.toolScore : 0;
+        acc.total += s.totalScore || 0;
+        return acc;
+      },
+      { knowledge: 0, tool: 0, total: 0 },
+    );
+
+    const avgKnowledgeScore = Math.round(sum.knowledge / scored.length);
+    const avgToolScore = Math.round(sum.tool / scored.length);
+    const avgTotalScore = Math.round(sum.total / scored.length);
+
+    const saved = await prisma.productScore.create({
+      data: {
+        productId: product.id,
+        avgKnowledgeScore,
+        avgToolScore,
+        avgTotalScore,
+      },
+    });
+
+    return res.json({
+      productId: product.id,
+      applicationCount: scored.length,
+      avgKnowledgeScore,
+      avgToolScore,
+      avgTotalScore,
+      calculatedAt: saved.calculatedAt,
+      applications: scored.map((s) => ({
+        applicationId: s.applicationId,
+        name: s.name,
+        totalScore: s.totalScore,
+      })),
+    });
+  } catch (error) {
+    console.error('Error fetching product score:', error);
+    return res.status(500).json({ error: 'Failed to fetch product score' });
+  }
+});
+
 router.get('/:id', requireAuth, async (req, res) => {
   try {
     const product = await getProductForUser(req.params.id, req.session);

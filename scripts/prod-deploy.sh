@@ -60,13 +60,20 @@ else
   SERVICES="frontend backend"
 fi
 
-# IMPORTANT:
-# - For frontend/backend deploys we do NOT want docker compose to recreate dependencies like postgres.
-# - In this repo, postgres has a fixed `container_name: appsec-catalog-db`. If compose tries to create
-#   a new postgres container (even transiently) it can conflict with the existing one.
-# - `--no-deps` prevents compose from attempting to start/recreate dependencies.
-echo "[deploy] docker compose -p $PROJECT_NAME up -d --build --no-deps $SERVICES"
-docker compose -p "$PROJECT_NAME" up -d --build --no-deps $SERVICES
+# If backend is part of this deploy, run DB migrations safely before restarting it.
+# We run migrations in a one-off backend container with an overridden entrypoint, so we don't
+# accidentally start the web server while migrating. We also use --no-deps to avoid touching
+# postgres lifecycle; postgres must already be running.
+if [ "$TARGET" = "backend" ] || [ "$TARGET" = "both" ]; then
+  echo "[deploy] building backend image (for migrations)"
+  docker compose -p "$PROJECT_NAME" build backend
+
+  echo "[deploy] running prisma migrate deploy"
+  docker compose -p "$PROJECT_NAME" run --rm --no-deps --entrypoint sh backend -lc "npx prisma migrate deploy"
+fi
+
+echo "[deploy] docker compose -p $PROJECT_NAME up -d --build $SERVICES"
+docker compose -p "$PROJECT_NAME" up -d --build $SERVICES
 
 # Optional: reclaim disk space (volume-safe; never prunes volumes).
 # Enable by setting: DOCKER_PRUNE=true

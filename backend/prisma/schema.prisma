@@ -199,6 +199,7 @@ model Product {
   applications        ProductApplication[]
   ingressPoints       ProductIngressPoint[]
   dataFlows           ProductDataFlow[]
+  scores              ProductScore[]
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
@@ -348,6 +349,20 @@ model Score {
   @@index([applicationId])
   @@index([calculatedAt])
   @@index([totalScore])
+}
+
+model ProductScore {
+  id               String   @id @default(cuid())
+  productId        String
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  avgKnowledgeScore Int
+  avgToolScore      Int
+  avgTotalScore     Int
+  calculatedAt      DateTime @default(now())
+
+  @@index([productId])
+  @@index([calculatedAt])
+  @@index([avgTotalScore])
 }
 
 model Invitation {
