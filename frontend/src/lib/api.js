@@ -18,7 +18,12 @@ async function apiRequest(endpoint, options = {}) {
 
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw new Error(data.message || data.error || 'An error occurred');
+    const err = new Error(data.message || data.error || 'An error occurred');
+    // Attach structured fields for callers (e.g. deploy stdout/stderr)
+    err.status = response.status;
+    err.details = data.details;
+    err.body = data;
+    throw err;
   }
   if (response.status === 204) {
     return {};
