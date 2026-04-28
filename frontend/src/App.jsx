@@ -34,6 +34,7 @@ import { PolicyControls } from './pages/PolicyControls.jsx';
 import { PolicyViewer } from './pages/PolicyViewer.jsx';
 import { IntegrationSettings } from './pages/IntegrationSettings.jsx';
 import { SecurityFindingsExportJobs } from './pages/SecurityFindingsExportJobs.jsx';
+import { SettingsDeploy } from './pages/SettingsDeploy.jsx';
 
 function CatchAllRedirect() {
   const { isAuthenticated, isVerified, loading } = useAuthStore();
@@ -138,6 +139,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <ComponentsDemo />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/deploy"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <SettingsDeploy />
               </Layout>
             </ProtectedRoute>
           }

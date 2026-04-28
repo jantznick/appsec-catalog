@@ -162,6 +162,13 @@ export function Layout({ children }) {
                         >
                           Integration settings
                         </DropdownItem>
+                        <DropdownItem
+                          onClick={() => {
+                            navigate('/settings/deploy');
+                          }}
+                        >
+                          Deploy settings
+                        </DropdownItem>
                       </>
                     ) : null}
                     <DropdownItem

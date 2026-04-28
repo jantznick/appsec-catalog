@@ -54,8 +54,20 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-appsec}:${POSTGRES_PASSWORD:-appsec_password}@postgres:5432/${POSTGRES_DB:-appsec_catalog}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
       - NODE_ENV=${NODE_ENV:-production}
+      # Host path where this repo lives (for admin-triggered deploys).
+      # Must be an absolute path on the VM (e.g. /opt/appsec-catalog).
+      - DEPLOY_HOST_WORKDIR=${DEPLOY_HOST_WORKDIR:-/opt/appsec-catalog}
+      - DEPLOY_RUNNER_IMAGE=${DEPLOY_RUNNER_IMAGE:-docker:cli}
+      # Optional: dogfooding deploy records (POST /api/deployment-tokens)
+      - APPSEC_CATALOG_API_URL=${APPSEC_CATALOG_API_URL:-}
+      - APPSEC_CATALOG_DEPLOYMENT_TOKEN=${APPSEC_CATALOG_DEPLOYMENT_TOKEN:-}
+      - APPSEC_CATALOG_DEPLOY_ENV=${APPSEC_CATALOG_DEPLOY_ENV:-prod}
+      - APPSEC_CATALOG_FRONTEND_APP_ID=${APPSEC_CATALOG_FRONTEND_APP_ID:-}
+      - APPSEC_CATALOG_BACKEND_APP_ID=${APPSEC_CATALOG_BACKEND_APP_ID:-}
     volumes:
       - backend_storage:/app/storage
+      # Required for admin-triggered deploys (backend launches a short-lived docker runner container).
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy

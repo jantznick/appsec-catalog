@@ -360,6 +360,13 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // Admin: trigger VM deploy
+  adminTriggerDeploy: (data) =>
+    apiRequest('/api/admin/deploy', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
   // Product management
   getProducts: (filters = {}) => {
     const params = new URLSearchParams();

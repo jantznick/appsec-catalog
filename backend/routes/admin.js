@@ -9,6 +9,7 @@ import {
 } from '../services/securityFindingsExportService.js';
 import { createSecurityFindingsJob } from '../services/securityFindingsJobRunner.js';
 import { securityOverviewCsvFilename } from '../utils/securityOverviewFilename.js';
+import { triggerProdDeploy } from '../services/deployService.js';
 
 const router = express.Router();
 
@@ -209,6 +210,26 @@ router.get('/security-findings/jobs/:id/csv', async (req, res) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   return res.send(j.resultCsv);
+});
+
+// Trigger a production deploy (admin only)
+// POST /api/admin/deploy
+router.post('/deploy', async (req, res) => {
+  try {
+    const { target, version } = req.body || {};
+    const result = await triggerProdDeploy({ target, version });
+    return res.status(202).json(result);
+  } catch (error) {
+    const err = /** @type {Error & { statusCode?: number; details?: unknown }} */ (error);
+    if (err.statusCode === 400) {
+      return res.status(400).json({ error: err.message || 'Invalid request' });
+    }
+    console.error('admin deploy', error);
+    return res.status(500).json({
+      error: err.message || 'Deploy failed',
+      details: err.details,
+    });
+  }
 });
 
 export default router;
