@@ -780,7 +780,7 @@ export function ApplicationDetail() {
               )}
               {application.product?.name && (
                 <> {' • '}
-                  <span className="text-gray-600 font-medium">Product:</span>
+                  <span className="text-gray-600 font-medium">Product: </span>
                   <Link
                     to={`/products/${application.product.id}`}
                     className="text-blue-600 hover:text-blue-700"
