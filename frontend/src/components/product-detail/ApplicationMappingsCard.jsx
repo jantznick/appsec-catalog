@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../ui/Button.jsx';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card.jsx';
 import { Input } from '../ui/Input.jsx';
+import { Modal } from '../ui/Modal.jsx';
 import { Select } from '../ui/Select.jsx';
+import { Textarea } from '../ui/Textarea.jsx';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/Table.jsx';
 
 function bandClass0to100(value) {
@@ -13,22 +16,79 @@ function bandClass0to100(value) {
   return 'text-red-600 font-semibold tabular-nums';
 }
 
+const emptyFlowDraft = () => ({
+  connectFromApplicationId: '',
+  flowName: '',
+  dataClassification: '',
+  protocol: '',
+  direction: 'unidirectional',
+  notes: '',
+});
+
 export function ApplicationMappingsCard({
   product,
   appMetricsByApplicationId = {},
   componentTypes,
   componentTypeOptions,
+  mappedAppOptions = [],
   editingMappingId,
   setEditingMappingId,
   getRowEdit,
   setEditForRow,
   hasMappingChanges,
   handleSaveRow,
+  cancelEditMappingRow,
+  savingMappingId = null,
   openRemoveMappingModal,
   setShowTypeSettingsModal,
   setShowAddMappingModal,
   otherComponentValue,
 }) {
+  const [mappingFlowModal, setMappingFlowModal] = useState(null);
+  /** { targetApplicationId, targetAppName, draft } */
+
+  const clearFlowFieldsForRow = (applicationId) => {
+    setEditForRow(applicationId, 'connectFromApplicationId', '');
+    setEditForRow(applicationId, 'flowName', '');
+    setEditForRow(applicationId, 'dataClassification', '');
+    setEditForRow(applicationId, 'protocol', '');
+    setEditForRow(applicationId, 'direction', 'unidirectional');
+    setEditForRow(applicationId, 'notes', '');
+  };
+
+  const openMappingFlowModal = (mapping) => {
+    const edit = getRowEdit(mapping);
+    setMappingFlowModal({
+      targetApplicationId: mapping.applicationId,
+      targetAppName: mapping.application?.name || mapping.applicationId,
+      draft: {
+        connectFromApplicationId: edit.connectFromApplicationId || '',
+        flowName: edit.flowName || '',
+        dataClassification: edit.dataClassification || '',
+        protocol: edit.protocol || '',
+        direction: edit.direction || 'unidirectional',
+        notes: edit.notes || '',
+      },
+    });
+  };
+
+  const applyMappingFlowModal = () => {
+    if (!mappingFlowModal) return;
+    const { targetApplicationId, draft } = mappingFlowModal;
+    setEditForRow(targetApplicationId, 'connectFromApplicationId', draft.connectFromApplicationId);
+    setEditForRow(targetApplicationId, 'flowName', draft.flowName);
+    setEditForRow(targetApplicationId, 'dataClassification', draft.dataClassification);
+    setEditForRow(targetApplicationId, 'protocol', draft.protocol);
+    setEditForRow(targetApplicationId, 'direction', draft.direction);
+    setEditForRow(targetApplicationId, 'notes', draft.notes);
+    setMappingFlowModal(null);
+  };
+
+  const connectFromOptionsForModal =
+    mappingFlowModal != null
+      ? mappedAppOptions.filter((opt) => opt.value !== mappingFlowModal.targetApplicationId)
+      : [];
+
   return (
     <Card>
       <CardHeader>
@@ -77,6 +137,12 @@ export function ApplicationMappingsCard({
                 const metrics = appMetricsByApplicationId[mapping.applicationId];
                 const totalScore = metrics?.totalScore;
                 const policyPct = metrics?.policyCompliancePercent;
+                const connectFromOptions = mappedAppOptions.filter(
+                  (opt) => opt.value !== mapping.applicationId
+                );
+                const fromLabel = connectFromOptions.find(
+                  (o) => o.value === edit.connectFromApplicationId
+                )?.label;
 
                 return (
                   <TableRow
@@ -124,6 +190,44 @@ export function ApplicationMappingsCard({
                               placeholder="Custom label"
                             />
                           )}
+                          {connectFromOptions.length > 0 ? (
+                            <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                              {edit.connectFromApplicationId ? (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-xs text-gray-700">
+                                    New data flow:{' '}
+                                    <span className="font-medium text-gray-900">{fromLabel}</span>
+                                    <span className="text-gray-500"> → this app</span>
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => openMappingFlowModal(mapping)}
+                                  >
+                                    Edit flow
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => clearFlowFieldsForRow(mapping.applicationId)}
+                                  >
+                                    Clear
+                                  </Button>
+                                </div>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() => openMappingFlowModal(mapping)}
+                                >
+                                  Add data flow…
+                                </Button>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                       ) : (
                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-800 border border-blue-100">
@@ -141,7 +245,10 @@ export function ApplicationMappingsCard({
                                 e.stopPropagation();
                                 handleSaveRow(mapping);
                               }}
-                              disabled={!hasMappingChanges(mapping, edit)}
+                              disabled={
+                                !hasMappingChanges(mapping, edit) || savingMappingId === mapping.applicationId
+                              }
+                              loading={savingMappingId === mapping.applicationId}
                             >
                               Save
                             </Button>
@@ -150,8 +257,9 @@ export function ApplicationMappingsCard({
                               variant="secondary"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setEditingMappingId(null);
+                                cancelEditMappingRow(mapping.applicationId);
                               }}
+                              disabled={savingMappingId === mapping.applicationId}
                             >
                               Cancel
                             </Button>
@@ -176,6 +284,126 @@ export function ApplicationMappingsCard({
           </Table>
         )}
       </CardContent>
+
+      <Modal
+        isOpen={mappingFlowModal != null}
+        onClose={() => setMappingFlowModal(null)}
+        title={
+          mappingFlowModal
+            ? `Data flow into ${mappingFlowModal.targetAppName}`
+            : 'Data flow'
+        }
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" type="button" onClick={() => setMappingFlowModal(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                if (mappingFlowModal) {
+                  setMappingFlowModal({
+                    ...mappingFlowModal,
+                    draft: emptyFlowDraft(),
+                  });
+                }
+              }}
+            >
+              Reset fields
+            </Button>
+            <Button type="button" onClick={applyMappingFlowModal}>
+              Apply
+            </Button>
+          </>
+        }
+      >
+        {mappingFlowModal ? (
+          <div className="space-y-3 text-sm" onClick={(e) => e.stopPropagation()}>
+            <p className="text-gray-600">
+              Optional: define a new data flow from another mapped application into{' '}
+              <strong>{mappingFlowModal.targetAppName}</strong>. It will be created when you save the row.
+            </p>
+            <Select
+              label="Connect from"
+              value={mappingFlowModal.draft.connectFromApplicationId}
+              onChange={(e) =>
+                setMappingFlowModal((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        draft: { ...prev.draft, connectFromApplicationId: e.target.value },
+                      }
+                    : prev
+                )
+              }
+              options={[{ value: '', label: 'None' }, ...connectFromOptionsForModal]}
+              placeholder="Another mapped app"
+            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Select
+                label="Direction"
+                value={mappingFlowModal.draft.direction}
+                onChange={(e) =>
+                  setMappingFlowModal((prev) =>
+                    prev
+                      ? { ...prev, draft: { ...prev.draft, direction: e.target.value } }
+                      : prev
+                  )
+                }
+                options={[
+                  { value: 'unidirectional', label: 'Unidirectional' },
+                  { value: 'bidirectional', label: 'Bidirectional' },
+                ]}
+              />
+              <Input
+                label="Flow name"
+                value={mappingFlowModal.draft.flowName}
+                onChange={(e) =>
+                  setMappingFlowModal((prev) =>
+                    prev ? { ...prev, draft: { ...prev.draft, flowName: e.target.value } } : prev
+                  )
+                }
+                placeholder="e.g. User profile sync"
+              />
+              <Input
+                label="Data classification"
+                value={mappingFlowModal.draft.dataClassification}
+                onChange={(e) =>
+                  setMappingFlowModal((prev) =>
+                    prev
+                      ? { ...prev, draft: { ...prev.draft, dataClassification: e.target.value } }
+                      : prev
+                  )
+                }
+                placeholder="e.g. PII, Internal"
+              />
+              <Input
+                label="Protocol"
+                value={mappingFlowModal.draft.protocol}
+                onChange={(e) =>
+                  setMappingFlowModal((prev) =>
+                    prev ? { ...prev, draft: { ...prev.draft, protocol: e.target.value } } : prev
+                  )
+                }
+                placeholder="e.g. REST, Kafka"
+              />
+            </div>
+            <Textarea
+              label="Flow notes"
+              value={mappingFlowModal.draft.notes}
+              onChange={(e) =>
+                setMappingFlowModal((prev) =>
+                  prev ? { ...prev, draft: { ...prev.draft, notes: e.target.value } } : prev
+                )
+              }
+              rows={3}
+              placeholder="Optional"
+            />
+          </div>
+        ) : null}
+      </Modal>
     </Card>
   );
 }

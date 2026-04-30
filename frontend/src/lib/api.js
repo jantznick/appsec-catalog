@@ -145,6 +145,9 @@ export const api = {
   getCompany: (id) =>
     apiRequest(`/api/companies/${id}`),
 
+  getCompanyPortfolioArchitecture: (companyId) =>
+    apiRequest(`/api/companies/${encodeURIComponent(companyId)}/portfolio-architecture`),
+
   /**
    * Fetches CSV (app name + technical onboarding form URL per application). Same auth as company detail.
    * @returns {Promise<{ text: string, filename: string }>}

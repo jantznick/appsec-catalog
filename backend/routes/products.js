@@ -72,6 +72,7 @@ async function getProductForUser(productId, session) {
               companyId: true,
               status: true,
               facing: true,
+              interfaces: true,
             },
           },
           componentType: {

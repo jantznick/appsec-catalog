@@ -6,6 +6,40 @@ import { buildIntegrationSummaryForCompanyId } from '../integrations/summaryForC
 
 const router = express.Router();
 
+function parseApplicationInterfaceTargetIds(interfacesJson, appById) {
+  if (!interfacesJson) return [];
+  try {
+    const v = JSON.parse(interfacesJson);
+    if (!Array.isArray(v)) return [];
+    const ids = [];
+    for (const item of v) {
+      if (item == null) continue;
+      let raw =
+        typeof item === 'string'
+          ? item.trim()
+          : typeof item === 'object' && item !== null && item.applicationId != null
+            ? String(item.applicationId).trim()
+            : typeof item === 'object' && item !== null && item.id != null
+              ? String(item.id).trim()
+              : null;
+      if (!raw) continue;
+      if (appById.has(raw)) {
+        ids.push(raw);
+        continue;
+      }
+      for (const app of appById.values()) {
+        if (app?.name && String(app.name).trim() === raw) {
+          ids.push(app.id);
+          break;
+        }
+      }
+    }
+    return [...new Set(ids)];
+  } catch {
+    return [];
+  }
+}
+
 // Public: Get company by slug (for onboarding forms)
 router.get('/slug/:slug', async (req, res) => {
   try {
@@ -357,6 +391,122 @@ router.get('/:id/technical-onboarding-form-links', requireAuth, async (req, res)
   } catch (error) {
     console.error('Error building technical onboarding form links CSV:', error);
     res.status(500).json({ error: 'Failed to build CSV' });
+  }
+});
+
+/** Portfolio map: all applications, product groupings, mappings, flows, and ingress (read-only). */
+router.get('/:id/portfolio-architecture', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!req.session.isAdmin && req.session.companyId !== id) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only access your own company',
+      });
+    }
+
+    const company = await prisma.company.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    const [applications, productRows] = await Promise.all([
+      prisma.application.findMany({
+        where: { companyId: id },
+        select: {
+          id: true,
+          name: true,
+          facing: true,
+          description: true,
+          interfaces: true,
+        },
+        orderBy: { name: 'asc' },
+      }),
+      prisma.product.findMany({
+        where: { companyId: id },
+        include: {
+          applications: {
+            select: {
+              applicationId: true,
+              componentType: { select: { name: true } },
+              customComponentLabel: true,
+            },
+          },
+          dataFlows: {
+            select: {
+              id: true,
+              productId: true,
+              sourceApplicationId: true,
+              targetApplicationId: true,
+              flowName: true,
+              direction: true,
+              requiresApiKey: true,
+            },
+          },
+          ingressPoints: {
+            select: {
+              id: true,
+              productId: true,
+              applicationId: true,
+              channel: true,
+              requiresApiKey: true,
+            },
+          },
+        },
+        orderBy: { name: 'asc' },
+      }),
+    ]);
+
+    const products = productRows.map((p) => ({
+      id: p.id,
+      name: p.name,
+      status: p.status,
+    }));
+
+    const appById = new Map(applications.map((a) => [a.id, a]));
+
+    const mappings = [];
+    const dataFlows = [];
+    const ingressPoints = [];
+
+    for (const p of productRows) {
+      for (const row of p.applications) {
+        const app = appById.get(row.applicationId);
+        const interfaceTargetApplicationIds = parseApplicationInterfaceTargetIds(
+          app?.interfaces ?? null,
+          appById
+        );
+        mappings.push({
+          productId: p.id,
+          applicationId: row.applicationId,
+          componentTypeName: row.componentType?.name ?? null,
+          customComponentLabel: row.customComponentLabel,
+          interfaceTargetApplicationIds,
+        });
+      }
+      for (const f of p.dataFlows) {
+        dataFlows.push({ ...f });
+      }
+      for (const ing of p.ingressPoints) {
+        ingressPoints.push({ ...ing });
+      }
+    }
+
+    res.json({
+      applications,
+      products,
+      mappings,
+      dataFlows,
+      ingressPoints,
+    });
+  } catch (error) {
+    console.error('Error fetching portfolio architecture:', error);
+    res.status(500).json({ error: 'Failed to fetch portfolio architecture' });
   }
 });
 

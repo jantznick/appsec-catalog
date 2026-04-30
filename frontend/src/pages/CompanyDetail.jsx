@@ -17,6 +17,7 @@ import { NotesSection } from '../components/notes/NotesSection.jsx';
 import { ApplicablePoliciesView } from '../components/policy/ApplicablePoliciesView.jsx';
 import { CompanyIntegrationsSection } from '../components/integrations/CompanyIntegrationsSection.jsx';
 import { SecurityFindingsExportModal } from '../components/integrations/SecurityFindingsExportModal.jsx';
+import { CompanyPortfolioMapCard } from '../components/company-detail/CompanyPortfolioMapCard.jsx';
 
 export function CompanyDetail() {
   const { id } = useParams();
@@ -275,7 +276,7 @@ export function CompanyDetail() {
           companyName={company.name}
         />
       )}
-      <div className="mb-8 w-full max-w-5xl mx-auto">
+      <div className="mb-8 w-full max-w-7xl mx-auto">
         {!isAdmin() && (
           <button
             onClick={() => navigate('/companies')}
@@ -468,8 +469,9 @@ export function CompanyDetail() {
           </div>
         )}
       </div>
-      <Tabs defaultTab={0} className="w-full max-w-5xl mx-auto">
+      <Tabs defaultTab={0} className="w-full max-w-7xl mx-auto">
         <Tab>Overview</Tab>
+        <Tab>Application environment</Tab>
         <Tab>Tools & connections</Tab>
         <Tab>Domains</Tab>
         <Tab>Policies</Tab>
@@ -694,6 +696,12 @@ export function CompanyDetail() {
                 </div>
               </CardContent>
             </Card>
+          </div>
+        </TabPanel>
+
+        <TabPanel>
+          <div className="w-full space-y-6">
+            <CompanyPortfolioMapCard companyId={id} />
           </div>
         </TabPanel>
 

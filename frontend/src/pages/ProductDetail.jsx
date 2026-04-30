@@ -60,6 +60,7 @@ export function ProductDetail() {
   const [availableApps, setAvailableApps] = useState([]);
   const [componentTypes, setComponentTypes] = useState([]);
   const [rowEdits, setRowEdits] = useState({});
+  const [savingMappingId, setSavingMappingId] = useState(null);
   const [originalFormData, setOriginalFormData] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -492,23 +493,40 @@ export function ProductDetail() {
   };
 
   const getRowEdit = (mapping) => {
-    const existing = rowEdits[mapping.applicationId];
-    if (existing) return existing;
-    return {
+    const base = {
       componentTypeId:
         mapping.componentTypeId || (mapping.customComponentLabel ? OTHER_COMPONENT_VALUE : ''),
       customComponentLabel: mapping.customComponentLabel || '',
+      connectFromApplicationId: '',
+      flowName: '',
+      dataClassification: '',
+      protocol: '',
+      direction: 'unidirectional',
+      notes: '',
     };
+    const existing = rowEdits[mapping.applicationId];
+    if (existing) return { ...base, ...existing };
+    return base;
   };
 
   const hasMappingChanges = (mapping, edit) => {
     const originalType =
       mapping.componentTypeId || (mapping.customComponentLabel ? OTHER_COMPONENT_VALUE : '');
     const originalCustom = mapping.customComponentLabel || '';
-    return (
+    const typeChanged =
       originalType !== (edit.componentTypeId || '') ||
-      originalCustom !== (edit.customComponentLabel || '')
-    );
+      originalCustom !== (edit.customComponentLabel || '');
+    const wantsNewFlow = Boolean(edit.connectFromApplicationId);
+    return typeChanged || wantsNewFlow;
+  };
+
+  const cancelEditMappingRow = (applicationId) => {
+    setEditingMappingId(null);
+    setRowEdits((prev) => {
+      const next = { ...prev };
+      delete next[applicationId];
+      return next;
+    });
   };
 
   const handleSaveRow = async (mapping) => {
@@ -521,18 +539,52 @@ export function ProductDetail() {
       toast.error('Custom label is required when component type is Other');
       return;
     }
+    if (edit.connectFromApplicationId) {
+      if (edit.connectFromApplicationId === mapping.applicationId) {
+        toast.error('Choose a different application to connect from');
+        return;
+      }
+      const sourceMapped = product.applications.some(
+        (m) => m.applicationId === edit.connectFromApplicationId
+      );
+      if (!sourceMapped) {
+        toast.error('Connect-from application must already be mapped to this product');
+        return;
+      }
+    }
 
     try {
+      setSavingMappingId(mapping.applicationId);
       await api.updateProductApplicationMapping(product.id, mapping.applicationId, {
         componentTypeId: edit.componentTypeId === OTHER_COMPONENT_VALUE ? null : edit.componentTypeId,
         customComponentLabel:
           edit.componentTypeId === OTHER_COMPONENT_VALUE ? edit.customComponentLabel.trim() : null,
       });
+      if (edit.connectFromApplicationId) {
+        await api.createProductDataFlow(product.id, {
+          sourceApplicationId: edit.connectFromApplicationId,
+          targetApplicationId: mapping.applicationId,
+          flowName: edit.flowName?.trim() || undefined,
+          dataClassification: edit.dataClassification?.trim() || undefined,
+          protocol: edit.protocol?.trim() || undefined,
+          direction: edit.direction || 'unidirectional',
+          notes: edit.notes?.trim() || undefined,
+        });
+      }
       await reloadAll();
       setEditingMappingId(null);
-      toast.success('Mapping updated');
+      setRowEdits((prev) => {
+        const next = { ...prev };
+        delete next[mapping.applicationId];
+        return next;
+      });
+      toast.success(
+        edit.connectFromApplicationId ? 'Mapping saved and data flow added' : 'Mapping updated'
+      );
     } catch (error) {
       toast.error(error.message || 'Failed to update mapping');
+    } finally {
+      setSavingMappingId(null);
     }
   };
 
@@ -813,12 +865,15 @@ export function ProductDetail() {
             appMetricsByApplicationId={appMetricsByApplicationId}
             componentTypes={componentTypes}
             componentTypeOptions={componentTypeOptions}
+            mappedAppOptions={mappedAppOptions}
             editingMappingId={editingMappingId}
             setEditingMappingId={setEditingMappingId}
             getRowEdit={getRowEdit}
             setEditForRow={setEditForRow}
             hasMappingChanges={hasMappingChanges}
             handleSaveRow={handleSaveRow}
+            cancelEditMappingRow={cancelEditMappingRow}
+            savingMappingId={savingMappingId}
             openRemoveMappingModal={openRemoveMappingModal}
             setShowTypeSettingsModal={setShowTypeSettingsModal}
             setShowAddMappingModal={setShowAddMappingModal}
