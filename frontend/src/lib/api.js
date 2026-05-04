@@ -144,7 +144,7 @@ export const api = {
 
   /**
    * Portfolio CSV: company, products, productCount, applications, applicationCount,
-   * metadataCompleteness (avg %), securityCompleteness (filled/total).
+   * metadataCompleteness, securityCompleteness (each avg % across apps, e.g. "27%").
    * @param {string[]} companyIds
    * @returns {Promise<{ text: string, filename: string }>}
    */

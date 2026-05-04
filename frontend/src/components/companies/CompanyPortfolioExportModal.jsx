@@ -79,11 +79,12 @@ export function CompanyPortfolioExportModal({ open, onClose, companies, isAdmin 
   return (
     <Modal isOpen={open} onClose={onClose} title="Export company portfolio" size="lg">
       <p className="text-sm text-gray-600 mb-4">
-        One row per company: products and applications (comma-separated names plus counts), then average{' '}
-        <span className="font-medium text-gray-800">metadataCompleteness</span> (0–100, Basic + Technical app fields per
-        application, then averaged; NA values exclude a field), and{' '}
-        <span className="font-medium text-gray-800">securityCompleteness</span> (filled/total security-tool fields summed
-        across all apps, same rules as the Applications completeness column).
+        One row per company: products and applications (comma-separated names plus counts), then{' '}
+        <span className="font-medium text-gray-800">metadataCompleteness</span> and{' '}
+        <span className="font-medium text-gray-800">securityCompleteness</span> as values like{' '}
+        <span className="font-mono text-gray-800">27%</span>: each is the company-wide average of per-application
+        completeness (Basic + Technical vs security-tool fields; NA excludes a field), same rules as the Applications
+        list.
       </p>
 
       {isAdmin && companies.length > 0 && (

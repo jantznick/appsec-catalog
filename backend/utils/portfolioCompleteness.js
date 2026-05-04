@@ -138,14 +138,19 @@ export function countSecurityCompletenessFields(application) {
  * @param {Array<Record<string, unknown>>} applications
  * @returns {{ metadataCompleteness: string, securityCompleteness: string }}
  */
+function formatAvgPct(pcts) {
+  if (!pcts.length) return '';
+  const avg = Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
+  return `${avg}%`;
+}
+
 export function aggregateCompletenessForCompany(applications) {
   if (!applications.length) {
     return { metadataCompleteness: '', securityCompleteness: '' };
   }
 
   const metaPcts = [];
-  let securityFilled = 0;
-  let securityTotal = 0;
+  const secPcts = [];
 
   for (const app of applications) {
     const meta = countBasicTechnicalMetadata(app);
@@ -156,16 +161,15 @@ export function aggregateCompletenessForCompany(applications) {
     }
 
     const sec = countSecurityCompletenessFields(app);
-    securityFilled += sec.filled;
-    securityTotal += sec.total;
+    if (sec.total > 0) {
+      secPcts.push(Math.round((sec.filled / sec.total) * 100));
+    } else {
+      secPcts.push(0);
+    }
   }
 
-  const metadataCompleteness = String(
-    Math.round(metaPcts.reduce((a, b) => a + b, 0) / metaPcts.length),
-  );
-
-  const securityCompleteness =
-    securityTotal > 0 ? `${securityFilled}/${securityTotal}` : '0/0';
-
-  return { metadataCompleteness, securityCompleteness };
+  return {
+    metadataCompleteness: formatAvgPct(metaPcts),
+    securityCompleteness: formatAvgPct(secPcts),
+  };
 }
