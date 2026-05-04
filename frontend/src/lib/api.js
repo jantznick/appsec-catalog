@@ -142,6 +142,33 @@ export const api = {
     return apiRequest(`/api/companies${queryString ? `?${queryString}` : ''}`);
   },
 
+  /**
+   * Portfolio CSV: company, products, productCount, applications, applicationCount.
+   * @param {string[]} companyIds
+   * @returns {Promise<{ text: string, filename: string }>}
+   */
+  exportCompaniesPortfolioCsv: async (companyIds) => {
+    const url = `${API_URL}/api/companies/export-portfolio`;
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ companyIds }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || data.error || 'An error occurred');
+    }
+    const text = await response.text();
+    const dispo = response.headers.get('Content-Disposition');
+    let filename = 'company-portfolio-export.csv';
+    if (dispo) {
+      const m = /filename="([^"]+)"/.exec(dispo);
+      if (m) filename = m[1];
+    }
+    return { text, filename };
+  },
+
   getCompany: (id) =>
     apiRequest(`/api/companies/${id}`),
 

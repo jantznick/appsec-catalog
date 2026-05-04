@@ -6,6 +6,14 @@ import { buildIntegrationSummaryForCompanyId } from '../integrations/summaryForC
 
 const router = express.Router();
 
+function escapeCsvField(value) {
+  const s = value == null ? '' : String(value);
+  if (/[",\n\r]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
 function parseApplicationInterfaceTargetIds(interfacesJson, appById) {
   if (!interfacesJson) return [];
   try {
@@ -213,6 +221,80 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * CSV summary: company, product names (comma-separated), counts, application names, count.
+ * Admin: any companies. Members: only their company (other IDs rejected).
+ */
+router.post('/export-portfolio', requireAuth, async (req, res) => {
+  try {
+    const rawIds = req.body?.companyIds;
+    if (!Array.isArray(rawIds) || rawIds.length === 0) {
+      return res.status(400).json({ error: 'companyIds must be a non-empty array' });
+    }
+    const companyIds = [...new Set(rawIds.map((id) => String(id).trim()).filter(Boolean))];
+    if (companyIds.length === 0) {
+      return res.status(400).json({ error: 'No valid company IDs' });
+    }
+
+    let allowedIds = companyIds;
+    if (!req.session.isAdmin) {
+      if (!req.session.companyId) {
+        return res.status(403).json({ error: 'Permission denied' });
+      }
+      const foreign = companyIds.filter((id) => id !== req.session.companyId);
+      if (foreign.length > 0) {
+        return res.status(403).json({
+          error: 'Permission denied',
+          message: 'You can only export your own company',
+        });
+      }
+      allowedIds = companyIds.filter((id) => id === req.session.companyId);
+    }
+
+    const companies = await prisma.company.findMany({
+      where: { id: { in: allowedIds } },
+      select: {
+        id: true,
+        name: true,
+        products: { select: { name: true }, orderBy: { name: 'asc' } },
+        applications: { select: { name: true }, orderBy: { name: 'asc' } },
+      },
+    });
+
+    if (companies.length !== allowedIds.length) {
+      return res.status(400).json({ error: 'One or more companies were not found' });
+    }
+
+    const byId = new Map(companies.map((c) => [c.id, c]));
+    const ordered = allowedIds.map((id) => byId.get(id)).filter(Boolean);
+
+    const header =
+      'company,products,productCount,applications,applicationCount';
+    const rows = ordered.map((c) => {
+      const productNames = c.products.map((p) => p.name);
+      const appNames = c.applications.map((a) => a.name);
+      const productsCell = productNames.join(', ');
+      const appsCell = appNames.join(', ');
+      return [
+        escapeCsvField(c.name),
+        escapeCsvField(productsCell),
+        String(productNames.length),
+        escapeCsvField(appsCell),
+        String(appNames.length),
+      ].join(',');
+    });
+
+    const csv = `${header}\r\n${rows.join('\r\n')}\r\n`;
+    const filename = 'company-portfolio-export.csv';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(csv);
+  } catch (error) {
+    console.error('Error building portfolio export CSV:', error);
+    res.status(500).json({ error: 'Failed to build CSV' });
+  }
+});
+
 // Get company average score
 router.get('/:id/average-score', requireAuth, async (req, res) => {
   try {
@@ -324,14 +406,6 @@ function safeAsciiFilename(s) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
   return (t || 'company').slice(0, 80);
-}
-
-function escapeCsvField(value) {
-  const s = value == null ? '' : String(value);
-  if (/[",\n\r]/.test(s)) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
 }
 
 /** Admin or company members: CSV of app name and technical onboarding form URL for each application. */
