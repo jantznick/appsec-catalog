@@ -79,8 +79,11 @@ export function CompanyPortfolioExportModal({ open, onClose, companies, isAdmin 
   return (
     <Modal isOpen={open} onClose={onClose} title="Export company portfolio" size="lg">
       <p className="text-sm text-gray-600 mb-4">
-        Download a CSV with one row per company: company name, comma-separated product names, product count,
-        comma-separated application names, and application count. Names that contain commas are quoted in the CSV.
+        One row per company: products and applications (comma-separated names plus counts), then average{' '}
+        <span className="font-medium text-gray-800">metadataCompleteness</span> (0–100, Basic + Technical app fields per
+        application, then averaged; NA values exclude a field), and{' '}
+        <span className="font-medium text-gray-800">securityCompleteness</span> (filled/total security-tool fields summed
+        across all apps, same rules as the Applications completeness column).
       </p>
 
       {isAdmin && companies.length > 0 && (

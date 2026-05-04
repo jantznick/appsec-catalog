@@ -3,6 +3,7 @@ import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { generateSlug, ensureUniqueSlug } from '../utils/slug.js';
 import { buildIntegrationSummaryForCompanyId } from '../integrations/summaryForCompany.js';
+import { aggregateCompletenessForCompany } from '../utils/portfolioCompleteness.js';
 
 const router = express.Router();
 
@@ -257,7 +258,38 @@ router.post('/export-portfolio', requireAuth, async (req, res) => {
         id: true,
         name: true,
         products: { select: { name: true }, orderBy: { name: 'asc' } },
-        applications: { select: { name: true }, orderBy: { name: 'asc' } },
+        applications: {
+          orderBy: { name: 'asc' },
+          select: {
+            name: true,
+            description: true,
+            repoUrl: true,
+            devTeamContact: true,
+            businessCriticality: true,
+            criticalAspects: true,
+            language: true,
+            framework: true,
+            serverEnvironment: true,
+            currentVersion: true,
+            facing: true,
+            deploymentType: true,
+            authProfiles: true,
+            dataTypes: true,
+            sastTool: true,
+            sastIntegrationLevel: true,
+            dastTool: true,
+            dastIntegrationLevel: true,
+            scaTool: true,
+            scaIntegrationLevel: true,
+            sastIncludesSca: true,
+            appFirewallTool: true,
+            appFirewallIntegrationLevel: true,
+            apiSecurityTool: true,
+            apiSecurityIntegrationLevel: true,
+            apiSecurityNA: true,
+            appFirewallNA: true,
+          },
+        },
       },
     });
 
@@ -269,18 +301,23 @@ router.post('/export-portfolio', requireAuth, async (req, res) => {
     const ordered = allowedIds.map((id) => byId.get(id)).filter(Boolean);
 
     const header =
-      'company,products,productCount,applications,applicationCount';
+      'company,products,productCount,applications,applicationCount,metadataCompleteness,securityCompleteness';
     const rows = ordered.map((c) => {
       const productNames = c.products.map((p) => p.name);
       const appNames = c.applications.map((a) => a.name);
       const productsCell = productNames.join(', ');
       const appsCell = appNames.join(', ');
+      const { metadataCompleteness, securityCompleteness } = aggregateCompletenessForCompany(
+        c.applications,
+      );
       return [
         escapeCsvField(c.name),
         escapeCsvField(productsCell),
         String(productNames.length),
         escapeCsvField(appsCell),
         String(appNames.length),
+        escapeCsvField(metadataCompleteness),
+        escapeCsvField(securityCompleteness),
       ].join(',');
     });
 

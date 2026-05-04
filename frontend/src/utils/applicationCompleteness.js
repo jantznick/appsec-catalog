@@ -40,7 +40,6 @@ export function calculateCompleteness(application) {
     'apiSecurityIntegrationLevel',
     'apiSecurityNA',
     'appFirewallNA',
-    'interfaces',
   ];
 
   let filled = 0;
@@ -48,26 +47,6 @@ export function calculateCompleteness(application) {
 
   for (const field of fields) {
     const value = application[field];
-
-    if (field === 'interfaces') {
-      if (isStringNA(value)) continue;
-      if (value) {
-        try {
-          const parsed = JSON.parse(value);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            total += 1;
-            filled += 1;
-            continue;
-          }
-        } catch {
-          // invalid JSON, count as not filled but still in total
-        }
-        total += 1;
-        continue;
-      }
-      total += 1;
-      continue;
-    }
 
     if (field === 'apiSecurityNA' || field === 'appFirewallNA') {
       if (isStringNA(value)) continue;
