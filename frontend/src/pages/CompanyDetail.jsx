@@ -18,6 +18,7 @@ import { ApplicablePoliciesView } from '../components/policy/ApplicablePoliciesV
 import { CompanyIntegrationsSection } from '../components/integrations/CompanyIntegrationsSection.jsx';
 import { SecurityFindingsExportModal } from '../components/integrations/SecurityFindingsExportModal.jsx';
 import { CompanyPortfolioMapCard } from '../components/company-detail/CompanyPortfolioMapCard.jsx';
+import { CompanySecurityCoverageSection } from '../components/company-detail/CompanySecurityCoverageSection.jsx';
 
 export function CompanyDetail() {
   const { id } = useParams();
@@ -40,6 +41,9 @@ export function CompanyDetail() {
 
   const [divisions, setDivisions] = useState([]);
   const [loadingDivisions, setLoadingDivisions] = useState(false);
+  const [securityCoverage, setSecurityCoverage] = useState(null);
+  const [securityCoverageLoading, setSecurityCoverageLoading] = useState(true);
+  const [securityCoverageError, setSecurityCoverageError] = useState(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -61,6 +65,7 @@ export function CompanyDetail() {
       loadCompany();
       loadAverageScore();
       loadDomains();
+      loadSecurityCoverage();
     }
     if (isAdmin()) {
       loadDivisions();
@@ -101,6 +106,22 @@ export function CompanyDetail() {
       setDomains(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to load domains:', error);
+    }
+  };
+
+  const loadSecurityCoverage = async () => {
+    if (!id) return;
+    try {
+      setSecurityCoverageLoading(true);
+      setSecurityCoverageError(null);
+      const data = await api.getCompanySecurityCoverage(id);
+      setSecurityCoverage(data);
+    } catch (err) {
+      console.error('Failed to load security coverage:', err);
+      setSecurityCoverageError(err?.message || 'Failed to load security coverage');
+      setSecurityCoverage(null);
+    } finally {
+      setSecurityCoverageLoading(false);
     }
   };
 
@@ -472,6 +493,7 @@ export function CompanyDetail() {
       <Tabs defaultTab={0} className="w-full max-w-7xl mx-auto">
         <Tab>Overview</Tab>
         <Tab>Application environment</Tab>
+        <Tab>Security coverage</Tab>
         <Tab>Tools & connections</Tab>
         <Tab>Domains</Tab>
         <Tab>Policies</Tab>
@@ -702,6 +724,16 @@ export function CompanyDetail() {
         <TabPanel>
           <div className="w-full space-y-6">
             <CompanyPortfolioMapCard companyId={id} />
+          </div>
+        </TabPanel>
+
+        <TabPanel>
+          <div className="w-full space-y-6">
+            <CompanySecurityCoverageSection
+              loading={securityCoverageLoading}
+              error={securityCoverageError}
+              data={securityCoverage}
+            />
           </div>
         </TabPanel>
 

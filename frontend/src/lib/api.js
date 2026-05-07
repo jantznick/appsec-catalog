@@ -313,6 +313,9 @@ export const api = {
 
   getCompanyDomains: (id) =>
     apiRequest(`/api/companies/${id}/domains`),
+
+  getCompanySecurityCoverage: (id) =>
+    apiRequest(`/api/companies/${encodeURIComponent(id)}/security-coverage`),
   getCompanyBySlug: (slug) =>
     apiRequest(`/api/companies/slug/${slug}`),
   getPublicCompanies: () =>

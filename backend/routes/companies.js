@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { generateSlug, ensureUniqueSlug } from '../utils/slug.js';
 import { buildIntegrationSummaryForCompanyId } from '../integrations/summaryForCompany.js';
 import { aggregateCompletenessForCompany } from '../utils/portfolioCompleteness.js';
+import { buildCompanySecurityCoverage } from '../utils/companySecurityCoverage.js';
 
 const router = express.Router();
 
@@ -618,6 +619,51 @@ router.get('/:id/portfolio-architecture', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error fetching portfolio architecture:', error);
     res.status(500).json({ error: 'Failed to fetch portfolio architecture' });
+  }
+});
+
+/** Security tool coverage by category (SAST, SCA, DAST, WAF, API) for company detail. */
+router.get('/:id/security-coverage', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!req.session.isAdmin && req.session.companyId !== id) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only access your own company',
+      });
+    }
+
+    const applications = await prisma.application.findMany({
+      where: { companyId: id },
+      select: {
+        id: true,
+        name: true,
+        sastTool: true,
+        sastIntegrationLevel: true,
+        sastIncludesSca: true,
+        dastTool: true,
+        dastIntegrationLevel: true,
+        scaTool: true,
+        scaIntegrationLevel: true,
+        appFirewallTool: true,
+        appFirewallIntegrationLevel: true,
+        appFirewallNA: true,
+        apiSecurityTool: true,
+        apiSecurityIntegrationLevel: true,
+        apiSecurityNA: true,
+        lastSastScanDate: true,
+        lastDastScanDate: true,
+        lastScaScanDate: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    const payload = buildCompanySecurityCoverage(applications);
+    res.json(payload);
+  } catch (error) {
+    console.error('Error building company security coverage:', error);
+    res.status(500).json({ error: 'Failed to fetch security coverage' });
   }
 });
 
