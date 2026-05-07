@@ -6,10 +6,6 @@ import { api } from '../../lib/api.js';
 /** Fixed width (~9rem) so every category row’s bar aligns. */
 const BAR_W = 'w-36 shrink-0';
 
-const GRID_NAMES_ONLY =
-  'grid grid-cols-1 gap-x-3 gap-y-1';
-
-/** SAST / SCA / DAST – optional scan & integration columns (cells omitted when empty). */
 const GRID_SCAN_INTEGRATION =
   'grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(6.75rem,7.5rem)_minmax(10rem,1fr)] gap-x-3 gap-y-1';
 
@@ -78,32 +74,26 @@ function AppList({ apps, levelOptions, layout }) {
     return <p className="text-sm text-gray-500 py-1">None</p>;
   }
 
-  const gridClass =
-    layout === 'namesOnly'
-      ? GRID_NAMES_ONLY
-      : layout === 'integrationOnly'
-        ? GRID_INTEGRATION_ONLY
-        : GRID_SCAN_INTEGRATION;
-
   if (layout === 'namesOnly') {
     return (
-      <div className="mt-2 border-t border-gray-100 pt-2">
-        <ul className="divide-y divide-gray-100">
-          {apps.map((app) => (
-            <li key={app.id} className="py-2">
-              <Link
-                to={`/applications/${app.id}`}
-                className="font-medium text-sm text-blue-700 hover:underline underline-offset-2 truncate block min-w-0"
-                title={app.name}
-              >
-                {app.name}
-              </Link>
-            </li>
-          ))}
-        </ul>
+      <div className="mt-2 pt-2 border-t border-gray-100 text-sm leading-relaxed text-gray-800">
+        {apps.map((app, i) => (
+          <span key={app.id}>
+            {i > 0 ? ', ' : null}
+            <Link
+              to={`/applications/${app.id}`}
+              className="text-blue-700 hover:underline underline-offset-2"
+            >
+              {app.name}
+            </Link>
+          </span>
+        ))}
       </div>
     );
   }
+
+  const gridClass =
+    layout === 'integrationOnly' ? GRID_INTEGRATION_ONLY : GRID_SCAN_INTEGRATION;
 
   const showScan = layout === 'scanIntegration';
   const showIntegration = layout !== 'namesOnly';
