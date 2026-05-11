@@ -1,0 +1,304 @@
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { api } from '../../lib/api.js';
+import { toast } from '../ui/Toast.jsx';
+import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card.jsx';
+import { Button } from '../ui/Button.jsx';
+import { LoadingPage } from '../ui/Loading.jsx';
+import { usePendingApprovals } from '../../contexts/PendingApprovalsContext.jsx';
+
+export function AdminStats() {
+  const { globalPendingCount } = usePendingApprovals();
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getAdminStats();
+      setStats(data);
+    } catch (error) {
+      toast.error('Failed to load dashboard stats');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return <LoadingPage message="Loading dashboard..." />;
+  }
+
+  if (!stats) {
+    return null;
+  }
+
+  return (
+    <>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+        <Link to="/companies" className="h-full">
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
+            <CardContent className="flex-1 flex flex-col">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Total Companies</p>
+                  <p className="text-3xl font-semibold text-gray-800">{stats.companies.total}</p>
+                </div>
+                <div className="p-3 bg-blue-100 rounded-lg">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link to="/applications" className="h-full">
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
+            <CardContent className="flex-1 flex flex-col">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Total Applications</p>
+                  <p className="text-3xl font-semibold text-gray-800">{stats.applications.total}</p>
+                </div>
+                <div className="p-3 bg-green-100 rounded-lg">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link to="/users" className="h-full">
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
+            <CardContent className="flex-1 flex flex-col">
+              <div className="flex items-center justify-between flex-1">
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Total Users</p>
+                  <p className="text-3xl font-semibold text-gray-800">{stats.users.total}</p>
+                </div>
+                <div className="p-3 bg-purple-100 rounded-lg">
+                  <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                </div>
+              </div>
+              <div className="mt-2 text-xs text-gray-500">
+                {stats.users.verified} verified, {stats.users.unverified} pending
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link to="/pending-approvals" className="h-full">
+          <Card className={`hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col ${globalPendingCount > 0 ? 'border-yellow-300 bg-yellow-50' : ''}`}>
+            <CardContent className="flex-1 flex flex-col">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Pending Approvals</p>
+                  <p className="text-3xl font-semibold text-gray-800">{globalPendingCount}</p>
+                </div>
+                <div className="p-3 bg-yellow-100 rounded-lg">
+                  <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+              {globalPendingCount > 0 && (
+                <div className="mt-2 text-xs text-yellow-700 font-medium">
+                  Click to review
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link to="/divisions" className="h-full">
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
+            <CardContent className="flex-1 flex flex-col">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Total Divisions</p>
+                  <p className="text-3xl font-semibold text-gray-800">{stats.divisions?.total || 0}</p>
+                </div>
+                <div className="p-3 bg-indigo-100 rounded-lg">
+                  <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
+
+      {/* Applications by Status */}
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Applications by Status</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <p className="text-sm font-medium text-gray-600 mb-1">Onboarded</p>
+              <p className="text-2xl font-semibold text-gray-800">
+                {stats.applications.byStatus.onboarded || 0}
+              </p>
+            </div>
+            <div className="p-4 bg-yellow-50 rounded-lg">
+              <p className="text-sm font-medium text-gray-600 mb-1">Pending Technical</p>
+              <p className="text-2xl font-semibold text-gray-800">
+                {stats.applications.byStatus.pending_technical || 0}
+              </p>
+            </div>
+            <div className="p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm font-medium text-gray-600 mb-1">Pending Executive</p>
+              <p className="text-2xl font-semibold text-gray-800">
+                {stats.applications.byStatus.pending_executive || 0}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Quick Links */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card className="flex flex-col">
+          <CardHeader>
+            <CardTitle>Companies</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col h-full">
+            <div className="flex-grow">
+              <p className="text-gray-600 mb-4">
+                Manage all companies, assign users, and configure default settings.
+              </p>
+            </div>
+            <Link to="/companies" className="mt-auto">
+              <Button variant="primary" className="w-full">
+                Manage Companies
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card className="flex flex-col">
+          <CardHeader>
+            <CardTitle>Applications</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col h-full">
+            <div className="flex-grow">
+              <p className="text-gray-600 mb-4">
+                View and manage all applications across all companies.
+              </p>
+            </div>
+            <Link to="/applications" className="mt-auto">
+              <Button variant="primary" className="w-full">
+                Manage Applications
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card className="flex flex-col">
+          <CardHeader>
+            <CardTitle>Users</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col h-full">
+            <div className="flex-grow">
+              <p className="text-gray-600 mb-4">
+                View all users, verify accounts, and manage permissions.
+              </p>
+            </div>
+            <Link to="/users" className="mt-auto">
+              <Button variant="primary" className="w-full">
+                Manage Users
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card className="flex flex-col">
+          <CardHeader>
+            <CardTitle>Divisions</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col h-full">
+            <div className="flex-grow">
+              <p className="text-gray-600 mb-4">
+                Organize companies into divisions for better management and reporting.
+              </p>
+            </div>
+            <Link to="/divisions" className="mt-auto">
+              <Button variant="primary" className="w-full">
+                Manage Divisions
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card className="flex flex-col">
+          <CardHeader>
+            <CardTitle>Domains</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col h-full">
+            <div className="flex-grow">
+              <p className="text-gray-600 mb-4">
+                View and manage all hosting domains across all companies.
+              </p>
+            </div>
+            <Link to="/domains" className="mt-auto">
+              <Button variant="primary" className="w-full">
+                Manage Domains
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card className="flex flex-col">
+          <CardHeader>
+            <CardTitle>Deployment Tokens</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col h-full">
+            <div className="flex-grow">
+              <p className="text-gray-600 mb-4">
+                Manage API tokens for CI/CD pipeline integrations across all companies.
+              </p>
+            </div>
+            <Link to="/deployment-tokens" className="mt-auto">
+              <Button variant="primary" className="w-full">
+                Manage Tokens
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card className="flex flex-col">
+          <CardHeader>
+            <CardTitle>Policy Controls</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col h-full">
+            <div className="flex-grow">
+              <p className="text-gray-600 mb-4">
+                Manage policy controls for application security policies.
+              </p>
+            </div>
+            <Link to="/policy-controls" className="mt-auto">
+              <Button variant="primary" className="w-full">
+                Manage Policy Controls
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+      </div>
+    </>
+  );
+}
+

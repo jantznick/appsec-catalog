@@ -1,0 +1,8 @@
+{
+    "//": "Defines the weight multiplier for each level of tool integration. Scale: 0.0 to 1.0.",
+    "0": { "name": "Unknown / Nothing", "weight": 0.0 },
+    "1": { "name": "Tool Implemented - No data given to Corporate", "weight": 0.25 },
+    "2": { "name": "Tool Implemented - Data given to Corporate via API access", "weight": 0.5 },
+    "3": { "name": "Tool Implemented - Dashboard/tool config access given to Corporate", "weight": 0.75 },
+    "4": { "name": "Tool Implemented - Corporate full-service partner", "weight": 1.0 }
+}

@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+/* Custom theme colors - using Tailwind's default but ensuring consistency */
+:root {
+  --color-primary: #3b82f6;
+  --color-primary-dark: #2563eb;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+}
+
+/* Global text styling improvements */
+body {
+  color: #374151; /* gray-700 - softer than default black */
+  line-height: 1.6; /* Better readability */
+}
+
+/* Headings - softer but still prominent */
+h1, h2, h3, h4, h5, h6 {
+  color: #1f2937; /* gray-800 - softer than gray-900 */
+  line-height: 1.5;
+}
+
+/* Always visible scrollbar for note content */
+.note-content-scroll {
+  scrollbar-gutter: stable;
+  overflow-y: scroll; /* Use 'scroll' instead of 'auto' to always show scrollbar */
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: #d1d5db transparent; /* Firefox */
+}
+
+.note-content-scroll::-webkit-scrollbar {
+  width: 6px;
+  display: block !important;
+  -webkit-appearance: none;
+}
+
+.note-content-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.note-content-scroll::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+  border: 1px solid #f3f4f6;
+}
+
+.note-content-scroll::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+

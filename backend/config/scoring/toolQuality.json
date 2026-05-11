@@ -1,0 +1,14 @@
+{
+    "//": "Defines the quality weight multiplier for specific tools. A higher score rewards the use of better tools.",
+    "managed": {
+        "Snyk": 1.2,
+        "Tenable WAS": 1.1,
+        "Fastly NGWAF": 1.2,
+        "Traceable API Security": 1.1
+    },
+    "approvedUnmanaged": {
+        "Dependabot": 0.9,
+        "GitHub Advanced Security": 1.0
+    },
+    "other": 0.8
+}

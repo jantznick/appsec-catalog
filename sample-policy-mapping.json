@@ -1,0 +1,11 @@
+{
+    "policy_name": "policy_id",
+    "controls": [
+        {
+            "control_name": "Pre-Prod Scanning Required",
+            "control_description": "SAST or DAST scanning must be performed before deployment to a production environment.",
+            "control_number": "3.4.2",
+            "metadata_field": unsure what here, but some way to link it to a field in the application metadata
+        }
+    ]
+}

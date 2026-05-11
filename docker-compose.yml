@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: appsec-catalog-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-appsec}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-appsec_password}
+      POSTGRES_DB: ${POSTGRES_DB:-appsec_catalog}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Specify database name explicitly to avoid "database appsec does not exist" error
+      # The -d flag tells pg_isready which database to check
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-appsec} -d ${POSTGRES_DB:-appsec_catalog}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - appsec-network
+
+  # Frontend and backend are typically run via npm run dev
+  # Uncomment these if you want to run them in Docker too
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    networks:
+      - appsec-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    # Optional: load env files into the container (e.g. if you don’t bake .env into the image).
+    # Do not set INTEGRATIONS_ENCRYPTION_KEY= in `environment` with an empty default - that
+    # blocks dotenv from filling it from a mounted/copied .env (dotenv won’t override set vars).
+    env_file:
+      - path: .env
+        required: false
+      - path: ./backend/.env
+        required: false
+    ports:
+      - "3001:3001"  # Keep for development, remove in production
+    environment:
+      - PORT=3001
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-appsec}:${POSTGRES_PASSWORD:-appsec_password}@postgres:5432/${POSTGRES_DB:-appsec_catalog}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - NODE_ENV=${NODE_ENV:-production}
+      # Host path where this repo lives (for admin-triggered deploys).
+      # Must be an absolute path on the VM (e.g. /opt/appsec-catalog).
+      - DEPLOY_HOST_WORKDIR=${DEPLOY_HOST_WORKDIR:-/opt/appsec-catalog}
+      - DEPLOY_RUNNER_IMAGE=${DEPLOY_RUNNER_IMAGE:-docker:cli}
+      # Optional: dogfooding deploy records (POST /api/deployment-tokens)
+      - APPSEC_CATALOG_API_URL=${APPSEC_CATALOG_API_URL:-}
+      - APPSEC_CATALOG_DEPLOYMENT_TOKEN=${APPSEC_CATALOG_DEPLOYMENT_TOKEN:-}
+      - APPSEC_CATALOG_DEPLOY_ENV=${APPSEC_CATALOG_DEPLOY_ENV:-prod}
+      - APPSEC_CATALOG_FRONTEND_APP_ID=${APPSEC_CATALOG_FRONTEND_APP_ID:-}
+      - APPSEC_CATALOG_BACKEND_APP_ID=${APPSEC_CATALOG_BACKEND_APP_ID:-}
+    volumes:
+      - backend_storage:/app/storage
+      # Required for admin-triggered deploys (backend launches a short-lived docker runner container).
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - appsec-network
+
+  # Caddy reverse proxy with automatic HTTPS
+  caddy:
+    image: caddy:2-alpine
+    container_name: appsec-catalog-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"      # HTTP (redirects to HTTPS)
+      - "443:443"    # HTTPS
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - appsec-network
+
+volumes:
+  postgres_data:
+  backend_storage: # Persists backend-generated files (domain snapshots, etc.)
+  caddy_data:      # Persists Let's Encrypt certificates
+  caddy_config:    # Persists Caddy configuration
+
+networks:
+  appsec-network:
+    driver: bridge
+
+
+
+
+
