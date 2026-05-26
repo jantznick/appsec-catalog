@@ -3,6 +3,7 @@ import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { calculateApplicationScore } from '../services/scoring.js';
 import { evaluateAllControls } from '../services/policy.js';
+import { getAuthContext } from '../middleware/authContext.js';
 
 const router = express.Router();
 
@@ -54,7 +55,7 @@ function normalizeProductInput(body) {
   };
 }
 
-async function getProductForUser(productId, session) {
+async function getProductForUser(productId, auth) {
   const product = await prisma.product.findUnique({
     where: { id: productId },
     include: {
@@ -116,7 +117,7 @@ async function getProductForUser(productId, session) {
   });
 
   if (!product) return null;
-  if (!session.isAdmin && session.companyId !== product.companyId) return 'forbidden';
+  if (!auth?.isAdmin && auth?.companyId !== product.companyId) return 'forbidden';
   return product;
 }
 
@@ -169,13 +170,14 @@ async function validateProductFlowApplications(productId, companyId, sourceAppli
 // Get products (admin: all or filter by companyId, non-admin: own company only)
 router.get('/', requireAuth, async (req, res) => {
   try {
+    const auth = getAuthContext(req);
     const { companyId } = req.query;
 
     let where = {};
-    if (req.session.isAdmin) {
+    if (auth.isAdmin) {
       if (companyId) where.companyId = companyId;
-    } else if (req.session.companyId) {
-      where.companyId = req.session.companyId;
+    } else if (auth.companyId) {
+      where.companyId = auth.companyId;
     } else {
       return res.json([]);
     }
@@ -203,6 +205,7 @@ router.get('/', requireAuth, async (req, res) => {
 // Create product
 router.post('/', requireAuth, async (req, res) => {
   try {
+    const auth = getAuthContext(req);
     const payload = normalizeProductInput(req.body);
     if (!payload.name) {
       return res.status(400).json({ error: 'Product name is required' });
@@ -215,16 +218,13 @@ router.post('/', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'businessCriticality must be a number between 1 and 5' });
     }
 
-    const companyId = req.body.companyId || req.session.companyId;
+    const companyId = req.body.companyId || auth.companyId;
     if (!companyId) {
       return res.status(400).json({ error: 'Company is required' });
     }
 
-    if (!req.session.isAdmin && req.session.companyId !== companyId) {
-      return res.status(403).json({
-        error: 'Permission denied',
-        message: 'You can only create products for your company',
-      });
+    if (!auth.isAdmin && auth.companyId !== companyId) {
+      return res.status(403).json({ error: 'Permission denied', message: 'You can only create products for your company' });
     }
 
     const company = await prisma.company.findUnique({ where: { id: companyId } });
@@ -257,13 +257,12 @@ router.post('/', requireAuth, async (req, res) => {
 // Component types list (declared before /:id route)
 router.get('/component-types', requireAuth, async (req, res) => {
   try {
+    const auth = getAuthContext(req);
     const queryCompanyId = req.query.companyId;
-    const companyId = req.session.isAdmin
-      ? (queryCompanyId || req.session.companyId)
-      : req.session.companyId;
+    const companyId = auth.isAdmin ? (queryCompanyId || auth.companyId) : auth.companyId;
 
     if (!companyId) return res.json([]);
-    if (!req.session.isAdmin && queryCompanyId && queryCompanyId !== req.session.companyId) {
+    if (!auth.isAdmin && queryCompanyId && queryCompanyId !== auth.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only view component types for your company',
@@ -287,13 +286,14 @@ router.get('/component-types', requireAuth, async (req, res) => {
 // Create component type
 router.post('/component-types', requireAuth, async (req, res) => {
   try {
+    const auth = getAuthContext(req);
     const name = req.body.name?.trim();
     if (!name) return res.status(400).json({ error: 'Component type name is required' });
 
-    const companyId = req.body.companyId || req.session.companyId;
+    const companyId = req.body.companyId || auth.companyId;
     if (!companyId) return res.status(400).json({ error: 'Company is required' });
 
-    if (!req.session.isAdmin && req.session.companyId !== companyId) {
+    if (!auth.isAdmin && auth.companyId !== companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only create component types for your company',
@@ -440,7 +440,7 @@ router.get('/:id/score', requireAuth, async (req, res) => {
 
 router.get('/:id', requireAuth, async (req, res) => {
   try {
-    const product = await getProductForUser(req.params.id, req.session);
+    const product = await getProductForUser(req.params.id, getAuthContext(req));
     if (!product) return res.status(404).json({ error: 'Product not found' });
     if (product === 'forbidden') {
       return res.status(403).json({
@@ -459,10 +459,11 @@ router.get('/:id', requireAuth, async (req, res) => {
 // Update product
 router.put('/:id', requireAuth, async (req, res) => {
   try {
+    const auth = getAuthContext(req);
     const existing = await prisma.product.findUnique({ where: { id: req.params.id } });
     if (!existing) return res.status(404).json({ error: 'Product not found' });
 
-    if (!req.session.isAdmin && req.session.companyId !== existing.companyId) {
+    if (!auth.isAdmin && auth.companyId !== existing.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only update products in your company',
@@ -563,7 +564,8 @@ router.post('/:id/applications', requireAuth, async (req, res) => {
     const product = await prisma.product.findUnique({ where: { id: req.params.id } });
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
-    if (!req.session.isAdmin && req.session.companyId !== product.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== product.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only modify products in your company',
@@ -696,7 +698,8 @@ router.put('/:id/applications/:applicationId', requireAuth, async (req, res) => 
     const product = await prisma.product.findUnique({ where: { id } });
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
-    if (!req.session.isAdmin && req.session.companyId !== product.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== product.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only modify products in your company',
@@ -770,7 +773,8 @@ router.delete('/:id/applications/:applicationId', requireAuth, async (req, res) 
     const product = await prisma.product.findUnique({ where: { id } });
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
-    if (!req.session.isAdmin && req.session.companyId !== product.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== product.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only modify products in your company',
@@ -808,7 +812,8 @@ router.get('/:id/ingress-points', requireAuth, async (req, res) => {
     const product = await prisma.product.findUnique({ where: { id } });
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
-    if (!req.session.isAdmin && req.session.companyId !== product.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== product.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only view ingress points in your company',
@@ -842,7 +847,8 @@ router.post('/:id/ingress-points', requireAuth, async (req, res) => {
     const product = await prisma.product.findUnique({ where: { id } });
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
-    if (!req.session.isAdmin && req.session.companyId !== product.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== product.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only modify ingress points in your company',
@@ -895,7 +901,8 @@ router.delete('/:id/ingress-points/:ingressId', requireAuth, async (req, res) =>
     const product = await prisma.product.findUnique({ where: { id } });
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
-    if (!req.session.isAdmin && req.session.companyId !== product.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== product.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only modify ingress points in your company',
@@ -922,7 +929,8 @@ router.get('/:id/data-flows', requireAuth, async (req, res) => {
     const product = await prisma.product.findUnique({ where: { id } });
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
-    if (!req.session.isAdmin && req.session.companyId !== product.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== product.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only view product data flows in your company',
@@ -952,7 +960,8 @@ router.post('/:id/data-flows', requireAuth, async (req, res) => {
     const product = await prisma.product.findUnique({ where: { id } });
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
-    if (!req.session.isAdmin && req.session.companyId !== product.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== product.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only modify product data flows in your company',
@@ -995,7 +1004,8 @@ router.put('/:id/data-flows/:flowId', requireAuth, async (req, res) => {
     const product = await prisma.product.findUnique({ where: { id } });
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
-    if (!req.session.isAdmin && req.session.companyId !== product.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== product.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only modify product data flows in your company',
@@ -1051,7 +1061,8 @@ router.delete('/:id/data-flows/:flowId', requireAuth, async (req, res) => {
     const product = await prisma.product.findUnique({ where: { id } });
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
-    if (!req.session.isAdmin && req.session.companyId !== product.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== product.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only modify product data flows in your company',

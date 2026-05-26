@@ -5,6 +5,7 @@ import { generateSlug, ensureUniqueSlug } from '../utils/slug.js';
 import { buildIntegrationSummaryForCompanyId } from '../integrations/summaryForCompany.js';
 import { aggregateCompletenessForCompany } from '../utils/portfolioCompleteness.js';
 import { buildCompanySecurityCoverage } from '../utils/companySecurityCoverage.js';
+import { getAuthContext } from '../middleware/authContext.js';
 
 const router = express.Router();
 
@@ -149,7 +150,8 @@ router.post('/public', async (req, res) => {
 // Admin: all companies, Regular user: only their company
 router.get('/', requireAuth, async (req, res) => {
   try {
-    if (req.session.isAdmin) {
+    const auth = getAuthContext(req);
+    if (auth.isAdmin) {
       // Admin sees all companies
       const { divisionId } = req.query;
       
@@ -195,11 +197,11 @@ router.get('/', requireAuth, async (req, res) => {
       );
     } else {
       // Regular user sees only their company
-      if (!req.session.companyId) {
+      if (!auth.companyId) {
         return res.json([]);
       }
       const company = await prisma.company.findUnique({
-        where: { id: req.session.companyId },
+        where: { id: auth.companyId },
         include: {
           division: {
             select: {
@@ -229,6 +231,7 @@ router.get('/', requireAuth, async (req, res) => {
  */
 router.post('/export-portfolio', requireAuth, async (req, res) => {
   try {
+    const auth = getAuthContext(req);
     const rawIds = req.body?.companyIds;
     if (!Array.isArray(rawIds) || rawIds.length === 0) {
       return res.status(400).json({ error: 'companyIds must be a non-empty array' });
@@ -239,18 +242,18 @@ router.post('/export-portfolio', requireAuth, async (req, res) => {
     }
 
     let allowedIds = companyIds;
-    if (!req.session.isAdmin) {
-      if (!req.session.companyId) {
+    if (!auth.isAdmin) {
+      if (!auth.companyId) {
         return res.status(403).json({ error: 'Permission denied' });
       }
-      const foreign = companyIds.filter((id) => id !== req.session.companyId);
+      const foreign = companyIds.filter((id) => id !== auth.companyId);
       if (foreign.length > 0) {
         return res.status(403).json({
           error: 'Permission denied',
           message: 'You can only export your own company',
         });
       }
-      allowedIds = companyIds.filter((id) => id === req.session.companyId);
+      allowedIds = companyIds.filter((id) => id === auth.companyId);
     }
 
     const companies = await prisma.company.findMany({
@@ -337,9 +340,10 @@ router.post('/export-portfolio', requireAuth, async (req, res) => {
 router.get('/:id/average-score', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const auth = getAuthContext(req);
 
     // Check if user has access (admin or member of company)
-    if (!req.session.isAdmin && req.session.companyId !== id) {
+    if (!auth.isAdmin && auth.companyId !== id) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access your own company',
@@ -450,8 +454,9 @@ function safeAsciiFilename(s) {
 router.get('/:id/technical-onboarding-form-links', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const auth = getAuthContext(req);
 
-    if (!req.session.isAdmin && req.session.companyId !== id) {
+    if (!auth.isAdmin && auth.companyId !== id) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access your own company',
@@ -510,8 +515,9 @@ router.get('/:id/technical-onboarding-form-links', requireAuth, async (req, res)
 router.get('/:id/portfolio-architecture', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const auth = getAuthContext(req);
 
-    if (!req.session.isAdmin && req.session.companyId !== id) {
+    if (!auth.isAdmin && auth.companyId !== id) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access your own company',
@@ -626,8 +632,9 @@ router.get('/:id/portfolio-architecture', requireAuth, async (req, res) => {
 router.get('/:id/security-coverage', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const auth = getAuthContext(req);
 
-    if (!req.session.isAdmin && req.session.companyId !== id) {
+    if (!auth.isAdmin && auth.companyId !== id) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access your own company',
@@ -671,9 +678,10 @@ router.get('/:id/security-coverage', requireAuth, async (req, res) => {
 router.get('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const auth = getAuthContext(req);
 
     // Check if user has access (admin or member of company)
-    if (!req.session.isAdmin && req.session.companyId !== id) {
+    if (!auth.isAdmin && auth.companyId !== id) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access your own company',
@@ -733,7 +741,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Company not found' });
     }
 
-    const isAdminSession = !!req.session.isAdmin;
+    const isAdminSession = !!auth.isAdmin;
     const integrationSummary = await buildIntegrationSummaryForCompanyId(prisma, id, isAdminSession);
 
     res.json({ ...company, integrationSummary });
@@ -747,9 +755,10 @@ router.get('/:id', requireAuth, async (req, res) => {
 router.get('/:id/domains', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const auth = getAuthContext(req);
 
     // Check if user has access (admin or member of company)
-    if (!req.session.isAdmin && req.session.companyId !== id) {
+    if (!auth.isAdmin && auth.companyId !== id) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access your own company',
@@ -841,6 +850,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
 router.put('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const auth = getAuthContext(req);
     const {
       name,
       domains,
@@ -865,7 +875,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     }
 
     // Check if user has access (admin or member of company)
-    if (!req.session.isAdmin && req.session.companyId !== id) {
+    if (!auth.isAdmin && auth.companyId !== id) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only update your own company',
@@ -875,7 +885,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     // Only admins can change name and domains
     let updateData = {};
     if (name && name.trim() !== existing.name) {
-      if (!req.session.isAdmin) {
+      if (!auth.isAdmin) {
         return res.status(403).json({
           error: 'Permission denied',
           message: 'Only admins can change company name',
@@ -897,7 +907,7 @@ router.put('/:id', requireAuth, async (req, res) => {
       updateData.slug = slug;
     }
 
-    if (domains !== undefined && !req.session.isAdmin) {
+    if (domains !== undefined && !auth.isAdmin) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'Only admins can change company domains',
@@ -908,8 +918,8 @@ router.put('/:id', requireAuth, async (req, res) => {
       where: { id },
       data: {
         ...updateData,
-        ...(domains !== undefined && req.session.isAdmin && { domains: domains?.trim() || null }),
-        ...(divisionId !== undefined && req.session.isAdmin && { divisionId: divisionId || null }),
+        ...(domains !== undefined && auth.isAdmin && { domains: domains?.trim() || null }),
+        ...(divisionId !== undefined && auth.isAdmin && { divisionId: divisionId || null }),
         ...(engManager !== undefined && { engManager: engManager?.trim() || null }),
         ...(language !== undefined && { language: language?.trim() || null }),
         ...(framework !== undefined && { framework: framework?.trim() || null }),

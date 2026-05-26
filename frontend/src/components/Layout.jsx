@@ -201,6 +201,13 @@ export function Layout({ children }) {
                     </DropdownItem>
                     <DropdownItem
                       onClick={() => {
+                        navigate('/settings/api-tokens');
+                      }}
+                    >
+                      API Tokens
+                    </DropdownItem>
+                    <DropdownItem
+                      onClick={() => {
                         navigate('/users');
                       }}
                     >

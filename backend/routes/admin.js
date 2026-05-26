@@ -10,6 +10,7 @@ import {
 import { createSecurityFindingsJob } from '../services/securityFindingsJobRunner.js';
 import { securityOverviewCsvFilename } from '../utils/securityOverviewFilename.js';
 import { triggerProdDeploy } from '../services/deployService.js';
+import { getAuthContext } from '../middleware/authContext.js';
 
 const router = express.Router();
 
@@ -157,7 +158,7 @@ router.post('/security-findings/jobs', async (req, res) => {
     parseTimeRange(time);
     const providers = parseExportProviders(providersBody);
     assertAtLeastOneProvider(providers);
-    const userId = req.session.userId;
+    const userId = getAuthContext(req)?.userId;
     const jobId = await createSecurityFindingsJob({
       prisma,
       userId,
@@ -178,7 +179,7 @@ router.post('/security-findings/jobs', async (req, res) => {
 
 router.get('/security-findings/jobs/:id', async (req, res) => {
   const j = await prisma.securityFindingsJob.findFirst({
-    where: { id: req.params.id, userId: req.session.userId },
+    where: { id: req.params.id, userId: getAuthContext(req)?.userId },
     select: { status: true, message: true, error: true },
   });
   if (!j) {
@@ -193,7 +194,7 @@ router.get('/security-findings/jobs/:id', async (req, res) => {
 
 router.get('/security-findings/jobs/:id/csv', async (req, res) => {
   const j = await prisma.securityFindingsJob.findFirst({
-    where: { id: req.params.id, userId: req.session.userId },
+    where: { id: req.params.id, userId: getAuthContext(req)?.userId },
     select: { status: true, resultCsv: true, scope: true, companyId: true },
   });
   if (!j) {
@@ -229,6 +230,59 @@ router.post('/deploy', async (req, res) => {
       error: err.message || 'Deploy failed',
       details: err.details,
     });
+  }
+});
+
+// ADMIN: List all user API tokens (metadata only)
+router.get('/api-tokens', async (req, res) => {
+  try {
+    const tokens = await prisma.apiToken.findMany({
+      select: {
+        id: true,
+        userId: true,
+        name: true,
+        secretHint: true,
+        createdAt: true,
+        lastUsedAt: true,
+        revokedAt: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            companyId: true,
+            isAdmin: true,
+            verifiedAccount: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json({ tokens });
+  } catch (error) {
+    console.error('Error listing all api tokens:', error);
+    return res.status(500).json({ error: 'Failed to list API tokens' });
+  }
+});
+
+// ADMIN: Revoke any API token
+router.delete('/api-tokens/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const token = await prisma.apiToken.findUnique({
+      where: { id },
+      select: { id: true, revokedAt: true },
+    });
+    if (!token) {
+      return res.status(404).json({ error: 'API token not found' });
+    }
+    if (token.revokedAt) {
+      return res.json({ message: 'API token already revoked' });
+    }
+    await prisma.apiToken.update({ where: { id }, data: { revokedAt: new Date() } });
+    return res.json({ message: 'API token revoked' });
+  } catch (error) {
+    console.error('Error revoking api token:', error);
+    return res.status(500).json({ error: 'Failed to revoke API token' });
   }
 });
 

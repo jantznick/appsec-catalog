@@ -30,6 +30,7 @@ import {
 import { listTenableIoTagValues } from '../integrations/tenableIo.js';
 import { listWizFolders } from '../integrations/wiz.js';
 import { integrationLog } from '../integrations/log.js';
+import { getAuthContext } from '../middleware/authContext.js';
 
 /**
  * Get or create system user for automated notes
@@ -233,14 +234,15 @@ router.post('/onboard/executive', async (req, res) => {
 // APP-3: Get application list
 router.get('/', requireAuth, async (req, res) => {
   try {
+    const auth = getAuthContext(req);
     let whereClause = {};
 
     // Filter by company (user's company or admin sees all)
-    if (!req.session.isAdmin) {
-      if (!req.session.companyId) {
+    if (!auth.isAdmin) {
+      if (!auth.companyId) {
         return res.json([]);
       }
-      whereClause.companyId = req.session.companyId;
+      whereClause.companyId = auth.companyId;
     }
 
     const applications = await prisma.application.findMany({
@@ -628,7 +630,8 @@ router.get('/:id/score', requireAuth, async (req, res) => {
     }
 
     // Check if user has access (admin or member of same company)
-    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== application.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access applications in your company',
@@ -825,7 +828,8 @@ router.get('/:id/policy-compliance', requireAuth, async (req, res) => {
     }
 
     // Check if user has access (admin or member of same company)
-    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== application.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access applications in your company',
@@ -967,7 +971,7 @@ router.post('/:id/policy-overrides', requireAuth, requireAdmin, async (req, res)
         const note = await prisma.note.create({
           data: {
             content: prefix + noteContent.trim(),
-            createdBy: req.session.userId,
+            createdBy: getAuthContext(req)?.userId,
             applicationId: applicationId,
           },
         });
@@ -991,12 +995,12 @@ router.post('/:id/policy-overrides', requireAuth, requireAdmin, async (req, res)
         controlId,
         isCompliant,
         noteId,
-        overriddenBy: req.session.userId,
+        overriddenBy: getAuthContext(req)?.userId,
       },
       update: {
         isCompliant,
         noteId,
-        overriddenBy: req.session.userId,
+        overriddenBy: getAuthContext(req)?.userId,
       },
       include: {
         control: {
@@ -1102,7 +1106,8 @@ router.get('/:id/integrations/:provider/tags', requireAuth, async (req, res) => 
     if (!app) {
       return res.status(404).json({ error: 'Application not found' });
     }
-    if (!req.session.isAdmin && req.session.companyId !== app.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== app.companyId) {
       return res.status(403).json({ error: 'Permission denied', message: 'You cannot access this application' });
     }
 
@@ -1114,7 +1119,7 @@ router.get('/:id/integrations/:provider/tags', requireAuth, async (req, res) => 
         message: 'Save API credentials for this provider (enterprise or company) first.',
       });
     }
-    if (!(req.session.isAdmin || req.session.companyId === companyId)) {
+    if (!(auth.isAdmin || auth.companyId === companyId)) {
       return res.status(403).json({ error: 'Permission denied', message: 'You cannot list tags for this application' });
     }
 
@@ -1182,7 +1187,8 @@ router.put('/:id/integrations/:provider/link', requireAuth, async (req, res) => 
     if (!app) {
       return res.status(404).json({ error: 'Application not found' });
     }
-    if (!req.session.isAdmin && req.session.companyId !== app.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== app.companyId) {
       return res.status(403).json({ error: 'Permission denied', message: 'You cannot access this application' });
     }
 
@@ -1194,7 +1200,7 @@ router.put('/:id/integrations/:provider/link', requireAuth, async (req, res) => 
         message: 'Configure API credentials before setting a link.',
       });
     }
-    if (!(req.session.isAdmin || req.session.companyId === companyId)) {
+    if (!(auth.isAdmin || auth.companyId === companyId)) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You cannot set an integration link for this application',
@@ -1317,7 +1323,8 @@ router.get('/:id', requireAuth, async (req, res) => {
     delete application.productApplications;
 
     // Check if user has access (admin or member of same company)
-    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== application.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access applications in your company',
@@ -1327,7 +1334,7 @@ router.get('/:id', requireAuth, async (req, res) => {
     const integrationSummary = await buildIntegrationSummaryForCompanyId(
       prisma,
       application.companyId,
-      !!req.session.isAdmin,
+      !!auth.isAdmin,
     );
     application.integrationSummary = integrationSummary;
 
@@ -1402,7 +1409,7 @@ router.post('/:id/review', requireAuth, requireAdmin, async (req, res) => {
       await prisma.applicationMetadataReview.create({
         data: {
           applicationId: updated.id,
-          reviewedBy: req.session.userId,
+          reviewedBy: getAuthContext(req)?.userId,
         },
       });
     } catch (error) {
@@ -1413,14 +1420,14 @@ router.post('/:id/review', requireAuth, requireAdmin, async (req, res) => {
     // Create automatic note for review
     try {
       const reviewer = await prisma.user.findUnique({
-        where: { id: req.session.userId },
+        where: { id: getAuthContext(req)?.userId },
         select: { email: true },
       });
       
       const reviewerEmail = reviewer?.email || 'Unknown';
       const noteContent = `Application "${updated.name}" was reviewed by ${reviewerEmail}.`;
       
-      await createNote(req.session.userId, noteContent, null, updated.id);
+      await createNote(getAuthContext(req)?.userId, noteContent, null, updated.id);
     } catch (error) {
       console.error('Error creating note for review:', error);
       // Don't fail the request if note creation fails
@@ -1487,15 +1494,17 @@ router.post('/', requireAuth, async (req, res) => {
     // Determine company ID
     let finalCompanyId = companyId;
     if (!finalCompanyId) {
-      if (req.session.companyId) {
-        finalCompanyId = req.session.companyId;
+      const auth = getAuthContext(req);
+      if (auth?.companyId) {
+        finalCompanyId = auth.companyId;
       } else {
         return res.status(400).json({ error: 'Company is required' });
       }
     }
 
     // Check if user has access to this company
-    if (!req.session.isAdmin && req.session.companyId !== finalCompanyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== finalCompanyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only create applications for your company',
@@ -1606,7 +1615,7 @@ router.post('/', requireAuth, async (req, res) => {
     });
 
     // Create initial version
-    await createApplicationVersion(application.id, req.session.userId || null, 'web_form');
+    await createApplicationVersion(application.id, getAuthContext(req)?.userId || null, 'web_form');
 
     res.status(201).json(application);
   } catch (error) {
@@ -1671,7 +1680,8 @@ router.put('/:id', requireAuth, async (req, res) => {
     }
 
     // Check if user has access
-    if (!req.session.isAdmin && req.session.companyId !== existing.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== existing.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only update applications in your company',
@@ -1919,7 +1929,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     }
 
     // Create version snapshot after update
-    await createApplicationVersion(application.id, req.session.userId || null, 'web_form');
+    await createApplicationVersion(application.id, getAuthContext(req)?.userId || null, 'web_form');
 
     res.json(application);
   } catch (error) {
@@ -1947,8 +1957,11 @@ router.get('/search/name', requireAuth, async (req, res) => {
     // Filter by company if provided, otherwise user's company
     if (companyId) {
       whereClause.companyId = companyId;
-    } else if (!req.session.isAdmin && req.session.companyId) {
-      whereClause.companyId = req.session.companyId;
+    } else {
+      const auth = getAuthContext(req);
+      if (!auth.isAdmin && auth.companyId) {
+        whereClause.companyId = auth.companyId;
+      }
     }
 
     const applications = await prisma.application.findMany({
@@ -2005,7 +2018,8 @@ router.post('/:id/domains', requireAuth, async (req, res) => {
     }
 
     // Check if user has access (admin or member of same company)
-    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== application.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only modify applications in your company',
@@ -2100,7 +2114,8 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
     }
 
     // Check if user has access to this company
-    if (!req.session.isAdmin && req.session.companyId !== companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only import applications for your company',
@@ -2335,7 +2350,7 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
       
       const noteContent = `Bulk application upload completed. Created ${createdApplications.length} application(s): ${appNames}. Fields provided in upload: ${providedFields.join(', ')}.`;
       
-      await createNote(req.session.userId, noteContent, companyId, null);
+      await createNote(getAuthContext(req)?.userId, noteContent, companyId, null);
     } catch (error) {
       console.error('Error creating note for bulk import:', error);
       // Don't fail the request if note creation fails
@@ -2343,7 +2358,7 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
 
     // Create initial versions for all bulk imported applications
     for (const app of createdApplications) {
-      await createApplicationVersion(app.id, req.session.userId || null, 'bulk_import');
+      await createApplicationVersion(app.id, getAuthContext(req)?.userId || null, 'bulk_import');
     }
 
     res.status(201).json({
@@ -2381,7 +2396,8 @@ router.post('/:id/generate-technical-link', requireAuth, async (req, res) => {
     }
 
     // Check if user has access
-    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== application.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only generate links for applications in your company',
@@ -2490,7 +2506,8 @@ router.delete('/:id/domains/:domainId', requireAuth, async (req, res) => {
     }
 
     // Check if user has access (admin or member of same company)
-    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== application.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only modify applications in your company',
@@ -2559,7 +2576,8 @@ router.get('/:id/deployments', requireAuth, async (req, res) => {
     }
 
     // Check if user has access (admin or member of same company)
-    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== application.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access deployments for applications in your company',
@@ -2600,7 +2618,8 @@ router.post('/:id/deployments', requireAuth, async (req, res) => {
     }
 
     // Check if user has access (admin or member of same company)
-    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== application.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only create deployments for applications in your company',
@@ -2675,7 +2694,8 @@ router.delete('/:id/deployments/:deploymentId', requireAuth, async (req, res) =>
     }
 
     // Check if user has access (admin or member of same company)
-    if (!req.session.isAdmin && req.session.companyId !== deployment.application.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== deployment.application.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only delete deployments for applications in your company',
@@ -2716,7 +2736,8 @@ router.post('/:id/deployment-tokens', requireAuth, async (req, res) => {
     }
 
     // Check if user has access (admin or member of same company)
-    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== application.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only create deployment tokens for applications in your company',
@@ -2733,7 +2754,7 @@ router.post('/:id/deployment-tokens', requireAuth, async (req, res) => {
         token: plaintextToken, // Store plaintext for display (as per schema)
         tokenHash: tokenHash, // Store hash for verification
         name: name?.trim() || null,
-        createdBy: req.session.userId || null,
+        createdBy: getAuthContext(req)?.userId || null,
         companyId: application.companyId,
         applications: {
           create: {
@@ -2781,7 +2802,8 @@ router.get('/:id/deployment-tokens', requireAuth, async (req, res) => {
     }
 
     // Check if user has access (admin or member of same company)
-    if (!req.session.isAdmin && req.session.companyId !== application.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== application.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only view deployment tokens for applications in your company',
@@ -3220,7 +3242,7 @@ router.post('/:id/versions/:versionId/approve', requireAuth, requireAdmin, async
         where: { id: versionId },
         data: {
           approvalStatus: 'approved',
-          approvedBy: req.session.userId,
+          approvedBy: getAuthContext(req)?.userId,
           approvedAt: new Date(),
           approvedFields: approvedFieldsStr,
           approvalNotes: approvalNotes?.trim() || null,
@@ -3319,14 +3341,15 @@ router.post('/:id/versions/:versionId/approve', requireAuth, requireAdmin, async
 
       // Create automatic note
       try {
+        const auth = getAuthContext(req);
         const approver = await prisma.user.findUnique({
-          where: { id: req.session.userId },
+          where: { id: auth?.userId },
           select: { email: true },
         });
         const fieldsStr = approvedFieldsStr || 'all fields';
         const notesStr = approvalNotes ? ` Notes: ${approvalNotes}.` : '';
         const noteContent = `Version ${version.versionNumber} approved by ${approver?.email || 'Unknown'}. Approved fields: ${fieldsStr}.${notesStr}`;
-        await createNote(req.session.userId, noteContent, null, id);
+        await createNote(auth?.userId, noteContent, null, id);
       } catch (error) {
         console.error('Error creating note for approval:', error);
       }
@@ -3347,7 +3370,7 @@ router.post('/:id/versions/:versionId/approve', requireAuth, requireAdmin, async
         where: { id: versionId },
         data: {
           approvalStatus: 'rejected',
-          approvedBy: req.session.userId,
+          approvedBy: getAuthContext(req)?.userId,
           approvedAt: new Date(),
           rejectionReason: rejectionReason?.trim() || null,
         },
@@ -3355,13 +3378,14 @@ router.post('/:id/versions/:versionId/approve', requireAuth, requireAdmin, async
 
       // Create automatic note
       try {
+        const auth = getAuthContext(req);
         const approver = await prisma.user.findUnique({
-          where: { id: req.session.userId },
+          where: { id: auth?.userId },
           select: { email: true },
         });
         const reasonStr = rejectionReason ? ` Reason: ${rejectionReason}` : '';
         const noteContent = `Version ${version.versionNumber} rejected by ${approver?.email || 'Unknown'}.${reasonStr}`;
-        await createNote(req.session.userId, noteContent, null, id);
+        await createNote(auth?.userId, noteContent, null, id);
       } catch (error) {
         console.error('Error creating note for rejection:', error);
       }

@@ -22,11 +22,13 @@ import {
 import { listTenableIoTagValues } from '../integrations/tenableIo.js';
 import { listWizFolders, normalizeWizGraphqlUrl } from '../integrations/wiz.js';
 import { integrationLog } from '../integrations/log.js';
+import { getAuthContext } from '../middleware/authContext.js';
 
 const router = express.Router();
 
 function canAccessCompany(req, companyId) {
-  return req.session.isAdmin || req.session.companyId === companyId;
+  const auth = getAuthContext(req);
+  return auth?.isAdmin || auth?.companyId === companyId;
 }
 
 /**
@@ -41,13 +43,14 @@ function canListOrSaveTags(req, companyId, resolved) {
 }
 
 function canManageCredential(req, scope, companyId) {
+  const auth = getAuthContext(req);
   if (scope === 'ENTERPRISE') {
-    return !!req.session.isAdmin;
+    return !!auth?.isAdmin;
   }
   if (!companyId) {
     return false;
   }
-  return req.session.isAdmin || req.session.companyId === companyId;
+  return auth?.isAdmin || auth?.companyId === companyId;
 }
 
 /**
@@ -130,7 +133,7 @@ router.put('/integrations/credentials/:provider', requireAuth, async (req, res) 
       encryptedPayload,
       accessKeyHint: hint,
       baseUrl: baseUrlStored,
-      updatedByUserId: req.session.userId,
+      updatedByUserId: getAuthContext(req)?.userId ?? null,
     };
 
     if (scope === 'ENTERPRISE') {

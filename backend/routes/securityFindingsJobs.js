@@ -2,6 +2,7 @@ import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth } from '../middleware/auth.js';
 import { securityOverviewCsvFilename } from '../utils/securityOverviewFilename.js';
+import { getAuthContext } from '../middleware/authContext.js';
 
 const router = express.Router();
 router.use(requireAuth);
@@ -45,7 +46,7 @@ function jobToJson(job, companyName) {
 /** GET /api/security-findings/jobs - list current user's jobs (newest first) */
 router.get('/jobs', async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const userId = getAuthContext(req)?.userId;
     const jobs = await prisma.securityFindingsJob.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
@@ -69,7 +70,7 @@ router.get('/jobs', async (req, res) => {
 /** GET /api/security-findings/jobs/:id */
 router.get('/jobs/:id', async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const userId = getAuthContext(req)?.userId;
     const job = await prisma.securityFindingsJob.findFirst({
       where: { id: req.params.id, userId },
       select: listSelect,
@@ -90,7 +91,7 @@ router.get('/jobs/:id', async (req, res) => {
 /** POST /api/security-findings/jobs/:id/cancel - best-effort stop; worker checks between steps */
 router.post('/jobs/:id/cancel', async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const userId = getAuthContext(req)?.userId;
     const id = req.params.id;
     const job = await prisma.securityFindingsJob.findFirst({
       where: { id, userId },
@@ -134,7 +135,7 @@ router.post('/jobs/:id/cancel', async (req, res) => {
 /** DELETE /api/security-findings/jobs/:id - own jobs only; not while running (cancel first) */
 router.delete('/jobs/:id', async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const userId = getAuthContext(req)?.userId;
     const id = req.params.id;
     const existing = await prisma.securityFindingsJob.findFirst({
       where: { id, userId },
@@ -157,7 +158,7 @@ router.delete('/jobs/:id', async (req, res) => {
 /** GET /api/security-findings/jobs/:id/csv */
 router.get('/jobs/:id/csv', async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const userId = getAuthContext(req)?.userId;
     const job = await prisma.securityFindingsJob.findFirst({
       where: { id: req.params.id, userId },
       select: { status: true, resultCsv: true, scope: true, companyId: true },

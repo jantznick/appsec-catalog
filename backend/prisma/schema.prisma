@@ -19,6 +19,7 @@ model User {
   companyId              String?
   company                Company?                    @relation(fields: [companyId], references: [id])
   magicCodes             MagicCode[]
+  apiTokens              ApiToken[]
   notes                  Note[] // Notes created by this user
   applicationVersions    ApplicationVersion[] // Versions created by this user
   approvedVersions       ApplicationVersion[]        @relation("VersionApprover") // Versions approved by this user
@@ -26,6 +27,22 @@ model User {
   policyControlOverrides PolicyControlOverride[] // Policy control overrides set by this user
   integrationCredentialUpdates IntegrationCredential[] @relation("IntegrationCredentialUpdates")
   securityFindingsJobs      SecurityFindingsJob[]
+}
+
+/// User-created API tokens (Personal Access Tokens). Secret is only shown once; we store only a hash.
+model ApiToken {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String?
+  secretHash String   @db.Text
+  secretHint String?  // last chars of the secret for display only
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([revokedAt])
 }
 
 /// User-driven Tenable/Wiz CSV export. Completed CSV is kept until row is deleted; no automatic expiry (see ops).

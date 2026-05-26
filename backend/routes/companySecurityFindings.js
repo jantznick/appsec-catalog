@@ -1,6 +1,7 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth } from '../middleware/auth.js';
+import { getAuthContext } from '../middleware/authContext.js';
 import {
   getExportPreviewList,
   parseTimeRange,
@@ -13,7 +14,8 @@ import { securityOverviewCsvFilename } from '../utils/securityOverviewFilename.j
 const router = express.Router();
 
 function canAccess(req, companyId) {
-  return req.session.isAdmin || req.session.companyId === companyId;
+  const auth = getAuthContext(req);
+  return auth?.isAdmin || auth?.companyId === companyId;
 }
 
 /**
@@ -44,7 +46,7 @@ router.post('/:companyId/security-findings/jobs', requireAuth, async (req, res) 
     parseTimeRange(time);
     const providers = parseExportProviders(providersBody);
     assertAtLeastOneProvider(providers);
-    const userId = req.session.userId;
+    const userId = getAuthContext(req)?.userId;
     const jobId = await createSecurityFindingsJob({
       prisma,
       userId,
@@ -70,7 +72,7 @@ router.get('/:companyId/security-findings/jobs/:id', requireAuth, async (req, re
   const j = await prisma.securityFindingsJob.findFirst({
     where: {
       id: req.params.id,
-      userId: req.session.userId,
+      userId: getAuthContext(req)?.userId,
       companyId: req.params.companyId,
     },
     select: { status: true, message: true, error: true },
@@ -92,7 +94,7 @@ router.get('/:companyId/security-findings/jobs/:id/csv', requireAuth, async (req
   const j = await prisma.securityFindingsJob.findFirst({
     where: {
       id: req.params.id,
-      userId: req.session.userId,
+      userId: getAuthContext(req)?.userId,
       companyId: req.params.companyId,
     },
     select: { status: true, resultCsv: true },

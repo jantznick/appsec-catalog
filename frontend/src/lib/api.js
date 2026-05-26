@@ -570,6 +570,23 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // API token management (personal access tokens)
+  getApiTokens: async () => {
+    const data = await apiRequest('/api/api-tokens');
+    return data.tokens || [];
+  },
+
+  createApiToken: (name = null) =>
+    apiRequest('/api/api-tokens', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+
+  revokeApiToken: (id) =>
+    apiRequest(`/api/api-tokens/${id}`, {
+      method: 'DELETE',
+    }),
+
   // Domain management
   getDomains: () =>
     apiRequest('/api/domains'),
@@ -626,6 +643,17 @@ export const api = {
     const queryString = params.toString();
     return apiRequest(`/api/admin/applications${queryString ? `?${queryString}` : ''}`);
   },
+
+  // Admin: API tokens
+  getAdminApiTokens: async () => {
+    const data = await apiRequest('/api/admin/api-tokens');
+    return data.tokens || [];
+  },
+
+  adminRevokeApiToken: (id) =>
+    apiRequest(`/api/admin/api-tokens/${id}`, {
+      method: 'DELETE',
+    }),
 
   // Notes endpoints
   getCompanyNotes: (companyId) =>
