@@ -5,6 +5,7 @@ import {
   getApplicablePolicySummariesForCompany,
   canCompanyViewPolicy,
 } from '../services/policy.js';
+import { getAuthContext } from '../middleware/authContext.js';
 
 const router = express.Router();
 
@@ -19,7 +20,8 @@ router.get('/', requireAuth, async (req, res) => {
       typeof req.query.forCompany === 'string' ? req.query.forCompany.trim() : '';
 
     if (forCompany) {
-      if (!req.session.isAdmin && req.session.companyId !== forCompany) {
+      const auth = getAuthContext(req);
+      if (!auth?.isAdmin && auth?.companyId !== forCompany) {
         return res.status(403).json({
           error: 'Permission denied',
           message: 'You can only access your own company',
@@ -32,7 +34,7 @@ router.get('/', requireAuth, async (req, res) => {
       return res.json(policies);
     }
 
-    if (!req.session.isAdmin) {
+    if (!getAuthContext(req)?.isAdmin) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'Admin access required',
@@ -66,7 +68,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
-    if (req.session.isAdmin) {
+    if (getAuthContext(req)?.isAdmin) {
       const policy = await prisma.policy.findUnique({
         where: { id },
         include: {
@@ -112,7 +114,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       return res.json(policy);
     }
 
-    const companyId = req.session.companyId;
+    const companyId = getAuthContext(req)?.companyId;
     if (!companyId) {
       return res.status(403).json({
         error: 'Permission denied',

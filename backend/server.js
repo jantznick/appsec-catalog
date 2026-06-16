@@ -19,11 +19,13 @@ import configRoutes from './routes/config.js';
 import invitationRoutes from './routes/invitations.js';
 import domainRoutes from './routes/domains.js';
 import deploymentTokenRoutes from './routes/deploymentTokens.js';
+import apiTokenRoutes from './routes/apiTokens.js';
 import notesRoutes from './routes/notes.js';
 import policyControlRoutes from './routes/policyControls.js';
 import policyRoutes from './routes/policies.js';
 import productRoutes from './routes/products.js';
 import integrationRoutes from './routes/integrations.js';
+import { apiKeyAuth } from './middleware/apiKeyAuth.js';
 
 dotenv.config();
 
@@ -94,7 +96,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'api-key']
 }));
 app.use(express.json());
 app.use('/storage', express.static(path.resolve(__dirname, 'storage')));
@@ -129,6 +131,9 @@ if (cookieDomain) {
 
 app.use(session(sessionConfig));
 
+// Attach api-key auth context (does not modify sessions)
+app.use(apiKeyAuth);
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -142,6 +147,7 @@ app.use('/api/config', configRoutes);
 app.use('/api/invitations', invitationRoutes);
 app.use('/api/domains', domainRoutes);
 app.use('/api/deployment-tokens', deploymentTokenRoutes);
+app.use('/api/api-tokens', apiTokenRoutes);
 app.use('/api/notes', notesRoutes);
 app.use('/api/policy-controls', policyControlRoutes);
 app.use('/api/policies', policyRoutes);

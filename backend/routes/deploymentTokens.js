@@ -2,6 +2,7 @@ import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth } from '../middleware/auth.js';
 import { verifyDeploymentToken } from '../utils/deploymentToken.js';
+import { getAuthContext } from '../middleware/authContext.js';
 
 const router = express.Router();
 
@@ -9,14 +10,15 @@ const router = express.Router();
 // GET /api/deployment-tokens
 router.get('/', requireAuth, async (req, res) => {
   try {
+    const auth = getAuthContext(req);
     let whereClause = {};
 
     // Non-admin users can only see tokens for their company
-    if (!req.session.isAdmin) {
-      if (!req.session.companyId) {
+    if (!auth.isAdmin) {
+      if (!auth.companyId) {
         return res.json([]);
       }
-      whereClause.companyId = req.session.companyId;
+      whereClause.companyId = auth.companyId;
     }
 
     const tokens = await prisma.deploymentToken.findMany({
@@ -53,6 +55,7 @@ router.get('/', requireAuth, async (req, res) => {
 // GET /api/deployment-tokens/:tokenId
 router.get('/:tokenId', requireAuth, async (req, res) => {
   try {
+    const auth = getAuthContext(req);
     const { tokenId } = req.params;
 
     const token = await prisma.deploymentToken.findUnique({
@@ -82,7 +85,7 @@ router.get('/:tokenId', requireAuth, async (req, res) => {
     }
 
     // Check if user has access (admin or member of same company)
-    if (!req.session.isAdmin && req.session.companyId !== token.companyId) {
+    if (!auth.isAdmin && auth.companyId !== token.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only view deployment tokens for your company',
@@ -100,6 +103,7 @@ router.get('/:tokenId', requireAuth, async (req, res) => {
 // PUT /api/deployment-tokens/:tokenId
 router.put('/:tokenId', requireAuth, async (req, res) => {
   try {
+    const auth = getAuthContext(req);
     const { tokenId } = req.params;
     const { name, applicationIds } = req.body;
 
@@ -122,7 +126,7 @@ router.put('/:tokenId', requireAuth, async (req, res) => {
     }
 
     // Check if user has access (admin or member of same company)
-    if (!req.session.isAdmin && req.session.companyId !== existingToken.companyId) {
+    if (!auth.isAdmin && auth.companyId !== existingToken.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only update deployment tokens for your company',
@@ -216,6 +220,7 @@ router.put('/:tokenId', requireAuth, async (req, res) => {
 // DELETE /api/deployment-tokens/:tokenId
 router.delete('/:tokenId', requireAuth, async (req, res) => {
   try {
+    const auth = getAuthContext(req);
     const { tokenId } = req.params;
 
     // Check if token exists
@@ -228,7 +233,7 @@ router.delete('/:tokenId', requireAuth, async (req, res) => {
     }
 
     // Check if user has access (admin or member of same company)
-    if (!req.session.isAdmin && req.session.companyId !== token.companyId) {
+    if (!auth.isAdmin && auth.companyId !== token.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only revoke deployment tokens for your company',

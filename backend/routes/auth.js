@@ -4,6 +4,7 @@ import { hashPassword, comparePassword } from '../utils/password.js';
 import { createMagicCode, validateMagicCode, cleanupExpiredMagicCodes } from '../utils/magicCode.js';
 import { extractDomain, findCompanyByDomain } from '../utils/domain.js';
 import { requireAuth } from '../middleware/auth.js';
+import { getAuthContext } from '../middleware/authContext.js';
 
 const router = express.Router();
 
@@ -329,8 +330,9 @@ router.post('/login-magic', async (req, res) => {
  */
 router.get('/me', requireAuth, async (req, res) => {
   try {
+    const auth = getAuthContext(req);
     const user = await prisma.user.findUnique({
-      where: { id: req.session.userId },
+      where: { id: auth.userId },
       select: {
         id: true,
         email: true,
@@ -353,11 +355,12 @@ router.get('/me', requireAuth, async (req, res) => {
       });
     }
 
-    // Keep session in sync with the database (e.g. company assignment, admin flag) so API routes
-    // that rely on req.session.companyId / isAdmin match what the client got from /me.
-    req.session.companyId = user.companyId;
-    req.session.isAdmin = user.isAdmin;
-    req.session.verified = user.verifiedAccount;
+    // Keep cookie session in sync with the database. For api-key auth, do not mutate/create sessions.
+    if (!req.auth?.authType && req.session) {
+      req.session.companyId = user.companyId;
+      req.session.isAdmin = user.isAdmin;
+      req.session.verified = user.verifiedAccount;
+    }
 
     res.json({ user });
   } catch (error) {

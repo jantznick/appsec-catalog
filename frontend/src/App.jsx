@@ -35,6 +35,7 @@ import { PolicyViewer } from './pages/PolicyViewer.jsx';
 import { IntegrationSettings } from './pages/IntegrationSettings.jsx';
 import { SecurityFindingsExportJobs } from './pages/SecurityFindingsExportJobs.jsx';
 import { SettingsDeploy } from './pages/SettingsDeploy.jsx';
+import { SettingsApiTokens } from './pages/SettingsApiTokens.jsx';
 
 function CatchAllRedirect() {
   const { isAuthenticated, isVerified, loading } = useAuthStore();
@@ -149,6 +150,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <SettingsDeploy />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/api-tokens"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <SettingsApiTokens />
               </Layout>
             </ProtectedRoute>
           }

@@ -1,6 +1,7 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { getAuthContext } from '../middleware/authContext.js';
 
 const router = express.Router();
 
@@ -148,7 +149,7 @@ router.post('/company/:companyId', requireAuth, requireAdmin, async (req, res) =
     const note = await prisma.note.create({
       data: {
         content: content.trim(),
-        createdBy: req.session.userId,
+        createdBy: getAuthContext(req)?.userId,
         companyId: companyId,
       },
       include: {
@@ -197,7 +198,7 @@ router.post('/application/:applicationId', requireAuth, requireAdmin, async (req
     const note = await prisma.note.create({
       data: {
         content: content.trim(),
-        createdBy: req.session.userId,
+        createdBy: getAuthContext(req)?.userId,
         applicationId: applicationId,
       },
       include: {

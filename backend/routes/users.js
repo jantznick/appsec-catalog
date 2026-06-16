@@ -3,6 +3,7 @@ import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin, requireAdminOrCompanyMember } from '../middleware/auth.js';
 import { createInvitation } from '../utils/invitation.js';
 import { hashPassword, comparePassword } from '../utils/password.js';
+import { getAuthContext } from '../middleware/authContext.js';
 
 const router = express.Router();
 
@@ -14,16 +15,17 @@ const router = express.Router();
  */
 router.get('/pending', requireAuth, async (req, res) => {
   try {
+    const auth = getAuthContext(req);
     let whereClause = {
       verifiedAccount: false,
     };
 
     // If not admin, only show users from their company
-    if (!req.session.isAdmin) {
-      if (!req.session.companyId) {
+    if (!auth.isAdmin) {
+      if (!auth.companyId) {
         return res.json({ users: [] });
       }
-      whereClause.companyId = req.session.companyId;
+      whereClause.companyId = auth.companyId;
     }
 
     const users = await prisma.user.findMany({
@@ -69,7 +71,8 @@ router.post('/:id/verify', requireAuth, requireAdminOrCompanyMember, async (req,
   try {
     const { id } = req.params;
     const { companyId, isAdmin: makeAdmin } = req.body;
-    const isRequesterAdmin = req.session.isAdmin;
+    const auth = getAuthContext(req);
+    const isRequesterAdmin = auth.isAdmin;
 
     // Get the target user
     const targetUser = await prisma.user.findUnique({
@@ -119,8 +122,8 @@ router.post('/:id/verify', requireAuth, requireAdminOrCompanyMember, async (req,
       }
     } else {
       // Company members can assign users with no company to their company
-      if (!targetUser.companyId && req.session.companyId) {
-        updateData.companyId = req.session.companyId;
+      if (!targetUser.companyId && auth.companyId) {
+        updateData.companyId = auth.companyId;
       }
     }
 
@@ -185,7 +188,7 @@ router.put('/me/password', requireAuth, async (req, res) => {
 
     // Get current user
     const user = await prisma.user.findUnique({
-      where: { id: req.session.userId },
+      where: { id: getAuthContext(req)?.userId },
     });
 
     if (!user) {
@@ -242,17 +245,18 @@ router.put('/me/password', requireAuth, async (req, res) => {
  */
 router.get('/', requireAuth, async (req, res) => {
   try {
+    const auth = getAuthContext(req);
     let whereClause = {};
 
     // If not admin, show users from their company OR users with no company
-    if (!req.session.isAdmin) {
-      if (!req.session.companyId) {
+    if (!auth.isAdmin) {
+      if (!auth.companyId) {
         // If user has no company, only show unassigned users
         whereClause.companyId = null;
       } else {
         // Show users in their company OR users with no company
         whereClause.OR = [
-          { companyId: req.session.companyId },
+          { companyId: auth.companyId },
           { companyId: null },
         ];
       }
@@ -417,19 +421,20 @@ router.post('/invite', requireAuth, async (req, res) => {
       where: { email: emailLower },
     });
 
-    const isRequesterAdmin = req.session.isAdmin;
+    const auth = getAuthContext(req);
+    const isRequesterAdmin = auth.isAdmin;
     let finalCompanyId = companyId || null;
     let finalIsAdmin = Boolean(makeAdmin);
 
     // If not admin, restrict to their company and no admin status
     if (!isRequesterAdmin) {
-      if (!req.session.companyId) {
+      if (!auth.companyId) {
         return res.status(403).json({
           error: 'Permission denied',
           message: 'You must be assigned to a company to invite users'
         });
       }
-      finalCompanyId = req.session.companyId;
+      finalCompanyId = auth.companyId;
       finalIsAdmin = false; // Company members cannot create admins
     } else {
       // Admin can specify company, validate if provided
@@ -478,7 +483,7 @@ router.post('/invite', requireAuth, async (req, res) => {
     // Create invitation
     const { token, expiresAt, invitation } = await createInvitation(
       emailLower,
-      req.session.userId,
+      auth.userId,
       finalCompanyId,
       finalIsAdmin
     );
@@ -537,7 +542,8 @@ router.post('/:id/regenerate-invite', requireAuth, async (req, res) => {
     }
 
     // Check if user is already verified
-    const isRequesterAdmin = req.session.isAdmin;
+    const auth = getAuthContext(req);
+    const isRequesterAdmin = auth.isAdmin;
 
     // Only admins can create invite links for verified users (password reset function)
     // Non-admins can only create invites for unverified users
@@ -550,14 +556,14 @@ router.post('/:id/regenerate-invite', requireAuth, async (req, res) => {
 
     // Permission check: non-admins can only regenerate invites for users in their company or unassigned users
     if (!isRequesterAdmin) {
-      if (!req.session.companyId) {
+      if (!auth.companyId) {
         return res.status(403).json({
           error: 'Permission denied',
           message: 'You must be assigned to a company to regenerate invitations'
         });
       }
       // Allow if user is in requester's company OR user has no company (unassigned)
-      if (user.companyId && user.companyId !== req.session.companyId) {
+      if (user.companyId && user.companyId !== auth.companyId) {
         return res.status(403).json({
           error: 'Permission denied',
           message: 'You can only regenerate invitations for users in your company or unassigned users'
@@ -568,7 +574,7 @@ router.post('/:id/regenerate-invite', requireAuth, async (req, res) => {
     // Create new invitation for the user
     const { token, expiresAt, invitation } = await createInvitation(
       user.email,
-      req.session.userId,
+      auth.userId,
       user.companyId,
       user.isAdmin
     );
@@ -610,7 +616,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
     const { id } = req.params;
 
     // Prevent deleting yourself
-    if (id === req.session.userId) {
+    if (id === getAuthContext(req)?.userId) {
       return res.status(400).json({
         error: 'Cannot delete yourself',
         message: 'You cannot delete your own account'

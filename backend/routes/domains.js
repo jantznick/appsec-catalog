@@ -6,6 +6,7 @@ import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { runDnsCheck, buildSnapshotCreateData, detectDnsChanges } from '../services/domainDns.js';
 import { buildDomainDnsScore, recomputeSnapshotScoreForMetadata } from '../services/domainDnsScoring.js';
 import { runDomainWebSnapshot, enforceDomainWebSnapshotRetention } from '../services/domainSnapshot.js';
+import { getAuthContext } from '../middleware/authContext.js';
 
 const router = express.Router();
 
@@ -77,7 +78,7 @@ function deriveDomainRelationships(targetDomain, relatedDomains) {
   };
 }
 
-async function getDomainForUser(id, session) {
+async function getDomainForUser(id, auth) {
   const domain = await prisma.domain.findUnique({
     where: { id },
   });
@@ -86,7 +87,7 @@ async function getDomainForUser(id, session) {
     return { error: { status: 404, body: { error: 'Domain not found' } } };
   }
 
-  if (!session.isAdmin && session.companyId !== domain.companyId) {
+  if (!auth?.isAdmin && auth?.companyId !== domain.companyId) {
     return {
       error: {
         status: 403,
@@ -104,14 +105,15 @@ async function getDomainForUser(id, session) {
 // Get all domains (admin sees all, non-admin sees their company's domains)
 router.get('/', requireAuth, async (req, res) => {
   try {
+    const auth = getAuthContext(req);
     let whereClause = {};
 
     // Filter by company (user's company or admin sees all)
-    if (!req.session.isAdmin) {
-      if (!req.session.companyId) {
+    if (!auth.isAdmin) {
+      if (!auth.companyId) {
         return res.json([]);
       }
-      whereClause.companyId = req.session.companyId;
+      whereClause.companyId = auth.companyId;
     }
 
     const domains = await prisma.domain.findMany({
@@ -154,6 +156,7 @@ router.get('/', requireAuth, async (req, res) => {
 // Create a domain
 router.post('/', requireAuth, async (req, res) => {
   try {
+    const auth = getAuthContext(req);
     const {
       name,
       companyId: requestedCompanyId,
@@ -172,7 +175,7 @@ router.post('/', requireAuth, async (req, res) => {
       });
     }
 
-    const companyId = req.session.isAdmin ? requestedCompanyId : req.session.companyId;
+    const companyId = auth.isAdmin ? requestedCompanyId : auth.companyId;
 
     if (!companyId) {
       return res.status(400).json({
@@ -277,7 +280,8 @@ router.get('/:id', requireAuth, async (req, res) => {
     }
 
     // Check if user has access (admin or member of same company)
-    if (!req.session.isAdmin && req.session.companyId !== domain.companyId) {
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== domain.companyId) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access domains in your company',
@@ -336,7 +340,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 router.post('/:id/check-dns', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const access = await getDomainForUser(id, req.session);
+    const access = await getDomainForUser(id, getAuthContext(req));
     if (access.error) {
       return res.status(access.error.status).json(access.error.body);
     }
@@ -351,7 +355,7 @@ router.post('/:id/check-dns', requireAuth, requireAdmin, async (req, res) => {
     });
 
     const snapshot = await prisma.domainDnsSnapshot.create({
-      data: buildSnapshotCreateData(domain.id, req.session.userId, checkResult, scoreData),
+      data: buildSnapshotCreateData(domain.id, getAuthContext(req)?.userId, checkResult, scoreData),
     });
 
     const changes = detectDnsChanges(previousSnapshot, snapshot);
@@ -388,7 +392,7 @@ router.post('/:id/check-dns', requireAuth, requireAdmin, async (req, res) => {
 router.get('/:id/dns-snapshots', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const access = await getDomainForUser(id, req.session);
+    const access = await getDomainForUser(id, getAuthContext(req));
     if (access.error) {
       return res.status(access.error.status).json(access.error.body);
     }
@@ -410,7 +414,7 @@ router.get('/:id/dns-snapshots', requireAuth, async (req, res) => {
 router.get('/:id/dns-changes', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const access = await getDomainForUser(id, req.session);
+    const access = await getDomainForUser(id, getAuthContext(req));
     if (access.error) {
       return res.status(access.error.status).json(access.error.body);
     }
@@ -432,7 +436,7 @@ router.get('/:id/dns-changes', requireAuth, async (req, res) => {
 router.post('/:id/snapshot', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const access = await getDomainForUser(id, req.session);
+    const access = await getDomainForUser(id, getAuthContext(req));
     if (access.error) {
       return res.status(access.error.status).json(access.error.body);
     }
@@ -453,7 +457,7 @@ router.post('/:id/snapshot', requireAuth, requireAdmin, async (req, res) => {
         loadTimeMs: snapshotResult.loadTimeMs,
         screenshotPath: snapshotResult.screenshotPath,
         error: snapshotResult.error,
-        createdBy: req.session.userId || null,
+        createdBy: getAuthContext(req)?.userId || null,
       },
     });
 
@@ -471,7 +475,7 @@ router.post('/:id/snapshot', requireAuth, requireAdmin, async (req, res) => {
 router.get('/:id/snapshots', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const access = await getDomainForUser(id, req.session);
+    const access = await getDomainForUser(id, getAuthContext(req));
     if (access.error) {
       return res.status(access.error.status).json(access.error.body);
     }
