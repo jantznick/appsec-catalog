@@ -241,6 +241,7 @@ export function Companies() {
         open={portfolioExportOpen}
         onClose={() => setPortfolioExportOpen(false)}
         companies={companies}
+        divisions={divisions}
         isAdmin={isAdmin()}
       />
       <div className="mb-8 flex justify-between items-center">
@@ -432,4 +433,3 @@ export function Companies() {
     </div>
   );
 }
-

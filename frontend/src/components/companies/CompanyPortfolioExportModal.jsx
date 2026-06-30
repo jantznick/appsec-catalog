@@ -4,16 +4,19 @@ import { toast } from '../ui/Toast.jsx';
 import { Button } from '../ui/Button.jsx';
 import { Modal } from '../ui/Modal.jsx';
 import { Checkbox } from '../ui/Checkbox.jsx';
+import { Select } from '../ui/Select.jsx';
 
 /**
  * @param {object} p
  * @param {boolean} p.open
  * @param {() => void} p.onClose
- * @param {Array<{ id: string, name: string, _count?: { applications?: number } }>} p.companies
+ * @param {Array<{ id: string, name: string, division?: { id: string, name: string } | null, _count?: { applications?: number } }>} p.companies
+ * @param {Array<{ id: string, name: string }>} p.divisions
  * @param {boolean} p.isAdmin
  */
-export function CompanyPortfolioExportModal({ open, onClose, companies, isAdmin }) {
+export function CompanyPortfolioExportModal({ open, onClose, companies, divisions = [], isAdmin }) {
   const [selected, setSelected] = useState(/** @type {Record<string, boolean>} */ ({}));
+  const [selectedDivisionId, setSelectedDivisionId] = useState('');
   const [exporting, setExporting] = useState(false);
 
   const resetSelection = useCallback(() => {
@@ -27,6 +30,7 @@ export function CompanyPortfolioExportModal({ open, onClose, companies, isAdmin 
 
   useEffect(() => {
     if (open) {
+      setSelectedDivisionId('');
       resetSelection();
     }
   }, [open, resetSelection]);
@@ -34,6 +38,7 @@ export function CompanyPortfolioExportModal({ open, onClose, companies, isAdmin 
   const selectedIds = companies.filter((c) => selected[c.id]).map((c) => c.id);
 
   const selectAll = () => {
+    setSelectedDivisionId('');
     setSelected(
       companies.reduce((acc, c) => {
         acc[c.id] = true;
@@ -43,9 +48,20 @@ export function CompanyPortfolioExportModal({ open, onClose, companies, isAdmin 
   };
 
   const selectNone = () => {
+    setSelectedDivisionId('');
     setSelected(
       companies.reduce((acc, c) => {
         acc[c.id] = false;
+        return acc;
+      }, {}),
+    );
+  };
+
+  const selectDivision = (divisionId) => {
+    setSelectedDivisionId(divisionId);
+    setSelected(
+      companies.reduce((acc, c) => {
+        acc[c.id] = !!divisionId && c.division?.id === divisionId;
         return acc;
       }, {}),
     );
@@ -88,13 +104,27 @@ export function CompanyPortfolioExportModal({ open, onClose, companies, isAdmin 
       </p>
 
       {isAdmin && companies.length > 0 && (
-        <div className="flex gap-2 mb-3">
-          <Button type="button" variant="ghost" size="sm" onClick={selectAll}>
-            Select all
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={selectNone}>
-            Clear
-          </Button>
+        <div className="flex flex-col gap-3 mb-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={selectAll}>
+              Select all
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={selectNone}>
+              Clear
+            </Button>
+          </div>
+          <div className="w-full sm:w-64">
+            <Select
+              aria-label="Select companies by division"
+              value={selectedDivisionId}
+              onChange={(e) => selectDivision(e.target.value)}
+              options={[
+                { value: '', label: 'Select division...' },
+                ...divisions.map((d) => ({ value: d.id, label: d.name })),
+              ]}
+              className="text-sm"
+            />
+          </div>
         </div>
       )}
 
@@ -114,6 +144,7 @@ export function CompanyPortfolioExportModal({ open, onClose, companies, isAdmin 
                 disabled={!isAdmin}
                 onChange={() => {
                   if (!isAdmin) return;
+                  setSelectedDivisionId('');
                   setSelected((s) => ({ ...s, [c.id]: !s[c.id] }));
                 }}
               />
