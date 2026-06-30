@@ -421,6 +421,9 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  getAdminDeployments: (limit = 50) =>
+    apiRequest(`/api/admin/deployments?limit=${encodeURIComponent(limit)}`),
+
   // Product management
   getProducts: (filters = {}) => {
     const params = new URLSearchParams();

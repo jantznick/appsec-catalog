@@ -233,6 +233,59 @@ router.post('/deploy', async (req, res) => {
   }
 });
 
+// Recent deployment records with application/company context (admin only)
+// GET /api/admin/deployments
+router.get('/deployments', async (req, res) => {
+  try {
+    const limitParam = Number.parseInt(String(req.query.limit || '50'), 10);
+    const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 200) : 50;
+
+    const deployments = await prisma.deployment.findMany({
+      orderBy: { deployedAt: 'desc' },
+      take: limit,
+      include: {
+        application: {
+          select: {
+            id: true,
+            name: true,
+            currentVersion: true,
+            deploymentEnvironment: true,
+            gitBranch: true,
+            company: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const latest = deployments[0] || null;
+    const latestByApplication = [];
+    const seenApplicationIds = new Set();
+
+    for (const deployment of deployments) {
+      if (seenApplicationIds.has(deployment.applicationId)) {
+        continue;
+      }
+      seenApplicationIds.add(deployment.applicationId);
+      latestByApplication.push(deployment);
+    }
+
+    res.json({
+      deployments,
+      latest,
+      latestByApplication,
+      totalReturned: deployments.length,
+    });
+  } catch (error) {
+    console.error('Error fetching admin deployments:', error);
+    res.status(500).json({ error: 'Failed to fetch deployments' });
+  }
+});
+
 // ADMIN: List all user API tokens (metadata only)
 router.get('/api-tokens', async (req, res) => {
   try {
@@ -295,4 +348,3 @@ router.delete('/api-tokens/:id', async (req, res) => {
 });
 
 export default router;
-
