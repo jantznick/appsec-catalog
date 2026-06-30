@@ -27,6 +27,14 @@ router.get('/', requireAuth, requireVerified, async (req, res) => {
         userId: true,
         name: true,
         secretHint: true,
+        companyId: true,
+        adminAccessDisabled: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         createdAt: true,
         lastUsedAt: true,
         revokedAt: true,
@@ -45,6 +53,27 @@ router.post('/', requireAuth, requireVerified, async (req, res) => {
   try {
     const auth = getAuthContext(req);
     const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    const companyId = typeof req.body?.companyId === 'string' && req.body.companyId.trim()
+      ? req.body.companyId.trim()
+      : null;
+    const adminAccessDisabled = companyId ? true : (auth.isAdmin ? Boolean(req.body?.adminAccessDisabled) : true);
+
+    if (companyId) {
+      if (!auth.isAdmin && auth.companyId !== companyId) {
+        return res.status(403).json({
+          error: 'Permission denied',
+          message: 'You can only restrict a token to your own company',
+        });
+      }
+
+      const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { id: true },
+      });
+      if (!company) {
+        return res.status(400).json({ error: 'Selected company does not exist' });
+      }
+    }
 
     const secret = generateSecret();
     const secretHash = await bcrypt.hash(secret, 10);
@@ -56,12 +85,22 @@ router.post('/', requireAuth, requireVerified, async (req, res) => {
         name: name || null,
         secretHash,
         secretHint,
+        companyId,
+        adminAccessDisabled,
       },
       select: {
         id: true,
         userId: true,
         name: true,
         secretHint: true,
+        companyId: true,
+        adminAccessDisabled: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         createdAt: true,
         lastUsedAt: true,
         revokedAt: true,
@@ -111,4 +150,3 @@ router.delete('/:id', requireAuth, requireVerified, async (req, res) => {
 });
 
 export default router;
-

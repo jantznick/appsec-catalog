@@ -3,8 +3,10 @@ import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card.jsx';
 import { Button } from '../components/ui/Button.jsx';
+import { Checkbox } from '../components/ui/Checkbox.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
+import { Select } from '../components/ui/Select.jsx';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table.jsx';
 import { copyToClipboard, isClipboardAvailable } from '../utils/clipboard.js';
 import useAuthStore from '../store/authStore.js';
@@ -16,9 +18,12 @@ export function SettingsApiTokens() {
 
   const [myTokens, setMyTokens] = useState([]);
   const [allTokens, setAllTokens] = useState([]);
+  const [companies, setCompanies] = useState([]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTokenName, setNewTokenName] = useState('');
+  const [newTokenCompanyId, setNewTokenCompanyId] = useState('');
+  const [newTokenAdminAccessDisabled, setNewTokenAdminAccessDisabled] = useState(true);
   const [createdTokenValue, setCreatedTokenValue] = useState('');
   const [createdTokenMeta, setCreatedTokenMeta] = useState(null);
 
@@ -34,10 +39,16 @@ export function SettingsApiTokens() {
       const mine = await api.getApiTokens();
       setMyTokens(mine);
       if (isAdmin()) {
-        const all = await api.getAdminApiTokens();
+        const [all, companyRows] = await Promise.all([
+          api.getAdminApiTokens(),
+          api.getCompanies(),
+        ]);
         setAllTokens(all);
+        setCompanies(companyRows);
       } else {
         setAllTokens([]);
+        const companyRows = user?.companyId ? await api.getCompanies() : [];
+        setCompanies(companyRows);
       }
     } catch (e) {
       toast.error(e.message || 'Failed to load API tokens');
@@ -50,10 +61,20 @@ export function SettingsApiTokens() {
     load();
   }, []);
 
+  useEffect(() => {
+    if (newTokenCompanyId) {
+      setNewTokenAdminAccessDisabled(true);
+    }
+  }, [newTokenCompanyId]);
+
   const handleCreate = async () => {
     try {
       setSaving(true);
-      const resp = await api.createApiToken(newTokenName.trim() || null);
+      const resp = await api.createApiToken({
+        name: newTokenName.trim() || null,
+        companyId: newTokenCompanyId || null,
+        adminAccessDisabled: newTokenCompanyId ? true : newTokenAdminAccessDisabled,
+      });
       setCreatedTokenValue(resp.token || '');
       setCreatedTokenMeta(resp.apiToken || null);
       toast.success('API token created. Copy it now; it will not be shown again.');
@@ -141,6 +162,8 @@ export function SettingsApiTokens() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Hint</TableHead>
+                    <TableHead>Company scope</TableHead>
+                    <TableHead>Admin</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Last used</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -156,6 +179,12 @@ export function SettingsApiTokens() {
                         <code className="text-xs bg-gray-100 px-2 py-1 rounded font-mono">
                           …{t.secretHint || ''}
                         </code>
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-700">
+                        {t.company?.name || 'Unrestricted'}
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-700">
+                        {t.adminAccessDisabled ? 'Disabled' : 'Allowed'}
                       </TableCell>
                       <TableCell className="text-sm text-gray-700">
                         {t.createdAt ? new Date(t.createdAt).toLocaleDateString() : '-'}
@@ -191,6 +220,8 @@ export function SettingsApiTokens() {
                       <TableHead>User</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Hint</TableHead>
+                      <TableHead>Company scope</TableHead>
+                      <TableHead>Admin</TableHead>
                       <TableHead>Created</TableHead>
                       <TableHead>Last used</TableHead>
                       <TableHead>Revoked</TableHead>
@@ -210,6 +241,12 @@ export function SettingsApiTokens() {
                           <code className="text-xs bg-gray-100 px-2 py-1 rounded font-mono">
                             …{t.secretHint || ''}
                           </code>
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-700">
+                          {t.company?.name || 'Unrestricted'}
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-700">
+                          {t.adminAccessDisabled ? 'Disabled' : 'Allowed'}
                         </TableCell>
                         <TableCell className="text-sm text-gray-700">
                           {t.createdAt ? new Date(t.createdAt).toLocaleDateString() : '-'}
@@ -244,6 +281,8 @@ export function SettingsApiTokens() {
           onClose={() => {
             setShowCreateModal(false);
             setNewTokenName('');
+            setNewTokenCompanyId('');
+            setNewTokenAdminAccessDisabled(true);
             setCreatedTokenValue('');
             setCreatedTokenMeta(null);
           }}
@@ -256,6 +295,31 @@ export function SettingsApiTokens() {
               value={newTokenName}
               onChange={(e) => setNewTokenName(e.target.value)}
               placeholder="e.g., Terraform / Reporting script"
+            />
+            <Select
+              label="Company restriction"
+              value={newTokenCompanyId}
+              onChange={(e) => setNewTokenCompanyId(e.target.value)}
+              options={[
+                { value: '', label: 'No company restriction' },
+                ...companies.map((company) => ({
+                  value: company.id,
+                  label: company.name,
+                })),
+              ]}
+              helperText="When set, this token can only act within the selected company."
+            />
+            <Checkbox
+              id="api-token-disable-admin"
+              label="Prevent admin abilities for this token"
+              checked={newTokenAdminAccessDisabled}
+              disabled={Boolean(newTokenCompanyId)}
+              onChange={(e) => setNewTokenAdminAccessDisabled(e.target.checked)}
+              helperText={
+                newTokenCompanyId
+                  ? 'Company-restricted tokens cannot use global admin abilities.'
+                  : 'Recommended for automation tokens, even when your user account is an admin.'
+              }
             />
 
             {createdTokenValue ? (
@@ -284,6 +348,8 @@ export function SettingsApiTokens() {
                 {createdTokenMeta?.id && (
                   <div className="text-xs text-gray-500">
                     Created for {user?.email}. Token id: {createdTokenMeta.id}
+                    {createdTokenMeta.company?.name ? ` · Restricted to ${createdTokenMeta.company.name}` : ' · No company restriction'}
+                    {createdTokenMeta.adminAccessDisabled ? ' · Admin disabled' : ''}
                   </div>
                 )}
 
@@ -292,6 +358,8 @@ export function SettingsApiTokens() {
                     onClick={() => {
                       setShowCreateModal(false);
                       setNewTokenName('');
+                      setNewTokenCompanyId('');
+                      setNewTokenAdminAccessDisabled(true);
                       setCreatedTokenValue('');
                       setCreatedTokenMeta(null);
                     }}
@@ -307,6 +375,8 @@ export function SettingsApiTokens() {
                   onClick={() => {
                     setShowCreateModal(false);
                     setNewTokenName('');
+                    setNewTokenCompanyId('');
+                    setNewTokenAdminAccessDisabled(true);
                   }}
                 >
                   Cancel
@@ -356,4 +426,3 @@ export function SettingsApiTokens() {
     </div>
   );
 }
-

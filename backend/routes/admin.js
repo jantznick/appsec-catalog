@@ -242,6 +242,14 @@ router.get('/api-tokens', async (req, res) => {
         userId: true,
         name: true,
         secretHint: true,
+        companyId: true,
+        adminAccessDisabled: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         createdAt: true,
         lastUsedAt: true,
         revokedAt: true,
@@ -287,5 +295,4 @@ router.delete('/api-tokens/:id', async (req, res) => {
 });
 
 export default router;
-
 

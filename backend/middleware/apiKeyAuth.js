@@ -24,7 +24,13 @@ export async function apiKeyAuth(req, _res, next) {
 
     const tokenRow = await prisma.apiToken.findFirst({
       where: { id: parsed.tokenId, revokedAt: null },
-      select: { id: true, userId: true, secretHash: true },
+      select: {
+        id: true,
+        userId: true,
+        secretHash: true,
+        companyId: true,
+        adminAccessDisabled: true,
+      },
     });
     if (!tokenRow) return next();
 
@@ -46,10 +52,13 @@ export async function apiKeyAuth(req, _res, next) {
     req.auth = {
       userId: user.id,
       email: user.email,
-      companyId: user.companyId,
-      isAdmin: user.isAdmin,
+      companyId: tokenRow.companyId || user.companyId,
+      isAdmin: tokenRow.companyId || tokenRow.adminAccessDisabled ? false : user.isAdmin,
       verified: user.verifiedAccount,
       authType: 'apiKey',
+      tokenId: tokenRow.id,
+      restrictedCompanyId: tokenRow.companyId,
+      adminAccessDisabled: tokenRow.adminAccessDisabled,
     };
 
     await prisma.apiToken.update({
@@ -64,4 +73,3 @@ export async function apiKeyAuth(req, _res, next) {
     return next();
   }
 }
-

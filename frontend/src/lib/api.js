@@ -576,10 +576,10 @@ export const api = {
     return data.tokens || [];
   },
 
-  createApiToken: (name = null) =>
+  createApiToken: (data = {}) =>
     apiRequest('/api/api-tokens', {
       method: 'POST',
-      body: JSON.stringify({ name }),
+      body: JSON.stringify(data),
     }),
 
   revokeApiToken: (id) =>
@@ -809,4 +809,3 @@ export const api = {
     return r.text();
   },
 };
-

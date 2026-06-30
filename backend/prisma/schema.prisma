@@ -37,11 +37,15 @@ model ApiToken {
   name       String?
   secretHash String   @db.Text
   secretHint String?  // last chars of the secret for display only
+  companyId  String?  // optional company restriction for this token
+  company    Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  adminAccessDisabled Boolean @default(false) // if true, token cannot inherit admin permissions from the user
   createdAt  DateTime @default(now())
   lastUsedAt DateTime?
   revokedAt  DateTime?
 
   @@index([userId, createdAt(sort: Desc)])
+  @@index([companyId])
   @@index([revokedAt])
 }
 
@@ -86,6 +90,7 @@ model Company {
   divisionId            String? // Division this company belongs to
   division              Division?              @relation(fields: [divisionId], references: [id], onDelete: SetNull)
   users                 User[]
+  apiTokens             ApiToken[]
   applications          Application[]
   invitations           Invitation[]
   domainList            Domain[] // Application hosting domains - domains where this company's applications are hosted (see Domain model)
