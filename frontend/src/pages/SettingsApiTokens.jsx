@@ -13,6 +13,8 @@ import useAuthStore from '../store/authStore.js';
 
 export function SettingsApiTokens() {
   const { user, isAdmin } = useAuthStore();
+  const isAdminUser = isAdmin();
+  const defaultCompanyId = !isAdminUser && user?.companyId ? user.companyId : '';
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -22,7 +24,7 @@ export function SettingsApiTokens() {
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTokenName, setNewTokenName] = useState('');
-  const [newTokenCompanyId, setNewTokenCompanyId] = useState('');
+  const [newTokenCompanyId, setNewTokenCompanyId] = useState(defaultCompanyId);
   const [newTokenAdminAccessDisabled, setNewTokenAdminAccessDisabled] = useState(true);
   const [createdTokenValue, setCreatedTokenValue] = useState('');
   const [createdTokenMeta, setCreatedTokenMeta] = useState(null);
@@ -38,7 +40,7 @@ export function SettingsApiTokens() {
       setLoading(true);
       const mine = await api.getApiTokens();
       setMyTokens(mine);
-      if (isAdmin()) {
+      if (isAdminUser) {
         const [all, companyRows] = await Promise.all([
           api.getAdminApiTokens(),
           api.getCompanies(),
@@ -49,6 +51,7 @@ export function SettingsApiTokens() {
         setAllTokens([]);
         const companyRows = user?.companyId ? await api.getCompanies() : [];
         setCompanies(companyRows);
+        setNewTokenCompanyId(user?.companyId || '');
       }
     } catch (e) {
       toast.error(e.message || 'Failed to load API tokens');
@@ -60,6 +63,12 @@ export function SettingsApiTokens() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (!isAdminUser) {
+      setNewTokenCompanyId(user?.companyId || '');
+    }
+  }, [isAdminUser, user?.companyId]);
 
   useEffect(() => {
     if (newTokenCompanyId) {
@@ -281,7 +290,7 @@ export function SettingsApiTokens() {
           onClose={() => {
             setShowCreateModal(false);
             setNewTokenName('');
-            setNewTokenCompanyId('');
+            setNewTokenCompanyId(defaultCompanyId);
             setNewTokenAdminAccessDisabled(true);
             setCreatedTokenValue('');
             setCreatedTokenMeta(null);
@@ -300,14 +309,19 @@ export function SettingsApiTokens() {
               label="Company restriction"
               value={newTokenCompanyId}
               onChange={(e) => setNewTokenCompanyId(e.target.value)}
+              disabled={!isAdminUser}
               options={[
-                { value: '', label: 'No company restriction' },
+                ...(isAdminUser ? [{ value: '', label: 'No company restriction' }] : []),
                 ...companies.map((company) => ({
                   value: company.id,
                   label: company.name,
                 })),
               ]}
-              helperText="When set, this token can only act within the selected company."
+              helperText={
+                isAdminUser
+                  ? 'When set, this token can only act within the selected company.'
+                  : 'Non-admin tokens are limited to your company.'
+              }
             />
             <Checkbox
               id="api-token-disable-admin"
@@ -358,7 +372,7 @@ export function SettingsApiTokens() {
                     onClick={() => {
                       setShowCreateModal(false);
                       setNewTokenName('');
-                      setNewTokenCompanyId('');
+                      setNewTokenCompanyId(defaultCompanyId);
                       setNewTokenAdminAccessDisabled(true);
                       setCreatedTokenValue('');
                       setCreatedTokenMeta(null);
@@ -375,7 +389,7 @@ export function SettingsApiTokens() {
                   onClick={() => {
                     setShowCreateModal(false);
                     setNewTokenName('');
-                    setNewTokenCompanyId('');
+                    setNewTokenCompanyId(defaultCompanyId);
                     setNewTokenAdminAccessDisabled(true);
                   }}
                 >

@@ -53,19 +53,27 @@ router.post('/', requireAuth, requireVerified, async (req, res) => {
   try {
     const auth = getAuthContext(req);
     const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
-    const companyId = typeof req.body?.companyId === 'string' && req.body.companyId.trim()
+    const requestedCompanyId = typeof req.body?.companyId === 'string' && req.body.companyId.trim()
       ? req.body.companyId.trim()
       : null;
+    const companyId = auth.isAdmin ? requestedCompanyId : auth.companyId;
     const adminAccessDisabled = companyId ? true : (auth.isAdmin ? Boolean(req.body?.adminAccessDisabled) : true);
 
-    if (companyId) {
-      if (!auth.isAdmin && auth.companyId !== companyId) {
-        return res.status(403).json({
-          error: 'Permission denied',
-          message: 'You can only restrict a token to your own company',
-        });
-      }
+    if (!auth.isAdmin && !companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You must belong to a company to create API tokens',
+      });
+    }
 
+    if (!auth.isAdmin && requestedCompanyId && requestedCompanyId !== auth.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only create API tokens for your own company',
+      });
+    }
+
+    if (companyId) {
       const company = await prisma.company.findUnique({
         where: { id: companyId },
         select: { id: true },
