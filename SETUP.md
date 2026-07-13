@@ -104,6 +104,39 @@ npm run dev
 - **Backend**: Run via `npm run dev` in the backend directory
 - **Frontend**: Run via `npm run dev` in the frontend directory
 
+## Production Database Backup / Local Restore
+
+You can download a production database dump over SSH without changing your local database:
+
+```bash
+PROD_SSH_HOST=user@your-prod-host \
+PROD_APP_DIR=/opt/appsec-catalog \
+./scripts/prod-db-pull.sh
+```
+
+Backups are written to `backend/backups/`, which is ignored by git.
+
+To also replace your local development database with the downloaded production dump:
+
+```bash
+PROD_SSH_HOST=user@your-prod-host \
+PROD_APP_DIR=/opt/appsec-catalog \
+./scripts/prod-db-pull.sh --restore-local
+```
+
+The script prompts before restoring locally. Use `--force` only for trusted automation.
+
+Useful overrides:
+
+```bash
+PROD_PROJECT_NAME=appsec-catalog
+PROD_DB_SERVICE=postgres
+PROD_DB_USER=appsec
+PROD_DB_NAME=appsec_catalog
+BACKUP_DIR=/secure/local/backups
+LOCAL_DATABASE_URL=postgresql://appsec:appsec_password@localhost:5432/appsec_catalog
+```
+
 ## Available Endpoints
 
 - Frontend: http://localhost:3000
@@ -122,4 +155,3 @@ To stop and remove volumes (clears database):
 ```bash
 docker-compose down -v
 ```
-
