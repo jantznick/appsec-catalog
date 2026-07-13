@@ -11,6 +11,7 @@ RUN apk add --no-cache \
   harfbuzz \
   ca-certificates \
   ttf-freefont \
+  git \
   docker-cli
 
 # Keep Puppeteer browser cache in a stable location inside the image/container

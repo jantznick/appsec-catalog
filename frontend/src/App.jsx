@@ -36,6 +36,8 @@ import { IntegrationSettings } from './pages/IntegrationSettings.jsx';
 import { SecurityFindingsExportJobs } from './pages/SecurityFindingsExportJobs.jsx';
 import { SettingsDeploy } from './pages/SettingsDeploy.jsx';
 import { SettingsApiTokens } from './pages/SettingsApiTokens.jsx';
+import { ProductUpdatesAdmin } from './pages/ProductUpdatesAdmin.jsx';
+import { WhatsNew } from './pages/WhatsNew.jsx';
 
 function CatchAllRedirect() {
   const { isAuthenticated, isVerified, loading } = useAuthStore();
@@ -160,6 +162,26 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <SettingsApiTokens />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/product-updates"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProductUpdatesAdmin />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/whats-new"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <WhatsNew />
               </Layout>
             </ProtectedRoute>
           }

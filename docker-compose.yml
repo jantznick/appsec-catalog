@@ -58,6 +58,8 @@ services:
       # Must be an absolute path on the VM (e.g. /opt/appsec-catalog).
       - DEPLOY_HOST_WORKDIR=${DEPLOY_HOST_WORKDIR:-/opt/appsec-catalog}
       - DEPLOY_RUNNER_IMAGE=${DEPLOY_RUNNER_IMAGE:-docker:cli}
+      # Read-only repo mount used for Product Updates recent commit lookup.
+      - PRODUCT_UPDATES_GIT_WORKDIR=${PRODUCT_UPDATES_GIT_WORKDIR:-/repo}
       # Optional: dogfooding deploy records (POST /api/deployment-tokens)
       - APPSEC_CATALOG_API_URL=${APPSEC_CATALOG_API_URL:-}
       - APPSEC_CATALOG_DEPLOYMENT_TOKEN=${APPSEC_CATALOG_DEPLOYMENT_TOKEN:-}
@@ -68,6 +70,8 @@ services:
       - backend_storage:/app/storage
       # Required for admin-triggered deploys (backend launches a short-lived docker runner container).
       - /var/run/docker.sock:/var/run/docker.sock
+      # Read-only access to the host repo for admin Product Updates commit hints.
+      - ${DEPLOY_HOST_WORKDIR:-/opt/appsec-catalog}:/repo:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,7 +106,6 @@ volumes:
 networks:
   appsec-network:
     driver: bridge
-
 
 
 

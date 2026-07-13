@@ -97,6 +97,14 @@ export function Layout({ children }) {
                 >
                   Documentation
                 </Link>
+                {isAuthenticated() && (
+                  <Link
+                    to="/whats-new"
+                    className="text-sm text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md"
+                  >
+                    What&apos;s New
+                  </Link>
+                )}
               </div>
             </div>
 
@@ -169,8 +177,22 @@ export function Layout({ children }) {
                         >
                           Deploy settings
                         </DropdownItem>
+                        <DropdownItem
+                          onClick={() => {
+                            navigate('/settings/product-updates');
+                          }}
+                        >
+                          Product updates
+                        </DropdownItem>
                       </>
                     ) : null}
+                    <DropdownItem
+                      onClick={() => {
+                        navigate('/whats-new');
+                      }}
+                    >
+                      What&apos;s New
+                    </DropdownItem>
                     <DropdownItem
                       onClick={() => {
                         navigate('/applications');
@@ -301,4 +323,3 @@ export function Layout({ children }) {
     </div>
   );
 }
-

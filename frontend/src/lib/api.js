@@ -767,6 +767,30 @@ export const api = {
 
   // Security findings export (Tenable WAS + Wiz SAST)
   getAdminSecurityFindingsPreview: () => apiRequest('/api/admin/security-findings/preview'),
+  getAdminGitCommits: (limit = 25) =>
+    apiRequest(`/api/admin/git/commits?limit=${encodeURIComponent(limit)}`),
+  getAdminProductUpdates: (status) => {
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    const query = params.toString();
+    return apiRequest(`/api/product-updates/admin${query ? `?${query}` : ''}`);
+  },
+  createProductUpdate: (body) =>
+    apiRequest('/api/product-updates/admin', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateProductUpdate: (id, body) =>
+    apiRequest(`/api/product-updates/admin/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  deleteProductUpdate: (id) =>
+    apiRequest(`/api/product-updates/admin/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+  getPublishedProductUpdates: (limit = 50) =>
+    apiRequest(`/api/product-updates/published?limit=${encodeURIComponent(limit)}`),
   startAdminSecurityFindingsJob: (body) =>
     apiRequest('/api/admin/security-findings/jobs', { method: 'POST', body: JSON.stringify(body) }),
   getAdminSecurityFindingsJob: (jobId) =>

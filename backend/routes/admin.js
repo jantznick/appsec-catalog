@@ -11,6 +11,7 @@ import { createSecurityFindingsJob } from '../services/securityFindingsJobRunner
 import { securityOverviewCsvFilename } from '../utils/securityOverviewFilename.js';
 import { triggerProdDeploy } from '../services/deployService.js';
 import { getAuthContext } from '../middleware/authContext.js';
+import { getRecentGitCommits } from '../services/gitCommits.js';
 
 const router = express.Router();
 
@@ -283,6 +284,22 @@ router.get('/deployments', async (req, res) => {
   } catch (error) {
     console.error('Error fetching admin deployments:', error);
     res.status(500).json({ error: 'Failed to fetch deployments' });
+  }
+});
+
+// Recent local git commits to help admins draft product updates.
+// GET /api/admin/git/commits?limit=25
+router.get('/git/commits', async (req, res) => {
+  try {
+    const limit = Number.parseInt(String(req.query.limit || '25'), 10);
+    const commits = await getRecentGitCommits(limit);
+    res.json({ commits });
+  } catch (error) {
+    console.error('Error fetching git commits:', error);
+    res.status(500).json({
+      error: 'Failed to fetch git commits',
+      message: 'Make sure git is available and the backend can read the repository workdir.',
+    });
   }
 });
 

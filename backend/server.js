@@ -24,6 +24,7 @@ import notesRoutes from './routes/notes.js';
 import policyControlRoutes from './routes/policyControls.js';
 import policyRoutes from './routes/policies.js';
 import productRoutes from './routes/products.js';
+import productUpdateRoutes from './routes/productUpdates.js';
 import integrationRoutes from './routes/integrations.js';
 import { apiKeyAuth } from './middleware/apiKeyAuth.js';
 
@@ -152,6 +153,7 @@ app.use('/api/notes', notesRoutes);
 app.use('/api/policy-controls', policyControlRoutes);
 app.use('/api/policies', policyRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/product-updates', productUpdateRoutes);
 app.use('/api', integrationRoutes);
 
 // Health check endpoint
@@ -198,5 +200,4 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`🔌 DB test: http://localhost:${PORT}/api/db-test`);
 });
-
 

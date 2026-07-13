@@ -27,6 +27,28 @@ model User {
   policyControlOverrides PolicyControlOverride[] // Policy control overrides set by this user
   integrationCredentialUpdates IntegrationCredential[] @relation("IntegrationCredentialUpdates")
   securityFindingsJobs      SecurityFindingsJob[]
+  productUpdates         ProductUpdate[]
+}
+
+/// AppSec Catalog product release notes / "What's New" entries.
+model ProductUpdate {
+  id             String    @id @default(cuid())
+  title          String
+  summary        String    @db.Text
+  body           String?   @db.Text
+  category       String    @default("Improvement")
+  status         String    @default("draft") // draft | published
+  releaseLabel   String?
+  relatedCommits Json?
+  createdBy      String?
+  author         User?     @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  publishedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status, publishedAt])
+  @@index([createdBy])
+  @@index([createdAt])
 }
 
 /// User-created API tokens (Personal Access Tokens). Secret is only shown once; we store only a hash.
