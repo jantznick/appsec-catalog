@@ -26,6 +26,7 @@ export function ApplicationDetail() {
   const navigate = useNavigate();
   const { isAdmin, user } = useAuthStore();
   const [application, setApplication] = useState(null);
+  const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -53,6 +54,7 @@ export function ApplicationDetail() {
   const [loadingCompliance, setLoadingCompliance] = useState(false);
 
   const [formData, setFormData] = useState({
+    companyId: '',
     name: '',
     description: '',
     repoUrl: '',
@@ -132,13 +134,16 @@ export function ApplicationDetail() {
 
   useEffect(() => {
     loadIntegrationLevels();
+    if (isAdmin()) {
+      loadCompanies();
+    }
     if (id) {
       loadApplication();
       loadScore();
       loadDeployments();
       loadDeploymentTokens();
     }
-  }, [id]);
+  }, [id, user?.isAdmin]);
 
   useEffect(() => {
     if (id && user?.isAdmin) {
@@ -154,7 +159,7 @@ export function ApplicationDetail() {
     if (application && isEditing) {
       loadAvailableApplications();
     }
-  }, [application, isEditing]);
+  }, [application, isEditing, formData.companyId]);
 
   const loadIntegrationLevels = async () => {
     try {
@@ -162,6 +167,16 @@ export function ApplicationDetail() {
       setIntegrationLevels(levels);
     } catch (error) {
       console.error('Failed to load integration levels:', error);
+    }
+  };
+
+  const loadCompanies = async () => {
+    try {
+      const data = await api.getCompanies();
+      setCompanies(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Failed to load companies:', error);
+      toast.error('Failed to load companies');
     }
   };
 
@@ -177,11 +192,12 @@ export function ApplicationDetail() {
     setLoadingApplications(true);
     try {
       const apps = await api.getApplications();
+      const companyIdForInterfaces = isAdmin() ? formData.companyId || application.companyId : application.companyId;
       // For non-admin users, API already filters by company, so we just need to exclude current app
-      // For admin users, we filter to same company in frontend
+      // For admin users, we filter to the company currently selected in the edit form
       const filtered = apps.filter(app => 
         app.id !== application.id &&
-        (isAdmin() ? app.companyId === application.companyId : true)
+        (isAdmin() ? app.companyId === companyIdForInterfaces : true)
       );
       setAvailableApplications(filtered);
     } catch (error) {
@@ -488,6 +504,7 @@ export function ApplicationDetail() {
       setInterfaces(interfaceNames);
 
       const newFormData = {
+        companyId: data.companyId || '',
         name: data.name || '',
         description: data.description || '',
         repoUrl: data.repoUrl || '',
@@ -570,6 +587,8 @@ export function ApplicationDetail() {
       setHasUnsavedChanges(false);
       // Reload both application data and score
       await loadApplication();
+      await loadDeployments();
+      await loadDeploymentTokens();
       await loadScore();
       // Reload policy compliance to reflect any changes
       await loadPolicyCompliance();
@@ -898,6 +917,18 @@ export function ApplicationDetail() {
                         onChange={(e) => handleFieldChange('name', e.target.value)}
                         required
                       />
+                      {isAdmin() && (
+                        <Select
+                          label="Company"
+                          value={formData.companyId}
+                          onChange={(e) => handleFieldChange('companyId', e.target.value)}
+                          options={companies.map((company) => ({
+                            value: company.id,
+                            label: company.name,
+                          }))}
+                          required
+                        />
+                      )}
                       <Textarea
                         label="Description / Use Case"
                         value={formData.description}
@@ -972,6 +1003,19 @@ export function ApplicationDetail() {
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-1">Application Name</label>
                         <p className="text-base text-gray-900 font-medium">{formData.name || <span className="text-gray-400 italic">Not set</span>}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Company</label>
+                        {application.company?.name ? (
+                          <Link
+                            to={`/companies/${application.company.id}`}
+                            className="text-blue-600 hover:text-blue-700"
+                          >
+                            {application.company.name}
+                          </Link>
+                        ) : (
+                          <p className="text-base text-gray-400 italic">Not set</p>
+                        )}
                       </div>
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-1">Description / Use Case</label>
@@ -2204,4 +2248,3 @@ export function ApplicationDetail() {
     </div>
   );
 }
-

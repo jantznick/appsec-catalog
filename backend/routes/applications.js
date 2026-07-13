@@ -252,6 +252,7 @@ router.get('/', requireAuth, async (req, res) => {
           select: {
             id: true,
             name: true,
+            slug: true,
           },
         },
       },
@@ -1632,6 +1633,7 @@ router.put('/:id', requireAuth, async (req, res) => {
       name,
       description,
       repoUrl,
+      companyId,
       language,
       framework,
       serverEnvironment,
@@ -1688,6 +1690,33 @@ router.put('/:id', requireAuth, async (req, res) => {
       });
     }
 
+    let finalCompanyId = existing.companyId;
+    let targetCompany = existing.company;
+    const isCompanyChanging = companyId !== undefined && companyId !== existing.companyId;
+
+    if (companyId !== undefined) {
+      if (isCompanyChanging && !auth.isAdmin) {
+        return res.status(403).json({
+          error: 'Permission denied',
+          message: 'Only admins can change an application company',
+        });
+      }
+
+      if (!companyId || typeof companyId !== 'string' || companyId.trim() === '') {
+        return res.status(400).json({ error: 'Company is required' });
+      }
+
+      targetCompany = await prisma.company.findUnique({
+        where: { id: companyId },
+      });
+
+      if (!targetCompany) {
+        return res.status(404).json({ error: 'Company not found' });
+      }
+
+      finalCompanyId = targetCompany.id;
+    }
+
     // Process interfaces if provided
     let interfacesJson = existing.interfaces;
     let interfaceAppIds = [];
@@ -1699,7 +1728,7 @@ router.put('/:id', requireAuth, async (req, res) => {
           let interfaceApp = await prisma.application.findFirst({
             where: {
               name: interfaceName.trim(),
-              companyId: existing.companyId,
+              companyId: finalCompanyId,
             },
           });
 
@@ -1707,7 +1736,7 @@ router.put('/:id', requireAuth, async (req, res) => {
             interfaceApp = await prisma.application.create({
               data: {
                 name: interfaceName.trim(),
-                companyId: existing.companyId,
+                companyId: finalCompanyId,
                 description: `Auto-created interface application`,
                 status: 'onboarded',
               },
@@ -1739,6 +1768,7 @@ router.put('/:id', requireAuth, async (req, res) => {
       where: { id },
       data: {
         ...(name && { name: name.trim() }),
+        ...(companyId !== undefined && { companyId: finalCompanyId }),
         ...(description !== undefined && { description: description?.trim() || null }),
         ...(repoUrl !== undefined && { repoUrl: repoUrl?.trim() || null }),
         ...(language !== undefined && { language: language?.trim() || null }),
@@ -1781,6 +1811,73 @@ router.put('/:id', requireAuth, async (req, res) => {
         company: true,
       },
     });
+
+    if (isCompanyChanging) {
+      try {
+        await prisma.applicationDomain.deleteMany({
+          where: {
+            applicationId: application.id,
+            domain: {
+              companyId: {
+                not: finalCompanyId,
+              },
+            },
+          },
+        });
+
+        await prisma.applicationDeploymentToken.deleteMany({
+          where: {
+            applicationId: application.id,
+            token: {
+              companyId: {
+                not: finalCompanyId,
+              },
+            },
+          },
+        });
+
+        await prisma.productApplication.deleteMany({
+          where: {
+            applicationId: application.id,
+            product: {
+              companyId: {
+                not: finalCompanyId,
+              },
+            },
+          },
+        });
+
+        await prisma.productIngressPoint.deleteMany({
+          where: {
+            applicationId: application.id,
+            product: {
+              companyId: {
+                not: finalCompanyId,
+              },
+            },
+          },
+        });
+
+        await prisma.productDataFlow.deleteMany({
+          where: {
+            OR: [
+              { sourceApplicationId: application.id },
+              { targetApplicationId: application.id },
+            ],
+            product: {
+              companyId: {
+                not: finalCompanyId,
+              },
+            },
+          },
+        });
+
+        const noteContent = `Application moved from ${existing.company.name} to ${targetCompany.name}. Company-scoped domains, deployment tokens, and product mappings from the previous company were removed.`;
+        await createNote(getAuthContext(req)?.userId, noteContent, null, application.id);
+      } catch (error) {
+        console.error('Error cleaning up company-scoped application links:', error);
+      }
+    }
 
     // Update reciprocal interfaces if interfaces were changed
     if (interfaces !== undefined && interfaceAppIds.length > 0) {
@@ -3408,4 +3505,3 @@ router.post('/:id/versions/:versionId/approve', requireAuth, requireAdmin, async
 });
 
 export default router;
-
