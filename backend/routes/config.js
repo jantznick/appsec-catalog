@@ -237,19 +237,6 @@ router.get('/available-fields', requireAuth, async (req, res) => {
           description: 'Minimum integration level required (0-4 scale)'
         }
       },
-      { 
-        path: 'apiSecurityIntegrationLevel', 
-        label: 'API Security Integration Level', 
-        category: 'Security Tools', 
-        fieldType: 'number',
-        allowedOperators: ['gte', 'gt'],
-        valueType: 'dropdown',
-        valueOptions: integrationLevelOptions,
-        validationRules: {
-          description: 'Minimum integration level required (0-4 scale)'
-        }
-      },
-      
       // Security Tools - Tool Names
       { 
         path: 'sastTool', 
@@ -283,15 +270,6 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists'],
         valueType: 'text'
       },
-      { 
-        path: 'apiSecurityTool', 
-        label: 'API Security Tool', 
-        category: 'Security Tools', 
-        fieldType: 'string',
-        allowedOperators: ['exists', 'not_exists'],
-        valueType: 'text'
-      },
-      
       // Security Tools - Dates (may need cross-field comparisons later)
       { 
         path: 'lastSastScanDate', 

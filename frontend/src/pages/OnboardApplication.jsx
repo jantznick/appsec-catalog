@@ -753,31 +753,18 @@ export function OnboardApplication() {
                             </div>
                           </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <Input
-                            label="API Security Tool"
-                            value={formData.apiSecurityTool}
-                            onChange={(e) => setFormData({ ...formData, apiSecurityTool: e.target.value })}
+                        <div>
+                          <Checkbox
+                            id="apiSecurityNA"
+                            label="API Security N/A"
+                            checked={formData.apiSecurityNA}
+                            onChange={(e) => setFormData({ ...formData, apiSecurityNA: e.target.checked })}
                           />
-                          <div>
-                            <Select
-                              label="API Security Integration Level"
-                              value={formData.apiSecurityIntegrationLevel}
-                              onChange={(e) => setFormData({ ...formData, apiSecurityIntegrationLevel: e.target.value })}
-                              options={[
-                                { value: '', label: 'Select level' },
-                                ...integrationLevels,
-                              ]}
-                            />
-                            <div className="mt-2">
-                              <Checkbox
-                                id="apiSecurityNA"
-                                label="N/A"
-                                checked={formData.apiSecurityNA}
-                                onChange={(e) => setFormData({ ...formData, apiSecurityNA: e.target.checked })}
-                              />
-                            </div>
-                          </div>
+                          {!formData.apiSecurityNA && (
+                            <p className="mt-2 text-sm text-gray-600">
+                              OpenAPI/Swagger schemas can be added after onboarding.
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -817,4 +804,3 @@ export function OnboardApplication() {
     </div>
   );
 }
-

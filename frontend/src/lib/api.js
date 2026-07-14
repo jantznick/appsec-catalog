@@ -385,6 +385,38 @@ export const api = {
   getApplicationScore: (id) =>
     apiRequest(`/api/applications/${id}/score`),
 
+  getApplicationApiSchema: (id) =>
+    apiRequest(`/api/applications/${id}/api-schema`),
+
+  saveApplicationApiSchema: (id, data) =>
+    apiRequest(`/api/applications/${id}/api-schema`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteApplicationApiSchema: (id) =>
+    apiRequest(`/api/applications/${id}/api-schema`, {
+      method: 'DELETE',
+    }),
+
+  downloadApplicationApiSchema: async (id) => {
+    const response = await fetch(`${API_URL}/api/applications/${id}/api-schema/download`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || data.error || 'An error occurred');
+    }
+    const text = await response.text();
+    const dispo = response.headers.get('Content-Disposition');
+    let filename = 'openapi.yaml';
+    if (dispo) {
+      const m = /filename="([^"]+)"/.exec(dispo);
+      if (m) filename = m[1];
+    }
+    return { text, filename };
+  },
+
   markApplicationReviewed: (id) =>
     apiRequest(`/api/applications/${id}/review`, {
       method: 'POST',

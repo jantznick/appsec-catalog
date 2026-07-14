@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AppSec Program Strategy - Vulnerability and Threat Management</title>
+<style>
+  :root{
+    --bg:#101214;
+    --bg-soft:#171a1d;
+    --surface:#f7f8f4;
+    --surface-2:#ecefe7;
+    --panel:#ffffff;
+    --ink:#17191c;
+    --muted:#65706d;
+    --faint:#8a948f;
+    --line:#d9ded4;
+    --line-dark:#2b3032;
+    --app:#1e9bd7;
+    --design:#7ac943;
+    --verify:#ffb547;
+    --protect:#ef5d60;
+    --govern:#7b61ff;
+    --evidence:#24b89a;
+    --maxw:1180px;
+    --r:8px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    color:var(--ink);
+    background:var(--surface);
+    font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit}
+  p,h1,h2,h3{margin:0}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px}
+  .mono{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+  .topbar{
+    position:sticky;
+    top:0;
+    z-index:10;
+    background:rgba(247,248,244,.88);
+    backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--line);
+  }
+  .topbar .wrap{
+    height:56px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:18px;
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    min-width:0;
+  }
+  .mark{
+    width:28px;
+    height:28px;
+    border-radius:7px;
+    background:
+      linear-gradient(135deg,var(--app) 0 46%,transparent 46%),
+      linear-gradient(225deg,var(--design) 0 44%,transparent 44%),
+      linear-gradient(45deg,var(--verify) 0 42%,transparent 42%),
+      var(--protect);
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);
+    flex:none;
+  }
+  .brand b{
+    font-size:13px;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+  }
+  nav{
+    display:flex;
+    align-items:center;
+    gap:4px;
+    color:var(--muted);
+    font-size:12px;
+  }
+  nav a{
+    text-decoration:none;
+    padding:8px 9px;
+    border-radius:6px;
+  }
+  nav a:hover{background:var(--surface-2);color:var(--ink)}
+  .hero{
+    position:relative;
+    overflow:hidden;
+    background:
+      linear-gradient(120deg,rgba(30,155,215,.14),transparent 30%),
+      linear-gradient(180deg,var(--surface),#fff 64%,var(--surface));
+    border-bottom:1px solid var(--line);
+  }
+  .hero::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    opacity:.42;
+    background-image:
+      repeating-linear-gradient(103deg,transparent 0 18px,rgba(30,155,215,.22) 19px 21px,transparent 22px 38px);
+    mask-image:linear-gradient(90deg,transparent 0,#000 18%,#000 70%,transparent 100%);
+    pointer-events:none;
+  }
+  .hero .wrap{
+    position:relative;
+    min-height:calc(100vh - 56px);
+    display:grid;
+    grid-template-columns:minmax(0,1.02fr) minmax(390px,.98fr);
+    align-items:center;
+    gap:42px;
+    padding-top:54px;
+    padding-bottom:50px;
+  }
+  .eyebrow{
+    display:inline-flex;
+    align-items:center;
+    gap:10px;
+    color:var(--evidence);
+    font-size:12px;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    font-weight:800;
+  }
+  .eyebrow::before{
+    content:"";
+    width:30px;
+    height:2px;
+    background:currentColor;
+  }
+  h1{
+    margin-top:18px;
+    font-size:76px;
+    line-height:.98;
+    letter-spacing:0;
+    max-width:780px;
+  }
+  h1 span{color:var(--app)}
+  .lede{
+    margin-top:24px;
+    max-width:720px;
+    color:#46504c;
+    font-size:20px;
+  }
+  .hero-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-top:30px;
+  }
+  .pill{
+    border:1px solid var(--line);
+    background:rgba(255,255,255,.72);
+    border-radius:999px;
+    padding:8px 12px;
+    display:inline-flex;
+    gap:8px;
+    align-items:center;
+    color:#36413e;
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:.02em;
+  }
+  .pill i{
+    width:9px;
+    height:9px;
+    border-radius:3px;
+    background:var(--c);
+    flex:none;
+  }
+  .command-center{
+    position:relative;
+    border:1px solid rgba(23,25,28,.16);
+    border-radius:14px;
+    background:rgba(255,255,255,.78);
+    box-shadow:0 24px 70px rgba(16,18,20,.15);
+    padding:18px;
+    overflow:hidden;
+  }
+  .screen-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:18px;
+    border-bottom:1px solid var(--line);
+    padding-bottom:14px;
+    margin-bottom:16px;
+  }
+  .screen-head strong{
+    font-size:12px;
+    letter-spacing:.13em;
+    text-transform:uppercase;
+  }
+  .live{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    color:var(--muted);
+    font-size:11px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+  }
+  .live::before{
+    content:"";
+    width:8px;
+    height:8px;
+    border-radius:50%;
+    background:var(--design);
+    box-shadow:0 0 0 5px rgba(122,201,67,.16);
+  }
+  .radar{
+    display:grid;
+    grid-template-columns:1.1fr .9fr;
+    gap:14px;
+  }
+  .radar-map{
+    min-height:360px;
+    border:1px solid var(--line);
+    border-radius:10px;
+    background:#fbfcf8;
+    padding:14px;
+  }
+  .radar-map svg{width:100%;height:100%;display:block;min-height:330px}
+  .signal-list{
+    display:grid;
+    gap:10px;
+  }
+  .signal{
+    border:1px solid var(--line);
+    border-left:4px solid var(--c);
+    border-radius:8px;
+    background:#fff;
+    padding:13px 12px;
+  }
+  .signal .k{
+    font-size:10px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--faint);
+    font-weight:800;
+  }
+  .signal b{
+    display:block;
+    margin-top:4px;
+    font-size:15px;
+  }
+  .signal small{
+    display:block;
+    margin-top:3px;
+    color:var(--muted);
+    font-size:12px;
+  }
+  section{
+    padding:82px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .section-dark{
+    background:var(--bg);
+    color:#eef4ef;
+    border-bottom-color:var(--line-dark);
+  }
+  .head{
+    display:grid;
+    grid-template-columns:minmax(240px,.62fr) minmax(0,1fr);
+    gap:42px;
+    align-items:end;
+    margin-bottom:34px;
+  }
+  h2{
+    font-size:44px;
+    line-height:1.04;
+    letter-spacing:0;
+  }
+  .head p{
+    color:var(--muted);
+    max-width:690px;
+    font-size:16px;
+  }
+  .section-dark .head p{color:#aeb8b4}
+  .grid{
+    display:grid;
+    gap:16px;
+  }
+  .grid.cols-3{grid-template-columns:repeat(3,1fr)}
+  .grid.cols-4{grid-template-columns:repeat(4,1fr)}
+  .card{
+    border:1px solid var(--line);
+    border-radius:var(--r);
+    background:var(--panel);
+    padding:22px;
+    position:relative;
+    overflow:hidden;
+  }
+  .section-dark .card{
+    background:var(--bg-soft);
+    border-color:var(--line-dark);
+  }
+  .card::before{
+    content:"";
+    position:absolute;
+    inset:0 0 auto;
+    height:3px;
+    background:var(--c,var(--app));
+  }
+  .card .label{
+    color:var(--c,var(--app));
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    font-weight:900;
+  }
+  .card h3{
+    margin-top:12px;
+    font-size:20px;
+    line-height:1.12;
+    letter-spacing:0;
+  }
+  .card p{
+    margin-top:10px;
+    color:var(--muted);
+    font-size:14px;
+  }
+  .section-dark .card p{color:#aeb8b4}
+  .card ul{
+    list-style:none;
+    margin:16px 0 0;
+    padding:0;
+    display:grid;
+    gap:8px;
+  }
+  .card li{
+    color:var(--muted);
+    font-size:13px;
+    padding-top:8px;
+    border-top:1px solid var(--line);
+  }
+  .section-dark .card li{
+    color:#bac4c0;
+    border-top-color:var(--line-dark);
+  }
+  .strip{
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    border:1px solid var(--line);
+    border-radius:var(--r);
+    overflow:hidden;
+    background:var(--panel);
+  }
+  .stage{
+    min-height:178px;
+    padding:22px 18px;
+    border-right:1px solid var(--line);
+    position:relative;
+  }
+  .stage:last-child{border-right:0}
+  .stage::before{
+    content:"";
+    position:absolute;
+    inset:0 0 auto;
+    height:4px;
+    background:var(--c);
+  }
+  .stage .num{
+    color:var(--c);
+    font-size:12px;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    font-weight:900;
+  }
+  .stage h3{
+    margin-top:12px;
+    font-size:17px;
+    line-height:1.2;
+  }
+  .stage p{
+    margin-top:9px;
+    color:var(--muted);
+    font-size:13px;
+  }
+  .flow-shell{
+    border:1px solid var(--line-dark);
+    border-radius:12px;
+    background:#14181a;
+    padding:18px;
+    overflow:auto;
+  }
+  .flow-shell svg{
+    min-width:900px;
+    width:100%;
+    height:auto;
+    display:block;
+  }
+  .matrix{
+    display:grid;
+    grid-template-columns:1.1fr repeat(4,.9fr);
+    border:1px solid var(--line);
+    border-radius:var(--r);
+    overflow:hidden;
+    background:#fff;
+  }
+  .matrix div{
+    padding:14px 16px;
+    border-right:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+    min-height:72px;
+  }
+  .matrix div:nth-child(5n){border-right:0}
+  .matrix div:nth-last-child(-n+5){border-bottom:0}
+  .matrix .mh{
+    background:var(--ink);
+    color:#fff;
+    font-size:11px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    font-weight:900;
+    min-height:auto;
+  }
+  .matrix b{display:block;font-size:14px}
+  .matrix small{display:block;margin-top:4px;color:var(--muted);font-size:12px}
+  .score-layout{
+    display:grid;
+    grid-template-columns:360px 1fr;
+    gap:18px;
+  }
+  .score-card{
+    border-radius:12px;
+    background:var(--ink);
+    color:#fff;
+    padding:28px;
+    min-height:300px;
+  }
+  .score-card .big{
+    margin-top:16px;
+    font-size:80px;
+    line-height:1;
+    letter-spacing:0;
+    font-weight:900;
+  }
+  .score-card p{
+    margin-top:18px;
+    color:#c7d0cc;
+  }
+  .bars{
+    display:grid;
+    gap:13px;
+  }
+  .bar{
+    border:1px solid var(--line);
+    border-radius:8px;
+    background:#fff;
+    padding:16px;
+  }
+  .bar-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    font-size:13px;
+    font-weight:800;
+  }
+  .track{
+    margin-top:11px;
+    height:10px;
+    border-radius:999px;
+    background:var(--surface-2);
+    overflow:hidden;
+  }
+  .fill{height:100%;width:var(--w);background:var(--c);border-radius:999px}
+  .bar small{
+    display:block;
+    margin-top:8px;
+    color:var(--muted);
+  }
+  .roadmap{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:0;
+    border:1px solid var(--line-dark);
+    border-radius:var(--r);
+    overflow:hidden;
+  }
+  .phase{
+    background:var(--bg-soft);
+    padding:24px;
+    border-right:1px solid var(--line-dark);
+  }
+  .phase:last-child{border-right:0}
+  .phase .when{
+    display:inline-block;
+    color:#0f1515;
+    background:var(--c);
+    padding:4px 8px;
+    border-radius:5px;
+    font-size:11px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    font-weight:900;
+  }
+  .phase h3{margin-top:16px;font-size:22px}
+  .phase ul{
+    list-style:none;
+    padding:0;
+    margin:18px 0 0;
+    display:grid;
+    gap:10px;
+  }
+  .phase li{
+    color:#bac4c0;
+    border-top:1px solid var(--line-dark);
+    padding-top:10px;
+    font-size:14px;
+  }
+  .footer{
+    padding:34px 0 54px;
+    background:var(--bg);
+    color:#aeb8b4;
+    font-size:12px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+  }
+  .mobile-note{display:none}
+  @media(max-width:980px){
+    nav{display:none}
+    .hero .wrap{grid-template-columns:1fr;min-height:auto}
+    .radar{grid-template-columns:1fr}
+    .head{grid-template-columns:1fr;gap:14px}
+    .grid.cols-4,.grid.cols-3{grid-template-columns:repeat(2,1fr)}
+    .strip{grid-template-columns:1fr}
+    .stage{border-right:0;border-bottom:1px solid var(--line);min-height:auto}
+    .stage:last-child{border-bottom:0}
+    .score-layout{grid-template-columns:1fr}
+    .roadmap{grid-template-columns:1fr}
+    .phase{border-right:0;border-bottom:1px solid var(--line-dark)}
+    .phase:last-child{border-bottom:0}
+    .matrix{grid-template-columns:1fr}
+    .matrix div,.matrix div:nth-child(5n),.matrix div:nth-last-child(-n+5){border-right:0;border-bottom:1px solid var(--line)}
+    .matrix div:last-child{border-bottom:0}
+    .matrix .mh:not(:first-child){display:none}
+    .mobile-note{display:block;color:var(--muted);margin-bottom:12px}
+  }
+  @media(max-width:620px){
+    .wrap{padding:0 18px}
+    section{padding:58px 0}
+    .grid.cols-4,.grid.cols-3{grid-template-columns:1fr}
+    h1{font-size:44px}
+    h2{font-size:34px}
+    .lede{font-size:17px}
+    .command-center{padding:12px}
+    .radar-map{min-height:280px}
+    .screen-head{align-items:flex-start;flex-direction:column}
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand"><span class="mark" aria-hidden="true"></span><b>AppSec Program Strategy</b></div>
+    <nav aria-label="Page navigation">
+      <a href="#services">Services</a>
+      <a href="#lifecycle">Lifecycle</a>
+      <a href="#operating-model">Operating Model</a>
+      <a href="#score">Score</a>
+      <a href="#roadmap">Roadmap</a>
+    </nav>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <span class="eyebrow">Vulnerability and Threat Management Team</span>
+      <h1>New AppSec Program for secure software at <span>portfolio scale.</span></h1>
+      <p class="lede">A single operating model for onboarding applications, integrating security controls into delivery, measuring risk, and helping teams improve through practical services rather than one-off reviews.</p>
+      <div class="hero-actions">
+        <span class="pill" style="--c:var(--app)"><i></i>Application inventory</span>
+        <span class="pill" style="--c:var(--design)"><i></i>Threat-informed design</span>
+        <span class="pill" style="--c:var(--verify)"><i></i>Continuous verification</span>
+        <span class="pill" style="--c:var(--protect)"><i></i>Runtime protection</span>
+      </div>
+    </div>
+    <div class="command-center" aria-label="AppSec program map">
+      <div class="screen-head">
+        <strong class="mono">Program control plane</strong>
+        <span class="live mono">catalog active</span>
+      </div>
+      <div class="radar">
+        <div class="radar-map">
+          <svg viewBox="0 0 460 380" role="img" aria-label="AppSec program control plane connecting portfolio, services, tools, evidence, score, and roadmap">
+            <defs>
+              <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#101214" flood-opacity=".13"/>
+              </filter>
+            </defs>
+            <rect x="10" y="10" width="440" height="360" rx="14" fill="#f7f8f4" stroke="#d9ded4"/>
+            <path d="M230 74 L358 148 L358 276 L230 342 L102 276 L102 148 Z" fill="none" stroke="#d9ded4" stroke-width="2"/>
+            <path d="M230 118 L320 170 L320 254 L230 300 L140 254 L140 170 Z" fill="none" stroke="#d9ded4" stroke-dasharray="5 6"/>
+            <g stroke-width="3" fill="none">
+              <path d="M230 190 L230 76" stroke="var(--app)"/>
+              <path d="M230 190 L356 148" stroke="var(--design)"/>
+              <path d="M230 190 L356 276" stroke="var(--verify)"/>
+              <path d="M230 190 L230 342" stroke="var(--protect)"/>
+              <path d="M230 190 L104 276" stroke="var(--govern)"/>
+              <path d="M230 190 L104 148" stroke="var(--evidence)"/>
+            </g>
+            <g filter="url(#soft)">
+              <circle cx="230" cy="190" r="56" fill="#17191c"/>
+              <text x="230" y="182" text-anchor="middle" fill="#fff" font-size="16" font-weight="800">AppSec</text>
+              <text x="230" y="204" text-anchor="middle" fill="#c7d0cc" font-size="11" class="mono">program hub</text>
+            </g>
+            <g font-size="12" font-weight="800">
+              <circle cx="230" cy="74" r="35" fill="#fff" stroke="var(--app)" stroke-width="3"/>
+              <text x="230" y="78" text-anchor="middle">Portfolio</text>
+              <circle cx="358" cy="148" r="35" fill="#fff" stroke="var(--design)" stroke-width="3"/>
+              <text x="358" y="152" text-anchor="middle">Design</text>
+              <circle cx="358" cy="276" r="35" fill="#fff" stroke="var(--verify)" stroke-width="3"/>
+              <text x="358" y="280" text-anchor="middle">Verify</text>
+              <circle cx="230" cy="342" r="35" fill="#fff" stroke="var(--protect)" stroke-width="3"/>
+              <text x="230" y="346" text-anchor="middle">Protect</text>
+              <circle cx="102" cy="276" r="35" fill="#fff" stroke="var(--govern)" stroke-width="3"/>
+              <text x="102" y="280" text-anchor="middle">Govern</text>
+              <circle cx="102" cy="148" r="35" fill="#fff" stroke="var(--evidence)" stroke-width="3"/>
+              <text x="102" y="152" text-anchor="middle">Evidence</text>
+            </g>
+          </svg>
+        </div>
+        <div class="signal-list">
+          <div class="signal" style="--c:var(--app)">
+            <span class="k mono">Intake</span>
+            <b>Every app has an owner, profile, and risk context.</b>
+            <small>Questionnaires, metadata, repositories, domains, data types.</small>
+          </div>
+          <div class="signal" style="--c:var(--verify)">
+            <span class="k mono">Controls</span>
+            <b>Tool coverage is measured, not assumed.</b>
+            <small>SAST, SCA, DAST, API security, WAF, domain monitoring.</small>
+          </div>
+          <div class="signal" style="--c:var(--evidence)">
+            <span class="k mono">Outcome</span>
+            <b>Scorecards turn findings into next best actions.</b>
+            <small>Knowledge completeness plus active tool usage by importance.</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="services">
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <span class="eyebrow">Service Catalog</span>
+        <h2>The program is a set of services teams can actually use.</h2>
+      </div>
+      <p>Each service either reduces uncertainty, prevents new vulnerabilities from entering the SDLC, finds issues before release, or protects production while teams remediate.</p>
+    </div>
+    <div class="grid cols-4">
+      <article class="card" style="--c:var(--app)">
+        <span class="label mono">Foundation</span>
+        <h3>Application Onboarding</h3>
+        <p>Capture ownership, architecture, repo, runtime, auth, data sensitivity, domains, and deployment context.</p>
+        <ul>
+          <li>Application onboarding questionnaire</li>
+          <li>Posture analysis baseline</li>
+          <li>Portfolio map and ownership model</li>
+        </ul>
+      </article>
+      <article class="card" style="--c:var(--design)">
+        <span class="label mono">Design</span>
+        <h3>Threat Modeling</h3>
+        <p>Use lightweight STRIDE sessions to identify trust boundaries, abuse cases, and mitigations before code lands.</p>
+        <ul>
+          <li>Data flow diagrams</li>
+          <li>Security design review</li>
+          <li>Developer-led workshops</li>
+        </ul>
+      </article>
+      <article class="card" style="--c:var(--verify)">
+        <span class="label mono">Verification</span>
+        <h3>Code and Dependency Scanning</h3>
+        <p>Integrate Snyk for SAST and SCA so teams get fast feedback in pull requests and pipelines.</p>
+        <ul>
+          <li>Vulnerable code detection</li>
+          <li>Open-source dependency risk</li>
+          <li>License and IaC visibility</li>
+        </ul>
+      </article>
+      <article class="card" style="--c:var(--protect)">
+        <span class="label mono">Runtime</span>
+        <h3>DAST, API, and WAF Coverage</h3>
+        <p>Use Tenable WAS, Traceable, and Fastly NGWAF where risk warrants runtime testing and edge protection.</p>
+        <ul>
+          <li>Staging DAST before major release</li>
+          <li>API discovery and abuse detection</li>
+          <li>Managed edge enforcement</li>
+        </ul>
+      </article>
+      <article class="card" style="--c:var(--govern)">
+        <span class="label mono">Assurance</span>
+        <h3>Penetration Testing</h3>
+        <p>Collaborative testing that validates real exploitability and produces remediation guidance tied to root cause.</p>
+        <ul>
+          <li>Web, mobile, network, and cloud scope</li>
+          <li>Rules of engagement</li>
+          <li>Remediation tracking</li>
+        </ul>
+      </article>
+      <article class="card" style="--c:var(--evidence)">
+        <span class="label mono">Monitoring</span>
+        <h3>Domain Monitoring</h3>
+        <p>Watch registrations, certificate transparency, and phishing sources for brand impersonation and abuse.</p>
+        <ul>
+          <li>Suspicious domain discovery</li>
+          <li>Alert triage</li>
+          <li>Takedown coordination</li>
+        </ul>
+      </article>
+      <article class="card" style="--c:var(--app)">
+        <span class="label mono">Maturity</span>
+        <h3>SAMM Assessments</h3>
+        <p>Measure governance, design, implementation, verification, and operations maturity using a shared framework.</p>
+        <ul>
+          <li>Interviews and evidence</li>
+          <li>Score and gap analysis</li>
+          <li>6-12 month roadmap workshop</li>
+        </ul>
+      </article>
+      <article class="card" style="--c:var(--verify)">
+        <span class="label mono">Enablement</span>
+        <h3>Developer Guidance</h3>
+        <p>Give engineers concise patterns, checklists, and training so secure behavior is repeatable without waiting on a review.</p>
+        <ul>
+          <li>Secure coding checklist</li>
+          <li>Threat modeling training</li>
+          <li>Policy and control guidance</li>
+        </ul>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="lifecycle">
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <span class="eyebrow">Lifecycle</span>
+        <h2>Security moves with the application, not after it.</h2>
+      </div>
+      <p>The program creates a durable loop from inventory to design, delivery, production, and maturity planning. Every pass through the loop improves both the application and the evidence we hold about it.</p>
+    </div>
+    <div class="strip">
+      <div class="stage" style="--c:var(--app)">
+        <span class="num mono">01 - Know</span>
+        <h3>Inventory and context</h3>
+        <p>Owner, repository, framework, deployment model, domains, authentication, and data classification.</p>
+      </div>
+      <div class="stage" style="--c:var(--design)">
+        <span class="num mono">02 - Design</span>
+        <h3>Threats and mitigations</h3>
+        <p>Data flow, trust boundaries, STRIDE prompts, security requirements, and architecture decisions.</p>
+      </div>
+      <div class="stage" style="--c:var(--verify)">
+        <span class="num mono">03 - Build</span>
+        <h3>Automated feedback</h3>
+        <p>SAST, SCA, dependency risk, license checks, and developer remediation guidance in CI/CD.</p>
+      </div>
+      <div class="stage" style="--c:var(--protect)">
+        <span class="num mono">04 - Run</span>
+        <h3>Runtime validation</h3>
+        <p>DAST, API security, WAF posture, domain monitoring, and production exposure review.</p>
+      </div>
+      <div class="stage" style="--c:var(--govern)">
+        <span class="num mono">05 - Improve</span>
+        <h3>Score and roadmap</h3>
+        <p>Scorecards, quick wins, SAMM maturity, retesting, and recurring cadence meetings.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section-dark" id="operating-model">
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <span class="eyebrow">Operating Model</span>
+        <h2>How work enters the program and turns into measurable risk reduction.</h2>
+      </div>
+      <p>AppSec acts as the connective tissue between engineering teams, security platforms, risk context, and leadership reporting. The catalog is the front door; the scorecard is the feedback loop.</p>
+    </div>
+    <div class="flow-shell">
+      <svg viewBox="0 0 1120 520" role="img" aria-label="AppSec operating model flow">
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L8,3 L0,6 Z" fill="#24b89a"/>
+          </marker>
+        </defs>
+        <rect x="20" y="26" width="1080" height="468" rx="18" fill="#101214" stroke="#2b3032"/>
+        <text x="48" y="64" fill="#aeb8b4" font-size="12" letter-spacing="2" class="mono">PORTFOLIO OPERATING LOOP</text>
+        <g font-family="Inter, sans-serif">
+          <g>
+            <rect x="62" y="112" width="190" height="92" rx="10" fill="#171a1d" stroke="#1e9bd7" stroke-width="2"/>
+            <text x="84" y="147" fill="#fff" font-size="18" font-weight="800">Team Intake</text>
+            <text x="84" y="174" fill="#aeb8b4" font-size="13">Questionnaires, owners,</text>
+            <text x="84" y="193" fill="#aeb8b4" font-size="13">apps, domains, repos</text>
+          </g>
+          <g>
+            <rect x="324" y="112" width="190" height="92" rx="10" fill="#171a1d" stroke="#7ac943" stroke-width="2"/>
+            <text x="346" y="147" fill="#fff" font-size="18" font-weight="800">Risk Context</text>
+            <text x="346" y="174" fill="#aeb8b4" font-size="13">Criticality, exposure,</text>
+            <text x="346" y="193" fill="#aeb8b4" font-size="13">data, deploy cadence</text>
+          </g>
+          <g>
+            <rect x="586" y="112" width="190" height="92" rx="10" fill="#171a1d" stroke="#ffb547" stroke-width="2"/>
+            <text x="608" y="147" fill="#fff" font-size="18" font-weight="800">Control Coverage</text>
+            <text x="608" y="174" fill="#aeb8b4" font-size="13">SAST, SCA, DAST, WAF,</text>
+            <text x="608" y="193" fill="#aeb8b4" font-size="13">API security, monitoring</text>
+          </g>
+          <g>
+            <rect x="848" y="112" width="190" height="92" rx="10" fill="#171a1d" stroke="#ef5d60" stroke-width="2"/>
+            <text x="870" y="147" fill="#fff" font-size="18" font-weight="800">Findings and Work</text>
+            <text x="870" y="174" fill="#aeb8b4" font-size="13">Remediation guidance,</text>
+            <text x="870" y="193" fill="#aeb8b4" font-size="13">exceptions, retesting</text>
+          </g>
+          <path d="M252 158 L318 158" stroke="#24b89a" stroke-width="3" marker-end="url(#arrow)"/>
+          <path d="M514 158 L580 158" stroke="#24b89a" stroke-width="3" marker-end="url(#arrow)"/>
+          <path d="M776 158 L842 158" stroke="#24b89a" stroke-width="3" marker-end="url(#arrow)"/>
+          <g>
+            <rect x="166" y="300" width="210" height="96" rx="10" fill="#171a1d" stroke="#7b61ff" stroke-width="2"/>
+            <text x="190" y="336" fill="#fff" font-size="18" font-weight="800">Scorecard</text>
+            <text x="190" y="363" fill="#aeb8b4" font-size="13">Knowledge completeness</text>
+            <text x="190" y="382" fill="#aeb8b4" font-size="13">plus tool usage</text>
+          </g>
+          <g>
+            <rect x="456" y="300" width="210" height="96" rx="10" fill="#171a1d" stroke="#24b89a" stroke-width="2"/>
+            <text x="480" y="336" fill="#fff" font-size="18" font-weight="800">Portfolio View</text>
+            <text x="480" y="363" fill="#aeb8b4" font-size="13">Coverage, priority, gaps,</text>
+            <text x="480" y="382" fill="#aeb8b4" font-size="13">aging evidence</text>
+          </g>
+          <g>
+            <rect x="746" y="300" width="210" height="96" rx="10" fill="#171a1d" stroke="#1e9bd7" stroke-width="2"/>
+            <text x="770" y="336" fill="#fff" font-size="18" font-weight="800">Maturity Roadmap</text>
+            <text x="770" y="363" fill="#aeb8b4" font-size="13">SAMM assessment and</text>
+            <text x="770" y="382" fill="#aeb8b4" font-size="13">quarterly next actions</text>
+          </g>
+          <path d="M943 204 C943 260 850 272 850 294" stroke="#24b89a" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+          <path d="M746 348 L672 348" stroke="#24b89a" stroke-width="3" marker-end="url(#arrow)"/>
+          <path d="M456 348 L382 348" stroke="#24b89a" stroke-width="3" marker-end="url(#arrow)"/>
+          <path d="M270 300 C250 250 170 242 158 210" stroke="#24b89a" stroke-width="3" fill="none" stroke-dasharray="7 7" marker-end="url(#arrow)"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <span class="eyebrow">Tooling Layer</span>
+        <h2>Managed controls are matched to application risk.</h2>
+      </div>
+      <p>Not every application needs the same depth of tooling on day one. The program assigns controls based on exposure, data sensitivity, criticality, and deployment activity.</p>
+    </div>
+    <p class="mobile-note">On narrow screens, each row is shown as a stacked set of cells.</p>
+    <div class="matrix">
+      <div class="mh">Capability</div>
+      <div class="mh">Primary tool</div>
+      <div class="mh">Best trigger</div>
+      <div class="mh">Evidence</div>
+      <div class="mh">Program value</div>
+
+      <div><b>SAST and SCA</b><small>Code and dependency risk</small></div>
+      <div><b>Snyk</b><small>Developer-first pipeline scanning</small></div>
+      <div><b>Every onboarded repo</b><small>High priority for active apps</small></div>
+      <div><b>Fresh scans</b><small>Pull request and deployment cadence</small></div>
+      <div><b>Find earlier</b><small>Fix in the developer workflow</small></div>
+
+      <div><b>DAST</b><small>Running application testing</small></div>
+      <div><b>Tenable WAS</b><small>Web app and API scanning</small></div>
+      <div><b>Staging before release</b><small>External or sensitive apps</small></div>
+      <div><b>Scan results</b><small>Runtime vulnerability evidence</small></div>
+      <div><b>Validate behavior</b><small>Catch what static tools miss</small></div>
+
+      <div><b>API security</b><small>API discovery and abuse protection</small></div>
+      <div><b>Traceable</b><small>Context-rich API monitoring</small></div>
+      <div><b>API-heavy apps</b><small>PII, PCI, PHI, partner interfaces</small></div>
+      <div><b>Endpoint inventory</b><small>Traffic and abuse signals</small></div>
+      <div><b>Reduce blind spots</b><small>Know exposed APIs and behavior</small></div>
+
+      <div><b>Application firewall</b><small>Edge enforcement</small></div>
+      <div><b>Fastly NGWAF</b><small>Managed WAF posture</small></div>
+      <div><b>Internet-facing apps</b><small>High impact production systems</small></div>
+      <div><b>Policy state</b><small>Managed, observed, or not applicable</small></div>
+      <div><b>Protect while fixing</b><small>Compensating control at the edge</small></div>
+    </div>
+  </div>
+</section>
+
+<section id="score">
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <span class="eyebrow">Measurement</span>
+        <h2>The score turns program coverage into decisions.</h2>
+      </div>
+      <p>The application security score combines knowledge sharing and tool usage. Weighting changes by importance so high-risk applications are pushed toward stronger controls while lower-risk applications first improve completeness and ownership.</p>
+    </div>
+    <div class="score-layout">
+      <div class="score-card">
+        <span class="eyebrow">Security Score</span>
+        <div class="big">100</div>
+        <p>Not a vanity metric. The score is a routing mechanism: what do we know, which controls are active, what is stale, and what is the quickest responsible improvement?</p>
+      </div>
+      <div class="bars">
+        <div class="bar" style="--c:var(--app);--w:80%">
+          <div class="bar-head"><span>Knowledge Sharing</span><span>Metadata + review freshness</span></div>
+          <div class="track"><div class="fill"></div></div>
+          <small>Description, team contact, repository, language, framework, server environment, authentication profiles, and data types.</small>
+        </div>
+        <div class="bar" style="--c:var(--verify);--w:72%">
+          <div class="bar-head"><span>Tool Usage</span><span>Coverage + integration depth</span></div>
+          <div class="track"><div class="fill"></div></div>
+          <small>SAST, DAST, application firewall, and API security are weighted by quality, integration level, risk factors, and active usage.</small>
+        </div>
+        <div class="bar" style="--c:var(--protect);--w:60%">
+          <div class="bar-head"><span>Importance Weighting</span><span>Risk changes the math</span></div>
+          <div class="track"><div class="fill"></div></div>
+          <small>High-importance apps favor tool usage. Lower-importance apps can gain more through complete, accurate documentation.</small>
+        </div>
+        <div class="bar" style="--c:var(--evidence);--w:88%">
+          <div class="bar-head"><span>Quick Wins</span><span>Actionable next step</span></div>
+          <div class="track"><div class="fill"></div></div>
+          <small>The score breakdown should show the lowest-effort changes that most improve the application posture.</small>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section-dark" id="roadmap">
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <span class="eyebrow">Customer Roadmap</span>
+        <h2>A clear path from first conversation to continuous improvement.</h2>
+      </div>
+      <p>This mirrors the new-customer journey: establish a baseline, integrate tools, onboard applications, then mature through cadence meetings, testing, and SAMM-informed planning.</p>
+    </div>
+    <div class="roadmap">
+      <div class="phase" style="--c:var(--app)">
+        <span class="when mono">Weeks 1-2</span>
+        <h3>Foundation and onboarding</h3>
+        <ul>
+          <li>Initial contact and scoping conversation</li>
+          <li>Posture analysis questionnaire</li>
+          <li>Onboarding meeting and AppSec service overview</li>
+          <li>Initial quarter roadmap for priority actions</li>
+        </ul>
+      </div>
+      <div class="phase" style="--c:var(--verify)">
+        <span class="when mono">Weeks 3-6</span>
+        <h3>Integration and first services</h3>
+        <ul>
+          <li>SAST and SCA tool integration in CI/CD</li>
+          <li>First application profile and scorecard</li>
+          <li>Developer training and threat modeling guidance</li>
+          <li>Control selection based on risk and exposure</li>
+        </ul>
+      </div>
+      <div class="phase" style="--c:var(--evidence)">
+        <span class="when mono">Ongoing</span>
+        <h3>Maturity and continuous improvement</h3>
+        <ul>
+          <li>Recurring cadence meetings and score review</li>
+          <li>Penetration testing and DAST as applications mature</li>
+          <li>SAMM assessment after roughly six months</li>
+          <li>Evidence-driven roadmap for the next 6-12 months</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <span class="eyebrow">What Success Looks Like</span>
+        <h2>The program creates shared visibility and repeatable action.</h2>
+      </div>
+      <p>Leadership gets a portfolio-level view of risk. Engineering teams get practical help. AppSec gets evidence that stays current. The business gets a way to move faster with fewer unknowns.</p>
+    </div>
+    <div class="grid cols-3">
+      <article class="card" style="--c:var(--app)">
+        <span class="label mono">For teams</span>
+        <h3>Clear front door</h3>
+        <p>Teams know how to engage AppSec, which services exist, and what to do next when their score changes.</p>
+      </article>
+      <article class="card" style="--c:var(--evidence)">
+        <span class="label mono">For AppSec</span>
+        <h3>Current evidence</h3>
+        <p>Application metadata, tool state, scan freshness, and maturity work all connect to a shared catalog.</p>
+      </article>
+      <article class="card" style="--c:var(--protect)">
+        <span class="label mono">For leaders</span>
+        <h3>Risk-aware prioritization</h3>
+        <p>Portfolio reporting shows where coverage is strong, where exposure is high, and where investment matters most.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="wrap">New AppSec Program - Vulnerability and Threat Management Team - June 22, 2026</div>
+</footer>
+</body>
+</html>

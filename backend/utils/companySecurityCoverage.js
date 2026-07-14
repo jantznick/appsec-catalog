@@ -65,8 +65,7 @@ function apiSecurityApplicable(app) {
 function apiSecurityCovered(app) {
   return (
     apiSecurityApplicable(app) &&
-    toolFilled(app.apiSecurityTool) &&
-    integrationFilled(app.apiSecurityIntegrationLevel)
+    Boolean(app.apiSchema)
   );
 }
 
@@ -113,7 +112,7 @@ function rowForCategory(app, categoryId) {
     case 'appFirewall':
       return coverageAppRow(app, null, app.appFirewallIntegrationLevel);
     case 'apiSecurity':
-      return coverageAppRow(app, null, app.apiSecurityIntegrationLevel);
+      return coverageAppRow(app, null, app.apiSchema ? 4 : null);
     default:
       return coverageAppRow(app, null, null);
   }

@@ -12,10 +12,6 @@
     "Fastly NGWAF": {
       "weight": 1,
       "categories": ["appFirewall"]
-    },
-    "Traceable API Security": {
-      "weight": 1,
-      "categories": ["apiSecurity"]
     }
   },
   "approvedUnmanaged": {

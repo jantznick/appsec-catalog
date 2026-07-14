@@ -31,6 +31,7 @@ import { listTenableIoTagValues } from '../integrations/tenableIo.js';
 import { listWizFolders } from '../integrations/wiz.js';
 import { integrationLog } from '../integrations/log.js';
 import { getAuthContext } from '../middleware/authContext.js';
+import { apiSchemaSummary, validateAndNormalizeApiSchema } from '../services/apiSchema.js';
 
 /**
  * Get or create system user for automated notes
@@ -109,6 +110,38 @@ function getProvidedFields(data, fieldMapping = {}) {
 }
 
 const router = express.Router();
+
+async function getApplicationForAccess(applicationId, auth) {
+  const application = await prisma.application.findUnique({
+    where: { id: applicationId },
+    select: {
+      id: true,
+      companyId: true,
+    },
+  });
+
+  if (!application) {
+    const error = new Error('Application not found');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (!auth.isAdmin && auth.companyId !== application.companyId) {
+    const error = new Error('You can only access applications in your company');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  return application;
+}
+
+function sendAccessError(res, error) {
+  const statusCode = error.statusCode || 500;
+  res.status(statusCode).json({
+    error: statusCode === 404 ? 'Application not found' : 'Permission denied',
+    message: error.message,
+  });
+}
 
 // Public: Create application(s) with executive info only (no auth required)
 // Accepts either a single application object or an array of applications
@@ -255,6 +288,7 @@ router.get('/', requireAuth, async (req, res) => {
             slug: true,
           },
         },
+        apiSchema: { select: { id: true } },
       },
       orderBy: {
         name: 'asc',
@@ -576,8 +610,8 @@ router.put('/public/:id', async (req, res) => {
         scaIntegrationLevel: 'SCA Integration Level',
         appFirewallTool: 'App Firewall Tool',
         appFirewallIntegrationLevel: 'App Firewall Integration Level',
-        apiSecurityTool: 'API Security Tool',
-        apiSecurityIntegrationLevel: 'API Security Integration Level',
+        apiSecurityTool: 'Legacy API Security Tool',
+        apiSecurityIntegrationLevel: 'Legacy API Security Integration Level',
         apiSecurityNA: 'API Security N/A',
         appFirewallNA: 'App Firewall N/A',
       };
@@ -623,6 +657,7 @@ router.get('/:id/score', requireAuth, async (req, res) => {
           orderBy: { deployedAt: 'desc' },
           take: 1, // Only need the most recent deployment for scoring
         },
+        apiSchema: { select: { id: true } },
       },
     });
 
@@ -671,7 +706,7 @@ router.get('/:id/score', requireAuth, async (req, res) => {
       { key: 'dast', label: 'DAST', toolField: 'dastTool', levelField: 'dastIntegrationLevel', scanField: 'lastDastScanDate' },
       { key: 'sca', label: 'SCA', toolField: 'scaTool', levelField: 'scaIntegrationLevel', scanField: 'lastScaScanDate' },
       { key: 'appFirewall', label: 'Application Firewall', toolField: 'appFirewallTool', levelField: 'appFirewallIntegrationLevel', scanField: null },
-      { key: 'apiSecurity', label: 'API Security', toolField: 'apiSecurityTool', levelField: 'apiSecurityIntegrationLevel', scanField: null },
+      { key: 'apiSecurity', label: 'API Security', toolField: null, levelField: null, scanField: null },
     ];
 
     const toolRecommendations = toolCategories.map((category) => {
@@ -703,6 +738,14 @@ router.get('/:id/score', requireAuth, async (req, res) => {
       if (isNotApplicable) {
         status = 'complete';
         recommendation = null;
+      } else if (category.key === 'apiSecurity') {
+        if (application.apiSchema) {
+          status = 'complete';
+          recommendation = null;
+        } else {
+          status = 'missing';
+          recommendation = 'Add OpenAPI/Swagger schema';
+        }
       } else if (!tool || level === null || level === undefined) {
         status = 'missing';
         recommendation = `Add ${displayLabel} tool and integration level`;
@@ -734,7 +777,7 @@ router.get('/:id/score', requireAuth, async (req, res) => {
         status,
         recommendation,
         isNotApplicable,
-        isRealToolConfig,
+        isRealToolConfig: category.key === 'apiSecurity' ? !!application.apiSchema && !isNotApplicable : isRealToolConfig,
       };
     });
 
@@ -1251,6 +1294,115 @@ router.put('/:id/integrations/:provider/link', requireAuth, async (req, res) => 
   }
 });
 
+// API schema: metadata for the current OpenAPI/Swagger schema
+router.get('/:id/api-schema', requireAuth, async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    await getApplicationForAccess(req.params.id, auth);
+
+    const schema = await prisma.applicationApiSchema.findUnique({
+      where: { applicationId: req.params.id },
+    });
+
+    res.json({ schema: apiSchemaSummary(schema) });
+  } catch (error) {
+    console.error('Get API schema error:', error);
+    sendAccessError(res, error);
+  }
+});
+
+// API schema: upload/paste text content for the current OpenAPI/Swagger schema
+router.put('/:id/api-schema', requireAuth, async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    await getApplicationForAccess(req.params.id, auth);
+
+    const normalized = validateAndNormalizeApiSchema({
+      content: req.body?.content,
+      filename: req.body?.filename,
+      contentType: req.body?.contentType,
+    });
+
+    const schema = await prisma.applicationApiSchema.upsert({
+      where: { applicationId: req.params.id },
+      create: {
+        applicationId: req.params.id,
+        ...normalized,
+        uploadedById: auth.userId,
+      },
+      update: {
+        ...normalized,
+        uploadedById: auth.userId,
+        uploadedAt: new Date(),
+      },
+    });
+
+    res.json({ schema: apiSchemaSummary(schema) });
+  } catch (error) {
+    console.error('Save API schema error:', error);
+    if (error.statusCode) return sendAccessError(res, error);
+    res.status(400).json({
+      error: 'Failed to save API schema',
+      message: error.message,
+    });
+  }
+});
+
+router.delete('/:id/api-schema', requireAuth, async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    await getApplicationForAccess(req.params.id, auth);
+
+    await prisma.applicationApiSchema.delete({
+      where: { applicationId: req.params.id },
+    }).catch((error) => {
+      if (error.code === 'P2025') return null;
+      throw error;
+    });
+
+    res.status(204).send();
+  } catch (error) {
+    console.error('Delete API schema error:', error);
+    sendAccessError(res, error);
+  }
+});
+
+router.get('/:id/api-schema/download', requireAuth, async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    await getApplicationForAccess(req.params.id, auth);
+
+    const schema = await prisma.applicationApiSchema.findUnique({
+      where: { applicationId: req.params.id },
+      include: {
+        application: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!schema) {
+      return res.status(404).json({ error: 'API schema not found' });
+    }
+
+    const appNameSlug = (schema.application?.name || 'application')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'application';
+    const extension = schema.format === 'json' ? 'json' : 'yaml';
+    const safeFilename = `${appNameSlug}-api-schema.${extension}`;
+    res.setHeader('Content-Type', schema.contentType || 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+    res.send(schema.content);
+  } catch (error) {
+    console.error('Download API schema error:', error);
+    sendAccessError(res, error);
+  }
+});
+
 // APP-4: Get application detail
 router.get('/:id', requireAuth, async (req, res) => {
   try {
@@ -1270,6 +1422,19 @@ router.get('/:id', requireAuth, async (req, res) => {
             id: true,
             provider: true,
             filter: true,
+            updatedAt: true,
+          },
+        },
+        apiSchema: {
+          select: {
+            id: true,
+            filename: true,
+            contentType: true,
+            format: true,
+            sizeBytes: true,
+            sha256: true,
+            uploadedById: true,
+            uploadedAt: true,
             updatedAt: true,
           },
         },
@@ -2010,6 +2175,7 @@ router.put('/:id', requireAuth, async (req, res) => {
             orderBy: { deployedAt: 'desc' },
             take: 1,
           },
+          apiSchema: { select: { id: true } },
         },
       });
       const scores = calculateApplicationScore(appWithDeployments);
@@ -2435,8 +2601,8 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
         scaIntegrationLevel: 'SCA Integration Level',
         appFirewallTool: 'App Firewall Tool',
         appFirewallIntegrationLevel: 'App Firewall Integration Level',
-        apiSecurityTool: 'API Security Tool',
-        apiSecurityIntegrationLevel: 'API Security Integration Level',
+        apiSecurityTool: 'Legacy API Security Tool',
+        apiSecurityIntegrationLevel: 'Legacy API Security Integration Level',
         apiSecurityNA: 'API Security N/A',
         appFirewallNA: 'App Firewall N/A',
         hostingDomains: 'Hosting Domains',
@@ -3421,6 +3587,7 @@ router.post('/:id/versions/:versionId/approve', requireAuth, requireAdmin, async
               orderBy: { deployedAt: 'desc' },
               take: 1,
             },
+            apiSchema: { select: { id: true } },
           },
         });
         const scores = calculateApplicationScore(appWithDeployments);

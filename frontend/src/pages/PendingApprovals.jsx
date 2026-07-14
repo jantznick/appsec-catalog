@@ -9,6 +9,9 @@ import { Modal } from '../components/ui/Modal.jsx';
 import { Textarea } from '../components/ui/Textarea.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
 
+const HIDDEN_VERSION_FIELDS = new Set(['apiSecurityTool', 'apiSecurityIntegrationLevel']);
+const visibleVersionFields = (fields = []) => fields.filter((field) => !HIDDEN_VERSION_FIELDS.has(field));
+
 export function PendingApprovals() {
   const navigate = useNavigate();
   const [pendingVersions, setPendingVersions] = useState([]);
@@ -47,6 +50,7 @@ export function PendingApprovals() {
               previousVersion.versionNumber,
               version.versionNumber
             );
+            comparison.comparison.changedFields = visibleVersionFields(comparison.comparison.changedFields);
             changes[version.id] = comparison.comparison;
           } else {
             // Initial version - get all non-null fields
@@ -56,7 +60,7 @@ export function PendingApprovals() {
               'status', 'businessCriticality', 'criticalAspects', 'devTeamContact',
               'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel', 'sastIncludesSca',
               'dastTool', 'dastIntegrationLevel', 'scaTool', 'scaIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
-              'apiSecurityTool', 'apiSecurityIntegrationLevel', 'apiSecurityNA',
+              'apiSecurityNA',
               'appFirewallNA',
               'currentVersion', 'deploymentEnvironment', 'gitBranch',
               'lastDastScanDate', 'lastSastScanDate', 'lastScaScanDate', 'interfaces',
@@ -109,8 +113,6 @@ export function PendingApprovals() {
       scaIntegrationLevel: 'SCA Integration Level',
       appFirewallTool: 'App Firewall Tool',
       appFirewallIntegrationLevel: 'App Firewall Integration Level',
-      apiSecurityTool: 'API Security Tool',
-      apiSecurityIntegrationLevel: 'API Security Integration Level',
       apiSecurityNA: 'API Security N/A',
       appFirewallNA: 'App Firewall N/A',
       currentVersion: 'Current Version',
@@ -529,4 +531,3 @@ export function PendingApprovals() {
     </div>
   );
 }
-

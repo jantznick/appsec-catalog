@@ -13,7 +13,6 @@ const CATEGORY_OPTIONS = [
   { value: 'dast', label: 'DAST' },
   { value: 'sca', label: 'SCA' },
   { value: 'appFirewall', label: 'Firewall' },
-  { value: 'apiSecurity', label: 'API' },
 ];
 
 const CATEGORY_VALUES = CATEGORY_OPTIONS.map((category) => category.value);

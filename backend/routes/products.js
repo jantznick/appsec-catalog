@@ -373,6 +373,7 @@ router.get('/:id/score', requireAuth, async (req, res) => {
           orderBy: { deployedAt: 'desc' },
           take: 1,
         },
+        apiSchema: { select: { id: true } },
       },
     });
 

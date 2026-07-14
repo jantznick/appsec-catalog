@@ -13,7 +13,7 @@ const toolQualityPath = path.join(scoringConfigDir, 'toolQuality.json');
 const TOOL_QUALITY_COMMENT =
   'Defines category-specific quality multipliers for tools. Weights are 0.0 to 1.0 and cap how much credit a tool can receive.';
 
-export const TOOL_CATEGORIES = ['sast', 'dast', 'sca', 'appFirewall', 'apiSecurity'];
+export const TOOL_CATEGORIES = ['sast', 'dast', 'sca', 'appFirewall'];
 
 function readJsonFile(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
@@ -31,12 +31,17 @@ export function getToolQualityConfig() {
   return normalizeToolQualityConfig(readJsonFile(toolQualityPath), { coerceLegacyWeights: true });
 }
 
-function normalizeToolCategories(categories, tool) {
+function normalizeToolCategories(categories, tool, options = {}) {
   if (!Array.isArray(categories) || categories.length === 0) {
     throw new Error(`${tool} must belong to at least one category`);
   }
 
-  const uniqueCategories = [...new Set(categories)];
+  const uniqueCategories = [...new Set(categories)]
+    .filter((category) => !(options.coerceLegacyWeights && category === 'apiSecurity'));
+  if (uniqueCategories.length === 0 && options.coerceLegacyWeights) {
+    return [];
+  }
+
   for (const category of uniqueCategories) {
     if (!TOOL_CATEGORIES.includes(category)) {
       throw new Error(`${tool} has an unknown category: ${category}`);
@@ -60,7 +65,7 @@ function normalizeToolEntry(rawValue, tool, options = {}) {
 
   return {
     weight: normalizeToolWeight(rawValue.weight, tool, options),
-    categories: normalizeToolCategories(rawValue.categories, tool),
+    categories: normalizeToolCategories(rawValue.categories, tool, options),
   };
 }
 
@@ -87,7 +92,11 @@ function normalizeToolWeights(value, sectionName, options = {}) {
       throw new Error(`${sectionName} contains an empty tool name`);
     }
 
-    normalized[tool] = normalizeToolEntry(rawWeight, tool, options);
+    const entry = normalizeToolEntry(rawWeight, tool, options);
+    if (options.coerceLegacyWeights && entry.categories.length === 0) {
+      continue;
+    }
+    normalized[tool] = entry;
   }
 
   return normalized;

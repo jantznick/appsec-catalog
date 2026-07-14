@@ -84,8 +84,7 @@ export function countSecurityCompletenessFields(application) {
     ...(includeStandaloneSca ? ['scaTool', 'scaIntegrationLevel'] : []),
     'appFirewallTool',
     'appFirewallIntegrationLevel',
-    'apiSecurityTool',
-    'apiSecurityIntegrationLevel',
+    'apiSchema',
     'apiSecurityNA',
     'appFirewallNA',
   ];
@@ -109,8 +108,7 @@ export function countSecurityCompletenessFields(application) {
       field === 'sastIntegrationLevel' ||
       field === 'dastIntegrationLevel' ||
       field === 'scaIntegrationLevel' ||
-      field === 'appFirewallIntegrationLevel' ||
-      field === 'apiSecurityIntegrationLevel'
+      field === 'appFirewallIntegrationLevel'
     ) {
       if (isStringNA(value)) continue;
       total += 1;
@@ -126,7 +124,7 @@ export function countSecurityCompletenessFields(application) {
 
     total += 1;
 
-    if (value !== null && value !== undefined && value !== '') {
+    if (field === 'apiSchema' ? Boolean(value) : value !== null && value !== undefined && value !== '') {
       filled += 1;
     }
   }

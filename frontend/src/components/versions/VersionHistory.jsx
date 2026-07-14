@@ -9,6 +9,9 @@ import { Modal } from '../ui/Modal.jsx';
 import { Textarea } from '../ui/Textarea.jsx';
 import useAuthStore from '../../store/authStore.js';
 
+const HIDDEN_VERSION_FIELDS = new Set(['apiSecurityTool', 'apiSecurityIntegrationLevel']);
+const visibleVersionFields = (fields = []) => fields.filter((field) => !HIDDEN_VERSION_FIELDS.has(field));
+
 export function VersionHistory({ applicationId, alwaysExpanded = false, onVersionProcessed }) {
   const [versions, setVersions] = useState([]);
   const [totalVersionCount, setTotalVersionCount] = useState(0);
@@ -65,7 +68,7 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
               previousVersion.versionNumber,
               latestVersion.versionNumber
             );
-            changedFields = comparisonData.comparison?.changedFields || [];
+            changedFields = visibleVersionFields(comparisonData.comparison?.changedFields || []);
           } else if (isInitialVersion) {
             // For initial version, get all non-null fields
             const fieldsToCheck = [
@@ -74,7 +77,7 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
               'status', 'businessCriticality', 'criticalAspects', 'devTeamContact',
               'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel', 'sastIncludesSca',
               'dastTool', 'dastIntegrationLevel', 'scaTool', 'scaIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
-              'apiSecurityTool', 'apiSecurityIntegrationLevel', 'apiSecurityNA',
+              'apiSecurityNA',
               'appFirewallNA',
               'currentVersion', 'deploymentEnvironment', 'gitBranch',
               'lastDastScanDate', 'lastSastScanDate', 'lastScaScanDate', 'interfaces',
@@ -164,6 +167,7 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
               previousVersion.versionNumber,
               currentVersion.versionNumber
             );
+            comparisonData.comparison.changedFields = visibleVersionFields(comparisonData.comparison.changedFields);
             return { id: currentVersion.id, comparison: comparisonData.comparison };
           } catch (error) {
             console.error(`Failed to compare version ${currentVersion.versionNumber}:`, error);
@@ -176,7 +180,7 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
               'status', 'businessCriticality', 'criticalAspects', 'devTeamContact',
               'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel', 'sastIncludesSca',
               'dastTool', 'dastIntegrationLevel', 'scaTool', 'scaIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
-              'apiSecurityTool', 'apiSecurityIntegrationLevel', 'apiSecurityNA',
+              'apiSecurityNA',
               'appFirewallNA',
               'currentVersion', 'deploymentEnvironment', 'gitBranch',
               'lastDastScanDate', 'lastSastScanDate', 'lastScaScanDate', 'interfaces',
@@ -205,7 +209,7 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
           return {
             id: currentVersion.id,
             comparison: {
-              changedFields: allFields,
+              changedFields: visibleVersionFields(allFields),
               diff: allFields.reduce((acc, field) => {
                 acc[field] = { from: null, to: currentVersion[field] };
                 return acc;
@@ -328,8 +332,6 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
       scaIntegrationLevel: 'SCA Integration Level',
       appFirewallTool: 'App Firewall Tool',
       appFirewallIntegrationLevel: 'App Firewall Integration Level',
-      apiSecurityTool: 'API Security Tool',
-      apiSecurityIntegrationLevel: 'API Security Integration Level',
       apiSecurityNA: 'API Security N/A',
       appFirewallNA: 'App Firewall N/A',
       currentVersion: 'Current Version',
@@ -1081,4 +1083,3 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
     </Card>
   );
 }
-

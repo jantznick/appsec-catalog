@@ -99,7 +99,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'api-key']
 }));
-app.use(express.json());
+app.use(express.json({ limit: '3mb' }));
 app.use('/storage', express.static(path.resolve(__dirname, 'storage')));
 
 // Session configuration
@@ -200,4 +200,3 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`🔌 DB test: http://localhost:${PORT}/api/db-test`);
 });
-

@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOC Tool Design — Intelligence-Driven Operations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0c1220; --bg-2:#0f1727; --panel:#141d2f; --panel-2:#19243a;
+    --line:#26344c; --line-soft:#1c2840;
+    --text:#e9eef7; --muted:#94a2bb; --faint:#62708a;
+    /* functional flow colors — each means something */
+    --intel:#f0a93c;   /* raw intel ingest */
+    --enrich:#33d3c1;  /* curated IOCs · enrichment · orchestration (system accent) */
+    --alert:#ef5b5b;   /* detection alert */
+    --share:#5fd486;   /* feedback + outbound sharing */
+    --plumb:#7384a0;   /* telemetry plumbing · runbooks · validation (supporting) */
+    /* tool identity accents (cards only) */
+    --orch:#9b8cf0; --redteam:#e06aa8; --purple:#b591f2; --code:#7fa8e0; --ai:#5ad1ff; --hearst:#d9a441;
+    --maxw:1120px; --r:14px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(51,211,193,.06), transparent 60%),
+      radial-gradient(900px 500px at 0% 10%, rgba(240,169,60,.05), transparent 55%),
+      var(--bg);
+    color:var(--text); font-family:"Inter",system-ui,sans-serif;
+    font-size:16px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px}
+  section{padding:78px 0;border-top:1px solid var(--line-soft)}
+  h1,h2,h3{font-family:"Space Grotesk",sans-serif;font-weight:600;letter-spacing:-.02em;line-height:1.12;margin:0}
+  p{margin:0}
+  a{color:inherit}
+  .eyebrow{font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--enrich);display:inline-flex;align-items:center;gap:10px}
+  .eyebrow::before{content:"";width:26px;height:1px;background:var(--enrich);display:inline-block}
+
+  .statusbar{border-bottom:1px solid var(--line-soft);background:rgba(9,14,24,.6);backdrop-filter:blur(6px);position:sticky;top:0;z-index:20}
+  .statusbar .wrap{display:flex;align-items:center;justify-content:space-between;height:54px;gap:16px}
+  .brand{font-family:"JetBrains Mono",monospace;font-size:13px;letter-spacing:.14em;color:var(--text);text-transform:uppercase}
+  .brand b{color:var(--enrich);font-weight:600}
+  .pulse{display:inline-flex;align-items:center;gap:8px;font-family:"JetBrains Mono",monospace;font-size:11.5px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--share);animation:beat 2.4s infinite}
+  @keyframes beat{0%{box-shadow:0 0 0 0 rgba(95,212,134,.5)}70%{box-shadow:0 0 0 8px rgba(95,212,134,0)}100%{box-shadow:0 0 0 0 rgba(95,212,134,0)}}
+
+  .hero{padding:96px 0 64px;border-top:none}
+  .hero h1{font-size:clamp(38px,6.4vw,72px);font-weight:700;margin:22px 0 0}
+  .hero h1 em{font-style:normal;color:var(--enrich)}
+  .hero .lede{max-width:680px;color:var(--muted);font-size:clamp(16px,2.2vw,19px);margin-top:22px}
+  .tagrow{display:flex;flex-wrap:wrap;gap:10px;margin-top:30px}
+  .tag{font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.04em;color:var(--text);border:1px solid var(--line);background:var(--panel);padding:7px 12px;border-radius:999px}
+  .tag i{font-style:normal;width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:8px;transform:translateY(1px)}
+
+  .head{max-width:720px;margin-bottom:40px}
+  .head h2{font-size:clamp(26px,4vw,38px);margin-top:16px}
+  .head p{color:var(--muted);margin-top:14px}
+
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .toolcard{background:linear-gradient(180deg,var(--panel),var(--bg-2));border:1px solid var(--line);border-radius:var(--r);padding:22px 20px 24px;position:relative;overflow:hidden;transition:transform .25s ease,border-color .25s ease}
+  .toolcard:hover{transform:translateY(-4px);border-color:var(--accent)}
+  .toolcard::before{content:"";position:absolute;left:0;top:0;height:3px;width:100%;background:var(--accent)}
+  .toolcard .kx{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.16em;color:var(--accent);text-transform:uppercase}
+  .toolcard h3{font-size:19px;margin:14px 0 8px}
+  .toolcard p{color:var(--muted);font-size:14px}
+  .toolcard .role{margin-top:16px;font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--faint);letter-spacing:.03em}
+  .cardtop{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .cardtop .kx{min-width:0}
+  .soon{flex:none;font-family:"JetBrains Mono",monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#ffce7a;background:rgba(240,169,60,.12);border:1px solid rgba(240,169,60,.45);padding:3px 7px;border-radius:999px;white-space:nowrap}
+  .toolcard.pending{border-style:dashed}
+  .soon-inline{font-family:"JetBrains Mono",monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#ffce7a;background:rgba(240,169,60,.12);border:1px solid rgba(240,169,60,.45);padding:2px 6px;border-radius:999px;margin-left:8px;vertical-align:middle}
+
+  /* telemetry strip */
+  .telstrip{margin-top:26px;border:1px dashed var(--line);border-radius:var(--r);background:rgba(115,132,160,.05);padding:20px 22px}
+  .telstrip .tl{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--plumb)}
+  .telstrip .tg{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px}
+  .telitem{display:flex;flex-direction:column;gap:3px;border-left:2px solid var(--plumb);padding:4px 0 4px 14px}
+  .telitem b{font-family:"Space Grotesk",sans-serif;font-size:16px;font-weight:600}
+  .telitem small{color:var(--muted);font-size:13px}
+  .telstrip .foot{margin-top:16px;font-size:13px;color:var(--faint)}
+
+  .diagram-shell{background:linear-gradient(180deg,var(--bg-2),var(--panel));border:1px solid var(--line);border-radius:18px;padding:18px;margin-top:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:18px;margin:6px 4px 14px;font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:8px}
+  .legend i{width:22px;height:0;border-top:2px solid;display:inline-block}
+  .legend i.dash{border-top-style:dashed}
+  .hint{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--faint);margin-left:auto;letter-spacing:.04em}
+  svg.flowmap{width:100%;height:auto;display:block}
+  .node rect{transition:opacity .2s ease}
+  .node text{font-family:"Space Grotesk",sans-serif;fill:var(--text)}
+  .node .sub{font-family:"JetBrains Mono",monospace;fill:var(--faint)}
+  .zonelabel{font-family:"JetBrains Mono",monospace;fill:var(--plumb);letter-spacing:.12em}
+  .flow{transition:opacity .2s ease;opacity:.9}
+  .flowmap.focus .flow{opacity:.1}
+  .flowmap.focus .node{opacity:.26}
+  .flowmap.focus .flow.lit{opacity:1}
+  .flowmap.focus .node.lit{opacity:1}
+
+  .loop{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);border-radius:var(--r);overflow:hidden}
+  .step{background:var(--panel);padding:26px 22px}
+  .step .num{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:13px;color:var(--enrich);letter-spacing:.1em}
+  .step h3{font-size:18px;margin:10px 0 8px}
+  .step p{color:var(--muted);font-size:14px}
+  .step .tools{margin-top:14px;display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.04em;padding:4px 8px;border-radius:6px;border:1px solid var(--line);color:var(--muted)}
+  .loopnote{margin-top:18px;font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--faint);display:flex;align-items:center;gap:10px}
+  .loopnote i{font-style:normal;color:var(--share)}
+
+  .stepper{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px}
+  .sbtn{font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.04em;border:1px solid var(--line);background:var(--panel);color:var(--muted);padding:10px 14px;border-radius:10px;cursor:pointer;transition:all .2s ease;text-align:left}
+  .sbtn b{color:var(--text);font-weight:600;display:block;font-family:"Space Grotesk",sans-serif;font-size:13px}
+  .sbtn small{color:var(--faint)}
+  .sbtn.active{border-color:var(--enrich);background:var(--panel-2);color:var(--text)}
+  .sbtn.active b{color:var(--enrich)}
+  .scenebox{background:linear-gradient(180deg,var(--panel),var(--bg-2));border:1px solid var(--line);border-radius:var(--r);padding:30px 28px;min-height:190px}
+  .scenebox .who{font-family:"JetBrains Mono",monospace;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--enrich)}
+  .scenebox h3{font-size:23px;margin:12px 0 12px}
+  .scenebox p{color:var(--muted);max-width:780px}
+  .scenebox .uses{margin-top:18px;display:flex;gap:8px;flex-wrap:wrap}
+  .scenebox .uses .chip{border-color:var(--line);color:var(--text)}
+
+  .roles{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .rolecard{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:22px 20px}
+  .rolecard h3{font-size:17px;margin-bottom:6px}
+  .rolecard .lvl{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--faint);letter-spacing:.1em;text-transform:uppercase}
+  .rolecard ul{list-style:none;padding:0;margin:14px 0 0}
+  .rolecard li{font-size:13.5px;color:var(--muted);padding:7px 0;border-top:1px solid var(--line-soft);display:flex;gap:9px;align-items:flex-start}
+  .rolecard li::before{content:"";width:7px;height:7px;border-radius:2px;background:var(--enrich);margin-top:7px;flex:none}
+
+  .intg{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  .irow{display:flex;align-items:center;gap:16px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .irow .ports{font-family:"JetBrains Mono",monospace;font-size:13px;color:var(--text);white-space:nowrap}
+  .irow .ports b{color:var(--enrich);font-weight:600}
+  .irow .arrow{color:var(--faint);font-weight:600}
+  .irow .desc{color:var(--muted);font-size:13.5px}
+
+  footer{padding:40px 0 64px;border-top:1px solid var(--line-soft);color:var(--faint);font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.04em}
+
+  /* teams */
+  .teamgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:14px}
+  .teamcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px 18px;display:flex;flex-direction:column}
+  .teamcard .lvl{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--accent,var(--faint));letter-spacing:.1em;text-transform:uppercase}
+  .teamcard h3{font-size:16px;margin:7px 0 2px}
+  .teamcard ul{list-style:none;padding:0;margin:12px 0 0}
+  .teamcard li{font-size:13px;color:var(--muted);padding:6px 0;border-top:1px solid var(--line-soft);display:flex;gap:8px;align-items:flex-start}
+  .teamcard li::before{content:"";width:6px;height:6px;border-radius:2px;background:var(--accent,var(--enrich));margin-top:6px;flex:none}
+  .teamcard .trow{margin-top:auto;padding-top:14px;display:flex;flex-wrap:wrap;gap:5px}
+  .teamcard .trow .chip{font-size:9.5px;padding:3px 6px}
+
+  /* gaps */
+  .gapgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .gapcard{background:linear-gradient(180deg,var(--panel),var(--bg-2));border:1px solid var(--line);border-left:3px solid var(--intel);border-radius:var(--r);padding:22px 20px}
+  .gapcard .gh{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .gapcard h3{font-size:17px}
+  .gaprow{margin-top:13px}
+  .gaplabel{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase}
+  .gaplabel.now{color:#ef8b8b}
+  .gaplabel.fix{color:#6fdc9b}
+  .gaptext{color:var(--muted);font-size:13px;margin-top:3px}
+
+  @media(max-width:900px){.grid4{grid-template-columns:repeat(2,1fr)}.loop{grid-template-columns:repeat(2,1fr)}.roles{grid-template-columns:repeat(2,1fr)}.teamgrid{grid-template-columns:repeat(3,1fr)}.gapgrid{grid-template-columns:1fr}.intg{grid-template-columns:1fr}.telstrip .tg{grid-template-columns:1fr}}
+  @media(max-width:560px){.wrap{padding:0 18px}section{padding:56px 0}.grid4,.loop,.roles,.teamgrid{grid-template-columns:1fr}.hint{display:none}.irow{flex-direction:column;align-items:flex-start;gap:8px}.irow .ports{white-space:normal}}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto}}
+
+  /* ── OPERATIONAL MODEL SECTION ── */
+  #ops-model { background: var(--bg-2); border-top: 1px solid var(--line); padding: 80px 0; }
+  #ops-model h2 { font-size: clamp(1.6rem,3vw,2.4rem); margin-bottom: 12px; }
+
+  .ops-block { margin-top: 56px; }
+  .ops-block-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; letter-spacing: 2px; color: var(--muted);
+    border-left: 3px solid var(--enrich); padding-left: 12px;
+    margin-bottom: 16px; text-transform: uppercase;
+  }
+  .ops-block-desc { color: var(--muted); max-width: 760px; margin-bottom: 28px; line-height: 1.7; }
+
+  /* Team cards */
+  .ops-team-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 18px;
+  }
+  .ops-team-card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--r); overflow: hidden;
+    border-left-width: 3px;
+  }
+  .ops-team-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px; border-bottom: 1px solid var(--line);
+  }
+  .ops-team-icon { font-size: 22px; }
+  .ops-team-name { font-weight: 700; font-size: 15px; }
+  .ops-team-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .ops-owns {
+    list-style: none; padding: 14px 16px; margin: 0;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .ops-owns li {
+    font-size: 13px; color: var(--muted);
+    padding-left: 16px; position: relative;
+  }
+  .ops-owns li::before {
+    content: '›'; position: absolute; left: 0;
+    color: var(--enrich); font-weight: 700;
+  }
+  .ops-tools-row {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding: 0 16px 14px;
+  }
+  .ops-tool {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; letter-spacing: 0.5px;
+    background: var(--panel-2); color: var(--faint);
+    border: 1px solid var(--line); border-radius: 4px;
+    padding: 2px 7px;
+  }
+
+  /* Swimlane SVG */
+  .swimlane-wrap { overflow-x: auto; border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); }
+  .swimlane { width: 100%; min-width: 700px; display: block; }
+
+  /* Detection lifecycle */
+  .ops-lifecycle-wrap {
+    display: flex; align-items: stretch; gap: 0;
+    overflow-x: auto; padding-bottom: 8px;
+  }
+  .ops-lc-step {
+    flex: 1; min-width: 160px; background: var(--panel);
+    border: 1px solid var(--line); border-top-width: 3px;
+    border-radius: 12px; padding: 18px 16px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .ops-lc-num {
+    width: 26px; height: 26px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 13px; color: #0c1220;
+    flex-shrink: 0;
+  }
+  .ops-lc-title { font-weight: 700; font-size: 14px; }
+  .ops-lc-body { font-size: 12px; color: var(--muted); line-height: 1.6; flex: 1; }
+  .ops-lc-who {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; color: var(--faint); letter-spacing: 0.5px;
+    border-top: 1px solid var(--line); padding-top: 8px; margin-top: auto;
+  }
+  .ops-lc-arrow {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; color: var(--line); padding: 0 4px;
+    flex-shrink: 0; align-self: center;
+  }
+
+  /* Shift grid */
+  .ops-shift-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  .ops-shift-col {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 18px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .ops-shift-header { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+  .ops-shift-item {
+    font-size: 12.5px; color: var(--muted);
+    padding: 8px 10px; background: var(--panel-2);
+    border-radius: 7px; line-height: 1.5;
+    border-left: 2px solid var(--line);
+  }
+
+  /* IR playbook */
+  .ops-ir-swimlane {
+    display: flex; align-items: stretch;
+    gap: 0; overflow-x: auto; padding-bottom: 8px;
+  }
+  .ops-ir-phase {
+    flex: 1; min-width: 180px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-top-width: 3px; border-radius: 12px; overflow: hidden;
+  }
+  .ops-ir-phase-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 700; letter-spacing: 2px;
+    color: #0c1220; padding: 8px 14px; text-align: center;
+  }
+  .ops-ir-phase-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .ops-ir-actor {
+    font-size: 11px; font-weight: 700; letter-spacing: 1px;
+    padding: 4px 10px; border-radius: 5px; display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .ops-ir-actor.mssp   { background: #7384a020; color: #7384a0; border: 1px solid #7384a040; }
+  .ops-ir-actor.hearst { background: #d9a44120; color: #d9a441; border: 1px solid #d9a44140; }
+  .ops-ir-actor.ti     { background: #33d3c120; color: #33d3c1; border: 1px solid #33d3c140; }
+  .ops-ir-steps { display: flex; flex-direction: column; gap: 6px; }
+  .ops-ir-step {
+    font-size: 12px; color: var(--muted);
+    padding: 7px 10px; border-radius: 6px;
+    background: var(--panel-2); border-left: 2px solid var(--line);
+    line-height: 1.4;
+  }
+  .ops-ir-step.auto {
+    border-left-color: var(--orch); color: #b0a0f0;
+    background: #9b8cf008;
+  }
+  .ops-ir-arrow-h {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; color: var(--line); padding: 0 6px;
+    flex-shrink: 0; align-self: center;
+  }
+  .ops-ir-legend {
+    display: flex; flex-wrap: wrap; gap: 20px;
+    margin-top: 16px; padding: 12px 16px;
+    background: var(--panel); border-radius: 8px;
+    border: 1px solid var(--line);
+  }
+  .ops-ir-leg-item { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .ops-ir-leg-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .auto-dot   { background: var(--orch); }
+  .mssp-dot   { background: var(--plumb); }
+  .hearst-dot { background: var(--hearst); }
+  .ti-dot     { background: var(--enrich); }
+
+  </style>
+</head>
+<body>
+
+<div class="statusbar">
+  <div class="wrap">
+    <div class="brand">SOC&nbsp;//&nbsp;<b>intel-driven</b>&nbsp;design</div>
+    <div class="pulse"><span class="dot"></span> loop&nbsp;active</div>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">SOC Architecture · Intelligence-Driven Operations</span>
+    <h1>One stack,<br>one intelligence <em>loop.</em></h1>
+    <p class="lede">The tools the SOC actually works in — the intel triad, AI triage, case management, orchestration, purple-team validation, detection-as-code, and the knowledge home — and how they connect to the telemetry feeding them.</p>
+    <div class="tagrow">
+      <span class="tag"><i style="background:var(--intel)"></i>Raw intel in</span>
+      <span class="tag"><i style="background:var(--enrich)"></i>Aggregate · enrich · orchestrate</span>
+      <span class="tag"><i style="background:var(--alert)"></i>Detect &amp; alert</span>
+      <span class="tag"><i style="background:var(--share)"></i>Respond &amp; share</span>
+    </div>
+  </div>
+</header>
+
+<!-- THE STACK -->
+<section>
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">The Stack</span>
+      <h2>The SOC-owned platforms</h2>
+      <p>These are the tools analysts live in day to day. Telemetry sources and enforcement points feed them, but they are not the focus here — the value is in how they work together.</p>
+    </div>
+    <div class="grid4">
+      <div class="toolcard pending" style="--accent:var(--enrich)">
+        <div class="cardtop"><div class="kx">Fusion · The Brain</div><span class="soon">Coming soon</span></div>
+        <h3>OpenSTI</h3>
+        <p>Normalizes, dedupes, scores, and de-conflicts every feed. Pushes curated IOCs to detection and enrichment into cases.</p>
+        <div class="role">Hub for all intel flow</div>
+      </div>
+      <div class="toolcard pending" style="--accent:var(--intel)">
+        <div class="cardtop"><div class="kx">Link Analysis</div><span class="soon">Coming soon</span></div>
+        <h3>Anansi</h3>
+        <p>A custom, lightweight Maltego built in-house — pivot from any indicator to connected domains, IPs, certs, and infrastructure, mapped as a graph.</p>
+        <div class="role">In-house build · feeds OpenSTI</div>
+      </div>
+      <div class="toolcard pending" style="--accent:var(--share)">
+        <div class="cardtop"><div class="kx">Sharing Hub</div><span class="soon">Coming soon</span></div>
+        <h3>MISP</h3>
+        <p>Ingests community and sector feeds, and publishes your confirmed indicators back out to trusted partners and ISACs.</p>
+        <div class="role">Syncs both ways with OpenSTI</div>
+      </div>
+      <div class="toolcard pending" style="--accent:var(--alert)">
+        <div class="cardtop"><div class="kx">Workspace</div><span class="soon">Coming soon</span></div>
+        <h3>Case Management</h3>
+        <p>Brings ticketing in-house. Triage, investigate, respond, and document — and own the case data instead of leaving it in the MSSP's system.</p>
+        <div class="role">In-house · own &amp; retain the data</div>
+      </div>
+      <div class="toolcard" style="--accent:var(--ai)">
+        <div class="kx">AI Triage</div>
+        <h3>Intezer</h3>
+        <p>The AI SOC. Auto-triages every Sumo and CrowdStrike alert, classifies and enriches it, and forwards only what's real.</p>
+        <div class="role">Front door for alerts · cuts the noise</div>
+      </div>
+      <div class="toolcard pending" style="--accent:var(--orch)">
+        <div class="cardtop"><div class="kx">Orchestration</div><span class="soon">Coming soon</span></div>
+        <h3>n8n</h3>
+        <p>Deployed but not yet operationalized. Will run the playbooks that wire it all together: route alerts, auto-enrich observables, trigger containment.</p>
+        <div class="role">Glue between detection · OpenSTI · cases</div>
+      </div>
+      <div class="toolcard pending" style="--accent:var(--redteam)">
+        <div class="cardtop"><div class="kx">Validation</div><span class="soon">Coming soon</span></div>
+        <h3>Caldera</h3>
+        <p>Emulates ATT&amp;CK techniques against the estate so you can prove your detections actually fire — and find the gaps.</p>
+        <div class="role">Tests detection coverage</div>
+      </div>
+      <div class="toolcard pending" style="--accent:var(--purple)">
+        <div class="cardtop"><div class="kx">Purple Team</div><span class="soon">Coming soon</span></div>
+        <h3>Atomic Red Team</h3>
+        <p>A library of small, per-technique tests mapped to ATT&amp;CK. Drives Caldera and validates individual detections fast.</p>
+        <div class="role">Pairs with Caldera = purple team</div>
+      </div>
+      <div class="toolcard" style="--accent:var(--code)">
+        <div class="cardtop"><div class="kx">Source of Truth</div></div>
+        <h3>GitHub</h3>
+        <p>Today it stores the Terraform that manages every Sumo Logic instance. Next phase: a detection-as-code pipeline shipping rules to Sumo and CrowdStrike.</p>
+        <div class="role">IaC today · detection-as-code next</div>
+      </div>
+      <div class="toolcard" style="--accent:var(--plumb)">
+        <div class="kx">Knowledge Home</div>
+        <h3>Confluence</h3>
+        <p>Holds playbooks, IR procedures, and post-incident writeups. The reference the case workflow points to and feeds back into.</p>
+        <div class="role">Runbooks · process · institutional memory</div>
+      </div>
+      <div class="toolcard" style="--accent:var(--enrich)">
+        <div class="kx">The Loop</div>
+        <h3>How they connect</h3>
+        <p>Intel in &rarr; fused in OpenSTI &rarr; operationalized into detection &rarr; worked as cases &rarr; confirmed findings shared back out.</p>
+        <div class="role">See the architecture below &darr;</div>
+      </div>
+    </div>
+
+    <div class="telstrip">
+      <div class="tl">Telemetry &amp; enforcement — the visibility layer</div>
+      <div class="tg">
+        <div class="telitem"><b>Sumo Logic</b><small>SIEM — central correlation &amp; detection</small></div>
+        <div class="telitem"><b>Vector <span class="soon-inline">Coming soon</span></b><small>Telemetry pipeline — route &amp; reduce before Sumo</small></div>
+        <div class="telitem"><b>CrowdStrike</b><small>EDR — endpoint detection, sandbox &amp; response</small></div>
+      </div>
+      <div class="foot">Shown for context, not the focus of this design — these are sources that feed the SOC platforms and the points where response is enforced.</div>
+    </div>
+
+    <div class="telstrip" style="border-color:var(--ai);background:rgba(90,209,255,.05)">
+      <div class="tl" style="color:var(--ai)">Alert path — detection to escalation</div>
+      <div class="foot" style="color:var(--muted);font-size:14px">Sumo Logic &amp; CrowdStrike &rarr; <b style="color:var(--text)">Intezer</b> (AI auto-triage) &rarr; <b style="color:var(--text)">MSSP</b> (24/7 managed monitoring) &rarr; escalations &rarr; <b style="color:var(--text)">Hearst SOC</b> (the internal team, working in the platforms above).</div>
+    </div>
+  </div>
+</section>
+
+<!-- CURRENT STATE -->
+<section>
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">Current State</span>
+      <h2>What's running today</h2>
+      <p>Only the tools in play right now. Detection feeds the AI SOC; the MSSP triages and logs cases in its own ticketing system, and escalations reach the Hearst SOC. GitHub holds the Terraform that manages Sumo today, and Confluence holds the runbooks.</p>
+    </div>
+    <div class="diagram-shell">
+      <div class="legend">
+        <span><i style="border-color:var(--alert)"></i> alert · triage · escalation · case</span>
+        <span><i class="dash" style="border-color:var(--code)"></i> Terraform / IaC</span>
+        <span><i class="dash" style="border-color:var(--plumb)"></i> runbooks &amp; writeups</span>
+        <span class="hint">hover a box to trace its connections</span>
+      </div>
+      <svg class="flowmap" viewBox="0 0 1000 600" role="img" aria-label="Current-state SOC architecture, live tools only">
+        <defs>
+          <marker id="aAltC" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--alert)"/></marker>
+          <marker id="aCodC" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--code)"/></marker>
+          <marker id="aPlmC" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--plumb)"/></marker>
+        </defs>
+
+        <rect x="40" y="40" width="920" height="146" rx="16" fill="rgba(115,132,160,.06)" stroke="var(--plumb)" stroke-width="1" stroke-dasharray="6 6"/>
+        <rect x="40" y="210" width="920" height="116" rx="16" fill="rgba(90,209,255,.05)" stroke="var(--ai)" stroke-width="1" stroke-dasharray="6 6"/>
+        <rect x="40" y="386" width="920" height="170" rx="16" fill="rgba(115,132,160,.05)" stroke="var(--plumb)" stroke-width="1" stroke-dasharray="6 6"/>
+        <text class="zonelabel" x="60" y="68" font-size="11">DETECTION — IN PLAY TODAY</text>
+        <text class="zonelabel" x="60" y="236" font-size="11" fill="var(--ai)">AI TRIAGE &amp; ESCALATION — IN PLAY TODAY</text>
+        <text class="zonelabel" x="60" y="406" font-size="11">LIVE SUPPORTING &amp; CASE HANDLING</text>
+
+        <!-- flows -->
+        <path class="flow" data-link="sumo,intezer" d="M315,152 C315,200 385,232 400,244" fill="none" stroke="var(--alert)" stroke-width="2.4" marker-end="url(#aAltC)"/>
+        <path class="flow" data-link="cs,intezer" d="M630,152 C630,205 470,232 455,244" fill="none" stroke="var(--alert)" stroke-width="2.4" marker-end="url(#aAltC)"/>
+        <path class="flow" data-link="intezer,mssp" d="M500,276 L538,276" fill="none" stroke="var(--alert)" stroke-width="2.6" marker-end="url(#aAltC)"/>
+        <path class="flow" data-link="mssp,hearst" d="M710,276 L746,276" fill="none" stroke="var(--alert)" stroke-width="2.6" marker-end="url(#aAltC)"/>
+        <path class="flow" data-link="mssp,ticketing" d="M620,308 C615,350 600,400 593,430" fill="none" stroke="var(--alert)" stroke-width="2.2" marker-end="url(#aAltC)"/>
+        <path class="flow" data-link="hearst,ticketing" d="M790,308 C740,360 690,412 668,430" fill="none" stroke="var(--alert)" stroke-width="2.2" marker-end="url(#aAltC)"/>
+        <path class="flow" data-link="github,sumo" d="M215,430 C215,300 285,190 305,154" fill="none" stroke="var(--code)" stroke-width="2" stroke-dasharray="5 5" marker-end="url(#aCodC)"/>
+        <path class="flow" data-link="hearst,conf" d="M845,308 C843,360 840,400 838,430" fill="none" stroke="var(--plumb)" stroke-width="2" stroke-dasharray="5 5" marker-end="url(#aPlmC)"/>
+        <path class="flow" data-link="hearst,conf" d="M825,430 C827,395 830,355 832,308" fill="none" stroke="var(--plumb)" stroke-width="2" stroke-dasharray="5 5" marker-end="url(#aPlmC)"/>
+
+        <!-- nodes -->
+        <g class="node" data-node="sumo">
+          <rect x="210" y="86" width="210" height="66" rx="11" fill="var(--panel)" stroke="var(--plumb)" stroke-width="1.3"/>
+          <text x="230" y="122" font-size="17" font-weight="600">Sumo Logic</text>
+          <text class="sub" x="230" y="142" font-size="10.5">SIEM · correlation</text>
+        </g>
+        <g class="node" data-node="cs">
+          <rect x="520" y="86" width="220" height="66" rx="11" fill="var(--panel)" stroke="var(--plumb)" stroke-width="1.3"/>
+          <text x="540" y="122" font-size="17" font-weight="600">CrowdStrike</text>
+          <text class="sub" x="540" y="142" font-size="10.5">EDR · sandbox · response</text>
+        </g>
+
+        <g class="node" data-node="intezer">
+          <rect x="300" y="244" width="200" height="64" rx="11" fill="var(--panel-2)" stroke="var(--ai)" stroke-width="1.7"/>
+          <text x="320" y="278" font-size="18" font-weight="700">Intezer</text>
+          <text class="sub" x="320" y="298" font-size="10.5">AI SOC · auto-triage</text>
+        </g>
+        <g class="node" data-node="mssp">
+          <rect x="540" y="244" width="170" height="64" rx="11" fill="var(--panel)" stroke="var(--plumb)" stroke-width="1.4"/>
+          <text x="560" y="278" font-size="18" font-weight="600">MSSP</text>
+          <text class="sub" x="560" y="298" font-size="10.5">managed 24/7 triage</text>
+        </g>
+        <g class="node" data-node="hearst">
+          <rect x="748" y="244" width="205" height="64" rx="11" fill="var(--panel-2)" stroke="var(--hearst)" stroke-width="1.7"/>
+          <text x="768" y="278" font-size="18" font-weight="700">Hearst SOC</text>
+          <text class="sub" x="768" y="298" font-size="10.5">internal escalation tier</text>
+        </g>
+
+        <g class="node" data-node="github">
+          <rect x="110" y="430" width="210" height="70" rx="11" fill="var(--panel-2)" stroke="var(--code)" stroke-width="1.5"/>
+          <text x="130" y="466" font-size="17" font-weight="600">GitHub</text>
+          <text class="sub" x="130" y="486" font-size="10.5">Terraform · IaC for Sumo</text>
+        </g>
+        <g class="node" data-node="ticketing">
+          <rect x="480" y="430" width="220" height="70" rx="11" fill="var(--panel-2)" stroke="var(--alert)" stroke-width="1.5"/>
+          <text x="500" y="464" font-size="16" font-weight="700">MSSP Ticketing</text>
+          <text class="sub" x="500" y="484" font-size="10">current case mgmt · external</text>
+        </g>
+        <g class="node" data-node="conf">
+          <rect x="740" y="430" width="210" height="72" rx="11" fill="var(--panel)" stroke="var(--plumb)" stroke-width="1.3"/>
+          <text x="760" y="466" font-size="18" font-weight="600">Confluence</text>
+          <text class="sub" x="760" y="486" font-size="10.5">runbooks · writeups</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="telstrip" style="border-color:var(--intel);background:rgba(240,169,60,.05)">
+      <div class="tl" style="color:#ffce7a">Not yet in play — coming soon</div>
+      <div class="foot" style="color:var(--muted);font-size:14px">n8n, OpenSTI, Anansi, MISP, in-house Case Management, Caldera, Atomic Red Team, and Vector are on the roadmap. Today there's no central threat-intel fusion, no community sharing, no automated detection validation, GitHub isn't running a detection-as-code pipeline yet, and case data lives in the MSSP's ticketing system rather than our own.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ARCHITECTURE DIAGRAM -->
+<section>
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">Target State</span>
+      <h2>Where we're headed — the full design</h2>
+      <p>The complete picture with everything built out. Dashed boxes are still coming soon. Data flows from eight major sources (Okta, Azure, AWS, Wiz, EntraID, CrowdStrike, Windows/Servers, Application logs) into Sumo Logic. Detections flow into Intezer for AI triage, on to the MSSP, and escalations reach the Hearst SOC. Critically, CrowdStrike insights and case findings feed back into OpenSTI, creating a closed-loop intel enrichment cycle. GitHub ships detections as code and the Purple Team validates coverage.</p>
+    </div>
+
+    <div class="diagram-shell">
+      <div class="legend">
+        <span><i style="border-color:var(--intel)"></i> raw intel in</span>
+        <span><i style="border-color:var(--enrich)"></i> curated IOCs · enrich · orchestrate</span>
+        <span><i style="border-color:var(--alert)"></i> alert / triage / escalation</span>
+        <span><i style="border-color:var(--share)"></i> feedback &amp; sharing</span>
+        <span><i style="border-color:var(--purple)"></i> purple-team emulation</span>
+        <span><i class="dash" style="border-color:var(--code)"></i> detection-as-code</span>
+        <span><i class="dash" style="border-color:var(--plumb)"></i> telemetry · runbooks · validation</span>
+        <span style="color:#ffce7a"><i style="border:1px dashed #f0a93c;width:18px;height:11px;border-top:1px dashed #f0a93c"></i> dashed box = coming soon</span>
+        <span class="hint">hover a box to trace its connections</span>
+      </div>
+
+                                    <svg class="flowmap" viewBox="0 0 1240 1240" role="img" aria-label="Target-state SOC architecture with data sources and intel feedback">
+        <defs>
+          <marker id="aInt" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--intel)"/></marker>
+          <marker id="aEnr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--enrich)"/></marker>
+          <marker id="aAlt" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--alert)"/></marker>
+          <marker id="aShr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--share)"/></marker>
+          <marker id="aPlm" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--plumb)"/></marker>
+          <marker id="aPur" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--purple)"/></marker>
+          <marker id="aCod" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--code)"/></marker>
+          <marker id="aAi" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--ai)"/></marker>
+        </defs>
+
+        <!-- DATA SOURCES ZONE -->
+        <rect x="50" y="44" width="1120" height="106" rx="16" fill="rgba(240,169,60,.04)" stroke="var(--intel)" stroke-width="1" stroke-dasharray="6 6"/>
+        <text class="zonelabel" x="60" y="62" font-size="10.5" fill="var(--intel)">DATA SOURCES — FEEDING THE SIEM</text>
+
+        <g class="node" data-node="src0">
+          <rect x="96" y="60" width="118" height="62" rx="9" fill="var(--panel)" stroke="var(--intel)" stroke-width="1.2"/>
+          <text x="155" y="87" font-size="13" font-weight="600" text-anchor="middle">Okta</text>
+          <text x="155" y="105" font-size="10" text-anchor="middle" fill="#7384a0">identity</text>
+        </g>
+        <g class="node" data-node="src1">
+          <rect x="226" y="60" width="118" height="62" rx="9" fill="var(--panel)" stroke="var(--intel)" stroke-width="1.2"/>
+          <text x="285" y="87" font-size="13" font-weight="600" text-anchor="middle">Azure</text>
+          <text x="285" y="105" font-size="10" text-anchor="middle" fill="#7384a0">cloud</text>
+        </g>
+        <g class="node" data-node="src2">
+          <rect x="356" y="60" width="118" height="62" rx="9" fill="var(--panel)" stroke="var(--intel)" stroke-width="1.2"/>
+          <text x="415" y="87" font-size="13" font-weight="600" text-anchor="middle">AWS</text>
+          <text x="415" y="105" font-size="10" text-anchor="middle" fill="#7384a0">cloud</text>
+        </g>
+        <g class="node" data-node="src3">
+          <rect x="486" y="60" width="118" height="62" rx="9" fill="var(--panel)" stroke="var(--intel)" stroke-width="1.2"/>
+          <text x="545" y="87" font-size="13" font-weight="600" text-anchor="middle">Wiz</text>
+          <text x="545" y="105" font-size="10" text-anchor="middle" fill="#7384a0">CSPM</text>
+        </g>
+        <g class="node" data-node="src4">
+          <rect x="616" y="60" width="118" height="62" rx="9" fill="var(--panel)" stroke="var(--intel)" stroke-width="1.2"/>
+          <text x="675" y="87" font-size="13" font-weight="600" text-anchor="middle">EntraID</text>
+          <text x="675" y="105" font-size="10" text-anchor="middle" fill="#7384a0">identity</text>
+        </g>
+        <g class="node" data-node="src5">
+          <rect x="746" y="60" width="118" height="62" rx="9" fill="var(--panel)" stroke="var(--intel)" stroke-width="1.2"/>
+          <text x="805" y="87" font-size="13" font-weight="600" text-anchor="middle">CrowdStrike</text>
+          <text x="805" y="105" font-size="10" text-anchor="middle" fill="#7384a0">EDR</text>
+        </g>
+        <g class="node" data-node="src6">
+          <rect x="876" y="60" width="118" height="62" rx="9" fill="var(--panel)" stroke="var(--intel)" stroke-width="1.2"/>
+          <text x="935" y="87" font-size="13" font-weight="600" text-anchor="middle">Win/Server</text>
+          <text x="935" y="105" font-size="10" text-anchor="middle" fill="#7384a0">endpoints</text>
+        </g>
+        <g class="node" data-node="src7">
+          <rect x="1006" y="60" width="118" height="62" rx="9" fill="var(--panel)" stroke="var(--intel)" stroke-width="1.2"/>
+          <text x="1065" y="87" font-size="13" font-weight="600" text-anchor="middle">App Logs</text>
+          <text x="1065" y="105" font-size="10" text-anchor="middle" fill="#7384a0">apps</text>
+        </g>
+
+        <!-- DATA SOURCE FLOWS -->
+        <path class="flow" data-link="src0,sumo" d="M155,122 C155,172 310,190 310,240" fill="none" stroke="var(--intel)" stroke-width="1.8" marker-end="url(#aInt)"/>
+        <path class="flow" data-link="src1,sumo" d="M285,122 C285,172 334,190 334,240" fill="none" stroke="var(--intel)" stroke-width="1.8" marker-end="url(#aInt)"/>
+        <path class="flow" data-link="src2,sumo" d="M415,122 C415,172 358,190 358,240" fill="none" stroke="var(--intel)" stroke-width="1.8" marker-end="url(#aInt)"/>
+        <path class="flow" data-link="src3,sumo" d="M545,122 C545,172 382,190 382,240" fill="none" stroke="var(--intel)" stroke-width="1.8" marker-end="url(#aInt)"/>
+        <path class="flow" data-link="src4,sumo" d="M675,122 C675,172 407,190 407,240" fill="none" stroke="var(--intel)" stroke-width="1.8" marker-end="url(#aInt)"/>
+        <path class="flow" data-link="src5,sumo" d="M805,122 C805,172 431,190 431,240" fill="none" stroke="var(--intel)" stroke-width="1.8" marker-end="url(#aInt)"/>
+        <path class="flow" data-link="src6,sumo" d="M935,122 C935,172 455,190 455,240" fill="none" stroke="var(--intel)" stroke-width="1.8" marker-end="url(#aInt)"/>
+        <path class="flow" data-link="src7,sumo" d="M1065,122 C1065,172 480,190 480,240" fill="none" stroke="var(--intel)" stroke-width="1.8" marker-end="url(#aInt)"/>
+
+                <!-- TELEMETRY BAND -->
+        <rect x="40" y="200" width="1120" height="150" rx="16" fill="rgba(115,132,160,.06)" stroke="var(--plumb)" stroke-width="1" stroke-dasharray="6 6"/>
+        <text class="zonelabel" x="60" y="228" font-size="11">TELEMETRY &amp; ENFORCEMENT — VISIBILITY SOURCES</text>
+
+        <!-- AI TRIAGE BAND -->
+        <rect x="40" y="390" width="1120" height="116" rx="16" fill="rgba(90,209,255,.05)" stroke="var(--ai)" stroke-width="1" stroke-dasharray="6 6"/>
+        <text class="zonelabel" x="60" y="416" font-size="11" fill="var(--ai)">AI TRIAGE &amp; ESCALATION</text>
+
+        <!-- SOC PLATFORMS -->
+        <rect x="40" y="546" width="1120" height="480" rx="16" fill="rgba(115,132,160,.03)" stroke="var(--plumb)" stroke-width="1" stroke-dasharray="6 6"/>
+        <text class="zonelabel" x="60" y="566" font-size="11">SOC PLATFORMS — WHERE ANALYSTS WORK</text>
+
+        <!-- PURPLE TEAM ZONE -->
+        <rect x="490" y="900" width="530" height="170" rx="16" fill="rgba(181,145,242,.06)" stroke="var(--purple)" stroke-width="1" stroke-dasharray="6 6"/>
+        <text class="zonelabel" x="508" y="922" font-size="11" fill="var(--purple)">PURPLE TEAM — EMULATE &amp; VALIDATE DETECTION</text>
+
+        <!-- ===== DATA SOURCES FLOWS ===== -->
+
+        <!-- SIEM TO ORCHESTRATION -->
+        <path class="flow" data-link="sumo,intezer" d="M395,350 C395,398 420,420 435,432" fill="none" stroke="var(--alert)" stroke-width="2.4" marker-end="url(#aAlt)"/>
+        <path class="flow" data-link="cs,intezer" d="M630,350 C630,415 500,420 475,432" fill="none" stroke="var(--alert)" stroke-width="2.4" marker-end="url(#aAlt)"/>
+
+        <!-- INTEZER TO ESCALATION CHAIN -->
+        <path class="flow" data-link="intezer,mssp" d="M500,464 L538,464" fill="none" stroke="var(--alert)" stroke-width="2.6" marker-end="url(#aAlt)"/>
+        <path class="flow" data-link="mssp,hearst" d="M710,464 L746,464" fill="none" stroke="var(--alert)" stroke-width="2.6" marker-end="url(#aAlt)"/>
+
+        <!-- TIP AND INTEL FLOWS -->
+        <path class="flow" data-link="tip,sumo" d="M210,610 C220,500 310,340 390,260" fill="none" stroke="var(--enrich)" stroke-width="2.2" marker-end="url(#aEnr)"/>
+        <path class="flow" data-link="tip,n8n" d="M320,638 C370,620 400,570 428,550" fill="none" stroke="var(--enrich)" stroke-width="2.2" marker-end="url(#aEnr)"/>
+        <path class="flow" data-link="tip,n8n" d="M428,668 C400,650 360,620 322,608" fill="none" stroke="var(--enrich)" stroke-width="2.2" marker-end="url(#aEnr)"/>
+
+        <!-- CASE FLOWS -->
+        <path class="flow" data-link="hearst,case" d="M820,496 C810,530 800,555 800,580" fill="none" stroke="var(--alert)" stroke-width="2.4" marker-end="url(#aAlt)"/>
+        <path class="flow" data-link="n8n,case" d="M650,568 C680,590 720,620 748,640" fill="none" stroke="var(--enrich)" stroke-width="2.2" marker-end="url(#aEnr)"/>
+
+        <!-- FEEDBACK: CROWDSTRIKE AND CASE BACK TO INTEL -->
+        <!-- cs direct feedback replaced by CrowdStrike Threat Feeds node below -->
+        <!-- case→tip removed: case findings no longer feed back to OpenSTI -->
+        <!-- CrowdStrike Threat Feeds → OpenSTI: clean short arc from right side of feeds node to OpenSTI right edge -->
+        <path class="flow" data-link="csthreat,tip" d="M500,800 C475,770 470,700 322,660" fill="none" stroke="var(--intel)" stroke-width="2.2" marker-end="url(#aInt)"/>
+        <!-- CrowdStrike EDR → CrowdStrike Threat Feeds: enriches feeds with live endpoint intel -->
+        <path class="flow" data-link="cs,csthreat" d="M700,280 C760,500 700,700 695,784" fill="none" stroke="var(--share)" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#aShr)"/>
+
+        <!-- INTEL INNER FLOWS -->
+        <path class="flow" data-link="osint,tip" d="M160,754 C160,720 175,695 185,680" fill="none" stroke="var(--intel)" stroke-width="2.2" marker-end="url(#aInt)"/>
+        <path class="flow" data-link="misp,tip" d="M345,754 C322,725 305,700 300,680" fill="none" stroke="var(--intel)" stroke-width="2.2" marker-end="url(#aInt)"/>
+        <path class="flow" data-link="misp,tip" d="M250,680 C270,710 350,740 372,754" fill="none" stroke="var(--share)" stroke-width="2.2" marker-end="url(#aShr)"/>
+        <path class="flow" data-link="misp,comm" d="M372,826 L372,896" fill="none" stroke="var(--share)" stroke-width="2.2" marker-end="url(#aShr)"/>
+        <path class="flow" data-link="misp,comm" d="M392,896 L392,826" fill="none" stroke="var(--intel)" stroke-width="2.2" marker-end="url(#aInt)"/>
+
+        <!-- KNOWLEDGE FLOWS -->
+        <path class="flow" data-link="case,conf" d="M842,708 L842,750" fill="none" stroke="var(--plumb)" stroke-width="2" stroke-dasharray="5 5" marker-end="url(#aPlm)"/>
+        <path class="flow" data-link="case,conf" d="M822,750 L822,708" fill="none" stroke="var(--plumb)" stroke-width="2" stroke-dasharray="5 5" marker-end="url(#aPlm)"/>
+
+        <!-- PURPLE TEAM FLOWS -->
+        <path class="flow" data-link="atomic,caldera" d="M738,969 L710,969" fill="none" stroke="var(--purple)" stroke-width="2.4" marker-end="url(#aPur)"/>
+        <path class="flow" data-link="caldera,cs,sumo" d="M650,936 C732,860 732,420 705,306" fill="none" stroke="var(--plumb)" stroke-width="2" stroke-dasharray="5 5" marker-end="url(#aPlm)"/>
+
+        <!-- GITHUB FLOWS -->
+        <path class="flow" data-link="github,sumo,cs" d="M120,1100 C20,800 20,340 292,292" fill="none" stroke="var(--code)" stroke-width="2" stroke-dasharray="5 5" marker-end="url(#aCod)"/>
+        <path class="flow" data-link="github,atomic" d="M280,1110 C470,1110 640,1030 800,1002" fill="none" stroke="var(--code)" stroke-width="2.2" marker-end="url(#aCod)"/>
+
+        <!-- ===== NODES ===== -->
+        <!-- DATA SOURCES -->
+
+        <!-- TELEMETRY BAND -->
+        <g class="node" data-node="vector">
+          <rect x="95" y="240" width="160" height="66" rx="11" fill="var(--panel)" stroke="var(--plumb)" stroke-width="1.3" stroke-dasharray="6 4"/>
+          <text x="115" y="276" font-size="17" font-weight="600">Vector</text>
+          <text class="sub" x="115" y="296" font-size="10.5">pipeline · reduce</text>
+          <rect x="209" y="232" width="44" height="15" rx="6" fill="#302a24" stroke="#f0a93c" stroke-width="1"/>
+          <text x="218" y="243" font-family="JetBrains Mono, monospace" font-size="8.5" letter-spacing="1.2" fill="#ffce7a">SOON</text>
+        </g>
+        <g class="node" data-node="sumo">
+          <rect x="300" y="240" width="190" height="66" rx="11" fill="var(--panel)" stroke="var(--plumb)" stroke-width="1.3"/>
+          <text x="320" y="276" font-size="17" font-weight="600">Sumo Logic</text>
+          <text class="sub" x="320" y="296" font-size="10.5">SIEM · correlation</text>
+        </g>
+        <g class="node" data-node="cs">
+          <rect x="540" y="240" width="200" height="66" rx="11" fill="var(--panel)" stroke="var(--plumb)" stroke-width="1.3"/>
+          <text x="560" y="276" font-size="17" font-weight="600">CrowdStrike</text>
+          <text class="sub" x="560" y="296" font-size="10.5">EDR · sandbox · response</text>
+        </g>
+
+        <!-- AI TRIAGE -->
+        <g class="node" data-node="intezer">
+          <rect x="300" y="432" width="200" height="64" rx="11" fill="var(--panel-2)" stroke="var(--ai)" stroke-width="1.7"/>
+          <text x="320" y="466" font-size="18" font-weight="700">Intezer</text>
+          <text class="sub" x="320" y="486" font-size="10.5">AI SOC · auto-triage</text>
+        </g>
+        <g class="node" data-node="mssp">
+          <rect x="540" y="432" width="170" height="64" rx="11" fill="var(--panel)" stroke="var(--plumb)" stroke-width="1.4"/>
+          <text x="560" y="466" font-size="18" font-weight="600">MSSP</text>
+          <text class="sub" x="560" y="486" font-size="10.5">managed 24/7 triage</text>
+        </g>
+        <g class="node" data-node="hearst">
+          <rect x="748" y="432" width="205" height="64" rx="11" fill="var(--panel-2)" stroke="var(--hearst)" stroke-width="1.7"/>
+          <text x="768" y="466" font-size="18" font-weight="700">Hearst SOC</text>
+          <text class="sub" x="768" y="486" font-size="10.5">internal escalation tier</text>
+        </g>
+
+        <!-- ORCHESTRATION -->
+        <g class="node" data-node="n8n">
+          <rect x="430" y="520" width="220" height="76" rx="12" fill="var(--panel-2)" stroke="var(--orch)" stroke-width="1.7" stroke-dasharray="7 5"/>
+          <text x="452" y="558" font-size="20" font-weight="700">n8n</text>
+          <text class="sub" x="452" y="580" font-size="11">orchestration · playbooks</text>
+          <rect x="604" y="512" width="44" height="15" rx="6" fill="#302a24" stroke="#f0a93c" stroke-width="1"/>
+          <text x="613" y="523" font-family="JetBrains Mono, monospace" font-size="8.5" letter-spacing="1.2" fill="#ffce7a">SOON</text>
+        </g>
+
+        <!-- INTEL PLATFORMS -->
+        <g class="node" data-node="tip">
+          <rect x="80" y="580" width="240" height="116" rx="14" fill="var(--panel-2)" stroke="var(--enrich)" stroke-width="1.8" stroke-dasharray="7 5"/>
+          <text x="102" y="640" font-size="27" font-weight="700">OpenSTI</text>
+          <text class="sub" x="102" y="668" font-size="10.5">aggregate · score · dedupe</text>
+          <rect x="274" y="572" width="44" height="15" rx="6" fill="#302a24" stroke="#f0a93c" stroke-width="1"/>
+          <text x="283" y="583" font-family="JetBrains Mono, monospace" font-size="8.5" letter-spacing="1.2" fill="#ffce7a">SOON</text>
+        </g>
+        <g class="node" data-node="osint">
+          <rect x="80" y="754" width="185" height="66" rx="11" fill="var(--panel-2)" stroke="var(--intel)" stroke-width="1.4" stroke-dasharray="6 4"/>
+          <text x="98" y="788" font-size="17" font-weight="600">Anansi</text>
+          <text class="sub" x="98" y="808" font-size="10.5">link analysis · pivoting</text>
+          <rect x="219" y="746" width="44" height="15" rx="6" fill="#302a24" stroke="#f0a93c" stroke-width="1"/>
+          <text x="228" y="757" font-family="JetBrains Mono, monospace" font-size="8.5" letter-spacing="1.2" fill="#ffce7a">SOON</text>
+        </g>
+        <g class="node" data-node="misp">
+          <rect x="300" y="754" width="160" height="72" rx="11" fill="var(--panel-2)" stroke="var(--share)" stroke-width="1.4" stroke-dasharray="6 4"/>
+          <text x="318" y="788" font-size="18" font-weight="700">MISP</text>
+          <text class="sub" x="318" y="810" font-size="10.5">sharing hub · IOCs</text>
+          <rect x="414" y="746" width="44" height="15" rx="6" fill="#302a24" stroke="#f0a93c" stroke-width="1"/>
+          <text x="423" y="757" font-family="JetBrains Mono, monospace" font-size="8.5" letter-spacing="1.2" fill="#ffce7a">SOON</text>
+        </g>
+        <g class="node" data-node="comm">
+          <rect x="300" y="896" width="160" height="58" rx="11" fill="var(--panel)" stroke="var(--plumb)" stroke-width="1.3"/>
+          <text x="318" y="928" font-size="15" font-weight="600">Communities</text>
+          <text class="sub" x="318" y="946" font-size="10">ISACs · CIRCL · peers</text>
+        </g>
+
+        <!-- CROWDSTRIKE THREAT FEEDS NODE -->
+        <g class="node" data-node="csthreat">
+          <rect x="500" y="784" width="195" height="72" rx="11" fill="var(--panel-2)" stroke="var(--intel)" stroke-width="1.4"/>
+          <text x="520" y="816" font-size="15" font-weight="600">CrowdStrike</text>
+          <text x="520" y="836" font-size="15" font-weight="600">Threat Feeds</text>
+          <text x="520" y="852" font-size="10" fill="#7384a0">Falcon X · adversary intel</text>
+        </g>
+
+        <!-- WORKSPACE & KNOWLEDGE -->
+        <g class="node" data-node="case">
+          <rect x="720" y="580" width="240" height="92" rx="12" fill="var(--panel-2)" stroke="var(--alert)" stroke-width="1.6" stroke-dasharray="7 5"/>
+          <text x="742" y="618" font-size="20" font-weight="700">Case Management</text>
+          <text class="sub" x="742" y="644" font-size="10.5">triage · investigate · respond</text>
+          <rect x="914" y="572" width="44" height="15" rx="6" fill="#302a24" stroke="#f0a93c" stroke-width="1"/>
+          <text x="923" y="583" font-family="JetBrains Mono, monospace" font-size="8.5" letter-spacing="1.2" fill="#ffce7a">SOON</text>
+        </g>
+        <g class="node" data-node="conf">
+          <rect x="720" y="730" width="240" height="70" rx="12" fill="var(--panel)" stroke="var(--plumb)" stroke-width="1.3"/>
+          <text x="742" y="764" font-size="18" font-weight="600">Confluence</text>
+          <text class="sub" x="742" y="786" font-size="10.5">runbooks · procedures · writeups</text>
+        </g>
+
+        <!-- PURPLE TEAM -->
+        <g class="node" data-node="caldera">
+          <rect x="518" y="936" width="190" height="66" rx="11" fill="var(--panel-2)" stroke="var(--redteam)" stroke-width="1.4" stroke-dasharray="6 4"/>
+          <text x="536" y="970" font-size="17" font-weight="600">Caldera</text>
+          <text class="sub" x="536" y="990" font-size="10.5">ATT&amp;CK emulation</text>
+          <rect x="662" y="928" width="44" height="15" rx="6" fill="#302a24" stroke="#f0a93c" stroke-width="1"/>
+          <text x="671" y="939" font-family="JetBrains Mono, monospace" font-size="8.5" letter-spacing="1.2" fill="#ffce7a">SOON</text>
+        </g>
+        <g class="node" data-node="atomic">
+          <rect x="738" y="936" width="190" height="66" rx="11" fill="var(--panel-2)" stroke="var(--redteam)" stroke-width="1.4" stroke-dasharray="6 4"/>
+          <text x="756" y="968" font-size="15" font-weight="600">Atomic Red Team</text>
+          <text class="sub" x="756" y="988" font-size="10.5">atomic ATT&amp;CK tests</text>
+          <rect x="882" y="928" width="44" height="15" rx="6" fill="#302a24" stroke="#f0a93c" stroke-width="1"/>
+          <text x="891" y="939" font-family="JetBrains Mono, monospace" font-size="8.5" letter-spacing="1.2" fill="#ffce7a">SOON</text>
+        </g>
+
+        <!-- DETECTION-AS-CODE -->
+        <g class="node" data-node="github">
+          <rect x="80" y="1100" width="200" height="66" rx="11" fill="var(--panel-2)" stroke="var(--code)" stroke-width="1.5"/>
+          <text x="98" y="1134" font-size="17" font-weight="600">GitHub</text>
+          <text class="sub" x="98" y="1154" font-size="10.5">IaC · detection-as-code</text>
+        </g>
+              <!-- VECTOR: telemetry pipeline into Sumo -->
+        <path class="flow" data-link="vector,sumo" d="M255,273 L300,273" fill="none" stroke="var(--code)" stroke-width="2.2" stroke-dasharray="6 4" marker-end="url(#aCod)"/>
+        <text x="260" y="265" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--code)" letter-spacing="1">filter · reduce</text>
+        <!-- n8n response: isolate host in CrowdStrike, create/update case -->
+        <path class="flow" data-link="n8n,cs" d="M650,558 C740,545 740,360 715,306" fill="none" stroke="var(--enrich)" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#aEnr)"/>
+        <text x="672" y="418" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--enrich)" letter-spacing="1" text-anchor="middle">isolate</text>
+        <!-- Sumo Logic → OpenSTI: correlated events / anomalies as intel -->
+        <path class="flow" data-link="sumo,tip" d="M300,273 C260,273 230,530 230,580" fill="none" stroke="var(--share)" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#aShr)"/>
+        <text x="255" y="420" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--share)" letter-spacing="1" text-anchor="middle">SIEM intel</text>
+        <!-- COMMERCIAL / GOV THREAT INTEL FEEDS -->
+        <g class="node" data-node="intelfeeds">
+          <rect x="80" y="888" width="185" height="72" rx="11" fill="var(--panel)" stroke="var(--intel)" stroke-width="1.4"/>
+          <text x="100" y="920" font-size="14" font-weight="600">Threat Intel Feeds</text>
+          <text x="100" y="938" font-size="10" fill="#7384a0">commercial · gov · ISAC</text>
+          <text x="100" y="952" font-size="10" fill="#7384a0">Recorded Future · CISA</text>
+        </g>
+        <!-- Threat Intel Feeds → OpenSTI -->
+        <path class="flow" data-link="intelfeeds,tip" d="M265,905 C300,860 290,720 275,696" fill="none" stroke="var(--intel)" stroke-width="2.2" marker-end="url(#aInt)"/>
+        <!-- Hearst SOC reads runbooks from Confluence -->
+        <path class="flow" data-link="hearst,conf" d="M760,496 C700,540 700,680 760,730" fill="none" stroke="var(--plumb)" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#aPlm)"/>
+        <text x="690" y="640" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--plumb)" letter-spacing="1" text-anchor="middle">runbooks</text>
+        <!-- MSSP Ticketing today → being replaced by Case Management -->
+        <g class="node" data-node="msspticket">
+          <rect x="960" y="510" width="170" height="58" rx="10" fill="var(--panel)" stroke="var(--alert)" stroke-width="1" stroke-dasharray="4 3" opacity="0.7"/>
+          <text x="978" y="537" font-size="13" font-weight="600" fill="#94a2bb">MSSP Ticketing</text>
+          <text x="978" y="554" font-size="10" fill="#62708a">current · external</text>
+        </g>
+        <!-- migration arrow -->
+        <path class="flow" data-link="msspticket,case" d="M990,568 C960,576 940,580 920,584" fill="none" stroke="var(--alert)" stroke-width="1.8" stroke-dasharray="4 3" marker-end="url(#aAlt)" opacity="0.6"/>
+        <text x="1000" y="555" font-family="JetBrains Mono,monospace" font-size="8.5" fill="var(--alert)" letter-spacing="1" text-anchor="middle" opacity="0.75">replaces ↓</text>
+        <!-- CrowdStrike flow labels -->
+        <text x="560" y="342" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--alert)" letter-spacing="1" text-anchor="middle">alerts</text>
+        <text x="695" y="540" font-family="JetBrains Mono,monospace" font-size="9" fill="var(--share)" letter-spacing="1" text-anchor="middle">threat intel</text>
+        <!-- Phase annotations on coming-soon nodes -->
+        <text x="362" y="514" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#d9a441" letter-spacing="1.5" text-anchor="middle">P1</text>
+        <text x="840" y="574" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#d9a441" letter-spacing="1.5" text-anchor="middle">P1</text>
+        <text x="200" y="574" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#9b8cf0" letter-spacing="1.5" text-anchor="middle">P2</text>
+        <text x="155" y="748" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#9b8cf0" letter-spacing="1.5" text-anchor="middle">P2</text>
+        <text x="363" y="748" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#9b8cf0" letter-spacing="1.5" text-anchor="middle">P2</text>
+        <text x="595" y="778" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#e06aa8" letter-spacing="1.5" text-anchor="middle">P3</text>
+        <text x="509" y="930" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#e06aa8" letter-spacing="1.5" text-anchor="middle">P3</text>
+        <text x="729" y="930" font-family="JetBrains Mono,monospace" font-size="8.5" fill="#e06aa8" letter-spacing="1.5" text-anchor="middle">P3</text>
+        <!-- phase legend -->
+        <rect x="800" y="1170" width="390" height="46" rx="9" fill="rgba(20,29,47,.9)" stroke="var(--line-soft)" stroke-width="1"/>
+        <text x="818" y="1191" font-family="JetBrains Mono,monospace" font-size="10" fill="#d9a441" letter-spacing="1">● P1</text>
+        <text x="852" y="1191" font-family="JetBrains Mono,monospace" font-size="10" fill="#94a2bb">Case Mgmt · n8n · Vector</text>
+        <text x="818" y="1207" font-family="JetBrains Mono,monospace" font-size="10" fill="#9b8cf0" letter-spacing="1">● P2</text>
+        <text x="852" y="1207" font-family="JetBrains Mono,monospace" font-size="10" fill="#94a2bb">OpenSTI · Anansi · MISP</text>
+        <text x="1000" y="1191" font-family="JetBrains Mono,monospace" font-size="10" fill="#e06aa8" letter-spacing="1">● P3</text>
+        <text x="1034" y="1191" font-family="JetBrains Mono,monospace" font-size="10" fill="#94a2bb">Caldera · Atomic · CS Feeds</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- LIFECYCLE -->
+<section>
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">The Intelligence Lifecycle</span>
+      <h2>Six stages, one continuous loop</h2>
+      <p>Order matters here — this is the path a single indicator travels from the outside world to a contained threat and back out as shared intel.</p>
+    </div>
+    <div class="loop">
+      <div class="step">
+        <div class="num">01 — COLLECT</div>
+        <h3>Gather raw signal</h3>
+        <p>MISP community events and sector feeds pull in raw indicators; Anansi pivots from them to map related attacker infrastructure.</p>
+        <div class="tools"><span class="chip">Anansi</span><span class="chip">MISP</span></div>
+      </div>
+      <div class="step">
+        <div class="num">02 — AGGREGATE &amp; SCORE</div>
+        <h3>Make sense of it</h3>
+        <p>The OpenSTI normalizes formats, removes duplicates, de-conflicts sources, and scores each indicator for confidence and relevance.</p>
+        <div class="tools"><span class="chip">OpenSTI</span></div>
+      </div>
+      <div class="step">
+        <div class="num">03 — OPERATIONALIZE</div>
+        <h3>Push to defenses</h3>
+        <p>High-confidence, in-scope IOCs are exported from OpenSTI into Sumo Logic and CrowdStrike as watchlists, rules, and blocks.</p>
+        <div class="tools"><span class="chip">OpenSTI</span><span class="chip">Sumo</span><span class="chip">CrowdStrike</span></div>
+      </div>
+      <div class="step">
+        <div class="num">04 — DETECT &amp; ESCALATE</div>
+        <h3>Triage the hit</h3>
+        <p>Sumo or CrowdStrike fires; Intezer auto-triages, the MSSP monitors 24/7, and only real escalations reach the Hearst SOC as a case.</p>
+        <div class="tools"><span class="chip">Sumo / CrowdStrike</span><span class="chip">Intezer</span><span class="chip">MSSP</span></div>
+      </div>
+      <div class="step">
+        <div class="num">05 — ENRICH &amp; INVESTIGATE</div>
+        <h3>Build the picture</h3>
+        <p>n8n auto-enriches from OpenSTI; the case shows actor, campaign, related IOCs. The analyst pivots, scopes, and confirms against runbooks in Confluence.</p>
+        <div class="tools"><span class="chip">Case Mgmt</span><span class="chip">OpenSTI</span><span class="chip">Confluence</span></div>
+      </div>
+      <div class="step">
+        <div class="num">06 — RESPOND &amp; SHARE</div>
+        <h3>Contain, then give back</h3>
+        <p>n8n triggers containment via CrowdStrike; confirmed observables go through OpenSTI into a MISP event shared with the community. The writeup lands in Confluence.</p>
+        <div class="tools"><span class="chip">n8n</span><span class="chip">CrowdStrike</span><span class="chip">MISP</span></div>
+      </div>
+    </div>
+    <div class="loopnote"><i>&#8635;</i> Stage 06 feeds stage 01 — every closed case makes the next detection sharper, and Caldera proves it still fires.</div>
+  </div>
+</section>
+
+<!-- SCENARIO -->
+<section>
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">A Day In The SOC</span>
+      <h2>Follow one alert through the stack</h2>
+      <p>A single endpoint starts beaconing to a suspicious domain. Here's how each tool — and each tier — carries it forward.</p>
+    </div>
+
+    <div class="stepper" id="stepper">
+      <button class="sbtn active" data-i="0"><b>1 · Detect</b><small>CrowdStrike fires</small></button>
+      <button class="sbtn" data-i="1"><b>2 · AI triage</b><small>Intezer</small></button>
+      <button class="sbtn" data-i="2"><b>3 · Escalate</b><small>MSSP → Hearst</small></button>
+      <button class="sbtn" data-i="3"><b>4 · Investigate</b><small>Hearst SOC</small></button>
+      <button class="sbtn" data-i="4"><b>5 · Share</b><small>Intel team</small></button>
+    </div>
+
+    <div class="scenebox" id="scenebox"></div>
+  </div>
+</section>
+
+<!-- TEAMS -->
+<section>
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">Who Does What</span>
+      <h2>How each team uses the stack</h2>
+      <p>Five functions, one shared toolset. Each team leans on a different slice of the platform, and the seams between them are where the work flows.</p>
+    </div>
+    <div class="teamgrid">
+      <div class="teamcard" style="--accent:var(--alert)">
+        <div class="lvl">Respond &amp; recover</div>
+        <h3>Incident Response</h3>
+        <ul><li>Owns the case lifecycle, triage to recovery</li><li>Runs response playbooks, isolates hosts</li><li>Documents every incident for the record</li></ul>
+        <div class="trow"><span class="chip">Case Mgmt</span><span class="chip">n8n</span><span class="chip">CrowdStrike</span><span class="chip">Confluence</span></div>
+      </div>
+      <div class="teamcard" style="--accent:var(--code)">
+        <div class="lvl">Build &amp; validate</div>
+        <h3>Detection Engineering</h3>
+        <ul><li>Writes and tunes detections as code</li><li>Ships rules to Sumo &amp; CrowdStrike via CI</li><li>Validates coverage with purple-team tests</li></ul>
+        <div class="trow"><span class="chip">GitHub</span><span class="chip">Sumo</span><span class="chip">Caldera</span><span class="chip">Atomic Red Team</span></div>
+      </div>
+      <div class="teamcard" style="--accent:var(--enrich)">
+        <div class="lvl">Proactive search</div>
+        <h3>Threat Hunting</h3>
+        <ul><li>Hypothesis-driven hunts across telemetry</li><li>Pivots indicators into infrastructure maps</li><li>Feeds new findings back to detection</li></ul>
+        <div class="trow"><span class="chip">Sumo</span><span class="chip">OpenSTI</span><span class="chip">Anansi</span><span class="chip">CrowdStrike</span></div>
+      </div>
+      <div class="teamcard" style="--accent:var(--intel)">
+        <div class="lvl">Know the adversary</div>
+        <h3>Threat Intelligence</h3>
+        <ul><li>Curates, scores, and de-conflicts intel</li><li>Manages community sharing</li><li>Tasks collection on emerging threats</li></ul>
+        <div class="trow"><span class="chip">OpenSTI</span><span class="chip">MISP</span><span class="chip">Anansi</span></div>
+      </div>
+      <div class="teamcard" style="--accent:var(--orch)">
+        <div class="lvl">Connect &amp; scale</div>
+        <h3>Automation</h3>
+        <ul><li>Builds the playbooks that wire tools together</li><li>Versions automation as code</li><li>Removes manual toil from every workflow</li></ul>
+        <div class="trow"><span class="chip">n8n</span><span class="chip">GitHub</span><span class="chip">all APIs</span></div>
+      </div>
+      <div class="teamcard" style="--accent:var(--code)">
+        <div class="lvl">Ops &amp; data flow</div>
+        <h3>SIEM Engineering</h3>
+        <ul><li>Manages Sumo Logic infrastructure &amp; configuration</li><li>Owns the Terraform/IaC that provisions Sumo</li><li>Ensures data pipeline health and telemetry flow</li></ul>
+        <div class="trow"><span class="chip">Sumo Logic</span><span class="chip">GitHub</span><span class="chip">Vector</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- GAPS -->
+<section>
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">Why It Matters</span>
+      <h2>The gaps the new tools close</h2>
+      <p>Each coming-soon platform exists to fix something the SOC can't do well today. Here's the before and after.</p>
+    </div>
+    <div class="gapgrid">
+      <div class="gapcard" style="border-left-color:var(--enrich)">
+        <div class="gh"><h3>OpenSTI</h3><span class="soon">Coming soon</span></div>
+        <div class="gaprow"><div class="gaplabel now">Gap today</div><div class="gaptext">Feeds are siloed, noisy, and unscored; analysts cross-reference by hand.</div></div>
+        <div class="gaprow"><div class="gaplabel fix">What it closes</div><div class="gaptext">One fused, scored intel picture that auto-enriches detection and cases.</div></div>
+      </div>
+      <div class="gapcard" style="border-left-color:var(--intel)">
+        <div class="gh"><h3>Anansi</h3><span class="soon">Coming soon</span></div>
+        <div class="gaprow"><div class="gaplabel now">Gap today</div><div class="gaptext">Pivoting from an indicator to related infrastructure is slow and manual, with no way to see how observables connect.</div></div>
+        <div class="gaprow"><div class="gaplabel fix">What it closes</div><div class="gaptext">A custom, lightweight Maltego for fast OSINT pivoting and relationship mapping — built in-house.</div></div>
+      </div>
+      <div class="gapcard" style="border-left-color:var(--share)">
+        <div class="gh"><h3>MISP</h3><span class="soon">Coming soon</span></div>
+        <div class="gaprow"><div class="gaplabel now">Gap today</div><div class="gaptext">Intel is consumed but never shared; no structured IOC exchange with peers.</div></div>
+        <div class="gaprow"><div class="gaplabel fix">What it closes</div><div class="gaptext">Two-way sharing with ISACs and partners — give and receive vetted intel.</div></div>
+      </div>
+      <div class="gapcard" style="border-left-color:var(--alert)">
+        <div class="gh"><h3>Case Management</h3><span class="soon">Coming soon</span></div>
+        <div class="gaprow"><div class="gaplabel now">Gap today</div><div class="gaptext">Case data lives in the MSSP's ticketing system — externally owned, with limited retention and real risk of losing history if we change providers.</div></div>
+        <div class="gaprow"><div class="gaplabel fix">What it closes</div><div class="gaptext">An in-house system of record we own, with auditable timelines and multi-year incident retention.</div></div>
+      </div>
+      <div class="gapcard" style="border-left-color:var(--orch)">
+        <div class="gh"><h3>n8n</h3><span class="soon">Coming soon</span></div>
+        <div class="gaprow"><div class="gaplabel now">Gap today</div><div class="gaptext">n8n is deployed but not operationalized — enrichment and response are still manual.</div></div>
+        <div class="gaprow"><div class="gaplabel fix">What it closes</div><div class="gaptext">Automated playbooks that wire detection, intel, and cases together and cut response time.</div></div>
+      </div>
+      <div class="gapcard" style="border-left-color:var(--purple)">
+        <div class="gh"><h3>Purple Team</h3><span class="soon">Coming soon</span></div>
+        <div class="gaprow"><div class="gaplabel now">Gap today</div><div class="gaptext">Detections are assumed to work; coverage gaps stay invisible until an incident. (Caldera + Atomic Red Team)</div></div>
+        <div class="gaprow"><div class="gaplabel fix">What it closes</div><div class="gaptext">Continuous ATT&amp;CK emulation that proves detections fire and pinpoints blind spots.</div></div>
+      </div>
+      <div class="gapcard" style="border-left-color:var(--plumb)">
+        <div class="gh"><h3>Vector</h3><span class="soon">Coming soon</span></div>
+        <div class="gaprow"><div class="gaplabel now">Gap today</div><div class="gaptext">All logs ship raw to Sumo — high ingest cost and low signal.</div></div>
+        <div class="gaprow"><div class="gaplabel fix">What it closes</div><div class="gaptext">A pipeline to filter, route, and reduce before ingest — controlling spend and noise.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- INTEGRATION -->
+<section>
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">The Seams</span>
+      <h2>Integration points that make it work</h2>
+      <p>These are the connections to build first — without them, you have a pile of dashboards instead of one system.</p>
+    </div>
+    <div class="intg">
+      <div class="irow"><div class="ports">Vector <span class="arrow">&rarr;</span> <b>Sumo Logic</b></div><div class="desc">Route, reduce, and enrich logs before they hit Sumo ingest — directly controls credit spend.</div></div>
+      <div class="irow"><div class="ports">Anansi <span class="arrow">&rarr;</span> <b>OpenSTI</b></div><div class="desc">Pivot results and mapped infrastructure pushed in as linked, scored indicators.</div></div>
+      <div class="irow"><div class="ports">MISP <span class="arrow">&#8644;</span> <b>OpenSTI</b></div><div class="desc">Two-way sync of events and attributes — community intel in, confirmed intel out.</div></div>
+      <div class="irow"><div class="ports">OpenSTI <span class="arrow">&rarr;</span> <b>Sumo / CrowdStrike</b></div><div class="desc">Curated IOCs exported as watchlists and blocks via STIX/TAXII or API.</div></div>
+      <div class="irow"><div class="ports">Sumo / CS <span class="arrow">&rarr;</span> <b>Intezer</b></div><div class="desc">Alerts forwarded to the AI SOC for automated triage and enrichment.</div></div>
+      <div class="irow"><div class="ports">Intezer <span class="arrow">&rarr;</span> <b>MSSP</b></div><div class="desc">Triaged, classified alerts handed to the MSSP for 24/7 monitoring.</div></div>
+      <div class="irow"><div class="ports">MSSP <span class="arrow">&rarr;</span> <b>Hearst SOC</b></div><div class="desc">Real escalations opened as cases for the internal team to work.</div></div>
+      <div class="irow"><div class="ports">n8n <span class="arrow">&#8644;</span> <b>OpenSTI · Case Mgmt</b></div><div class="desc">Playbooks pull OpenSTI enrichment and create / update cases automatically.</div></div>
+      <div class="irow"><div class="ports">Case Mgmt <span class="arrow">&#8644;</span> <b>Confluence</b></div><div class="desc">Runbooks referenced during triage; post-incident writeups stored back.</div></div>
+      <div class="irow"><div class="ports">Caldera <span class="arrow">&rarr;</span> <b>Sumo / CrowdStrike</b></div><div class="desc">Emulated ATT&amp;CK techniques validate detections fire and surface gaps.</div></div>
+      <div class="irow"><div class="ports">Atomic Red Team <span class="arrow">&rarr;</span> <b>Caldera</b></div><div class="desc">Per-technique tests drive emulation — together they form the purple-team loop.</div></div>
+      <div class="irow"><div class="ports">GitHub <span class="arrow">&rarr;</span> <b>Sumo Logic (Terraform)</b></div><div class="desc">Today: Terraform / IaC manages every Sumo instance from the repo.</div></div>
+      <div class="irow"><div class="ports">GitHub <span class="arrow">&rarr;</span> <b>Detection stack (next)</b></div><div class="desc">Next phase: detection-as-code ships rules to Sumo &amp; CrowdStrike via CI.</div></div>
+      <div class="irow"><div class="ports">GitHub <span class="arrow">&rarr;</span> <b>Atomic Red Team</b></div><div class="desc">Atomic tests and playbooks live in the repo as the source of truth.</div></div>
+      <div class="irow"><div class="ports">MSSP ticketing <span class="arrow">&rarr;</span> <b>Case Management</b></div><div class="desc">Migrate case data in-house — own it and retain incidents for years.</div></div>
+    </div>
+  </div>
+</section>
+
+
+<section id="ops-model">
+  <div class="wrap">
+    <div class="badge">OPERATIONAL MODEL</div>
+    <h2>How the SecOps team operates in the future state</h2>
+    <p>Six teams, five workflows, one integrated operating model. Each lane shows what that team owns — from the first alert to a closed case, a new detection rule, or a fresh intel report. The horizontal flows show where handoffs happen and where automation absorbs the routine work so analysts focus on what matters.</p>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         SECTION 1 — TEAM STRUCTURE & OWNERSHIP
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="ops-block">
+      <div class="ops-block-label">TEAM STRUCTURE &amp; OWNERSHIP</div>
+      <div class="ops-team-grid">
+
+        <div class="ops-team-card" style="border-color:var(--plumb)">
+          <div class="ops-team-header" style="background:var(--plumb)20">
+            <span class="ops-team-icon">🛡️</span>
+            <div>
+              <div class="ops-team-name">MSSP</div>
+              <div class="ops-team-sub">24/7 Tier 1 · managed</div>
+            </div>
+          </div>
+          <ul class="ops-owns">
+            <li>First-touch alert triage</li>
+            <li>Noise filtering &amp; false-positive closure</li>
+            <li>Escalation to Hearst SOC</li>
+            <li>Shift handoff notes</li>
+          </ul>
+          <div class="ops-tools-row"><span class="ops-tool">Sumo Logic</span><span class="ops-tool">CrowdStrike</span><span class="ops-tool">MSSP Ticketing</span></div>
+        </div>
+
+        <div class="ops-team-card" style="border-color:var(--hearst)">
+          <div class="ops-team-header" style="background:var(--hearst)20">
+            <span class="ops-team-icon">🔎</span>
+            <div>
+              <div class="ops-team-name">Hearst SOC</div>
+              <div class="ops-team-sub">Escalation · internal</div>
+            </div>
+          </div>
+          <ul class="ops-owns">
+            <li>Escalated incident investigation</li>
+            <li>Case ownership &amp; containment decisions</li>
+            <li>Analyst-led threat hunting</li>
+            <li>Runbook execution &amp; update</li>
+          </ul>
+          <div class="ops-tools-row"><span class="ops-tool">Case Mgmt</span><span class="ops-tool">Intezer</span><span class="ops-tool">Confluence</span></div>
+        </div>
+
+        <div class="ops-team-card" style="border-color:var(--code)">
+          <div class="ops-team-header" style="background:var(--code)20">
+            <span class="ops-team-icon">⚙️</span>
+            <div>
+              <div class="ops-team-name">Detection Engineering</div>
+              <div class="ops-team-sub">Rules · pipelines · quality</div>
+            </div>
+          </div>
+          <ul class="ops-owns">
+            <li>Detection rule authoring &amp; tuning</li>
+            <li>SIEM content management via GitHub</li>
+            <li>Purple team test coverage</li>
+            <li>Alert fidelity &amp; false-positive review</li>
+          </ul>
+          <div class="ops-tools-row"><span class="ops-tool">Sumo Logic</span><span class="ops-tool">GitHub</span><span class="ops-tool">Caldera</span><span class="ops-tool">Atomic</span></div>
+        </div>
+
+        <div class="ops-team-card" style="border-color:var(--enrich)">
+          <div class="ops-team-header" style="background:var(--enrich)20">
+            <span class="ops-team-icon">🌐</span>
+            <div>
+              <div class="ops-team-name">Threat Intelligence</div>
+              <div class="ops-team-sub">Feeds · fusion · context</div>
+            </div>
+          </div>
+          <ul class="ops-owns">
+            <li>Intel feed curation &amp; scoring</li>
+            <li>IOC operationalization via OpenSTI</li>
+            <li>Threat actor profiling &amp; TTP mapping</li>
+            <li>Intel sharing via MISP</li>
+          </ul>
+          <div class="ops-tools-row"><span class="ops-tool">OpenSTI</span><span class="ops-tool">MISP</span><span class="ops-tool">Anansi</span><span class="ops-tool">CS Feeds</span></div>
+        </div>
+
+        <div class="ops-team-card" style="border-color:var(--intel)">
+          <div class="ops-team-header" style="background:var(--intel)20">
+            <span class="ops-team-icon">🔭</span>
+            <div>
+              <div class="ops-team-name">Threat Hunting</div>
+              <div class="ops-team-sub">Proactive · hypothesis-driven</div>
+            </div>
+          </div>
+          <ul class="ops-owns">
+            <li>Hypothesis creation from intel &amp; anomalies</li>
+            <li>SIEM &amp; EDR manual query campaigns</li>
+            <li>Hunt findings → detection rules</li>
+            <li>Emerging TTP coverage gap identification</li>
+          </ul>
+          <div class="ops-tools-row"><span class="ops-tool">Sumo Logic</span><span class="ops-tool">CrowdStrike</span><span class="ops-tool">OpenSTI</span></div>
+        </div>
+
+        <div class="ops-team-card" style="border-color:var(--orch)">
+          <div class="ops-team-header" style="background:var(--orch)20">
+            <span class="ops-team-icon">🤖</span>
+            <div>
+              <div class="ops-team-name">Automation</div>
+              <div class="ops-team-sub">n8n · playbooks · response</div>
+            </div>
+          </div>
+          <ul class="ops-owns">
+            <li>Playbook authoring &amp; maintenance</li>
+            <li>Auto-enrichment &amp; triage pipelines</li>
+            <li>Response action execution (isolate, block)</li>
+            <li>Integration health &amp; connector ownership</li>
+          </ul>
+          <div class="ops-tools-row"><span class="ops-tool">n8n</span><span class="ops-tool">CrowdStrike API</span><span class="ops-tool">Case Mgmt</span></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         SECTION 2 — ALERT TRIAGE & ESCALATION SWIMLANE
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="ops-block">
+      <div class="ops-block-label">ALERT TRIAGE &amp; ESCALATION FLOW</div>
+      <p class="ops-block-desc">Every alert starts at the MSSP. Automation handles enrichment. Only confirmed, high-confidence events reach the Hearst SOC for investigation.</p>
+      <div class="swimlane-wrap">
+        <svg class="swimlane" viewBox="0 0 1100 420" role="img" aria-label="Alert triage and escalation swimlane">
+          <defs>
+            <marker id="sw-arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#94a2bb"/></marker>
+            <marker id="sw-arr-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#ef5b5b"/></marker>
+            <marker id="sw-arr-grn" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#5fd486"/></marker>
+            <marker id="sw-arr-teal" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#33d3c1"/></marker>
+            <marker id="sw-arr-gold" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#d9a441"/></marker>
+          </defs>
+
+          <!-- Lane backgrounds -->
+          <rect x="0" y="0" width="1100" height="70" fill="#141d2f" rx="0"/>
+          <rect x="0" y="70" width="1100" height="70" fill="#111826" rx="0"/>
+          <rect x="0" y="140" width="1100" height="70" fill="#141d2f" rx="0"/>
+          <rect x="0" y="210" width="1100" height="70" fill="#111826" rx="0"/>
+          <rect x="0" y="280" width="1100" height="70" fill="#141d2f" rx="0"/>
+          <rect x="0" y="350" width="1100" height="70" fill="#111826" rx="0"/>
+
+          <!-- Lane labels -->
+          <rect x="0" y="0" width="140" height="420" fill="#0c1220"/>
+          <line x1="140" y1="0" x2="140" y2="420" stroke="#26344c" stroke-width="1"/>
+          <text x="70" y="40" text-anchor="middle" font-size="11" font-weight="600" fill="#7384a0">SIEM/EDR</text>
+          <text x="70" y="105" text-anchor="middle" font-size="11" font-weight="600" fill="#7384a0">Automation</text>
+          <text x="70" y="175" text-anchor="middle" font-size="11" font-weight="600" fill="#7384a0">Intezer</text>
+          <text x="70" y="245" text-anchor="middle" font-size="11" font-weight="600" fill="#7384a0">MSSP</text>
+          <text x="70" y="315" text-anchor="middle" font-size="11" font-weight="600" fill="#d9a441">Hearst SOC</text>
+          <text x="70" y="385" text-anchor="middle" font-size="11" font-weight="600" fill="#33d3c1">Case Mgmt</text>
+
+          <!-- Step boxes - Row 1: SIEM/EDR -->
+          <rect x="160" y="12" width="130" height="44" rx="8" fill="#19243a" stroke="#ef5b5b" stroke-width="1.4"/>
+          <text x="225" y="33" text-anchor="middle" font-size="12" font-weight="700" fill="#ef5b5b">Alert Fires</text>
+          <text x="225" y="49" text-anchor="middle" font-size="10" fill="#94a2bb">Sumo / CrowdStrike</text>
+
+          <!-- Step boxes - Row 2: Automation -->
+          <rect x="330" y="82" width="130" height="44" rx="8" fill="#19243a" stroke="#9b8cf0" stroke-width="1.4"/>
+          <text x="395" y="103" text-anchor="middle" font-size="12" font-weight="700" fill="#9b8cf0">Auto-Enrich</text>
+          <text x="395" y="119" text-anchor="middle" font-size="10" fill="#94a2bb">n8n pulls context</text>
+
+          <!-- Step boxes - Row 3: Intezer -->
+          <rect x="500" y="152" width="130" height="44" rx="8" fill="#19243a" stroke="#5ad1ff" stroke-width="1.4"/>
+          <text x="565" y="173" text-anchor="middle" font-size="12" font-weight="700" fill="#5ad1ff">AI Triage</text>
+          <text x="565" y="189" text-anchor="middle" font-size="10" fill="#94a2bb">Intezer scores alert</text>
+
+          <!-- Decision: FP or real -->
+          <rect x="670" y="152" width="110" height="44" rx="8" fill="#19243a" stroke="#7384a0" stroke-width="1.2" stroke-dasharray="5 3"/>
+          <text x="725" y="173" text-anchor="middle" font-size="11" font-weight="600" fill="#7384a0">False Positive?</text>
+          <text x="725" y="189" text-anchor="middle" font-size="10" fill="#62708a">auto-close if yes</text>
+
+          <!-- FP closed path -->
+          <path d="M780,174 C860,174 880,140 900,105" fill="none" stroke="#5fd486" stroke-width="1.6" stroke-dasharray="5 3" marker-end="url(#sw-arr-grn)"/>
+          <text x="860" y="148" font-size="9" fill="#5fd486" text-anchor="middle">closed</text>
+          <!-- auto-close box in automation lane -->
+          <rect x="870" y="82" width="110" height="44" rx="8" fill="#141d2f" stroke="#5fd486" stroke-width="1" stroke-dasharray="5 3"/>
+          <text x="925" y="103" text-anchor="middle" font-size="11" fill="#5fd486">Auto-Close</text>
+          <text x="925" y="119" text-anchor="middle" font-size="9" fill="#62708a">logged + ticketed</text>
+
+          <!-- Escalate to MSSP -->
+          <path d="M725,196 L725,222" fill="none" stroke="#ef5b5b" stroke-width="2" marker-end="url(#sw-arr-red)"/>
+          <text x="740" y="215" font-size="9" fill="#ef5b5b">escalate</text>
+
+          <!-- Step boxes - Row 4: MSSP -->
+          <rect x="660" y="222" width="130" height="44" rx="8" fill="#19243a" stroke="#7384a0" stroke-width="1.4"/>
+          <text x="725" y="243" text-anchor="middle" font-size="12" font-weight="700" fill="#e9eef7">MSSP Reviews</text>
+          <text x="725" y="259" text-anchor="middle" font-size="10" fill="#94a2bb">validate · triage · note</text>
+
+          <!-- MSSP closes or escalates -->
+          <path d="M660,244 C580,244 560,210 540,196" fill="none" stroke="#5fd486" stroke-width="1.6" stroke-dasharray="5 3" marker-end="url(#sw-arr-grn)"/>
+          <text x="590" y="230" font-size="9" fill="#5fd486" text-anchor="middle">FP closed</text>
+
+          <path d="M725,266 L725,292" fill="none" stroke="#ef5b5b" stroke-width="2.2" marker-end="url(#sw-arr-red)"/>
+          <text x="742" y="285" font-size="9" fill="#ef5b5b">confirmed</text>
+
+          <!-- Step boxes - Row 5: Hearst SOC -->
+          <rect x="660" y="292" width="130" height="44" rx="8" fill="#19243a" stroke="#d9a441" stroke-width="1.6"/>
+          <text x="725" y="313" text-anchor="middle" font-size="12" font-weight="700" fill="#d9a441">Hearst Investigates</text>
+          <text x="725" y="329" text-anchor="middle" font-size="10" fill="#94a2bb">deep dive · IOC pivot</text>
+
+          <!-- Hearst → Case -->
+          <path d="M725,336 L725,362" fill="none" stroke="#33d3c1" stroke-width="2" marker-end="url(#sw-arr-teal)"/>
+
+          <!-- Step boxes - Row 6: Case Mgmt -->
+          <rect x="660" y="362" width="130" height="44" rx="8" fill="#19243a" stroke="#33d3c1" stroke-width="1.4"/>
+          <text x="725" y="383" text-anchor="middle" font-size="12" font-weight="700" fill="#33d3c1">Case Opened</text>
+          <text x="725" y="399" text-anchor="middle" font-size="10" fill="#94a2bb">own · track · close</text>
+
+          <!-- Flow arrows connecting early steps -->
+          <path d="M225,56 C225,105 330,105 330,105" fill="none" stroke="#94a2bb" stroke-width="1.6" marker-end="url(#sw-arr)"/>
+          <path d="M460,105 C500,105 500,152 500,170" fill="none" stroke="#94a2bb" stroke-width="1.6" marker-end="url(#sw-arr)"/>
+          <path d="M630,174 L670,174" fill="none" stroke="#94a2bb" stroke-width="1.6" marker-end="url(#sw-arr)"/>
+
+          <!-- n8n also auto-creates MSSP ticket -->
+          <rect x="330" y="222" width="130" height="44" rx="8" fill="#19243a" stroke="#9b8cf0" stroke-width="1.2" stroke-dasharray="5 3"/>
+          <text x="395" y="243" text-anchor="middle" font-size="11" font-weight="600" fill="#9b8cf0">Auto-Ticket</text>
+          <text x="395" y="259" text-anchor="middle" font-size="9" fill="#94a2bb">MSSP ticket created</text>
+          <path d="M395,126 L395,222" fill="none" stroke="#9b8cf0" stroke-width="1.4" stroke-dasharray="5 3" marker-end="url(#sw-arr)"/>
+          <path d="M460,244 L660,244" fill="none" stroke="#9b8cf0" stroke-width="1.4" stroke-dasharray="5 3" marker-end="url(#sw-arr)"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         SECTION 3 — DETECTION ENGINEERING LIFECYCLE
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="ops-block">
+      <div class="ops-block-label">DETECTION ENGINEERING LIFECYCLE</div>
+      <p class="ops-block-desc">Detection rules aren't written once and forgotten. Every rule moves through a defined lifecycle — from hypothesis to production to validated coverage.</p>
+      <div class="ops-lifecycle-wrap">
+        <div class="ops-lc-step" style="border-color:var(--intel)">
+          <div class="ops-lc-num" style="background:var(--intel)">1</div>
+          <div class="ops-lc-title">Hypothesis</div>
+          <div class="ops-lc-body">TI team or hunt surfaces a gap. New TTP from OpenSTI, CISA advisory, or hunt finding triggers a detection request.</div>
+          <div class="ops-lc-who">Threat Intel · Hunting</div>
+        </div>
+        <div class="ops-lc-arrow">→</div>
+        <div class="ops-lc-step" style="border-color:var(--code)">
+          <div class="ops-lc-num" style="background:var(--code)">2</div>
+          <div class="ops-lc-title">Author &amp; Review</div>
+          <div class="ops-lc-body">Detection engineer writes rule in Sumo Logic. Peer review via GitHub PR. Logic validated against historical data.</div>
+          <div class="ops-lc-who">Detection Engineering</div>
+        </div>
+        <div class="ops-lc-arrow">→</div>
+        <div class="ops-lc-step" style="border-color:var(--purple)">
+          <div class="ops-lc-num" style="background:var(--purple)">3</div>
+          <div class="ops-lc-title">Purple Team Test</div>
+          <div class="ops-lc-body">Caldera or Atomic Red Team emulates the TTP in a safe environment. Rule must fire. Tune until it does.</div>
+          <div class="ops-lc-who">Detection Eng · Hearst SOC</div>
+        </div>
+        <div class="ops-lc-arrow">→</div>
+        <div class="ops-lc-step" style="border-color:var(--share)">
+          <div class="ops-lc-num" style="background:var(--share)">4</div>
+          <div class="ops-lc-title">Deploy to Prod</div>
+          <div class="ops-lc-body">Merged to main in GitHub. Terraform applies to Sumo Logic. Rule is live and alerting in production.</div>
+          <div class="ops-lc-who">Detection Engineering</div>
+        </div>
+        <div class="ops-lc-arrow">→</div>
+        <div class="ops-lc-step" style="border-color:var(--enrich)">
+          <div class="ops-lc-num" style="background:var(--enrich)">5</div>
+          <div class="ops-lc-title">Monitor &amp; Tune</div>
+          <div class="ops-lc-body">MSSP flags noise. Detection Eng reviews FP rate weekly. Alert fidelity score tracked in case management.</div>
+          <div class="ops-lc-who">Detection Eng · MSSP</div>
+        </div>
+        <div class="ops-lc-arrow">↺</div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         SECTION 4 — ANALYST DAILY WORKFLOW / SHIFT HANDOFF
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="ops-block">
+      <div class="ops-block-label">ANALYST DAILY WORKFLOW &amp; SHIFT HANDOFF</div>
+      <p class="ops-block-desc">Structure prevents chaos. Each shift follows a defined rhythm — open, work, hand off — so no alert is dropped and no context is lost.</p>
+      <div class="ops-shift-grid">
+
+        <div class="ops-shift-col">
+          <div class="ops-shift-header" style="color:var(--plumb)">🌅 MSSP — Shift Start</div>
+          <div class="ops-shift-item">Review open tickets from prior shift</div>
+          <div class="ops-shift-item">Check Sumo Logic alert queue</div>
+          <div class="ops-shift-item">Review any Intezer auto-triage results</div>
+          <div class="ops-shift-item">Acknowledge and begin working priority alerts</div>
+        </div>
+
+        <div class="ops-shift-col">
+          <div class="ops-shift-header" style="color:var(--plumb)">⚙️ MSSP — During Shift</div>
+          <div class="ops-shift-item">Triage alerts: close FPs, escalate confirmed threats</div>
+          <div class="ops-shift-item">n8n auto-enriches escalations with IOC context</div>
+          <div class="ops-shift-item">Document findings in MSSP ticket</div>
+          <div class="ops-shift-item">Escalate P1/P2 to Hearst SOC immediately</div>
+        </div>
+
+        <div class="ops-shift-col">
+          <div class="ops-shift-header" style="color:var(--plumb)">🌙 MSSP — Shift Handoff</div>
+          <div class="ops-shift-item">Update all open ticket statuses</div>
+          <div class="ops-shift-item">Write shift summary note in Case Management</div>
+          <div class="ops-shift-item">Flag any pending decisions for Hearst SOC</div>
+          <div class="ops-shift-item">Confirm no unacknowledged critical alerts</div>
+        </div>
+
+        <div class="ops-shift-col" style="border-color:var(--hearst)20; background:var(--hearst)08">
+          <div class="ops-shift-header" style="color:var(--hearst)">🔎 Hearst SOC — Daily</div>
+          <div class="ops-shift-item">Review overnight MSSP escalations</div>
+          <div class="ops-shift-item">Progress open cases in Case Management</div>
+          <div class="ops-shift-item">Pull relevant runbooks from Confluence</div>
+          <div class="ops-shift-item">Coordinate containment decisions with MSSP</div>
+          <div class="ops-shift-item">Feed confirmed IOCs into OpenSTI</div>
+        </div>
+
+        <div class="ops-shift-col" style="border-color:var(--code)20; background:var(--code)08">
+          <div class="ops-shift-header" style="color:var(--code)">⚙️ Detection Eng — Weekly</div>
+          <div class="ops-shift-item">Review FP rate report from MSSP</div>
+          <div class="ops-shift-item">Tune noisy rules in Sumo Logic</div>
+          <div class="ops-shift-item">Process detection backlog from hunt &amp; TI</div>
+          <div class="ops-shift-item">Run Atomic Red Team regression tests</div>
+          <div class="ops-shift-item">Merge approved PRs to production</div>
+        </div>
+
+        <div class="ops-shift-col" style="border-color:var(--enrich)20; background:var(--enrich)08">
+          <div class="ops-shift-header" style="color:var(--enrich)">🌐 Threat Intel — Weekly</div>
+          <div class="ops-shift-item">Review new feeds in OpenSTI</div>
+          <div class="ops-shift-item">Score &amp; operationalize new IOCs</div>
+          <div class="ops-shift-item">Publish relevant intel to MISP</div>
+          <div class="ops-shift-item">Brief Hearst SOC on active threat actors</div>
+          <div class="ops-shift-item">Submit detection requests for new TTPs</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         SECTION 5 — INCIDENT RESPONSE PLAYBOOK STEPS
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="ops-block">
+      <div class="ops-block-label">INCIDENT RESPONSE PLAYBOOK</div>
+      <p class="ops-block-desc">When a confirmed incident is declared, the full team activates on a defined playbook. Automation handles the mechanical steps. Humans own the decisions.</p>
+      <div class="ops-ir-swimlane">
+
+        <div class="ops-ir-phase" style="border-color:var(--alert)">
+          <div class="ops-ir-phase-label" style="background:var(--alert)">DETECT</div>
+          <div class="ops-ir-phase-body">
+            <div class="ops-ir-actor mssp">MSSP</div>
+            <div class="ops-ir-steps">
+              <div class="ops-ir-step">Alert fires in Sumo / CrowdStrike</div>
+              <div class="ops-ir-step">Intezer scores — high confidence</div>
+              <div class="ops-ir-step">MSSP validates &amp; declares P1</div>
+              <div class="ops-ir-step auto">n8n auto-notifies Hearst SOC</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ops-ir-arrow-h">▶</div>
+
+        <div class="ops-ir-phase" style="border-color:var(--intel)">
+          <div class="ops-ir-phase-label" style="background:var(--intel)">ANALYSE</div>
+          <div class="ops-ir-phase-body">
+            <div class="ops-ir-actor hearst">Hearst SOC</div>
+            <div class="ops-ir-steps">
+              <div class="ops-ir-step">Open case in Case Management</div>
+              <div class="ops-ir-step">Pull runbook from Confluence</div>
+              <div class="ops-ir-step">IOC pivot in Anansi &amp; OpenSTI</div>
+              <div class="ops-ir-step auto">n8n enriches with threat context</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ops-ir-arrow-h">▶</div>
+
+        <div class="ops-ir-phase" style="border-color:var(--alert)">
+          <div class="ops-ir-phase-label" style="background:var(--alert)">CONTAIN</div>
+          <div class="ops-ir-phase-body">
+            <div class="ops-ir-actor hearst">Hearst SOC</div>
+            <div class="ops-ir-steps">
+              <div class="ops-ir-step auto">n8n isolates host in CrowdStrike</div>
+              <div class="ops-ir-step">Block IOCs at enforcement layer</div>
+              <div class="ops-ir-step">Scope lateral movement</div>
+              <div class="ops-ir-step">Notify stakeholders</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ops-ir-arrow-h">▶</div>
+
+        <div class="ops-ir-phase" style="border-color:var(--enrich)">
+          <div class="ops-ir-phase-label" style="background:var(--enrich)">ERADICATE</div>
+          <div class="ops-ir-phase-body">
+            <div class="ops-ir-actor hearst">Hearst SOC</div>
+            <div class="ops-ir-steps">
+              <div class="ops-ir-step">Remove malicious artefacts</div>
+              <div class="ops-ir-step">Validate clean state in CrowdStrike</div>
+              <div class="ops-ir-step">Re-enable affected systems</div>
+              <div class="ops-ir-step">Update case timeline</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ops-ir-arrow-h">▶</div>
+
+        <div class="ops-ir-phase" style="border-color:var(--share)">
+          <div class="ops-ir-phase-label" style="background:var(--share)">LEARN</div>
+          <div class="ops-ir-phase-body">
+            <div class="ops-ir-actor ti">Threat Intel</div>
+            <div class="ops-ir-steps">
+              <div class="ops-ir-step">Write AAR in Confluence</div>
+              <div class="ops-ir-step">Feed new IOCs into OpenSTI &amp; MISP</div>
+              <div class="ops-ir-step">Submit detection gap to Eng backlog</div>
+              <div class="ops-ir-step">Close case in Case Management</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="ops-ir-legend">
+        <span class="ops-ir-leg-item"><span class="ops-ir-leg-dot auto-dot"></span>Automated step (n8n)</span>
+        <span class="ops-ir-leg-item"><span class="ops-ir-leg-dot mssp-dot"></span>MSSP owned</span>
+        <span class="ops-ir-leg-item"><span class="ops-ir-leg-dot hearst-dot"></span>Hearst SOC owned</span>
+        <span class="ops-ir-leg-item"><span class="ops-ir-leg-dot ti-dot"></span>Threat Intel owned</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">SOC tool design · high-level reference · intelligence-driven operations · Intezer · OpenSTI · Anansi · MISP · Case Mgmt · n8n · Caldera · Atomic Red Team · GitHub · Confluence · Sumo Logic · Vector · CrowdStrike</div>
+</footer>
+
+<script>
+  (function(){
+    document.querySelectorAll('.flowmap').forEach(svg=>{
+      const nodes = svg.querySelectorAll('.node');
+      const flows = svg.querySelectorAll('.flow');
+      nodes.forEach(node=>{
+        const id = node.dataset.node;
+        node.addEventListener('mouseenter',()=>{
+          svg.classList.add('focus');
+          node.classList.add('lit');
+          flows.forEach(f=>{
+            const links = f.dataset.link.split(',');
+            if(links.includes(id)){
+              f.classList.add('lit');
+              links.forEach(l=>{const n=svg.querySelector('.node[data-node="'+l+'"]');if(n)n.classList.add('lit');});
+            }
+          });
+        });
+        node.addEventListener('mouseleave',()=>{
+          svg.classList.remove('focus');
+          nodes.forEach(n=>n.classList.remove('lit'));
+          flows.forEach(f=>f.classList.remove('lit'));
+        });
+      });
+    });
+  })();
+
+  (function(){
+    const scenes = [
+      {who:'CrowdStrike — EDR', title:'An endpoint starts beaconing',
+       body:'Falcon flags a workstation reaching out to a domain on a curated blocklist OpenSTI pushed down last week. The alert flows straight to Intezer, the AI SOC — no human has touched it yet.',
+       uses:['CrowdStrike','Intezer','Detection &rarr; AI']},
+      {who:'Intezer — AI SOC', title:'Auto-triaged in seconds',
+       body:'Intezer pulls the domain reputation, classifies the alert as malicious, and enriches it with related indicators. It discards the noise and forwards a clean, scored verdict — so no analyst starts from a blank page.',
+       uses:['Intezer','OpenSTI enrichment']},
+      {who:'MSSP → Hearst SOC', title:'Confirm, then escalate',
+       body:'The MSSP, watching 24/7, confirms the Intezer verdict. Because this one needs internal context and hands-on response, the MSSP escalates to the Hearst SOC, where it opens as a case ready to work.',
+       uses:['MSSP','Hearst SOC','Case Mgmt']},
+      {who:'Hearst SOC analyst', title:'Pivot to the full campaign',
+       body:'A Hearst analyst pivots in OpenSTI from the single domain to the wider campaign. An Anansi graph pivots off the C2 domain to two look-alike domains sharing a registrant, a Sumo search scopes affected hosts, then an n8n playbook isolates the host via CrowdStrike. Every action is logged in the case; the writeup lands in Confluence.',
+       uses:['OpenSTI','Anansi','n8n','Confluence']},
+      {who:'Threat intel team', title:'Feed the findings back out',
+       body:'Confirmed observables go from the case into OpenSTI, published as a sanitized MISP event and shared with sector partners. The same curated IOCs loop back into Sumo and CrowdStrike — and a Caldera test later confirms the detection still fires.',
+       uses:['OpenSTI','MISP','Caldera','Detection']}
+    ];
+    const box=document.getElementById('scenebox');
+    const btns=[...document.querySelectorAll('.sbtn')];
+    function render(i){
+      const s=scenes[i];
+      box.innerHTML='<div class="who">'+s.who+'</div><h3>'+s.title+'</h3><p>'+s.body+'</p>'+
+        '<div class="uses">'+s.uses.map(u=>'<span class="chip">'+u+'</span>').join('')+'</div>';
+      btns.forEach(b=>b.classList.toggle('active',+b.dataset.i===i));
+    }
+    btns.forEach(b=>b.addEventListener('click',()=>render(+b.dataset.i)));
+    render(0);
+  })();
+</script>
+</body>
+</html>

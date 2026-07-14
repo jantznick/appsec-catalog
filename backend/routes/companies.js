@@ -291,6 +291,7 @@ router.post('/export-portfolio', requireAuth, async (req, res) => {
             apiSecurityTool: true,
             apiSecurityIntegrationLevel: true,
             apiSecurityNA: true,
+            apiSchema: { select: { id: true } },
             appFirewallNA: true,
           },
         },
@@ -659,6 +660,7 @@ router.get('/:id/security-coverage', requireAuth, async (req, res) => {
         apiSecurityTool: true,
         apiSecurityIntegrationLevel: true,
         apiSecurityNA: true,
+        apiSchema: { select: { id: true } },
         lastSastScanDate: true,
         lastDastScanDate: true,
         lastScaScanDate: true,
@@ -1028,4 +1030,3 @@ router.delete('/:id/users/:userId', requireAuth, requireAdmin, async (req, res) 
 });
 
 export default router;
-

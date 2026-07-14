@@ -52,6 +52,13 @@ export function ApplicationDetail() {
   const [pendingVersionsCount, setPendingVersionsCount] = useState(0);
   const [policyCompliance, setPolicyCompliance] = useState(null);
   const [loadingCompliance, setLoadingCompliance] = useState(false);
+  const [apiSchema, setApiSchema] = useState(null);
+  const [apiSchemaContent, setApiSchemaContent] = useState('');
+  const [apiSchemaFilename, setApiSchemaFilename] = useState('openapi.yaml');
+  const [apiSchemaSelectedFile, setApiSchemaSelectedFile] = useState(null);
+  const [apiSchemaInputError, setApiSchemaInputError] = useState('');
+  const [savingApiSchema, setSavingApiSchema] = useState(false);
+  const [deletingApiSchema, setDeletingApiSchema] = useState(false);
 
   const [formData, setFormData] = useState({
     companyId: '',
@@ -420,6 +427,86 @@ export function ApplicationDetail() {
     }
   };
 
+  const formatBytes = (bytes) => {
+    if (!bytes && bytes !== 0) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const handleApiSchemaFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      setApiSchemaFilename(file.name);
+      setApiSchemaContent(text);
+      setApiSchemaSelectedFile({ name: file.name, size: file.size });
+      setApiSchemaInputError(text.trim() ? '' : 'The selected file is empty.');
+      setHasUnsavedChanges(true);
+    } catch (error) {
+      console.error(error);
+      setApiSchemaInputError('Failed to read schema file.');
+      toast.error('Failed to read schema file');
+    }
+  };
+
+  const handleSaveApiSchema = async () => {
+    setSavingApiSchema(true);
+    try {
+      const result = await api.saveApplicationApiSchema(id, {
+        filename: apiSchemaFilename,
+        content: apiSchemaContent,
+        contentType: apiSchemaFilename.toLowerCase().endsWith('.json')
+          ? 'application/json'
+          : 'application/yaml',
+      });
+      setApiSchema(result.schema);
+      setApiSchemaContent('');
+      setApiSchemaSelectedFile(null);
+      setApiSchemaInputError('');
+      setApiSchemaFilename('openapi.yaml');
+      toast.success('API schema saved');
+      await loadScore();
+    } catch (error) {
+      toast.error(error.message || 'Failed to save API schema');
+    } finally {
+      setSavingApiSchema(false);
+    }
+  };
+
+  const handleDownloadApiSchema = async () => {
+    try {
+      const { text, filename } = await api.downloadApplicationApiSchema(id);
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error(error.message || 'Failed to download API schema');
+    }
+  };
+
+  const handleDeleteApiSchema = async () => {
+    setDeletingApiSchema(true);
+    try {
+      await api.deleteApplicationApiSchema(id);
+      setApiSchema(null);
+      setApiSchemaContent('');
+      toast.success('API schema removed');
+      await loadScore();
+    } catch (error) {
+      toast.error(error.message || 'Failed to remove API schema');
+    } finally {
+      setDeletingApiSchema(false);
+    }
+  };
+
   const handleMarkReviewed = async () => {
     try {
       await api.markApplicationReviewed(id);
@@ -474,6 +561,7 @@ export function ApplicationDetail() {
       setLoading(true);
       const data = await api.getApplication(id);
       setApplication(data);
+      setApiSchema(data.apiSchema || null);
       
       // Set domains from application data
       setDomains(data.domains || []);
@@ -1736,26 +1824,78 @@ export function ApplicationDetail() {
                       <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
                         <h5 className="text-sm font-semibold text-orange-900 mb-3">API Security</h5>
                         <div className="space-y-3">
-                          <Input
-                            label="Tool"
-                            value={formData.apiSecurityTool}
-                            onChange={(e) => handleFieldChange('apiSecurityTool', e.target.value)}
-                          />
-                          <Select
-                            label="Integration Level"
-                            value={formData.apiSecurityIntegrationLevel}
-                            onChange={(e) => handleFieldChange('apiSecurityIntegrationLevel', e.target.value)}
-                            options={[
-                              { value: '', label: 'Select level' },
-                              ...integrationLevels,
-                            ]}
-                          />
                           <Checkbox
                             id="apiSecurityNA"
                             label="Not Applicable"
                             checked={formData.apiSecurityNA}
                             onChange={(e) => handleFieldChange('apiSecurityNA', e.target.checked)}
                           />
+                          {!formData.apiSecurityNA && (
+                            <>
+                              {apiSchema && (
+                                <div className="rounded-lg border border-orange-200 bg-white/70 p-3 text-sm text-orange-950">
+                                  <p className="font-medium">{apiSchema.filename || 'OpenAPI schema'}</p>
+                                  <p className="mt-1 text-xs text-orange-800">
+                                    {apiSchema.format?.toUpperCase()} · {formatBytes(apiSchema.sizeBytes)} · {apiSchema.sha256?.slice(0, 12)}
+                                  </p>
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    <Button variant="secondary" size="sm" onClick={handleDownloadApiSchema}>
+                                      Download
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={handleDeleteApiSchema}
+                                      loading={deletingApiSchema}
+                                    >
+                                      Remove
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                              <Input
+                                label="Upload schema"
+                                type="file"
+                                accept=".json,.yaml,.yml,application/json,text/yaml,application/yaml"
+                                onChange={handleApiSchemaFile}
+                              />
+                              {apiSchemaSelectedFile && (
+                                <div className={`rounded-md border px-3 py-2 text-xs ${
+                                  apiSchemaInputError
+                                    ? 'border-red-200 bg-red-50 text-red-700'
+                                    : 'border-orange-200 bg-white/70 text-orange-900'
+                                }`}>
+                                  {apiSchemaInputError || `Loaded ${apiSchemaSelectedFile.name} (${formatBytes(apiSchemaSelectedFile.size)})`}
+                                </div>
+                              )}
+                              <Textarea
+                                label="Paste schema"
+                                value={apiSchemaContent}
+                                onChange={(e) => {
+                                  setApiSchemaContent(e.target.value);
+                                  setApiSchemaSelectedFile(null);
+                                  setApiSchemaInputError('');
+                                  setApiSchemaFilename('openapi.yaml');
+                                }}
+                                placeholder="openapi: 3.0.0"
+                                className="font-mono text-xs min-h-[180px]"
+                              />
+                              <p className="text-xs text-orange-800">
+                                {apiSchemaSelectedFile
+                                  ? `Will save as ${apiSchemaFilename}.`
+                                  : 'Uploaded files keep their filename. Pasted schemas save as openapi.yaml.'}
+                              </p>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={handleSaveApiSchema}
+                                loading={savingApiSchema}
+                                disabled={!apiSchemaContent.trim()}
+                              >
+                                Save schema
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1891,19 +2031,27 @@ export function ApplicationDetail() {
                         </h5>
                         <div className="space-y-2">
                           <div>
-                            <span className="text-xs font-medium text-gray-600">Tool:</span>
-                            <p className="text-sm text-gray-900 mt-0.5">{formData.apiSecurityTool || <span className="text-gray-400 italic">Not set</span>}</p>
-                          </div>
-                          <div>
-                            <span className="text-xs font-medium text-gray-600">Integration Level:</span>
-                            <p className="text-sm text-gray-900 mt-0.5">
-                              {getIntegrationLevelName(formData.apiSecurityIntegrationLevel) || <span className="text-gray-400 italic">Not set</span>}
-                            </p>
-                          </div>
-                          <div>
                             <span className="text-xs font-medium text-gray-600">Not Applicable:</span>
                             <p className="text-sm text-gray-900 mt-0.5">{formData.apiSecurityNA ? 'Yes' : 'No'}</p>
                           </div>
+                          {!formData.apiSecurityNA && (
+                            <div>
+                              <span className="text-xs font-medium text-gray-600">Schema:</span>
+                              {apiSchema ? (
+                                <div className="mt-1">
+                                  <p className="text-sm text-gray-900">{apiSchema.filename || 'OpenAPI schema'}</p>
+                                  <p className="text-xs text-gray-600">
+                                    {apiSchema.format?.toUpperCase()} · {formatBytes(apiSchema.sizeBytes)} · {apiSchema.sha256?.slice(0, 12)}
+                                  </p>
+                                  <Button variant="secondary" size="sm" className="mt-2" onClick={handleDownloadApiSchema}>
+                                    Download schema
+                                  </Button>
+                                </div>
+                              ) : (
+                                <p className="text-sm text-gray-400 italic mt-0.5">Not set</p>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

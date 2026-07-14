@@ -584,28 +584,17 @@ export function ApplicationNew() {
                   checked={formData.appFirewallNA}
                   onChange={(e) => setFormData({ ...formData, appFirewallNA: e.target.checked })}
                 />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="API Security Tool"
-                    value={formData.apiSecurityTool}
-                    onChange={(e) => setFormData({ ...formData, apiSecurityTool: e.target.value })}
-                  />
-                  <Select
-                    label="API Security Integration Level"
-                    value={formData.apiSecurityIntegrationLevel}
-                    onChange={(e) => setFormData({ ...formData, apiSecurityIntegrationLevel: e.target.value })}
-                    options={[
-                      { value: '', label: 'Select level' },
-                      ...integrationLevels,
-                    ]}
-                  />
-                </div>
                 <Checkbox
                   id="apiSecurityNA"
                   label="API Security Not Applicable"
                   checked={formData.apiSecurityNA}
                   onChange={(e) => setFormData({ ...formData, apiSecurityNA: e.target.checked })}
                 />
+                {!formData.apiSecurityNA && (
+                  <p className="text-sm text-gray-600">
+                    OpenAPI/Swagger schemas can be added after the application is created.
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -631,4 +620,3 @@ export function ApplicationNew() {
     </div>
   );
 }
-

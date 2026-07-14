@@ -2,7 +2,6 @@ import {
   getIntegrationLevelsConfig,
   getRiskFactorsConfig,
   getToolQualityConfig,
-  TOOL_CATEGORIES,
 } from './scoringConfig.js';
 
 const MAX_SCORE_PER_CATEGORY = 50;
@@ -409,7 +408,7 @@ export function calculateToolUsageScore(app) {
   const riskFactors = getRiskFactorsConfig();
   const toolQuality = getToolQualityConfig();
 
-  const toolCategories = TOOL_CATEGORIES;
+  const toolCategories = ['sast', 'dast', 'sca', 'appFirewall', 'apiSecurity'];
   const MAX_TOOL_SCORE = 50;
   const BASE_POINTS_PER_CATEGORY = MAX_TOOL_SCORE / toolCategories.length; // 10
 
@@ -478,12 +477,18 @@ export function calculateToolUsageScore(app) {
     
     const categoryMaxPoints = BASE_POINTS_PER_CATEGORY * riskWeight;
 
-    // 2. Add to total possible points for normalization
+    // 2. N/A categories are excluded from the denominator so their points redistribute to applicable categories.
+    if (isSecurityToolCategoryNotApplicable(app, category)) {
+      continue;
+    }
+
+    // 3. Add applicable categories to total possible points for normalization
     totalPossiblePoints += categoryMaxPoints;
 
-    // 3. N/A: API Security flag, or any category with tool set to the plain text "NA" — full credit, no level/scan
-    if (isSecurityToolCategoryNotApplicable(app, category)) {
-      totalAchievedPoints += categoryMaxPoints;
+    if (category === 'apiSecurity') {
+      if (app.apiSchema) {
+        totalAchievedPoints += categoryMaxPoints;
+      }
       continue;
     }
 
