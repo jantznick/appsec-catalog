@@ -1,14 +1,32 @@
 {
-    "//": "Defines the quality weight multiplier for specific tools. A higher score rewards the use of better tools.",
-    "managed": {
-        "Snyk": 1.2,
-        "Tenable WAS": 1.1,
-        "Fastly NGWAF": 1.2,
-        "Traceable API Security": 1.1
+  "//": "Defines category-specific quality multipliers for tools. Weights are 0.0 to 1.0 and cap how much credit a tool can receive.",
+  "managed": {
+    "Snyk": {
+      "weight": 1,
+      "categories": ["sast", "sca"]
     },
-    "approvedUnmanaged": {
-        "Dependabot": 0.9,
-        "GitHub Advanced Security": 1.0
+    "Tenable WAS": {
+      "weight": 1,
+      "categories": ["dast"]
     },
-    "other": 0.8
+    "Fastly NGWAF": {
+      "weight": 1,
+      "categories": ["appFirewall"]
+    },
+    "Traceable API Security": {
+      "weight": 1,
+      "categories": ["apiSecurity"]
+    }
+  },
+  "approvedUnmanaged": {
+    "Dependabot": {
+      "weight": 0.9,
+      "categories": ["sca"]
+    },
+    "GitHub Advanced Security": {
+      "weight": 1,
+      "categories": ["sast", "sca"]
+    }
+  },
+  "other": 0.8
 }

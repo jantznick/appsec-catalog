@@ -184,6 +184,13 @@ export function Layout({ children }) {
                         >
                           Product updates
                         </DropdownItem>
+                        <DropdownItem
+                          onClick={() => {
+                            navigate('/settings/scoring');
+                          }}
+                        >
+                          Scoring settings
+                        </DropdownItem>
                       </>
                     ) : null}
                     <DropdownItem

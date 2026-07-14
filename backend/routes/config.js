@@ -2,7 +2,8 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAdmin, requireAuth } from '../middleware/auth.js';
+import { getToolQualityConfig, saveToolQualityConfig } from '../services/scoringConfig.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -27,6 +28,30 @@ router.get('/integration-levels', (req, res) => {
   } catch (error) {
     console.error('Error loading integration levels:', error);
     res.status(500).json({ error: 'Failed to load integration levels' });
+  }
+});
+
+// Admin: Get editable tool quality scoring config
+router.get('/tool-quality', requireAdmin, (req, res) => {
+  try {
+    res.json(getToolQualityConfig());
+  } catch (error) {
+    console.error('Error loading tool quality config:', error);
+    res.status(500).json({ error: 'Failed to load tool quality config' });
+  }
+});
+
+// Admin: Update editable tool quality scoring config
+router.put('/tool-quality', requireAdmin, async (req, res) => {
+  try {
+    const saved = await saveToolQualityConfig(req.body);
+    res.json(saved);
+  } catch (error) {
+    console.error('Error saving tool quality config:', error);
+    res.status(400).json({
+      error: 'Failed to save tool quality config',
+      message: error.message,
+    });
   }
 });
 
@@ -416,4 +441,3 @@ router.get('/available-fields', requireAuth, async (req, res) => {
 });
 
 export default router;
-

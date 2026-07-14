@@ -1,34 +1,28 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Load configs once at module level
-const integrationLevels = JSON.parse(
-  fs.readFileSync(
-    path.join(__dirname, '..', 'config', 'scoring', 'integrationLevels.json'),
-    'utf-8'
-  )
-);
-const toolQuality = JSON.parse(
-  fs.readFileSync(
-    path.join(__dirname, '..', 'config', 'scoring', 'toolQuality.json'),
-    'utf-8'
-  )
-);
-const riskFactors = JSON.parse(
-  fs.readFileSync(
-    path.join(__dirname, '..', 'config', 'scoring', 'riskFactors.json'),
-    'utf-8'
-  )
-);
+import {
+  getIntegrationLevelsConfig,
+  getRiskFactorsConfig,
+  getToolQualityConfig,
+  TOOL_CATEGORIES,
+} from './scoringConfig.js';
 
 const MAX_SCORE_PER_CATEGORY = 50;
 const SCAN_GRACE_PERIOD_DAYS = 1; // Grace period after deployment before scan is required
 const METADATA_REVIEW_MAX_DAYS = 180; // 6 months in days
 const METADATA_REVIEW_MAX_POINTS = 10; // Maximum points for metadata review
+
+function getToolQualityWeight(toolQuality, tool, category) {
+  const managedTool = toolQuality.managed[tool];
+  if (managedTool) {
+    return managedTool.categories.includes(category) ? managedTool.weight : 0;
+  }
+
+  const approvedTool = toolQuality.approvedUnmanaged[tool];
+  if (approvedTool) {
+    return approvedTool.categories.includes(category) ? approvedTool.weight : 0;
+  }
+
+  return toolQuality.other ?? 0.8;
+}
 
 /** The eight text metadata fields that contribute to knowledge-sharing completeness. */
 export const KNOWLEDGE_SCORING_FIELDS = [
@@ -411,7 +405,11 @@ export function calculateKnowledgeSharingScore(app) {
  * Based on 5 tool categories (SAST, DAST, SCA, app firewall, API security) with risk-adjusted scoring
  */
 export function calculateToolUsageScore(app) {
-  const toolCategories = ['sast', 'dast', 'sca', 'appFirewall', 'apiSecurity'];
+  const integrationLevels = getIntegrationLevelsConfig();
+  const riskFactors = getRiskFactorsConfig();
+  const toolQuality = getToolQualityConfig();
+
+  const toolCategories = TOOL_CATEGORIES;
   const MAX_TOOL_SCORE = 50;
   const BASE_POINTS_PER_CATEGORY = MAX_TOOL_SCORE / toolCategories.length; // 10
 
@@ -501,12 +499,7 @@ export function calculateToolUsageScore(app) {
     const integrationWeight = integrationLevels[levelKey]?.weight || 0;
 
     // Get tool quality weight
-    let toolWeight = toolQuality.other || 0.8;
-    if (toolQuality.managed[tool]) {
-      toolWeight = toolQuality.managed[tool];
-    } else if (toolQuality.approvedUnmanaged[tool]) {
-      toolWeight = toolQuality.approvedUnmanaged[tool];
-    }
+    const toolWeight = getToolQualityWeight(toolQuality, tool, category);
 
     // Check scan date freshness (SAST, DAST, SCA / SCA-via-SAST) relative to last deployment
     let scanDateWeight = 1.0; // Default: full points
@@ -565,7 +558,7 @@ export function calculateToolUsageScore(app) {
   // 5. Normalize the score to be out of 50
   const normalizedScore = (totalAchievedPoints / totalPossiblePoints) * MAX_TOOL_SCORE;
 
-  return Math.round(normalizedScore);
+  return Math.round(Math.min(normalizedScore, MAX_TOOL_SCORE));
 }
 
 /**
@@ -605,7 +598,7 @@ export function calculateApplicationScore(app) {
   // Apply weights and scale to maintain 100 point total
   const knowledgeScore = Math.round(rawKnowledgeScore * knowledgeWeight * 2);
   const toolScore = Math.round(rawToolScore * toolWeight * 2);
-  const totalScore = knowledgeScore + toolScore;
+  const totalScore = Math.min(knowledgeScore + toolScore, 100);
 
   return {
     knowledgeScore,
@@ -619,7 +612,3 @@ export function calculateApplicationScore(app) {
     rawToolScore,
   };
 }
-
-
-
-

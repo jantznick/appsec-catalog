@@ -38,6 +38,7 @@ import { SettingsDeploy } from './pages/SettingsDeploy.jsx';
 import { SettingsApiTokens } from './pages/SettingsApiTokens.jsx';
 import { ProductUpdatesAdmin } from './pages/ProductUpdatesAdmin.jsx';
 import { WhatsNew } from './pages/WhatsNew.jsx';
+import { ScoringSettings } from './pages/ScoringSettings.jsx';
 
 function CatchAllRedirect() {
   const { isAuthenticated, isVerified, loading } = useAuthStore();
@@ -172,6 +173,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <ProductUpdatesAdmin />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/scoring"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ScoringSettings />
               </Layout>
             </ProtectedRoute>
           }

@@ -343,6 +343,15 @@ export const api = {
   getIntegrationLevels: () =>
     apiRequest('/api/config/integration-levels'),
 
+  getToolQualityConfig: () =>
+    apiRequest('/api/config/tool-quality'),
+
+  updateToolQualityConfig: (data) =>
+    apiRequest('/api/config/tool-quality', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
   createCompany: (data) =>
     apiRequest('/api/companies', {
       method: 'POST',
