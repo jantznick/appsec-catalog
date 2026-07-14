@@ -3,25 +3,37 @@
   "managed": {
     "Snyk": {
       "weight": 1,
-      "categories": ["sast", "sca"]
+      "categories": [
+        "sast",
+        "sca"
+      ]
     },
     "Tenable WAS": {
       "weight": 1,
-      "categories": ["dast"]
+      "categories": [
+        "dast"
+      ]
     },
     "Fastly NGWAF": {
       "weight": 1,
-      "categories": ["appFirewall"]
+      "categories": [
+        "appFirewall"
+      ]
     }
   },
   "approvedUnmanaged": {
     "Dependabot": {
       "weight": 0.9,
-      "categories": ["sca"]
+      "categories": [
+        "sca"
+      ]
     },
     "GitHub Advanced Security": {
       "weight": 1,
-      "categories": ["sast", "sca"]
+      "categories": [
+        "sast",
+        "sca"
+      ]
     }
   },
   "other": 0.8

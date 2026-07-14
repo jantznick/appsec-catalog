@@ -1,11 +1,10 @@
 import crypto from 'crypto';
 import yaml from 'js-yaml';
+import { getSensitiveFieldsConfig } from './scoringConfig.js';
 
 export const API_SCHEMA_MAX_BYTES = 2 * 1024 * 1024;
 const CONTROL_CHAR_REGEX = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/;
 const HTTP_METHODS = new Set(['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']);
-const SENSITIVE_FIELD_REGEX =
-  /(password|passwd|pwd|secret|token|apikey|api_key|authorization|auth|credential|session|cookie|ssn|social|dob|birth|email|phone|address|zip|postal|credit|card|cvv|cvc|pan|account|routing|iban|pii|phi|pci|patient|medical|diagnosis|mrn)/i;
 
 function inferFormat(filename = '', content = '') {
   const lower = filename.toLowerCase();
@@ -127,22 +126,105 @@ function schemaDisplayName(schema) {
   return null;
 }
 
-function collectSensitiveFields(root, schema, prefix = '', seenRefs = new Set(), depth = 0) {
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function compileSensitiveRules() {
+  return getSensitiveFieldsConfig().rules.map((rule) => ({
+    ...rule,
+    keyRegex: rule.keyTerms.length > 0
+      ? new RegExp(`(${rule.keyTerms.map(escapeRegExp).join('|')})`, 'i')
+      : null,
+    valueRegexes: rule.valuePatterns.map((pattern) =>
+      new RegExp(pattern.replace(/^\(\?i\)/, ''), 'i'),
+    ),
+  }));
+}
+
+function redactValue(value) {
+  const stringValue = String(value);
+  if (stringValue.length <= 4) return '***';
+  if (/@/.test(stringValue)) {
+    const [local, domain] = stringValue.split('@');
+    return `${local.slice(0, 2)}***@${domain || '***'}`;
+  }
+  if (/^\d{3}-\d{2}-\d{4}$/.test(stringValue)) {
+    return `***-**-${stringValue.slice(-4)}`;
+  }
+  if (stringValue.length > 16) {
+    return `${stringValue.slice(0, 4)}...${stringValue.slice(-4)}`;
+  }
+  return `${stringValue.slice(0, 2)}***`;
+}
+
+function sampleValuesFromSchema(schema) {
+  const values = [];
+  if (!schema || typeof schema !== 'object') return values;
+  if (schema.example !== undefined) values.push(schema.example);
+  if (schema.default !== undefined) values.push(schema.default);
+  if (Array.isArray(schema.enum)) values.push(...schema.enum);
+  return values.filter((value) => ['string', 'number', 'boolean'].includes(typeof value));
+}
+
+function findingFromRule(rule, match) {
+  return {
+    ruleId: rule.id,
+    label: rule.label,
+    classification: rule.classification,
+    severity: rule.severity,
+    why: rule.why,
+    reviewGuidance: rule.reviewGuidance,
+    match,
+  };
+}
+
+function matchSensitiveRules(rules, path, propertySchema) {
+  const findings = [];
+  for (const rule of rules) {
+    if (rule.keyRegex?.test(path)) {
+      findings.push(findingFromRule(rule, {
+        source: 'field name',
+        evidence: path,
+      }));
+      continue;
+    }
+
+    const values = sampleValuesFromSchema(propertySchema);
+    let matched = false;
+    for (const value of values) {
+      for (const regex of rule.valueRegexes) {
+        if (regex.test(String(value))) {
+          findings.push(findingFromRule(rule, {
+            source: 'example/default/enum value',
+            evidence: redactValue(value),
+          }));
+          matched = true;
+          break;
+        }
+      }
+      if (matched) break;
+    }
+  }
+  return findings;
+}
+
+function collectSensitiveFields(root, schema, prefix = '', seenRefs = new Set(), depth = 0, rules = compileSensitiveRules()) {
   if (!schema || typeof schema !== 'object' || depth > 8) return [];
 
   if (schema.$ref) {
     const resolved = resolveRef(root, schema.$ref, seenRefs);
-    return collectSensitiveFields(root, resolved, prefix, seenRefs, depth + 1);
+    return collectSensitiveFields(root, resolved, prefix, seenRefs, depth + 1, rules);
   }
 
   if (schema.allOf || schema.anyOf || schema.oneOf) {
     return [...(schema.allOf || []), ...(schema.anyOf || []), ...(schema.oneOf || [])].flatMap((subSchema) =>
-      collectSensitiveFields(root, subSchema, prefix, seenRefs, depth + 1),
+      collectSensitiveFields(root, subSchema, prefix, seenRefs, depth + 1, rules),
     );
   }
 
   if (schema.items) {
-    return collectSensitiveFields(root, schema.items, prefix ? `${prefix}[]` : 'items[]', seenRefs, depth + 1);
+    return collectSensitiveFields(root, schema.items, prefix ? `${prefix}[]` : 'items[]', seenRefs, depth + 1, rules);
   }
 
   const fields = [];
@@ -151,18 +233,18 @@ function collectSensitiveFields(root, schema, prefix = '', seenRefs = new Set(),
     const path = prefix ? `${prefix}.${name}` : name;
     const format = propertySchema?.format ? String(propertySchema.format) : '';
     const type = propertySchema?.type ? String(propertySchema.type) : schemaDisplayName(propertySchema);
-    const sensitiveByName = SENSITIVE_FIELD_REGEX.test(path);
-    const sensitiveByFormat = /(password|email|uuid|uri|date|date-time)/i.test(format) && SENSITIVE_FIELD_REGEX.test(path);
+    const findings = matchSensitiveRules(rules, path, propertySchema);
 
-    if (sensitiveByName || sensitiveByFormat) {
+    if (findings.length > 0) {
       fields.push({
         path,
         type: type || 'unknown',
         format: format || null,
+        findings,
       });
     }
 
-    fields.push(...collectSensitiveFields(root, propertySchema, path, new Set(seenRefs), depth + 1));
+    fields.push(...collectSensitiveFields(root, propertySchema, path, new Set(seenRefs), depth + 1, rules));
   }
 
   return fields;

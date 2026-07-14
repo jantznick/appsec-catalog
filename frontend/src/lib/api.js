@@ -352,6 +352,15 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  getSensitiveFieldsConfig: () =>
+    apiRequest('/api/config/sensitive-fields'),
+
+  updateSensitiveFieldsConfig: (data) =>
+    apiRequest('/api/config/sensitive-fields', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
   createCompany: (data) =>
     apiRequest('/api/companies', {
       method: 'POST',

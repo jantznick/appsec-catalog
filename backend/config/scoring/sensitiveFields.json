@@ -1,0 +1,75 @@
+{
+  "//": "Rules used to identify and explain sensitive fields in uploaded OpenAPI/Swagger schemas. keyTerms match field paths; valuePatterns match example/default/enum values.",
+  "rules": [
+    {
+      "id": "credential",
+      "label": "Credential or Secret",
+      "classification": "Credential",
+      "severity": "High",
+      "keyTerms": ["password", "passwd", "pwd", "secret", "token", "apikey", "api_key", "authorization", "credential", "session", "cookie", "csrf"],
+      "valuePatterns": ["(?i)^bearer\\s+[a-z0-9._-]+$", "(?i)^eyj[a-z0-9_-]+\\.[a-z0-9_-]+\\.[a-z0-9_-]+$", "(?i)(secret|token|api[_-]?key)[_-]?[a-z0-9]{8,}"],
+      "why": "Credentials and session material can allow account takeover or unauthorized API access if exposed, logged, replayed, or returned unnecessarily.",
+      "reviewGuidance": "Confirm values are never returned unnecessarily, are redacted from logs, transported only over TLS, rotated when exposed, and stored hashed or encrypted as appropriate."
+    },
+    {
+      "id": "personal_data",
+      "label": "Personal Data",
+      "classification": "PII",
+      "severity": "Medium",
+      "keyTerms": ["email", "phone", "address", "zip", "postal", "dob", "birth", "name"],
+      "valuePatterns": ["\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b", "\\b\\+?1?[-.\\s]?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}\\b"],
+      "why": "Personal data can identify or contact an individual and may be subject to privacy, retention, and access-control requirements.",
+      "reviewGuidance": "Confirm collection is necessary, access is limited, logs and exports are minimized, and masking or retention controls are in place where appropriate."
+    },
+    {
+      "id": "ssn",
+      "label": "Social Security Number",
+      "classification": "Government Identifier",
+      "severity": "High",
+      "keyTerms": ["ssn", "social", "socialSecurityNumber", "taxId", "tin"],
+      "valuePatterns": ["\\b\\d{3}-\\d{2}-\\d{4}\\b"],
+      "why": "Social Security Numbers are high-risk government identifiers that can enable identity theft if exposed.",
+      "reviewGuidance": "Confirm collection is strictly necessary, values are encrypted at rest, masked in UI/logs, never used as public identifiers, and access is tightly controlled."
+    },
+    {
+      "id": "payment_card",
+      "label": "Payment Card Data",
+      "classification": "PCI",
+      "severity": "High",
+      "keyTerms": ["credit", "card", "cvv", "cvc", "pan", "payment"],
+      "valuePatterns": ["\\b(?:\\d[ -]*?){13,19}\\b"],
+      "why": "Payment card data can bring PCI obligations and can be used for fraud if exposed.",
+      "reviewGuidance": "Confirm card data is tokenized where possible, CVV is never stored, logs are redacted, and PCI-scoped systems and access are clearly controlled."
+    },
+    {
+      "id": "financial_account",
+      "label": "Financial Account Data",
+      "classification": "Financial",
+      "severity": "High",
+      "keyTerms": ["account", "routing", "iban", "bank"],
+      "valuePatterns": ["\\b[A-Z]{2}\\d{2}[A-Z0-9]{11,30}\\b"],
+      "why": "Financial account identifiers can enable fraud, account correlation, or unauthorized payment activity.",
+      "reviewGuidance": "Confirm values are encrypted, masked in logs/UI, access is audited, and only required systems can retrieve full values."
+    },
+    {
+      "id": "health_data",
+      "label": "Health Data",
+      "classification": "PHI",
+      "severity": "High",
+      "keyTerms": ["patient", "medical", "diagnosis", "mrn", "health", "phi"],
+      "valuePatterns": ["(?i)\\b(mrn|patient)[-_ ]?\\d{4,}\\b"],
+      "why": "Health data may be regulated and can reveal sensitive medical information about an individual.",
+      "reviewGuidance": "Confirm minimum necessary use, strict access controls, audit logging, encryption, and retention requirements."
+    },
+    {
+      "id": "tenant_identifier",
+      "label": "Tenant or Resource Identifier",
+      "classification": "Tenant Identifier",
+      "severity": "Medium",
+      "keyTerms": ["companyId", "tenantId", "organizationId", "accountId", "applicationId"],
+      "valuePatterns": ["\\b(clx|org|acct|tenant|app)[a-z0-9_-]{4,}\\b"],
+      "why": "Tenant and resource identifiers can become IDOR pivots if authorization does not bind the requested ID to the authenticated principal.",
+      "reviewGuidance": "Confirm identifiers are opaque or non-enumerable, authorization is enforced server-side for every ID, and cross-tenant access attempts are logged."
+    }
+  ]
+}

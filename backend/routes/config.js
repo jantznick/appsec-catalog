@@ -3,7 +3,12 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { requireAdmin, requireAuth } from '../middleware/auth.js';
-import { getToolQualityConfig, saveToolQualityConfig } from '../services/scoringConfig.js';
+import {
+  getSensitiveFieldsConfig,
+  getToolQualityConfig,
+  saveSensitiveFieldsConfig,
+  saveToolQualityConfig,
+} from '../services/scoringConfig.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -50,6 +55,28 @@ router.put('/tool-quality', requireAdmin, async (req, res) => {
     console.error('Error saving tool quality config:', error);
     res.status(400).json({
       error: 'Failed to save tool quality config',
+      message: error.message,
+    });
+  }
+});
+
+router.get('/sensitive-fields', requireAdmin, (req, res) => {
+  try {
+    res.json(getSensitiveFieldsConfig());
+  } catch (error) {
+    console.error('Error loading sensitive fields config:', error);
+    res.status(500).json({ error: 'Failed to load sensitive fields config' });
+  }
+});
+
+router.put('/sensitive-fields', requireAdmin, async (req, res) => {
+  try {
+    const saved = await saveSensitiveFieldsConfig(req.body);
+    res.json(saved);
+  } catch (error) {
+    console.error('Error saving sensitive fields config:', error);
+    res.status(400).json({
+      error: 'Failed to save sensitive fields config',
       message: error.message,
     });
   }

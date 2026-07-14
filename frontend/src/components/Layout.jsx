@@ -7,6 +7,14 @@ import { api } from '../lib/api.js';
 import { useToastStore } from './ui/Toast.jsx';
 import { usePendingApprovals } from '../contexts/PendingApprovalsContext.jsx';
 
+function DropdownSectionLabel({ children }) {
+  return (
+    <div className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+      {children}
+    </div>
+  );
+}
+
 export function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -133,73 +141,42 @@ export function Layout({ children }) {
                     align="right"
                   >
                     {!isAdmin() && user?.companyId && companyName ? (
-                      <DropdownItem
-                        onClick={() => {
-                          navigate(`/companies/${user.companyId}`);
-                        }}
-                      >
-                        {companyName}
-                      </DropdownItem>
+                      <>
+                        <DropdownSectionLabel>Company</DropdownSectionLabel>
+                        <DropdownItem
+                          onClick={() => {
+                            navigate(`/companies/${user.companyId}`);
+                          }}
+                        >
+                          {companyName}
+                        </DropdownItem>
+                      </>
                     ) : isAdmin() ? (
                       <>
+                        <DropdownSectionLabel>Admin</DropdownSectionLabel>
                         <DropdownItem
                           onClick={() => {
-                            navigate('/divisions');
+                            navigate('/settings');
                           }}
                         >
-                          Divisions
+                          Settings
                         </DropdownItem>
                         <DropdownItem
                           onClick={() => {
-                            navigate('/companies');
+                            navigate('/pending-approvals');
                           }}
+                          className="relative"
                         >
-                          Companies
-                        </DropdownItem>
-                        <DropdownItem
-                          onClick={() => {
-                            navigate('/policy-controls');
-                          }}
-                        >
-                          Policy Controls
-                        </DropdownItem>
-                        <DropdownItem
-                          onClick={() => {
-                            navigate('/settings/integrations');
-                          }}
-                        >
-                          Integration settings
-                        </DropdownItem>
-                        <DropdownItem
-                          onClick={() => {
-                            navigate('/settings/deploy');
-                          }}
-                        >
-                          Deploy settings
-                        </DropdownItem>
-                        <DropdownItem
-                          onClick={() => {
-                            navigate('/settings/product-updates');
-                          }}
-                        >
-                          Product updates
-                        </DropdownItem>
-                        <DropdownItem
-                          onClick={() => {
-                            navigate('/settings/scoring');
-                          }}
-                        >
-                          Scoring settings
+                          <span>Pending approvals</span>
+                          {globalPendingCount > 0 && (
+                            <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
+                              {globalPendingCount > 99 ? '99+' : globalPendingCount}
+                            </span>
+                          )}
                         </DropdownItem>
                       </>
                     ) : null}
-                    <DropdownItem
-                      onClick={() => {
-                        navigate('/whats-new');
-                      }}
-                    >
-                      What&apos;s New
-                    </DropdownItem>
+                    <DropdownSectionLabel>Catalog</DropdownSectionLabel>
                     <DropdownItem
                       onClick={() => {
                         navigate('/applications');
@@ -221,52 +198,26 @@ export function Layout({ children }) {
                     >
                       Domains
                     </DropdownItem>
-                    <DropdownItem
-                      onClick={() => {
-                        navigate('/deployment-tokens');
-                      }}
-                    >
-                      Deployment Tokens
-                    </DropdownItem>
-                    <DropdownItem
-                      onClick={() => {
-                        navigate('/settings/api-tokens');
-                      }}
-                    >
-                      API Tokens
-                    </DropdownItem>
-                    <DropdownItem
-                      onClick={() => {
-                        navigate('/users');
-                      }}
-                    >
-                      Users
-                    </DropdownItem>
-                    <DropdownItem
-                      onClick={() => {
-                        navigate('/export-jobs');
-                      }}
-                    >
-                      Security export jobs
-                    </DropdownItem>
-                    {isAdmin() && (
+                    {!isAdmin() && (
                       <>
-                        <DropdownItem divider />
+                        <DropdownSectionLabel>Settings</DropdownSectionLabel>
                         <DropdownItem
                           onClick={() => {
-                            navigate('/pending-approvals');
+                            navigate('/settings');
                           }}
-                          className="relative"
                         >
-                          <span>Pending Approvals</span>
-                          {globalPendingCount > 0 && (
-                            <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
-                              {globalPendingCount > 99 ? '99+' : globalPendingCount}
-                            </span>
-                          )}
+                          Settings
                         </DropdownItem>
                       </>
                     )}
+                    <DropdownSectionLabel>Updates</DropdownSectionLabel>
+                    <DropdownItem
+                      onClick={() => {
+                        navigate('/whats-new');
+                      }}
+                    >
+                      What&apos;s New
+                    </DropdownItem>
                   </Dropdown>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-700">{user.email}</span>
