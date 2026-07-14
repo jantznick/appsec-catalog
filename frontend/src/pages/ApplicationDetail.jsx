@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
@@ -59,6 +59,13 @@ export function ApplicationDetail() {
   const [apiSchemaInputError, setApiSchemaInputError] = useState('');
   const [savingApiSchema, setSavingApiSchema] = useState(false);
   const [deletingApiSchema, setDeletingApiSchema] = useState(false);
+  const [apiSchemaVisualization, setApiSchemaVisualization] = useState(null);
+  const [loadingApiSchemaVisualization, setLoadingApiSchemaVisualization] = useState(false);
+  const [expandedApiEndpointId, setExpandedApiEndpointId] = useState(null);
+  const [apiEndpointSearch, setApiEndpointSearch] = useState('');
+  const [apiSensitiveOnly, setApiSensitiveOnly] = useState(false);
+  const [apiSensitiveFieldFilter, setApiSensitiveFieldFilter] = useState('');
+  const [apiEndpointSort, setApiEndpointSort] = useState('path');
 
   const [formData, setFormData] = useState({
     companyId: '',
@@ -427,12 +434,81 @@ export function ApplicationDetail() {
     }
   };
 
+  const loadApiSchemaVisualization = async () => {
+    if (!id) return;
+    try {
+      setLoadingApiSchemaVisualization(true);
+      const data = await api.getApplicationApiSchemaVisualization(id);
+      setApiSchemaVisualization(data.visualization || null);
+      setExpandedApiEndpointId(data.visualization?.endpoints?.[0]?.id || null);
+    } catch (error) {
+      if (error.status === 404) {
+        setApiSchemaVisualization(null);
+        return;
+      }
+      console.error('Failed to load API schema visualization:', error);
+      toast.error(error.message || 'Failed to load API schema visualization');
+    } finally {
+      setLoadingApiSchemaVisualization(false);
+    }
+  };
+
   const formatBytes = (bytes) => {
     if (!bytes && bytes !== 0) return '';
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
+
+  const formatSampleJson = (sample) => {
+    if (sample === null || sample === undefined) return 'No sample body declared';
+    return JSON.stringify(sample, null, 2);
+  };
+
+  const apiSensitiveFieldOptions = useMemo(() => {
+    if (!apiSchemaVisualization?.endpoints) return [];
+    const fields = new Set();
+    for (const endpoint of apiSchemaVisualization.endpoints) {
+      for (const field of endpoint.sensitiveFields || []) {
+        fields.add(field.path);
+      }
+    }
+    return [...fields].sort((a, b) => a.localeCompare(b));
+  }, [apiSchemaVisualization]);
+
+  const filteredApiEndpoints = useMemo(() => {
+    const endpoints = apiSchemaVisualization?.endpoints || [];
+    const search = apiEndpointSearch.trim().toLowerCase();
+    const filtered = endpoints.filter((endpoint) => {
+      const sensitiveFields = endpoint.sensitiveFields || [];
+      if (apiSensitiveOnly && sensitiveFields.length === 0) return false;
+      if (apiSensitiveFieldFilter && !sensitiveFields.some((field) => field.path === apiSensitiveFieldFilter)) {
+        return false;
+      }
+      if (!search) return true;
+      const haystack = [
+        endpoint.method,
+        endpoint.path,
+        endpoint.summary,
+        ...(endpoint.tags || []),
+        ...sensitiveFields.flatMap((field) => [field.path, field.location, field.type]),
+      ].join(' ').toLowerCase();
+      return haystack.includes(search);
+    });
+
+    return [...filtered].sort((a, b) => {
+      if (apiEndpointSort === 'sensitive-desc') {
+        return (b.sensitiveFields?.length || 0) - (a.sensitiveFields?.length || 0) || a.path.localeCompare(b.path);
+      }
+      if (apiEndpointSort === 'auth') {
+        return Number(a.auth?.required || false) - Number(b.auth?.required || false) || a.path.localeCompare(b.path);
+      }
+      if (apiEndpointSort === 'method') {
+        return a.method.localeCompare(b.method) || a.path.localeCompare(b.path);
+      }
+      return a.path.localeCompare(b.path) || a.method.localeCompare(b.method);
+    });
+  }, [apiEndpointSearch, apiEndpointSort, apiSchemaVisualization, apiSensitiveFieldFilter, apiSensitiveOnly]);
 
   const handleApiSchemaFile = async (event) => {
     const file = event.target.files?.[0];
@@ -467,6 +543,7 @@ export function ApplicationDetail() {
       setApiSchemaInputError('');
       setApiSchemaFilename('openapi.yaml');
       toast.success('API schema saved');
+      await loadApiSchemaVisualization();
       await loadScore();
     } catch (error) {
       toast.error(error.message || 'Failed to save API schema');
@@ -477,12 +554,18 @@ export function ApplicationDetail() {
 
   const handleDownloadApiSchema = async () => {
     try {
-      const { text, filename } = await api.downloadApplicationApiSchema(id);
+      const { text } = await api.downloadApplicationApiSchema(id);
       const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
+      const appNameSlug = (application?.name || 'application')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'application';
+      const extension = apiSchema?.format === 'json' ? 'json' : 'yaml';
       link.href = url;
-      link.download = filename;
+      link.download = `${appNameSlug}-api-schema.${extension}`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -497,6 +580,7 @@ export function ApplicationDetail() {
     try {
       await api.deleteApplicationApiSchema(id);
       setApiSchema(null);
+      setApiSchemaVisualization(null);
       setApiSchemaContent('');
       toast.success('API schema removed');
       await loadScore();
@@ -562,6 +646,11 @@ export function ApplicationDetail() {
       const data = await api.getApplication(id);
       setApplication(data);
       setApiSchema(data.apiSchema || null);
+      if (data.apiSchema) {
+        loadApiSchemaVisualization();
+      } else {
+        setApiSchemaVisualization(null);
+      }
       
       // Set domains from application data
       setDomains(data.domains || []);
@@ -971,6 +1060,7 @@ export function ApplicationDetail() {
         <Tab>Deployments</Tab>
         {isAdmin() && <Tab>App Timeline</Tab>}
         <Tab>Security</Tab>
+        <Tab>API Schema</Tab>
         <Tab>Infosec Policy Compliance</Tab>
         {isAdmin() && <Tab badge={pendingVersionsCount}>Application Metadata History</Tab>}
         <Tab>Integrations</Tab>
@@ -2060,6 +2150,228 @@ export function ApplicationDetail() {
               </div>
               </CardContent>
             </Card>
+        </TabPanel>
+
+        {/* API Schema Tab */}
+        <TabPanel>
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle>API Schema</CardTitle>
+                  <p className="mt-1 text-sm text-gray-600">
+                    OpenAPI/Swagger endpoint view with auth and sensitive data indicators.
+                  </p>
+                </div>
+                {apiSchema && (
+                  <Button variant="secondary" size="sm" onClick={handleDownloadApiSchema}>
+                    Download schema
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {formData.apiSecurityNA ? (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-8 text-center">
+                  <p className="text-sm text-gray-600">API Security is marked not applicable.</p>
+                </div>
+              ) : !apiSchema ? (
+                <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center">
+                  <p className="text-sm text-gray-600">No API schema uploaded yet.</p>
+                  <p className="mt-2 text-sm text-gray-500">
+                    Add an OpenAPI or Swagger file from the Security tab to visualize endpoints here.
+                  </p>
+                </div>
+              ) : loadingApiSchemaVisualization ? (
+                <LoadingPage message="Loading API schema..." />
+              ) : apiSchemaVisualization ? (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div className="rounded-lg border border-gray-200 bg-white p-4">
+                      <p className="text-xs font-medium text-gray-500">Schema</p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900">{apiSchemaVisualization.title}</p>
+                    </div>
+                    <div className="rounded-lg border border-gray-200 bg-white p-4">
+                      <p className="text-xs font-medium text-gray-500">Version</p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900">{apiSchemaVisualization.version || 'Not set'}</p>
+                    </div>
+                    <div className="rounded-lg border border-gray-200 bg-white p-4">
+                      <p className="text-xs font-medium text-gray-500">Endpoints</p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900">{apiSchemaVisualization.endpoints.length}</p>
+                    </div>
+                    <div className="rounded-lg border border-gray-200 bg-white p-4">
+                      <p className="text-xs font-medium text-gray-500">Sensitive Fields</p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900">{apiSchemaVisualization.sensitiveFieldCount}</p>
+                    </div>
+                  </div>
+
+                  {apiSchemaVisualization.authSchemes.length > 0 && (
+                    <div>
+                      <h3 className="mb-3 text-sm font-semibold text-gray-900">Auth schemes</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {apiSchemaVisualization.authSchemes.map((scheme) => (
+                          <span key={scheme.name} className="rounded-md border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800">
+                            {scheme.name} · {scheme.type}{scheme.scheme ? `/${scheme.scheme}` : ''}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="rounded-lg border border-gray-200 bg-white p-4">
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+                      <Input
+                        label="Search endpoints"
+                        value={apiEndpointSearch}
+                        onChange={(e) => setApiEndpointSearch(e.target.value)}
+                        placeholder="Path, method, tag, field"
+                      />
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="apiSensitiveFieldFilter">
+                          Sensitive field
+                        </label>
+                        <select
+                          id="apiSensitiveFieldFilter"
+                          value={apiSensitiveFieldFilter}
+                          onChange={(e) => setApiSensitiveFieldFilter(e.target.value)}
+                          className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Any field</option>
+                          {apiSensitiveFieldOptions.map((field) => (
+                            <option key={field} value={field}>{field}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="apiEndpointSort">
+                          Sort
+                        </label>
+                        <select
+                          id="apiEndpointSort"
+                          value={apiEndpointSort}
+                          onChange={(e) => setApiEndpointSort(e.target.value)}
+                          className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="path">Path</option>
+                          <option value="method">Method</option>
+                          <option value="sensitive-desc">Most sensitive fields</option>
+                          <option value="auth">Auth status</option>
+                        </select>
+                      </div>
+                      <div className="flex items-end">
+                        <Checkbox
+                          id="apiSensitiveOnly"
+                          label="Sensitive data only"
+                          checked={apiSensitiveOnly}
+                          onChange={(e) => setApiSensitiveOnly(e.target.checked)}
+                        />
+                      </div>
+                    </div>
+                    <p className="mt-3 text-xs text-gray-500">
+                      Showing {filteredApiEndpoints.length} of {apiSchemaVisualization.endpoints.length} endpoints.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {filteredApiEndpoints.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center">
+                        <p className="text-sm text-gray-600">No endpoints match the current filters.</p>
+                      </div>
+                    ) : filteredApiEndpoints.map((endpoint) => (
+                      <div key={endpoint.id} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedApiEndpointId((current) => current === endpoint.id ? null : endpoint.id)}
+                          className="flex w-full flex-col gap-3 px-4 py-4 text-left hover:bg-gray-50 sm:flex-row sm:items-start sm:justify-between"
+                          aria-expanded={expandedApiEndpointId === endpoint.id}
+                        >
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded bg-gray-900 px-2 py-1 text-xs font-semibold text-white">
+                                {endpoint.method}
+                              </span>
+                              <span className="font-mono text-sm font-semibold text-gray-900">{endpoint.path}</span>
+                              <span className="text-xs text-gray-400">
+                                {expandedApiEndpointId === endpoint.id ? 'Hide details' : 'Show details'}
+                              </span>
+                            </div>
+                            {endpoint.summary && (
+                              <p className="mt-2 text-sm text-gray-700">{endpoint.summary}</p>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <span className={`rounded-md px-2 py-1 text-xs font-medium ${
+                              endpoint.auth.required
+                                ? 'bg-green-50 text-green-700 border border-green-200'
+                                : 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                            }`}>
+                              {endpoint.auth.required ? 'Auth required' : 'No auth declared'}
+                            </span>
+                            {endpoint.sensitiveFields.length > 0 && (
+                              <span className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700">
+                                Sensitive data
+                              </span>
+                            )}
+                          </div>
+                        </button>
+
+                        {expandedApiEndpointId === endpoint.id && (
+                          <div className="border-t border-gray-100 px-4 py-4">
+                            {endpoint.auth.schemes.length > 0 && (
+                              <div className="mb-4">
+                                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Auth</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {endpoint.auth.schemes.map((scheme) => (
+                                    <span key={`${endpoint.id}-${scheme.name}`} className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-800">
+                                      {scheme.name}{scheme.type ? ` · ${scheme.type}` : ''}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {endpoint.sensitiveFields.length > 0 && (
+                              <div className="mb-4">
+                                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Sensitive fields</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {endpoint.sensitiveFields.map((field) => (
+                                    <span key={`${endpoint.id}-${field.location}-${field.path}`} className="rounded-md border border-red-100 bg-red-50 px-2 py-1 font-mono text-xs text-red-700">
+                                      {field.location}: {field.path}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                              <div>
+                                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Sample request</p>
+                                <pre className="max-h-80 overflow-auto rounded-lg bg-gray-950 p-3 text-xs text-gray-100">
+                                  {formatSampleJson(endpoint.samples?.request)}
+                                </pre>
+                              </div>
+                              <div>
+                                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+                                  Sample response{endpoint.samples?.response?.statusCode ? ` (${endpoint.samples.response.statusCode})` : ''}
+                                </p>
+                                <pre className="max-h-80 overflow-auto rounded-lg bg-gray-950 p-3 text-xs text-gray-100">
+                                  {formatSampleJson(endpoint.samples?.response?.body)}
+                                </pre>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-8 text-center">
+                  <p className="text-sm text-gray-600">Schema visualization is not available.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabPanel>
 
         {/* Infosec Policy Compliance Tab */}

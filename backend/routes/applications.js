@@ -31,7 +31,7 @@ import { listTenableIoTagValues } from '../integrations/tenableIo.js';
 import { listWizFolders } from '../integrations/wiz.js';
 import { integrationLog } from '../integrations/log.js';
 import { getAuthContext } from '../middleware/authContext.js';
-import { apiSchemaSummary, validateAndNormalizeApiSchema } from '../services/apiSchema.js';
+import { apiSchemaSummary, buildApiSchemaVisualization, validateAndNormalizeApiSchema } from '../services/apiSchema.js';
 
 /**
  * Get or create system user for automated notes
@@ -1400,6 +1400,30 @@ router.get('/:id/api-schema/download', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Download API schema error:', error);
     sendAccessError(res, error);
+  }
+});
+
+router.get('/:id/api-schema/visualization', requireAuth, async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    await getApplicationForAccess(req.params.id, auth);
+
+    const schema = await prisma.applicationApiSchema.findUnique({
+      where: { applicationId: req.params.id },
+    });
+
+    if (!schema) {
+      return res.status(404).json({ error: 'API schema not found' });
+    }
+
+    res.json({ visualization: buildApiSchemaVisualization(schema) });
+  } catch (error) {
+    console.error('API schema visualization error:', error);
+    if (error.statusCode) return sendAccessError(res, error);
+    res.status(400).json({
+      error: 'Failed to visualize API schema',
+      message: error.message,
+    });
   }
 });
 

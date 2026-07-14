@@ -388,6 +388,9 @@ export const api = {
   getApplicationApiSchema: (id) =>
     apiRequest(`/api/applications/${id}/api-schema`),
 
+  getApplicationApiSchemaVisualization: (id) =>
+    apiRequest(`/api/applications/${id}/api-schema/visualization`),
+
   saveApplicationApiSchema: (id, data) =>
     apiRequest(`/api/applications/${id}/api-schema`, {
       method: 'PUT',
