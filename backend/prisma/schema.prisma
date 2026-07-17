@@ -171,6 +171,7 @@ model Application {
   reviews                ApplicationMetadataReview[] // History of metadata reviews
   apiSchema              ApplicationApiSchema?
   policyControlOverrides PolicyControlOverride[] // Manual overrides for policy controls
+  threatModel            ThreatModel?
   productApplications    ProductApplication[]
   applicationToolLinks  ApplicationToolLink[]
   ingressProducts        ProductIngressPoint[]
@@ -243,6 +244,63 @@ model ApplicationApiSchema {
   uploadedById  String?
   uploadedAt    DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+}
+
+// Threat model for an application, using Shostack's 4-question frame.
+// One record per application (the "root" node covering the whole app);
+// child ThreatModelComponent rows cover key parts (auth, payments, storage, ...).
+model ThreatModel {
+  id            String      @id @default(cuid())
+  applicationId String      @unique
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  status         String    @default("draft") // draft | in_review | approved | superseded
+  version        Int       @default(1)
+
+  // Q1 "What are we working on?" for the whole application
+  scope     String? @db.Text
+  actors    String? @db.Text // JSON array of actor keys
+  dataTypes String? @db.Text // JSON array of data-type keys
+
+  // Q2/Q3: threats at the whole-app level. JSON array of threat objects.
+  threats String? @db.Text
+
+  // Q4 "Did we do a good job?"
+  reviewer       String?
+  lastReviewedAt DateTime?
+
+  components ThreatModelComponent[]
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+}
+
+// A key part of the application that gets its own pass through the 4 questions.
+model ThreatModelComponent {
+  id            String      @id @default(cuid())
+  threatModelId String
+  threatModel   ThreatModel @relation(fields: [threatModelId], references: [id], onDelete: Cascade)
+
+  name       String
+  archetype  String  @default("other") // auth | payment | data_storage | integration | admin | file_upload | messaging | other
+  orderIndex Int     @default(0)
+
+  // Q1 for this component
+  scope String? @db.Text
+
+  // Q2/Q3: threats for this component. JSON array of threat objects.
+  threats String? @db.Text
+
+  // Q4: has this component been reviewed/signed off
+  reviewed Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([threatModelId])
 }
 
 model Product {

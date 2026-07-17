@@ -434,6 +434,36 @@ export const api = {
       method: 'POST',
     }),
 
+  // Threat model
+  getThreatModelOptions: () =>
+    apiRequest('/api/applications/threat-model/options'),
+
+  getThreatModel: (id) =>
+    apiRequest(`/api/applications/${id}/threat-model`),
+
+  saveThreatModel: (id, data) =>
+    apiRequest(`/api/applications/${id}/threat-model`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  addThreatModelComponent: (id, data) =>
+    apiRequest(`/api/applications/${id}/threat-model/components`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateThreatModelComponent: (id, componentId, data) =>
+    apiRequest(`/api/applications/${id}/threat-model/components/${componentId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteThreatModelComponent: (id, componentId) =>
+    apiRequest(`/api/applications/${id}/threat-model/components/${componentId}`, {
+      method: 'DELETE',
+    }),
+
   createApplication: (data) =>
     apiRequest('/api/applications', {
       method: 'POST',

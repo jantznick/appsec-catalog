@@ -20,6 +20,7 @@ import { VersionHistory } from '../components/versions/VersionHistory.jsx';
 import { Tabs, Tab, TabPanel } from '../components/ui/Tabs.jsx';
 import { PolicyComplianceView } from '../components/policy/PolicyComplianceView.jsx';
 import { ApplicationIntegrationsSection } from '../components/integrations/ApplicationIntegrationsSection.jsx';
+import { ThreatModelTab } from '../components/threat-model/ThreatModelTab.jsx';
 
 export function ApplicationDetail() {
   const { id } = useParams();
@@ -1171,6 +1172,7 @@ export function ApplicationDetail() {
         <Tab>Deployments</Tab>
         {isAdmin() && <Tab>App Timeline</Tab>}
         <Tab>Security</Tab>
+        <Tab>Threat Model</Tab>
         {!formData.apiSecurityNA && <Tab>API Schema</Tab>}
         <Tab>Infosec Policy Compliance</Tab>
         {isAdmin() && <Tab badge={pendingVersionsCount}>Application Metadata History</Tab>}
@@ -2261,6 +2263,11 @@ export function ApplicationDetail() {
               </div>
               </CardContent>
             </Card>
+        </TabPanel>
+
+        {/* Threat Model Tab */}
+        <TabPanel>
+          <ThreatModelTab applicationId={id} />
         </TabPanel>
 
         {!formData.apiSecurityNA && (

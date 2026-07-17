@@ -32,6 +32,16 @@ import { listWizFolders } from '../integrations/wiz.js';
 import { integrationLog } from '../integrations/log.js';
 import { getAuthContext } from '../middleware/authContext.js';
 import { apiSchemaSummary, buildApiSchemaVisualization, validateAndNormalizeApiSchema } from '../services/apiSchema.js';
+import {
+  getThreatModelOptions,
+  serializeThreatModel,
+  getMissingRecommendedArchetypes,
+  normalizeThreats,
+  normalizeActors,
+  normalizeDataTypes,
+  normalizeArchetype,
+  isValidModelStatus,
+} from '../services/threatModel.js';
 
 /**
  * Get or create system user for automated notes
@@ -683,8 +693,7 @@ router.get('/:id/score', requireAuth, async (req, res) => {
         data: {
           applicationId: application.id,
           knowledgeScore: scores.knowledgeScore,
-          toolScore: scores.toolScore,
-          totalScore: scores.totalScore,
+          toolScore: scores.toolScore,          totalScore: scores.totalScore,
         },
       });
     } catch (error) {
@@ -1427,6 +1436,249 @@ router.get('/:id/api-schema/visualization', requireAuth, async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Threat model (Shostack 4-question frame). One model per application, with
+// component child nodes. Threats stored as JSON arrays on each node.
+// ---------------------------------------------------------------------------
+
+const THREAT_MODEL_INCLUDE = { components: { orderBy: { orderIndex: 'asc' } } };
+
+// Static options library (archetypes, STRIDE prompts, actor/data-type lists).
+router.get('/threat-model/options', requireAuth, (req, res) => {
+  res.json(getThreatModelOptions());
+});
+
+// Get the threat model for an application.
+router.get('/:id/threat-model', requireAuth, async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    await getApplicationForAccess(req.params.id, auth);
+
+    const model = await prisma.threatModel.findUnique({
+      where: { applicationId: req.params.id },
+      include: THREAT_MODEL_INCLUDE,
+    });
+
+    res.json(serializeThreatModel(model));
+  } catch (error) {
+    console.error('Get threat model error:', error);
+    sendAccessError(res, error);
+  }
+});
+
+// Create/update the root threat model (question 1 + app-level threats + status).
+router.put('/:id/threat-model', requireAuth, async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    await getApplicationForAccess(req.params.id, auth);
+
+    const body = req.body || {};
+    // Partial update: only touch fields present in the request body.
+    const data = {};
+    if (body.scope !== undefined) {
+      data.scope = typeof body.scope === 'string' ? body.scope.slice(0, 8000) : null;
+    }
+    if (body.actors !== undefined) data.actors = JSON.stringify(normalizeActors(body.actors));
+    if (body.dataTypes !== undefined) data.dataTypes = JSON.stringify(normalizeDataTypes(body.dataTypes));
+    if (body.threats !== undefined) data.threats = JSON.stringify(normalizeThreats(body.threats));
+
+    if (body.status !== undefined) {
+      if (!isValidModelStatus(body.status)) {
+        return res.status(400).json({ error: 'Invalid status' });
+      }
+      data.status = body.status;
+    }
+
+    if (body.reviewer !== undefined) {
+      data.reviewer = typeof body.reviewer === 'string' ? body.reviewer.slice(0, 300) || null : null;
+    }
+
+    // "Mark reviewed now" toggle from the UI.
+    if (body.markReviewed === true) {
+      data.lastReviewedAt = new Date();
+    } else if (body.lastReviewedAt === null) {
+      data.lastReviewedAt = null;
+    }
+
+    const model = await prisma.threatModel.upsert({
+      where: { applicationId: req.params.id },
+      create: {
+        applicationId: req.params.id,
+        createdById: auth.userId,
+        status: data.status || 'draft',
+        ...data,
+      },
+      update: data,
+      include: THREAT_MODEL_INCLUDE,
+    });
+
+    // Auto-create a matching component for anything checked in question 1
+    // (data types / actors) that doesn't already have one. Create-only — a
+    // component you deleted comes back on the next save while the box stays checked.
+    const serialized = serializeThreatModel(model).model;
+    const missing = getMissingRecommendedArchetypes(serialized, serialized.components);
+    if (missing.length > 0) {
+      let nextIndex =
+        serialized.components.reduce((max, c) => Math.max(max, c.orderIndex ?? 0), -1) + 1;
+      await prisma.threatModelComponent.createMany({
+        data: missing.map((r) => ({
+          threatModelId: model.id,
+          name: r.label,
+          archetype: r.archetype,
+          orderIndex: nextIndex++,
+          threats: JSON.stringify([]),
+        })),
+      });
+      const refreshed = await prisma.threatModel.findUnique({
+        where: { id: model.id },
+        include: THREAT_MODEL_INCLUDE,
+      });
+      return res.json(serializeThreatModel(refreshed));
+    }
+
+    res.json(serializeThreatModel(model));
+  } catch (error) {
+    console.error('Save threat model error:', error);
+    if (error.statusCode) return sendAccessError(res, error);
+    res.status(400).json({ error: 'Failed to save threat model', message: error.message });
+  }
+});
+
+// Ensure a threat model row exists, returning it. Used before adding components.
+async function ensureThreatModel(applicationId, userId) {
+  return prisma.threatModel.upsert({
+    where: { applicationId },
+    create: { applicationId, createdById: userId, status: 'draft' },
+    update: {},
+  });
+}
+
+// Add a component node.
+router.post('/:id/threat-model/components', requireAuth, async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    await getApplicationForAccess(req.params.id, auth);
+
+    const body = req.body || {};
+    const name = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : '';
+    if (!name) {
+      return res.status(400).json({ error: 'Component name is required' });
+    }
+
+    const model = await ensureThreatModel(req.params.id, auth.userId);
+
+    const last = await prisma.threatModelComponent.findFirst({
+      where: { threatModelId: model.id },
+      orderBy: { orderIndex: 'desc' },
+      select: { orderIndex: true },
+    });
+
+    await prisma.threatModelComponent.create({
+      data: {
+        threatModelId: model.id,
+        name,
+        archetype: normalizeArchetype(body.archetype),
+        orderIndex: (last?.orderIndex ?? -1) + 1,
+        scope: typeof body.scope === 'string' ? body.scope.slice(0, 8000) : null,
+        threats: JSON.stringify(normalizeThreats(body.threats)),
+        reviewed: body.reviewed === true,
+      },
+    });
+
+    const full = await prisma.threatModel.findUnique({
+      where: { id: model.id },
+      include: THREAT_MODEL_INCLUDE,
+    });
+    res.status(201).json(serializeThreatModel(full));
+  } catch (error) {
+    console.error('Add threat model component error:', error);
+    if (error.statusCode) return sendAccessError(res, error);
+    res.status(400).json({ error: 'Failed to add component', message: error.message });
+  }
+});
+
+// Update a component node.
+router.put('/:id/threat-model/components/:componentId', requireAuth, async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    await getApplicationForAccess(req.params.id, auth);
+
+    const model = await prisma.threatModel.findUnique({
+      where: { applicationId: req.params.id },
+      select: { id: true },
+    });
+    if (!model) return res.status(404).json({ error: 'Threat model not found' });
+
+    const existing = await prisma.threatModelComponent.findFirst({
+      where: { id: req.params.componentId, threatModelId: model.id },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Component not found' });
+
+    const body = req.body || {};
+    const data = {};
+    if (body.name !== undefined) {
+      const name = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : '';
+      if (!name) return res.status(400).json({ error: 'Component name is required' });
+      data.name = name;
+    }
+    if (body.archetype !== undefined) data.archetype = normalizeArchetype(body.archetype);
+    if (body.scope !== undefined) {
+      data.scope = typeof body.scope === 'string' ? body.scope.slice(0, 8000) : null;
+    }
+    if (body.threats !== undefined) data.threats = JSON.stringify(normalizeThreats(body.threats));
+    if (body.reviewed !== undefined) data.reviewed = body.reviewed === true;
+    if (body.orderIndex !== undefined && Number.isInteger(body.orderIndex)) {
+      data.orderIndex = body.orderIndex;
+    }
+
+    await prisma.threatModelComponent.update({
+      where: { id: req.params.componentId },
+      data,
+    });
+
+    const full = await prisma.threatModel.findUnique({
+      where: { id: model.id },
+      include: THREAT_MODEL_INCLUDE,
+    });
+    res.json(serializeThreatModel(full));
+  } catch (error) {
+    console.error('Update threat model component error:', error);
+    if (error.statusCode) return sendAccessError(res, error);
+    res.status(400).json({ error: 'Failed to update component', message: error.message });
+  }
+});
+
+// Delete a component node.
+router.delete('/:id/threat-model/components/:componentId', requireAuth, async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    await getApplicationForAccess(req.params.id, auth);
+
+    const model = await prisma.threatModel.findUnique({
+      where: { applicationId: req.params.id },
+      select: { id: true },
+    });
+    if (!model) return res.status(404).json({ error: 'Threat model not found' });
+
+    await prisma.threatModelComponent
+      .delete({ where: { id: req.params.componentId } })
+      .catch((error) => {
+        if (error.code === 'P2025') return null;
+        throw error;
+      });
+
+    const full = await prisma.threatModel.findUnique({
+      where: { id: model.id },
+      include: THREAT_MODEL_INCLUDE,
+    });
+    res.json(serializeThreatModel(full));
+  } catch (error) {
+    console.error('Delete threat model component error:', error);
+    sendAccessError(res, error);
+  }
+});
+
 // APP-4: Get application detail
 router.get('/:id', requireAuth, async (req, res) => {
   try {
@@ -1586,8 +1838,7 @@ router.post('/:id/review', requireAuth, requireAdmin, async (req, res) => {
         data: {
           applicationId: updated.id,
           knowledgeScore: scores.knowledgeScore,
-          toolScore: scores.toolScore,
-          totalScore: scores.totalScore,
+          toolScore: scores.toolScore,          totalScore: scores.totalScore,
         },
       });
     } catch (error) {
@@ -2207,8 +2458,7 @@ router.put('/:id', requireAuth, async (req, res) => {
         data: {
           applicationId: application.id,
           knowledgeScore: scores.knowledgeScore,
-          toolScore: scores.toolScore,
-          totalScore: scores.totalScore,
+          toolScore: scores.toolScore,          totalScore: scores.totalScore,
         },
       });
     } catch (error) {
@@ -3619,8 +3869,7 @@ router.post('/:id/versions/:versionId/approve', requireAuth, requireAdmin, async
           data: {
             applicationId: id,
             knowledgeScore: scores.knowledgeScore,
-            toolScore: scores.toolScore,
-            totalScore: scores.totalScore,
+            toolScore: scores.toolScore,            totalScore: scores.totalScore,
           },
         });
       } catch (error) {
