@@ -118,7 +118,7 @@ const sessionConfig = {
     }
   ),
   cookie: {
-    secure: false, // Set to true for HTTPS in production
+    secure: isHttps, // Secure cookies over HTTPS (required for Okta SSO in production)
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
     sameSite: 'lax', // 'lax' works for same-site requests (which this is through Caddy proxy)

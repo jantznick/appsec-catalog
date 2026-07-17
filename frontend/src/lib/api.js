@@ -1,5 +1,9 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+// Base URL of the backend API, exported for full-page redirects (e.g. Okta SSO,
+// which must be a browser navigation to the backend, not a fetch).
+export const API_BASE_URL = API_URL;
+
 /**
  * Make an API request with automatic session handling
  */
@@ -79,6 +83,10 @@ export const api = {
 
   getCurrentUser: () =>
     apiRequest('/api/auth/me'),
+
+  // Whether Okta SSO is enabled on the backend
+  getOktaStatus: () =>
+    apiRequest('/api/auth/okta/status'),
 
   // User endpoints
   getPendingUsers: async () => {

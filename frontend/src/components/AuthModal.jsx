@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../store/authStore.js';
+import { api, API_BASE_URL } from '../lib/api.js';
 import { Button, Input, Modal, Alert } from './ui/index.js';
 
 export function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
@@ -19,17 +20,45 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
   const [magicCodeLoading, setMagicCodeLoading] = useState(false);
   const [magicCodeSent, setMagicCodeSent] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [oktaEnabled, setOktaEnabled] = useState(false);
+  const [oktaError, setOktaError] = useState('');
 
-  // Update isLogin based on route or initialMode
+  // Self-service registration is disabled; new accounts come through Okta SSO.
+  // The modal is always in login mode.
   useEffect(() => {
-    if (location.pathname === '/login') {
-      setIsLogin(true);
-    } else if (location.pathname === '/register') {
-      setIsLogin(false);
-    } else {
-      setIsLogin(initialMode === 'login');
-    }
+    setIsLogin(true);
   }, [location.pathname, initialMode]);
+
+  // Check whether Okta SSO is enabled on the backend, and surface any error
+  // returned from the Okta callback redirect (e.g. ?error=okta).
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    let cancelled = false;
+    api
+      .getOktaStatus()
+      .then((data) => {
+        if (!cancelled) setOktaEnabled(Boolean(data?.enabled));
+      })
+      .catch(() => {
+        if (!cancelled) setOktaEnabled(false);
+      });
+
+    const params = new URLSearchParams(location.search);
+    if (params.get('error')?.startsWith('okta')) {
+      setOktaError('Okta sign-in failed. Please try again or contact your administrator.');
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, location.search]);
+
+  const handleOktaLogin = () => {
+    // Full-page navigation to the backend, which redirects to Okta.
+    window.location.href = `${API_BASE_URL}/api/auth/okta/login`;
+  };
 
   // Close modal if user becomes authenticated
   useEffect(() => {
@@ -151,10 +180,28 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
           </Alert>
         )}
 
-        {error && (
+        {(error || oktaError) && (
           <Alert variant="error" className="mb-4">
-            {error}
+            {oktaError || error}
           </Alert>
+        )}
+
+        {oktaEnabled && (
+          <div className="mb-4">
+            <Button
+              type="button"
+              variant="primary"
+              className="w-full"
+              onClick={handleOktaLogin}
+            >
+              Sign in with Okta
+            </Button>
+            <div className="flex items-center gap-3 my-4">
+              <div className="h-px flex-1 bg-gray-200" />
+              <span className="text-xs uppercase tracking-wide text-gray-400">or</span>
+              <div className="h-px flex-1 bg-gray-200" />
+            </div>
+          </div>
         )}
 
         <form onSubmit={handlePasswordSubmit} className="space-y-4">
@@ -227,27 +274,7 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
 
         <div className="mt-4 text-center">
           <p className="text-sm text-gray-600">
-            {isLogin ? (
-              <>
-                Don't have an account?{' '}
-                <button
-                  onClick={() => setIsLogin(false)}
-                  className="text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Sign up
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{' '}
-                <button
-                  onClick={() => setIsLogin(true)}
-                  className="text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Sign in
-                </button>
-              </>
-            )}
+            Need an account? New accounts are provisioned through Okta single sign-on.
           </p>
         </div>
       </Modal>

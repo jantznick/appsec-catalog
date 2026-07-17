@@ -5,14 +5,38 @@ import { createMagicCode, validateMagicCode, cleanupExpiredMagicCodes } from '..
 import { extractDomain, findCompanyByDomain } from '../utils/domain.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getAuthContext } from '../middleware/authContext.js';
+import {
+  isOktaConfigured,
+  buildAuthorizationRequest,
+  handleCallback,
+  buildLogoutUrl,
+} from '../services/oktaClient.js';
+import { provisionOktaUser } from '../utils/oktaProvision.js';
 
 const router = express.Router();
+
+// Frontend base URL used for post-auth redirects.
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 /**
  * Register a new user
  * POST /api/auth/register
+ *
+ * DISABLED: new users are provisioned exclusively through Okta SSO. Existing
+ * password accounts continue to work via POST /api/auth/login. This endpoint is
+ * intentionally closed off; see /api/auth/okta/login for onboarding.
  */
-router.post('/register', async (req, res) => {
+router.post('/register', (req, res) => {
+  return res.status(403).json({
+    error: 'Registration disabled',
+    message: 'New accounts are created through Okta single sign-on. Please use "Sign in with Okta".',
+  });
+});
+
+/**
+ * Legacy password registration (retained for reference; unreachable).
+ */
+async function _legacyRegister(req, res) {
   try {
     const { email, password } = req.body;
 
@@ -98,7 +122,7 @@ router.post('/register', async (req, res) => {
       message: 'An error occurred during registration'
     });
   }
-});
+}
 
 /**
  * Login with email and password
@@ -387,6 +411,122 @@ router.post('/logout', (req, res) => {
     }
     res.clearCookie('connect.sid'); // Default session cookie name
     res.json({ message: 'Logout successful' });
+  });
+});
+
+/**
+ * Report whether Okta SSO is enabled, so the frontend can show/hide the button.
+ * GET /api/auth/okta/status
+ */
+router.get('/okta/status', (req, res) => {
+  res.json({ enabled: isOktaConfigured() });
+});
+
+/**
+ * Begin Okta login (Authorization Code + PKCE).
+ * GET /api/auth/okta/login
+ */
+router.get('/okta/login', async (req, res) => {
+  if (!isOktaConfigured()) {
+    return res.status(503).json({
+      error: 'Okta not configured',
+      message: 'Okta SSO is not configured on this server.',
+    });
+  }
+
+  try {
+    const { url, state, nonce, codeVerifier } = await buildAuthorizationRequest();
+
+    // Stash the per-request checks in the session; they are validated at the
+    // callback. sameSite=lax lets this cookie survive the top-level redirect
+    // back from Okta.
+    req.session.oktaAuth = { state, nonce, codeVerifier };
+
+    // Persist the session before redirecting to guarantee the cookie is set.
+    req.session.save((err) => {
+      if (err) {
+        console.error('Okta login session error:', err);
+        return res.redirect(`${FRONTEND_URL}/login?error=okta`);
+      }
+      res.redirect(url);
+    });
+  } catch (error) {
+    console.error('Okta login error:', error);
+    res.redirect(`${FRONTEND_URL}/login?error=okta`);
+  }
+});
+
+/**
+ * Okta redirect callback: exchange the code, provision/link the user, and
+ * establish the same session the password flow uses.
+ * GET /api/auth/okta/callback
+ */
+router.get('/okta/callback', async (req, res) => {
+  if (!isOktaConfigured()) {
+    return res.redirect(`${FRONTEND_URL}/login?error=okta`);
+  }
+
+  const checks = req.session.oktaAuth;
+  if (!checks) {
+    console.error('Okta callback without pending auth state in session');
+    return res.redirect(`${FRONTEND_URL}/login?error=okta_state`);
+  }
+
+  try {
+    const currentUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+    const { claims, idToken } = await handleCallback(currentUrl, {
+      codeVerifier: checks.codeVerifier,
+      state: checks.state,
+      nonce: checks.nonce,
+    });
+
+    const user = await provisionOktaUser(claims);
+
+    // Clear the one-time auth checks and establish the app session.
+    delete req.session.oktaAuth;
+    req.session.userId = user.id;
+    req.session.email = user.email;
+    req.session.verified = user.verifiedAccount;
+    req.session.isAdmin = user.isAdmin;
+    req.session.companyId = user.companyId;
+    req.session.oktaIdToken = idToken; // used as id_token_hint for SSO logout
+
+    req.session.save((err) => {
+      if (err) {
+        console.error('Okta callback session error:', err);
+        return res.redirect(`${FRONTEND_URL}/login?error=okta`);
+      }
+      res.redirect(`${FRONTEND_URL}/dashboard`);
+    });
+  } catch (error) {
+    console.error('Okta callback error:', error);
+    res.redirect(`${FRONTEND_URL}/login?error=okta`);
+  }
+});
+
+/**
+ * Optional RP-initiated (single) logout: destroy the local session and, when
+ * Okta supports it, redirect the browser to Okta's end-session endpoint.
+ * GET /api/auth/okta/logout
+ */
+router.get('/okta/logout', async (req, res) => {
+  const idTokenHint = req.session?.oktaIdToken;
+
+  let logoutUrl = null;
+  if (isOktaConfigured()) {
+    try {
+      logoutUrl = await buildLogoutUrl(idTokenHint);
+    } catch (error) {
+      console.error('Okta logout URL error:', error);
+    }
+  }
+
+  req.session.destroy((err) => {
+    if (err) {
+      console.error('Okta logout error:', err);
+    }
+    res.clearCookie('connect.sid');
+    res.redirect(logoutUrl || `${FRONTEND_URL}/`);
   });
 });
 
