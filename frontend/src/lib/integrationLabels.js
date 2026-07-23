@@ -1,5 +1,5 @@
 /** Human-readable names for IntegrationCredential.provider values */
-export const INTEGRATION_PROVIDER_LABELS = {
+const INTEGRATION_PROVIDER_LABELS = {
   TENABLE_IO: 'Tenable.io',
   WIZ: 'Wiz',
 };
