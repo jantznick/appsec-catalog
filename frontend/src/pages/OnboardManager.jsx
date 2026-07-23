@@ -6,7 +6,6 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.
 import { Button } from '../components/ui/Button.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { Textarea } from '../components/ui/Textarea.jsx';
-import { Select } from '../components/ui/Select.jsx';
 import { RadioGroup, Radio } from '../components/ui/Radio.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
 import { LoadingPage } from '../components/ui/Loading.jsx';
@@ -25,6 +24,9 @@ export function OnboardManager() {
   const [companies, setCompanies] = useState([]);
   const [loadingCompanies, setLoadingCompanies] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [companySearch, setCompanySearch] = useState('');
+  const [debouncedCompanySearch, setDebouncedCompanySearch] = useState('');
+  const [showCompanyResults, setShowCompanyResults] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
   const [creatingCompany, setCreatingCompany] = useState(false);
   const [showCreateCompany, setShowCreateCompany] = useState(false);
@@ -48,6 +50,21 @@ export function OnboardManager() {
       loadCompanies();
     }
   }, [slug]);
+
+  // Debounced company search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedCompanySearch(companySearch);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [companySearch]);
+
+  const filteredCompanies = debouncedCompanySearch.trim()
+    ? companies.filter(c =>
+        c.name.toLowerCase().includes(debouncedCompanySearch.trim().toLowerCase())
+      )
+    : companies;
 
   const loadCompany = async () => {
     try {
@@ -85,6 +102,18 @@ export function OnboardManager() {
     if (selectedCompany) {
       navigate(`/onboard/${selectedCompany.slug}/manager`);
     }
+  };
+
+  const handleCompanyResultSelect = (selectedCompany) => {
+    setSelectedCompanyId(selectedCompany.id);
+    setCompanySearch(selectedCompany.name);
+    setShowCompanyResults(false);
+  };
+
+  const handleCompanySearchChange = (value) => {
+    setCompanySearch(value);
+    setSelectedCompanyId('');
+    setShowCompanyResults(true);
   };
 
   const handleCreateCompany = async () => {
@@ -276,17 +305,47 @@ export function OnboardManager() {
             <CardContent>
               {!showCreateCompany ? (
                 <div className="space-y-6">
-                  <div>
-                    <Select
+                  <div className="relative">
+                    <Input
                       label="Select Company *"
-                      value={selectedCompanyId}
-                      onChange={(e) => setSelectedCompanyId(e.target.value)}
-                      options={[
-                        { value: '', label: 'Choose a company...' },
-                        ...companies.map(c => ({ value: c.id, label: c.name }))
-                      ]}
+                      value={companySearch}
+                      onChange={(e) => handleCompanySearchChange(e.target.value)}
+                      onFocus={() => setShowCompanyResults(true)}
+                      onBlur={() => setTimeout(() => setShowCompanyResults(false), 150)}
+                      placeholder="Start typing to search companies..."
                     />
+                    {showCompanyResults && filteredCompanies.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {filteredCompanies.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => handleCompanyResultSelect(c)}
+                            className={`w-full text-left px-4 py-2 hover:bg-gray-100 ${
+                              selectedCompanyId === c.id ? 'bg-blue-50' : ''
+                            }`}
+                          >
+                            <div className="font-medium">{c.name}</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {showCompanyResults && companySearch.trim() && filteredCompanies.length === 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-4 text-sm text-gray-600">
+                        No companies found. Try "Create New Company" below.
+                      </div>
+                    )}
                   </div>
+
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={handleCompanySelect}
+                    disabled={!selectedCompanyId}
+                    className="w-full"
+                  >
+                    Continue
+                  </Button>
 
                   <div className="flex items-center gap-4">
                     <div className="flex-1 border-t border-gray-300"></div>
@@ -301,16 +360,6 @@ export function OnboardManager() {
                     className="w-full"
                   >
                     Create New Company
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="primary"
-                    onClick={handleCompanySelect}
-                    disabled={!selectedCompanyId}
-                    className="w-full"
-                  >
-                    Continue
                   </Button>
                 </div>
               ) : (
