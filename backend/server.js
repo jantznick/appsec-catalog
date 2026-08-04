@@ -105,8 +105,19 @@ app.use('/storage', express.static(path.resolve(__dirname, 'storage')));
 // Session configuration
 // Using PrismaSessionStore to store sessions in the database (scalable, survives restarts)
 // NOTE: secure is set to false for HTTP. For HTTPS in production, set secure: true
+
+// Require a real session secret in production; never fall back to a shipped
+// default that would let anyone forge sessions. In non-production, a clearly
+// labelled dev secret is allowed for convenience.
+if (!process.env.SESSION_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('SESSION_SECRET must be set in production');
+}
+if (!process.env.SESSION_SECRET) {
+  console.warn('⚠️  SESSION_SECRET is not set — using an insecure development-only secret.');
+}
+
 const sessionConfig = {
-  secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
+  secret: process.env.SESSION_SECRET || 'dev-only-insecure-secret-change-me',
   resave: false, // Don't save session if unmodified (PrismaSessionStore handles this)
   saveUninitialized: false,
   store: new PrismaSessionStore(
@@ -118,7 +129,7 @@ const sessionConfig = {
     }
   ),
   cookie: {
-    secure: false, // Set to true for HTTPS in production
+    secure: isHttps, // Secure cookies over HTTPS (required for Okta SSO in production)
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
     sameSite: 'lax', // 'lax' works for same-site requests (which this is through Caddy proxy)
