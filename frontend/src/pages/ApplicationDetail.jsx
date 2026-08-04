@@ -44,6 +44,7 @@ export function ApplicationDetail() {
   const [technicalFormUrl, setTechnicalFormUrl] = useState('');
   const [generatingLink, setGeneratingLink] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [showDependenciesModal, setShowDependenciesModal] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [interfaces, setInterfaces] = useState([]);
@@ -1302,7 +1303,6 @@ export function ApplicationDetail() {
         <Tab>Infosec Policy Compliance</Tab>
         {isAdmin() && <Tab badge={pendingVersionsCount}>Application Metadata History</Tab>}
         <Tab>Integrations</Tab>
-        <Tab>Dependencies</Tab>
 
         {/* App Data Tab */}
         <TabPanel>
@@ -1532,6 +1532,18 @@ export function ApplicationDetail() {
                             placeholder="e.g. cloud, on-premises, hybrid"
                           />
                         </div>
+                        <div className="mt-3 pt-3 border-t border-indigo-200 relative z-20">
+                          <button
+                            type="button"
+                            onClick={() => setShowDependenciesModal(true)}
+                            className="text-xs font-medium text-indigo-700 hover:text-indigo-900 hover:underline inline-flex items-center gap-1"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                            </svg>
+                            View dependencies →
+                          </button>
+                        </div>
                       </div>
 
                       {/* Deployment Info Section */}
@@ -1627,6 +1639,18 @@ export function ApplicationDetail() {
                             <span className="text-xs font-medium text-gray-600">Server Environment:</span>
                             <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.serverEnvironment || <span className="text-gray-400 italic">Not set</span>}</p>
                           </div>
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-indigo-200 relative z-20">
+                          <button
+                            type="button"
+                            onClick={() => setShowDependenciesModal(true)}
+                            className="text-xs font-medium text-indigo-700 hover:text-indigo-900 hover:underline inline-flex items-center gap-1"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                            </svg>
+                            View dependencies →
+                          </button>
                         </div>
                       </div>
 
@@ -2665,14 +2689,20 @@ export function ApplicationDetail() {
             <ApplicationIntegrationsSection application={application} onRefresh={refreshFromGithubAction} />
           )}
         </TabPanel>
-
-        <TabPanel>
-          {application && <ApplicationDependenciesPanel application={application} />}
-        </TabPanel>
       </Tabs>
 
       {/* GitHub link/change/sync + Language/Framework modals (self-contained flow) */}
       {githubFlow.modals}
+
+      {/* Dependencies Modal */}
+      <Modal
+        isOpen={showDependenciesModal}
+        onClose={() => setShowDependenciesModal(false)}
+        title="Dependencies"
+        size="xl"
+      >
+        {application && <ApplicationDependenciesPanel application={application} />}
+      </Modal>
 
       {/* Add Deployment Modal */}
       <Modal
