@@ -149,11 +149,16 @@ password sign-up is disabled.
 - **Existing password users** can log in with Okta as soon as their Okta email
   matches their existing account — no migration needed. The account is linked to
   their Okta identity (`sub`) on first Okta login.
-- **New users** are auto-provisioned on first Okta login: verified automatically,
-  assigned to a company by email domain, and granted admin if they belong to the
-  configured Okta admin group.
+- **New users** are auto-provisioned on first Okta login: verified automatically
+  and assigned to a company by email domain. Admin is managed manually by default
+  (optionally mapped from an Okta group — see below).
+- Email-based linking onto a pre-existing account requires the IdP's
+  `email_verified` claim to be true.
 - If Okta env vars are not set, SSO is disabled and the app runs with
   password/magic-code login only.
+
+> Full reference (architecture, flow, security notes, testing):
+> [OKTA_SSO.md](./OKTA_SSO.md).
 
 ### Configure the Okta application (Okta admin)
 
@@ -167,10 +172,12 @@ password sign-up is disabled.
    - Dev: `http://localhost:3000`
    - Prod: `https://YOUR-DOMAIN`
 5. **Assignments:** assign the users/groups who should have access.
-6. For **group-based admin**, add a `groups` claim to your authorization server
-   (**Security → API → Authorization Servers → *your server* → Claims**): name
-   it `groups`, include it in the **ID token**, and filter to the groups you
-   care about. Note the group name that should map to app admins.
+6. *(Optional — group-based admin only)* Admin is managed manually by default.
+   To drive admin from Okta instead, add a `groups` claim to your authorization
+   server (**Security → API → Authorization Servers → *your server* → Claims**):
+   name it `groups`, include it in the **ID token**, and filter to the groups you
+   care about. Note the group name that should map to app admins, then set
+   `OKTA_ADMIN_GROUP` and add `groups` to `OKTA_SCOPES`.
 
 ### Configure the backend (`backend/.env`)
 
@@ -179,8 +186,8 @@ OKTA_ISSUER=https://yourcompany.okta.com/oauth2/default
 OKTA_CLIENT_ID=<from the Okta app>
 OKTA_CLIENT_SECRET=<from the Okta app>
 OKTA_REDIRECT_URI=http://localhost:5000/api/auth/okta/callback   # prod: https://YOUR-DOMAIN/api/auth/okta/callback
-OKTA_SCOPES=openid email profile groups
-OKTA_ADMIN_GROUP=appsec-admins                                    # your admin group name
+OKTA_SCOPES=openid email profile                                 # add "groups" only for group-based admin
+OKTA_ADMIN_GROUP=                                                # blank = admin managed manually (default)
 OKTA_POST_LOGOUT_REDIRECT_URI=http://localhost:3000              # optional
 ```
 

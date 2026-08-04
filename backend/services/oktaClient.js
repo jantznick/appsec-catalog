@@ -13,12 +13,15 @@ import * as client from 'openid-client';
  *   OKTA_CLIENT_SECRET
  *   OKTA_REDIRECT_URI   must exactly match a "Sign-in redirect URI" in Okta
  * Optional:
- *   OKTA_SCOPES         space-delimited, default "openid email profile groups"
+ *   OKTA_SCOPES         space-delimited, default "openid email profile".
+ *                       Add "groups" only if using OKTA_ADMIN_GROUP mapping.
  *   OKTA_ADMIN_GROUP    Okta group name that maps to app admins
  *   OKTA_POST_LOGOUT_REDIRECT_URI  where Okta returns the user after logout
  */
 
-const SCOPES = process.env.OKTA_SCOPES || 'openid email profile groups';
+// Admin is managed manually by default, so `groups` is not requested unless the
+// operator opts in via OKTA_SCOPES (needed only for OKTA_ADMIN_GROUP mapping).
+const SCOPES = process.env.OKTA_SCOPES || 'openid email profile';
 
 let configPromise = null;
 

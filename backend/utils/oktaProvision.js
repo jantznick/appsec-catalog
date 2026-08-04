@@ -26,13 +26,15 @@ export function isAdminFromClaims(claims) {
  * Linking rules:
  *  - Existing users are matched first by `oktaSub`, then by email
  *    (case-insensitive). This lets a user who already has a password log in
- *    with Okta simply because the email matches.
+ *    with Okta simply because the email matches. Email-based linking onto a
+ *    pre-existing account requires the IdP's `email_verified` claim to be true.
  *  - New users are auto-provisioned: verifiedAccount=true, company assigned by
- *    email domain, admin from the Okta group claim.
- *  - On every login the stored oktaSub is (re)linked and isAdmin is refreshed
- *    from the group claim so group changes in Okta take effect. Company is only
- *    assigned when the user does not already have one, to avoid clobbering a
- *    manual assignment.
+ *    email domain.
+ *  - Admin is managed manually (via ADMIN_EMAILS / the isAdmin flag) by
+ *    default. Group-based admin is opt-in: it activates only when OKTA_ADMIN_GROUP
+ *    is set (and the `groups` scope/claim is configured), and it never downgrades
+ *    a manually-set admin. Company is only assigned when the user does not
+ *    already have one, to avoid clobbering a manual assignment.
  *
  * @param {object} claims - verified ID token claims
  * @returns {Promise<object>} the persisted user
@@ -50,10 +52,20 @@ export async function provisionOktaUser(claims) {
 
   const admin = isAdminFromClaims(claims);
 
-  // 1) Match by oktaSub, then by email.
+  // 1) Match by oktaSub first, then fall back to email.
   let user = await prisma.user.findFirst({ where: { oktaSub: sub } });
+  const matchedBySub = Boolean(user);
   if (!user) {
     user = await prisma.user.findUnique({ where: { email } });
+  }
+
+  // Security: only auto-link an Okta identity onto a *pre-existing* local
+  // account when the IdP asserts the email is verified. Matching by oktaSub is
+  // already a trusted binding, so this guard applies only to email-based links.
+  if (user && !matchedBySub && claims.email_verified !== true) {
+    throw new Error(
+      `Refusing to link Okta identity to existing account for ${email}: email_verified claim is not true`
+    );
   }
 
   if (user) {

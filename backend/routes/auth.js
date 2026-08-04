@@ -34,97 +34,6 @@ router.post('/register', (req, res) => {
 });
 
 /**
- * Legacy password registration (retained for reference; unreachable).
- */
-async function _legacyRegister(req, res) {
-  try {
-    const { email, password } = req.body;
-
-    // Validate input
-    if (!email || !password) {
-      return res.status(400).json({ 
-        error: 'Missing required fields',
-        message: 'Email and password are required'
-      });
-    }
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ 
-        error: 'Invalid email format',
-        message: 'Please provide a valid email address'
-      });
-    }
-
-    // Check if email already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-    });
-
-    if (existingUser) {
-      return res.status(409).json({ 
-        error: 'Email already registered',
-        message: 'An account with this email already exists'
-      });
-    }
-
-    // Validate password strength (minimum 8 characters)
-    if (password.length < 8) {
-      return res.status(400).json({ 
-        error: 'Password too short',
-        message: 'Password must be at least 8 characters long'
-      });
-    }
-
-    // Extract domain and find matching company
-    const domain = extractDomain(email);
-    const company = domain ? await findCompanyByDomain(domain) : null;
-
-    // Hash password
-    const hashedPassword = await hashPassword(password);
-
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        email: email.toLowerCase(),
-        password: hashedPassword,
-        verifiedAccount: false,
-        isAdmin: false,
-        companyId: company?.id || null,
-      },
-      select: {
-        id: true,
-        email: true,
-        verifiedAccount: true,
-        isAdmin: true,
-        companyId: true,
-        company: company ? {
-          id: true,
-          name: true,
-        } : false,
-      },
-    });
-
-    res.status(201).json({
-      message: 'Registration successful. Your account is pending verification.',
-      user: {
-        id: user.id,
-        email: user.email,
-        verifiedAccount: user.verifiedAccount,
-        company: user.company,
-      },
-    });
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ 
-      error: 'Registration failed',
-      message: 'An error occurred during registration'
-    });
-  }
-}
-
-/**
  * Login with email and password
  * POST /api/auth/login
  */
@@ -204,15 +113,26 @@ router.post('/login', async (req, res) => {
 });
 
 /**
- * Request a magic code (works for both login and registration)
+ * Request a magic code for an EXISTING account.
  * POST /api/auth/request-magic-code
+ *
+ * Onboarding is Okta-only: this endpoint no longer creates accounts. It issues
+ * a code for an existing user, and for an unknown email it returns the same
+ * generic response (without issuing a code) so it cannot be used to enumerate
+ * accounts or provision new ones.
  */
 router.post('/request-magic-code', async (req, res) => {
+  // Generic response reused for both the known- and unknown-email cases so the
+  // caller cannot distinguish whether an account exists.
+  const genericResponse = {
+    message: 'If an account exists for that email, a magic code has been sent. Please ask your administrator to retrieve it from the console.',
+  };
+
   try {
     const { email } = req.body;
 
     if (!email) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Missing required field',
         message: 'Email is required'
       });
@@ -221,7 +141,7 @@ router.post('/request-magic-code', async (req, res) => {
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Invalid email format',
         message: 'Please provide a valid email address'
       });
@@ -229,26 +149,13 @@ router.post('/request-magic-code', async (req, res) => {
 
     const emailLower = email.toLowerCase();
 
-    // Find or create user
-    let user = await prisma.user.findUnique({
+    // Only issue codes to existing accounts; never create one here.
+    const user = await prisma.user.findUnique({
       where: { email: emailLower },
     });
 
     if (!user) {
-      // User doesn't exist - create them for magic code registration
-      // Extract domain and find matching company
-      const domain = extractDomain(emailLower);
-      const company = domain ? await findCompanyByDomain(domain) : null;
-
-      user = await prisma.user.create({
-        data: {
-          email: emailLower,
-          password: null, // No password for magic code only users
-          verifiedAccount: false,
-          isAdmin: false,
-          companyId: company?.id || null,
-        },
-      });
+      return res.json(genericResponse);
     }
 
     // Clean up expired magic codes before creating a new one
@@ -262,9 +169,8 @@ router.post('/request-magic-code', async (req, res) => {
     console.log(`   Expires at: ${expiresAt.toISOString()}\n`);
 
     res.json({
-      message: 'A magic code has been sent. Please ask your administrator to retrieve it from the console.',
-      // In production, don't return the code
-      // For development, we can return it
+      ...genericResponse,
+      // In production, don't return the code. For development, we can return it.
       ...(process.env.NODE_ENV !== 'production' && { code }),
     });
   } catch (error) {
@@ -482,21 +388,31 @@ router.get('/okta/callback', async (req, res) => {
 
     const user = await provisionOktaUser(claims);
 
-    // Clear the one-time auth checks and establish the app session.
-    delete req.session.oktaAuth;
-    req.session.userId = user.id;
-    req.session.email = user.email;
-    req.session.verified = user.verifiedAccount;
-    req.session.isAdmin = user.isAdmin;
-    req.session.companyId = user.companyId;
-    req.session.oktaIdToken = idToken; // used as id_token_hint for SSO logout
-
-    req.session.save((err) => {
-      if (err) {
-        console.error('Okta callback session error:', err);
+    // Regenerate the session on successful authentication so the authenticated
+    // session gets a fresh ID, preventing session fixation (the pre-auth cookie
+    // that carried oktaAuth cannot be replayed as an authenticated session).
+    req.session.regenerate((regenErr) => {
+      if (regenErr) {
+        console.error('Okta callback session regenerate error:', regenErr);
         return res.redirect(`${FRONTEND_URL}/login?error=okta`);
       }
-      res.redirect(`${FRONTEND_URL}/dashboard`);
+
+      // Establish the app session on the fresh session (the one-time oktaAuth
+      // checks are dropped by regeneration).
+      req.session.userId = user.id;
+      req.session.email = user.email;
+      req.session.verified = user.verifiedAccount;
+      req.session.isAdmin = user.isAdmin;
+      req.session.companyId = user.companyId;
+      req.session.oktaIdToken = idToken; // used as id_token_hint for SSO logout
+
+      req.session.save((err) => {
+        if (err) {
+          console.error('Okta callback session error:', err);
+          return res.redirect(`${FRONTEND_URL}/login?error=okta`);
+        }
+        res.redirect(`${FRONTEND_URL}/dashboard`);
+      });
     });
   } catch (error) {
     console.error('Okta callback error:', error);
