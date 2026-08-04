@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
 import { LoadingPage } from '../components/ui/Loading.jsx';
@@ -11,7 +11,152 @@ import { integrationProviderLabel } from '../lib/integrationLabels.js';
 import { AddIntegrationModal } from '../components/integrations/AddIntegrationModal.jsx';
 
 /**
- * Admin-only: catalog-wide (enterprise) integrations.
+ * Per-user GitHub account connection (GitHub App). Available to any authenticated user —
+ * it links their own GitHub so they can attach repos to applications.
+ */
+function MyGithubAccountCard() {
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [disconnectOpen, setDisconnectOpen] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const loadStatus = async () => {
+    try {
+      setLoading(true);
+      setStatus(await api.getGithubStatus());
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message || 'Failed to load GitHub status');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // Surface the callback outcome, then strip the flag from the URL.
+    const flag = searchParams.get('github');
+    if (flag === 'success') {
+      toast.success('GitHub account connected');
+    } else if (flag === 'error') {
+      toast.error('Could not connect GitHub. Please try again.');
+    }
+    if (flag) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('github');
+      setSearchParams(next, { replace: true });
+    }
+    loadStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const confirmDisconnect = async () => {
+    setDisconnecting(true);
+    try {
+      await api.disconnectGithub();
+      toast.success('GitHub disconnected');
+      setDisconnectOpen(false);
+      await loadStatus();
+    } catch (e) {
+      toast.error(e.message || 'Failed to disconnect');
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
+  return (
+    <Card className="max-w-2xl mb-8">
+      <CardHeader>
+        <CardTitle>My GitHub account</CardTitle>
+        <p className="text-sm text-gray-600 font-normal mt-1 max-w-2xl">
+          Connect your GitHub account to link repositories to applications and automatically pull
+          languages, frameworks, and dependencies from the source.
+        </p>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <p className="text-sm text-gray-500">Loading…</p>
+        ) : !status?.configured ? (
+          <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/50 px-4 py-6 text-center">
+            <p className="text-sm text-gray-600">GitHub integration is not configured yet.</p>
+            <p className="text-sm text-gray-500 mt-2">
+              An administrator needs to register a GitHub App and set its environment variables.
+            </p>
+          </div>
+        ) : status.connected ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center gap-3">
+              {status.avatarUrl ? (
+                <img
+                  src={status.avatarUrl}
+                  alt=""
+                  className="h-10 w-10 rounded-full border border-gray-200"
+                />
+              ) : null}
+              <div>
+                <p className="text-sm font-semibold text-gray-900">@{status.login}</p>
+                <p className="text-xs text-green-800 font-medium">Connected</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  window.location.href = api.githubConnectUrl();
+                }}
+              >
+                Manage repos
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setDisconnectOpen(true)}>
+                Disconnect
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 p-4">
+            <p className="text-sm text-gray-600">Your GitHub account is not connected.</p>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                window.location.href = api.githubConnectUrl();
+              }}
+            >
+              Connect GitHub
+            </Button>
+          </div>
+        )}
+      </CardContent>
+
+      <Modal
+        isOpen={disconnectOpen}
+        onClose={() => !disconnecting && setDisconnectOpen(false)}
+        title="Disconnect GitHub?"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDisconnectOpen(false)} disabled={disconnecting}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={confirmDisconnect} loading={disconnecting}>
+              Disconnect
+            </Button>
+          </>
+        }
+      >
+        <p className="text-gray-700">
+          Disconnecting removes your stored GitHub connection. Repositories already linked to
+          applications stay linked, but syncing will require reconnecting.
+        </p>
+      </Modal>
+    </Card>
+  );
+}
+
+/**
+ * Integration settings. The "My GitHub account" panel is available to every authenticated user;
+ * catalog-wide (enterprise) and company credential management remain admin-only.
  */
 export function IntegrationSettings() {
   const { isAdmin, loading: authLoading } = useAuthStore();
@@ -96,9 +241,7 @@ export function IntegrationSettings() {
     return <LoadingPage message="Loading…" />;
   }
 
-  if (!isAdmin()) {
-    return <Navigate to="/dashboard" replace />;
-  }
+  const admin = isAdmin();
 
   return (
     <div>
@@ -108,14 +251,16 @@ export function IntegrationSettings() {
         </Link>
         <h1 className="text-3xl font-bold text-gray-800 mb-2">Integration settings</h1>
         <p className="text-gray-600 max-w-2xl">
-          Catalog-wide API credentials apply to all companies unless a company adds its own keys on its
-          company page. Only administrators can assign tags when using shared catalog-wide credentials.
-          Company-specific keys are always added on each company&apos;s Integrations section (members or
-          admins).
+          Connect your own GitHub account below to link repositories to applications.
+          {admin
+            ? ' Catalog-wide API credentials below apply to all companies unless a company adds its own keys on its company page.'
+            : ''}
         </p>
       </div>
 
-      {loading ? (
+      <MyGithubAccountCard />
+
+      {!admin ? null : loading ? (
         <LoadingPage message="Loading…" />
       ) : (
         <Card className="max-w-2xl">
@@ -178,7 +323,7 @@ export function IntegrationSettings() {
         </Card>
       )}
 
-      {!loading && (
+      {admin && !loading && (
         <Card className="max-w-2xl mt-8">
           <CardHeader>
             <CardTitle>Company-level integrations</CardTitle>
@@ -232,29 +377,31 @@ export function IntegrationSettings() {
         </Card>
       )}
 
-      <AddIntegrationModal
-        isOpen={addModalOpen}
-        onClose={() => {
-          setAddModalOpen(false);
-          setAddModalProviderPreset(undefined);
-        }}
-        scope="ENTERPRISE"
-        onSaved={load}
-        providerOptions={
-          providerOptions.length
-            ? providerOptions
-            : [
-                { value: 'TENABLE_IO', label: 'Tenable.io' },
-                { value: 'WIZ', label: 'Wiz' },
-              ]
-        }
-        defaultProvider={addModalProviderPreset}
-        title={addModalProviderPreset ? 'Update catalog-wide integration' : 'Add integration'}
-        description="These credentials apply to the entire catalog (all companies). Per-company keys are added on each company Integrations page."
-      />
+      {admin && (
+        <AddIntegrationModal
+          isOpen={addModalOpen}
+          onClose={() => {
+            setAddModalOpen(false);
+            setAddModalProviderPreset(undefined);
+          }}
+          scope="ENTERPRISE"
+          onSaved={load}
+          providerOptions={
+            providerOptions.length
+              ? providerOptions
+              : [
+                  { value: 'TENABLE_IO', label: 'Tenable.io' },
+                  { value: 'WIZ', label: 'Wiz' },
+                ]
+          }
+          defaultProvider={addModalProviderPreset}
+          title={addModalProviderPreset ? 'Update catalog-wide integration' : 'Add integration'}
+          description="These credentials apply to the entire catalog (all companies). Per-company keys are added on each company Integrations page."
+        />
+      )}
 
       <Modal
-        isOpen={removeEnterpriseProvider != null}
+        isOpen={admin && removeEnterpriseProvider != null}
         onClose={() => !removingEnterprise && setRemoveEnterpriseProvider(null)}
         title="Remove catalog-wide integration?"
         size="sm"

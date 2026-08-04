@@ -1514,10 +1514,30 @@ export function ApplicationDetail() {
                           <div>
                             <span className="text-xs font-medium text-gray-600">Language:</span>
                             <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.language || <span className="text-gray-400 italic">Not set</span>}</p>
+                            {(() => {
+                              const langs = application?.githubRepoLink?.repo?.languages;
+                              const top = langs
+                                ? Object.entries(langs).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([l]) => l).join(', ')
+                                : '';
+                              return top ? (
+                                <p className="text-xs text-indigo-700 mt-0.5" title="Detected from linked GitHub repo">
+                                  GitHub: {top}
+                                </p>
+                              ) : null;
+                            })()}
                           </div>
                           <div>
                             <span className="text-xs font-medium text-gray-600">Framework:</span>
                             <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.framework || <span className="text-gray-400 italic">Not set</span>}</p>
+                            {(() => {
+                              const deps = application?.githubRepoLink?.repo?.dependencies || [];
+                              const fw = [...new Set(deps.filter((d) => d.isFramework && d.framework).map((d) => d.framework))].join(', ');
+                              return fw ? (
+                                <p className="text-xs text-indigo-700 mt-0.5" title="Detected from linked GitHub repo">
+                                  GitHub: {fw}
+                                </p>
+                              ) : null;
+                            })()}
                           </div>
                           <div>
                             <span className="text-xs font-medium text-gray-600">Server Environment:</span>

@@ -65,9 +65,8 @@ const settingsSections = [
       },
       {
         label: 'Integration settings',
-        description: 'Configure catalog-wide security tool integrations.',
+        description: 'Connect your GitHub account; admins configure catalog-wide tool integrations.',
         to: '/settings/integrations',
-        adminOnly: true,
       },
     ],
   },

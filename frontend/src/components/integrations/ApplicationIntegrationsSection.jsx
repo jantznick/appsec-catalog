@@ -7,6 +7,7 @@ import { Button } from '../ui/Button.jsx';
 import useAuthStore from '../../store/authStore.js';
 import { integrationProviderLabel } from '../../lib/integrationLabels.js';
 import { IntegrationTagPickerModal } from './IntegrationTagPickerModal.jsx';
+import { ApplicationGithubBlock } from './ApplicationGithubBlock.jsx';
 
 const TOOL_LINK_PROVIDERS = new Set(['TENABLE_IO', 'WIZ']);
 
@@ -118,6 +119,12 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
 
   return (
     <>
+      <ApplicationGithubBlock
+        application={application}
+        canManage={canViewThisCompany}
+        onRefresh={onRefresh}
+      />
+
       <Card className="mt-6">
         <CardHeader>
           <CardTitle>Integrations (this application)</CardTitle>

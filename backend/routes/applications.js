@@ -1701,6 +1701,17 @@ router.get('/:id', requireAuth, async (req, res) => {
             updatedAt: true,
           },
         },
+        githubRepoLink: {
+          include: {
+            repo: {
+              include: {
+                dependencies: {
+                  orderBy: [{ isFramework: 'desc' }, { name: 'asc' }],
+                },
+              },
+            },
+          },
+        },
         apiSchema: {
           select: {
             id: true,

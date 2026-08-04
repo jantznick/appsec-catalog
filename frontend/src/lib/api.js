@@ -848,6 +848,52 @@ export const api = {
   getIntegrationAdminCompanyOverview: () =>
     apiRequest('/api/integrations/admin/company-overview'),
 
+  // GitHub integration (per-user account connection + per-application repo linking)
+  /** Per-user connection state: { configured, connected, login, avatarUrl, connectedAt } */
+  getGithubStatus: () => apiRequest('/api/integrations/github/status'),
+
+  /** Full-page navigation target that starts the GitHub App install/OAuth flow. */
+  githubConnectUrl: () => `${API_URL}/api/integrations/github/connect`,
+
+  disconnectGithub: () =>
+    apiRequest('/api/integrations/github/connection', { method: 'DELETE' }),
+
+  /** Repos the caller's installation can access (for the link picker). */
+  getGithubRepos: () => apiRequest('/api/integrations/github/repos'),
+
+  /** Cross-application package search: which apps use a given package. */
+  searchGithubDependencies: (name, ecosystem) => {
+    const params = new URLSearchParams({ name });
+    if (ecosystem) params.set('ecosystem', ecosystem);
+    return apiRequest(`/api/integrations/github/dependencies?${params.toString()}`);
+  },
+
+  /** Company-scoped dependency inventory (SBOM) across applications. */
+  getGithubSbom: (companyId) => {
+    const params = new URLSearchParams();
+    if (companyId) params.set('companyId', companyId);
+    const qs = params.toString();
+    return apiRequest(`/api/integrations/github/sbom${qs ? `?${qs}` : ''}`);
+  },
+
+  linkApplicationGithubRepo: (applicationId, { owner, name }) =>
+    apiRequest(`/api/applications/${applicationId}/github/link`, {
+      method: 'PUT',
+      body: JSON.stringify({ owner, name }),
+    }),
+
+  syncApplicationGithubRepo: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/github/sync`, { method: 'POST' }),
+
+  applyApplicationGithubData: (applicationId, fields) =>
+    apiRequest(`/api/applications/${applicationId}/github/apply`, {
+      method: 'POST',
+      body: JSON.stringify({ fields }),
+    }),
+
+  unlinkApplicationGithubRepo: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/github/link`, { method: 'DELETE' }),
+
   // Security findings export (Tenable WAS + Wiz SAST)
   getAdminSecurityFindingsPreview: () => apiRequest('/api/admin/security-findings/preview'),
   getAdminGitCommits: (limit = 25) =>

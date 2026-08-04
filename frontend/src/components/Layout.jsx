@@ -198,6 +198,20 @@ export function Layout({ children }) {
                     >
                       Domains
                     </DropdownItem>
+                    <DropdownItem
+                      onClick={() => {
+                        navigate('/companies');
+                      }}
+                    >
+                      Companies
+                    </DropdownItem>
+                    <DropdownItem
+                      onClick={() => {
+                        navigate('/dependencies');
+                      }}
+                    >
+                      Dependencies
+                    </DropdownItem>
                     {!isAdmin() && (
                       <>
                         <DropdownSectionLabel>Settings</DropdownSectionLabel>

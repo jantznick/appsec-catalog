@@ -16,6 +16,7 @@ import { Companies } from './pages/Companies.jsx';
 import { CompanyDetail } from './pages/CompanyDetail.jsx';
 import { CompanyNew } from './pages/CompanyNew.jsx';
 import { Applications } from './pages/Applications.jsx';
+import { Dependencies } from './pages/Dependencies.jsx';
 import { ApplicationNew } from './pages/ApplicationNew.jsx';
 import { ApplicationDetail } from './pages/ApplicationDetail.jsx';
 import { Products } from './pages/Products.jsx';
@@ -244,6 +245,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <Applications />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dependencies"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Dependencies />
               </Layout>
             </ProtectedRoute>
           }

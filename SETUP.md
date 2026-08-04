@@ -104,6 +104,12 @@ npm run dev
 - **Backend**: Run via `npm run dev` in the backend directory
 - **Frontend**: Run via `npm run dev` in the frontend directory
 
+## Optional Integrations
+
+- **GitHub** (users connect their own account and link repos to applications for automatic
+  language/framework/dependency detection): see [GITHUB_INTEGRATION.md](./GITHUB_INTEGRATION.md).
+  One-time admin setup registers a single GitHub App; after that users self-serve.
+
 ## Production Database Backup / Local Restore
 
 You can download a production database dump over SSH without changing your local database:
