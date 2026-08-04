@@ -367,12 +367,77 @@ function parseGemfile(text) {
   return out;
 }
 
+/**
+ * pypi: pyproject.toml — supports PEP 621 `[project] dependencies = [...]` (+ optional-dependencies)
+ * and Poetry `[tool.poetry.dependencies]` / group + dev dependency tables. No TOML lib, so this is
+ * a section-aware line scan (best-effort but covers the common shapes).
+ */
+function parsePyprojectToml(text) {
+  const out = [];
+  const seen = new Set();
+  const push = (name, range) => {
+    const n = String(name || '').trim();
+    if (!n || n.toLowerCase() === 'python' || seen.has(n.toLowerCase())) return;
+    seen.add(n.toLowerCase());
+    out.push({ ecosystem: 'pypi', name: n, versionRange: range || null, source: 'pyproject.toml' });
+  };
+
+  // PEP 621: dependencies = ["pkg>=1", ...] and [project.optional-dependencies] arrays.
+  for (const m of text.matchAll(/dependencies\s*=\s*\[([\s\S]*?)\]/g)) {
+    for (const s of m[1].matchAll(/['"]([^'"]+)['"]/g)) {
+      const spec = s[1].trim();
+      const nameMatch = spec.match(/^([A-Za-z0-9._-]+)/);
+      if (nameMatch) push(nameMatch[1], spec.slice(nameMatch[1].length).trim() || null);
+    }
+  }
+
+  // Poetry: within [tool.poetry(.group.*)?.dependencies] / [tool.poetry.dev-dependencies] tables,
+  // lines like `name = "^1.2"` or `name = { version = "^1.2" }`.
+  const lines = text.split('\n');
+  let inPoetryDeps = false;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line.startsWith('[')) {
+      inPoetryDeps = /^\[tool\.poetry(\.group\.[^.\]]+)?\.(dev-)?dependencies\]/.test(line);
+      continue;
+    }
+    if (!inPoetryDeps || !line || line.startsWith('#')) continue;
+    const m = line.match(/^["']?([A-Za-z0-9._-]+)["']?\s*=\s*(.+)$/);
+    if (!m) continue;
+    let range = m[2].trim();
+    const vin = range.match(/version\s*=\s*["']([^"']+)["']/); // inline table form
+    if (vin) range = vin[1];
+    else range = range.replace(/^["']|["']$/g, '');
+    push(m[1], range);
+  }
+  return out;
+}
+
+/** maven (Gradle): build.gradle / build.gradle.kts `implementation 'group:artifact:version'`. */
+function parseBuildGradle(text) {
+  const out = [];
+  const re =
+    /(?:implementation|api|compileOnly|runtimeOnly|testImplementation|testRuntimeOnly|annotationProcessor|kapt|developmentOnly|providedRuntime)\s*[(\s]\s*['"]([^'":]+):([^'":]+):?([^'"]*)['"]/g;
+  let m;
+  const seen = new Set();
+  while ((m = re.exec(text)) !== null) {
+    const name = `${m[1].trim()}:${m[2].trim()}`;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    out.push({ ecosystem: 'maven', name, versionRange: (m[3] || '').trim() || null, source: 'build.gradle' });
+  }
+  return out;
+}
+
 // Root-level manifests to probe. Each entry: file + parser.
 const MANIFESTS = [
   { file: 'package.json', parse: parsePackageJson },
   { file: 'requirements.txt', parse: parseRequirementsTxt },
+  { file: 'pyproject.toml', parse: parsePyprojectToml },
   { file: 'go.mod', parse: parseGoMod },
   { file: 'pom.xml', parse: parsePomXml },
+  { file: 'build.gradle', parse: parseBuildGradle },
+  { file: 'build.gradle.kts', parse: parseBuildGradle },
   { file: 'composer.json', parse: parseComposerJson },
   { file: 'Gemfile', parse: parseGemfile },
 ];

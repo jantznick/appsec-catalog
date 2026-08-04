@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
 import { LoadingPage } from '../components/ui/Loading.jsx';
@@ -9,16 +9,19 @@ import { Modal } from '../components/ui/Modal.jsx';
 import useAuthStore from '../store/authStore.js';
 import { integrationProviderLabel } from '../lib/integrationLabels.js';
 import { AddIntegrationModal } from '../components/integrations/AddIntegrationModal.jsx';
+import { GithubRepoPickerModal } from '../components/integrations/GithubRepoPickerModal.jsx';
 
 /**
  * Per-user GitHub account connection (GitHub App). Available to any authenticated user —
  * it links their own GitHub so they can attach repos to applications.
  */
 function MyGithubAccountCard() {
+  const navigate = useNavigate();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [createPickerOpen, setCreatePickerOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const loadStatus = async () => {
@@ -84,32 +87,42 @@ function MyGithubAccountCard() {
             </p>
           </div>
         ) : status.connected ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center gap-3">
-              {status.avatarUrl ? (
-                <img
-                  src={status.avatarUrl}
-                  alt=""
-                  className="h-10 w-10 rounded-full border border-gray-200"
-                />
-              ) : null}
-              <div>
-                <p className="text-sm font-semibold text-gray-900">@{status.login}</p>
-                <p className="text-xs text-green-800 font-medium">Connected</p>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center gap-3">
+                {status.avatarUrl ? (
+                  <img
+                    src={status.avatarUrl}
+                    alt=""
+                    className="h-10 w-10 rounded-full border border-gray-200"
+                  />
+                ) : null}
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">@{status.login}</p>
+                  <p className="text-xs text-green-800 font-medium">Connected</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    window.location.href = api.githubConnectUrl();
+                  }}
+                >
+                  Manage repos
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setDisconnectOpen(true)}>
+                  Disconnect
+                </Button>
               </div>
             </div>
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  window.location.href = api.githubConnectUrl();
-                }}
-              >
-                Manage repos
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => setDisconnectOpen(true)}>
-                Disconnect
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-gray-200 bg-gray-50/50 px-4 py-3">
+              <p className="text-sm text-gray-600">
+                Spin up a new application straight from one of your repositories.
+              </p>
+              <Button variant="primary" size="sm" onClick={() => setCreatePickerOpen(true)}>
+                Create application from a repo
               </Button>
             </div>
           </div>
@@ -150,6 +163,17 @@ function MyGithubAccountCard() {
           applications stay linked, but syncing will require reconnecting.
         </p>
       </Modal>
+
+      <GithubRepoPickerModal
+        isOpen={createPickerOpen}
+        onClose={() => setCreatePickerOpen(false)}
+        onSelect={(repo) => {
+          setCreatePickerOpen(false);
+          navigate(`/applications/new?repo=${encodeURIComponent(repo.fullName)}`);
+        }}
+        title="Create an application from a repository"
+        confirmLabel="Continue"
+      />
     </Card>
   );
 }

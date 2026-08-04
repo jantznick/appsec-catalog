@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.jsx';
@@ -9,12 +9,16 @@ import { Textarea } from '../components/ui/Textarea.jsx';
 import { Select } from '../components/ui/Select.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
 import useAuthStore from '../store/authStore.js';
+import { GithubRepoPickerModal } from '../components/integrations/GithubRepoPickerModal.jsx';
 
 export function ApplicationNew() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { isAdmin, user } = useAuthStore();
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [githubPickerOpen, setGithubPickerOpen] = useState(false);
+  const [selectedRepo, setSelectedRepo] = useState(null);
   const [companyDefaults, setCompanyDefaults] = useState(null);
   const [useDefaults, setUseDefaults] = useState(true);
   const [interfaceSearch, setInterfaceSearch] = useState('');
@@ -90,6 +94,40 @@ export function ApplicationNew() {
 
     return () => clearTimeout(timer);
   }, [interfaceSearch]);
+
+  // Prefill a repo when arriving from the GitHub integration (?repo=owner/name).
+  // Prefill the form from a chosen repo: repo URL + name, and (best-effort) the detected language
+  // and framework pulled from GitHub. All values remain editable before submit.
+  const prefillFromRepo = async ({ owner, name, fullName, htmlUrl }) => {
+    const url = htmlUrl || `https://github.com/${fullName}`;
+    setSelectedRepo({ owner, name, fullName, htmlUrl: url });
+    setFormData((prev) => ({ ...prev, repoUrl: url, name: prev.name || name }));
+    try {
+      const intel = await api.getGithubRepoIntel(owner, name);
+      setFormData((prev) => ({
+        ...prev,
+        language: intel.language || prev.language,
+        framework: intel.framework || prev.framework,
+      }));
+    } catch (e) {
+      // Detected language/framework is best-effort; ignore if the preview call fails.
+      console.error('Failed to load repo intel', e);
+    }
+  };
+
+  useEffect(() => {
+    const repoParam = searchParams.get('repo');
+    if (!repoParam || !repoParam.includes('/')) return;
+    const [owner, name] = repoParam.split('/');
+    if (!owner || !name) return;
+    prefillFromRepo({ owner, name, fullName: `${owner}/${name}` });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSelectRepo = (repo) => {
+    setGithubPickerOpen(false);
+    prefillFromRepo(repo);
+  };
 
   const loadCompanies = async () => {
     try {
@@ -178,7 +216,23 @@ export function ApplicationNew() {
         criticalAspects: criticalAspects.length > 0 ? criticalAspects : null,
         interfaces: interfaces,
       });
-      toast.success('Application created successfully');
+
+      // If a GitHub repo was selected, link it now (pulls languages/frameworks/dependencies).
+      if (selectedRepo?.owner && selectedRepo?.name) {
+        try {
+          await api.linkApplicationGithubRepo(application.id, {
+            owner: selectedRepo.owner,
+            name: selectedRepo.name,
+          });
+          toast.success('Application created and GitHub repo linked');
+        } catch (linkErr) {
+          toast.error(
+            `Application created, but linking the repo failed: ${linkErr.message || 'try again from the app'}`,
+          );
+        }
+      } else {
+        toast.success('Application created successfully');
+      }
       navigate(`/applications/${application.id}`);
     } catch (error) {
       toast.error(error.message || 'Failed to create application');
@@ -239,6 +293,20 @@ export function ApplicationNew() {
                   value={formData.repoUrl}
                   onChange={(e) => setFormData({ ...formData, repoUrl: e.target.value })}
                 />
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <Button type="button" variant="secondary" size="sm" onClick={() => setGithubPickerOpen(true)}>
+                    Choose from GitHub
+                  </Button>
+                  {selectedRepo ? (
+                    <span className="text-xs text-green-700">
+                      ✓ {selectedRepo.fullName} will be linked on create
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-400">
+                      Link a connected repo to auto-fill language, framework, and dependencies
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="mt-4">
                 <Textarea
@@ -617,6 +685,14 @@ export function ApplicationNew() {
           </div>
         </div>
       </form>
+
+      <GithubRepoPickerModal
+        isOpen={githubPickerOpen}
+        onClose={() => setGithubPickerOpen(false)}
+        onSelect={handleSelectRepo}
+        title="Choose a GitHub repository to link"
+        confirmLabel="Use this repo"
+      />
     </div>
   );
 }

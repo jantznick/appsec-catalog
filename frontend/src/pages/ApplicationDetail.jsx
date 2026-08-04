@@ -20,6 +20,8 @@ import { VersionHistory } from '../components/versions/VersionHistory.jsx';
 import { Tabs, Tab, TabPanel } from '../components/ui/Tabs.jsx';
 import { PolicyComplianceView } from '../components/policy/PolicyComplianceView.jsx';
 import { ApplicationIntegrationsSection } from '../components/integrations/ApplicationIntegrationsSection.jsx';
+import { ApplicationDependenciesPanel } from '../components/integrations/ApplicationDependenciesPanel.jsx';
+import { useRepoLinkFlow } from '../hooks/useRepoLinkFlow.jsx';
 import { ThreatModelTab } from '../components/threat-model/ThreatModelTab.jsx';
 
 export function ApplicationDetail() {
@@ -796,7 +798,7 @@ export function ApplicationDetail() {
         companyId: data.companyId || '',
         name: data.name || '',
         description: data.description || '',
-        repoUrl: data.repoUrl || '',
+        repoUrl: data.repoUrl || data.githubRepoLink?.repo?.htmlUrl || '',
         language: data.language || '',
         framework: data.framework || '',
         serverEnvironment: data.serverEnvironment || '',
@@ -923,6 +925,129 @@ export function ApplicationDetail() {
     setOriginalFormData(JSON.parse(JSON.stringify(formData)));
     setOriginalInterfaces([...interfaces]);
     setHasUnsavedChanges(false);
+  };
+
+  const canManageGithub = isAdmin() || (user?.companyId && user.companyId === application?.companyId);
+
+  // GitHub actions (link / change / sync / unlink) are their OWN flow via useRepoLinkFlow: they
+  // persist immediately and are completely independent of the metadata edit form. After any change
+  // we refresh ONLY the GitHub-managed state — never setting hasUnsavedChanges and never clobbering
+  // an in-progress edit (formData AND originalFormData stay in sync for the managed fields, so they
+  // never register as a phantom "unsaved change").
+  const refreshFromGithubAction = async () => {
+    try {
+      const data = await api.getApplication(id);
+      setApplication(data);
+      setDomains(data.domains || []);
+      const gh = {
+        repoUrl: data.repoUrl || data.githubRepoLink?.repo?.htmlUrl || '',
+        language: data.language || '',
+        framework: data.framework || '',
+      };
+      setFormData((prev) => ({ ...prev, ...gh }));
+      setOriginalFormData((prev) => (prev ? { ...prev, ...gh } : prev));
+    } catch (e) {
+      console.error('Failed to refresh after GitHub action', e);
+    }
+    await loadScore();
+  };
+
+  const githubFlow = useRepoLinkFlow(application, refreshFromGithubAction);
+
+  // The Repository field. GitHub controls (link/change/unlink) run through githubFlow and are
+  // rendered identically whether or not the metadata form is being edited — they are NOT form
+  // fields and never enter edit mode. When not linked, the plain editable Repository URL remains.
+  const renderRepoField = (editing) => {
+    const linkedRepo = application?.githubRepoLink?.repo;
+    if (linkedRepo) {
+      // `relative z-20` lifts this above the card's transparent click-to-edit overlay (z-10) so the
+      // GitHub controls are actually clickable and never trigger edit mode.
+      return (
+        <div className="relative z-20">
+          <span className="text-xs font-medium text-gray-600">Repository:</span>
+          <a
+            href={linkedRepo.htmlUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 underline text-sm mt-0.5 block break-all"
+          >
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+            {linkedRepo.fullName}
+          </a>
+          {canManageGithub && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => githubFlow.openLinkPicker()}
+                disabled={githubFlow.busy || githubFlow.unlinking}
+              >
+                Change repo
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => githubFlow.unlink()}
+                loading={githubFlow.unlinking}
+              >
+                Unlink
+              </Button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const linkButton = canManageGithub ? (
+      <div className="mt-2 relative z-20 inline-block">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => githubFlow.openLinkPicker()}
+          disabled={githubFlow.busy}
+        >
+          Link a GitHub repo
+        </Button>
+      </div>
+    ) : null;
+
+    if (editing) {
+      return (
+        <div>
+          <Input
+            label="Repository URL"
+            type="url"
+            value={formData.repoUrl}
+            onChange={(e) => handleFieldChange('repoUrl', e.target.value)}
+          />
+          {linkButton}
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        <span className="text-xs font-medium text-gray-600">Repository URL:</span>
+        {formData.repoUrl ? (
+          <a
+            href={formData.repoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 underline text-sm mt-0.5 block"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+            {formData.repoUrl}
+          </a>
+        ) : (
+          <p className="text-sm text-gray-400 italic mt-0.5">Not set</p>
+        )}
+        {linkButton}
+      </div>
+    );
   };
 
   const handleFieldClick = (e) => {
@@ -1177,6 +1302,7 @@ export function ApplicationDetail() {
         <Tab>Infosec Policy Compliance</Tab>
         {isAdmin() && <Tab badge={pendingVersionsCount}>Application Metadata History</Tab>}
         <Tab>Integrations</Tab>
+        <Tab>Dependencies</Tab>
 
         {/* App Data Tab */}
         <TabPanel>
@@ -1236,12 +1362,7 @@ export function ApplicationDetail() {
                           Repository & Contact
                         </h5>
                         <div className="space-y-4">
-                          <Input
-                            label="Repository URL"
-                            type="url"
-                            value={formData.repoUrl}
-                            onChange={(e) => handleFieldChange('repoUrl', e.target.value)}
-                          />
+                          {renderRepoField(true)}
                           <Textarea
                             label="Development Team Contact Info"
                             value={formData.devTeamContact}
@@ -1326,24 +1447,7 @@ export function ApplicationDetail() {
                           Repository & Contact
                         </h5>
                         <div className="space-y-2">
-                          <div>
-                            <span className="text-xs font-medium text-gray-600">Repository URL:</span>
-                            {formData.repoUrl ? (
-                              <a 
-                                href={formData.repoUrl} 
-                                target="_blank" 
-                                rel="noopener noreferrer" 
-                                className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 underline text-sm mt-0.5 block"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                </svg>
-                                {formData.repoUrl}
-                              </a>
-                            ) : (
-                              <p className="text-sm text-gray-400 italic mt-0.5">Not set</p>
-                            )}
-                          </div>
+                          {renderRepoField(false)}
                           <div>
                             <span className="text-xs font-medium text-gray-600">Development Team Contact Info:</span>
                             <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 mt-1">
@@ -1514,30 +1618,10 @@ export function ApplicationDetail() {
                           <div>
                             <span className="text-xs font-medium text-gray-600">Language:</span>
                             <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.language || <span className="text-gray-400 italic">Not set</span>}</p>
-                            {(() => {
-                              const langs = application?.githubRepoLink?.repo?.languages;
-                              const top = langs
-                                ? Object.entries(langs).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([l]) => l).join(', ')
-                                : '';
-                              return top ? (
-                                <p className="text-xs text-indigo-700 mt-0.5" title="Detected from linked GitHub repo">
-                                  GitHub: {top}
-                                </p>
-                              ) : null;
-                            })()}
                           </div>
                           <div>
                             <span className="text-xs font-medium text-gray-600">Framework:</span>
                             <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.framework || <span className="text-gray-400 italic">Not set</span>}</p>
-                            {(() => {
-                              const deps = application?.githubRepoLink?.repo?.dependencies || [];
-                              const fw = [...new Set(deps.filter((d) => d.isFramework && d.framework).map((d) => d.framework))].join(', ');
-                              return fw ? (
-                                <p className="text-xs text-indigo-700 mt-0.5" title="Detected from linked GitHub repo">
-                                  GitHub: {fw}
-                                </p>
-                              ) : null;
-                            })()}
                           </div>
                           <div>
                             <span className="text-xs font-medium text-gray-600">Server Environment:</span>
@@ -2578,10 +2662,17 @@ export function ApplicationDetail() {
 
         <TabPanel>
           {application && (
-            <ApplicationIntegrationsSection application={application} onRefresh={loadApplication} />
+            <ApplicationIntegrationsSection application={application} onRefresh={refreshFromGithubAction} />
           )}
         </TabPanel>
+
+        <TabPanel>
+          {application && <ApplicationDependenciesPanel application={application} />}
+        </TabPanel>
       </Tabs>
+
+      {/* GitHub link/change/sync + Language/Framework modals (self-contained flow) */}
+      {githubFlow.modals}
 
       {/* Add Deployment Modal */}
       <Modal

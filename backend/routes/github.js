@@ -207,6 +207,35 @@ router.get('/integrations/github/repos', requireAuth, async (req, res) => {
 });
 
 /**
+ * GET /api/integrations/github/repo-intel?owner=&name= — preview a repo's detected language/
+ * framework WITHOUT linking it. Used to prefill the New Application form.
+ */
+router.get('/integrations/github/repo-intel', requireAuth, async (req, res) => {
+  const connection = await getCallerConnection(req, res);
+  if (!connection) return;
+  const owner = typeof req.query.owner === 'string' ? req.query.owner.trim() : '';
+  const name = typeof req.query.name === 'string' ? req.query.name.trim() : '';
+  if (!owner || !name) {
+    return res.status(400).json({ error: 'owner and name are required' });
+  }
+  try {
+    const { metadata, languages, dependencies } = await fetchRepoIntel(connection.installationId, owner, name);
+    res.json({
+      htmlUrl: metadata.htmlUrl,
+      fullName: metadata.fullName,
+      language: topLanguagesString(languages),
+      framework: frameworkLabelsString(dependencies),
+    });
+  } catch (e) {
+    integrationLog('error', { provider: PROVIDER_GITHUB, op: 'repo_intel', error: e.message });
+    if (e.status === 404) {
+      return res.status(404).json({ error: 'Repository not found or not accessible to your installation' });
+    }
+    res.status(502).json({ error: 'GitHub API error', message: 'Could not read that repository.' });
+  }
+});
+
+/**
  * GET /api/integrations/github/dependencies?name=&ecosystem= — cross-application package search.
  * Scoped to apps the caller can see (admin → all; else own company). For CVE / security triage.
  */
@@ -391,8 +420,33 @@ async function loadAppForLink(req, res) {
   return app;
 }
 
-/** Fetch intel + upsert the shared GitHubRepo (+ dependencies). Returns the repo row id. */
-async function upsertRepoWithIntel(connection, userId, ownerName, repoName) {
+/** Parse a GitHub repo URL (https or ssh) into { owner, name }, or null. */
+function parseGithubRepoUrl(url) {
+  if (typeof url !== 'string') return null;
+  const m = url.trim().match(/github\.com[/:]([^/\s]+)\/([^/\s#?]+?)(?:\.git)?(?:[/#?].*)?$/i);
+  if (!m) return null;
+  return { owner: m[1], name: m[2] };
+}
+
+/** Top languages (by bytes) as a comma-joined string, or '' if none. */
+function topLanguagesString(languages) {
+  return Object.entries(languages || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([lang]) => lang)
+    .join(', ');
+}
+
+/** Distinct recognized-framework labels as a comma-joined string, or '' if none. */
+function frameworkLabelsString(dependencies) {
+  return [
+    ...new Set((dependencies || []).filter((d) => d.isFramework && d.framework).map((d) => d.framework)),
+  ].join(', ');
+}
+
+/** Fetch intel + upsert the shared GitHubRepo (+ dependencies), and populate the application's
+ * own repoUrl / language / framework fields from what was detected. Returns the repo row id. */
+async function upsertRepoWithIntel(connection, userId, ownerName, repoName, applicationId) {
   const { metadata, languages, dependencies } = await fetchRepoIntel(
     connection.installationId,
     ownerName,
@@ -432,6 +486,17 @@ async function upsertRepoWithIntel(connection, userId, ownerName, repoName) {
     },
   });
   await saveRepoDependencies(prisma, repo.id, dependencies);
+
+  // repoUrl always tracks the linked repo. Language/framework are NOT auto-written here — they are
+  // set explicitly through the Language/Framework modal (POST .../github/apply), which is its own
+  // flow, independent of the metadata edit form.
+  if (applicationId) {
+    await prisma.application.update({
+      where: { id: applicationId },
+      data: { repoUrl: metadata.htmlUrl },
+    });
+  }
+
   return repo.id;
 }
 
@@ -446,7 +511,7 @@ async function loadAppRepoLink(applicationId) {
 
 /**
  * PUT /api/applications/:id/github/link — link a repo (from the caller's installation) to the app.
- * body: { owner, name }  (owner/name of the repo to link)
+ * body: { owner, name } OR { url }  (a github.com repo URL is parsed into owner/name)
  */
 router.put('/applications/:id/github/link', requireAuth, async (req, res) => {
   const app = await loadAppForLink(req, res);
@@ -454,15 +519,24 @@ router.put('/applications/:id/github/link', requireAuth, async (req, res) => {
   const connection = await getCallerConnection(req, res);
   if (!connection) return;
 
-  const owner = typeof req.body.owner === 'string' ? req.body.owner.trim() : '';
-  const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+  let owner = typeof req.body.owner === 'string' ? req.body.owner.trim() : '';
+  let name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+  if ((!owner || !name) && typeof req.body.url === 'string') {
+    const parsed = parseGithubRepoUrl(req.body.url);
+    if (parsed) {
+      owner = parsed.owner;
+      name = parsed.name;
+    }
+  }
   if (!owner || !name) {
-    return res.status(400).json({ error: 'owner and name are required' });
+    return res.status(400).json({
+      error: 'Provide owner and name, or a valid github.com repository URL',
+    });
   }
 
   try {
     const { userId } = getAuthContext(req);
-    const repoId = await upsertRepoWithIntel(connection, userId, owner, name);
+    const repoId = await upsertRepoWithIntel(connection, userId, owner, name, app.id);
     await prisma.applicationGitHubRepo.upsert({
       where: { applicationId: app.id },
       create: { applicationId: app.id, githubRepoId: repoId, linkedById: userId },
@@ -498,7 +572,7 @@ router.post('/applications/:id/github/sync', requireAuth, async (req, res) => {
 
   try {
     const { userId } = getAuthContext(req);
-    await upsertRepoWithIntel(connection, userId, link.repo.owner, link.repo.name);
+    await upsertRepoWithIntel(connection, userId, link.repo.owner, link.repo.name, app.id);
     res.json({ ok: true, repo: await loadAppRepoLink(app.id) });
   } catch (e) {
     integrationLog('error', { provider: PROVIDER_GITHUB, op: 'sync_repo', error: e.message });
@@ -508,8 +582,9 @@ router.post('/applications/:id/github/sync', requireAuth, async (req, res) => {
 });
 
 /**
- * POST /api/applications/:id/github/apply — write detected values into the app's official fields.
- * body: { fields?: ['language','framework'] }  (defaults to both)
+ * POST /api/applications/:id/github/apply — write language/framework into the app's official fields.
+ * This is its OWN persisted action (independent of the metadata edit form). Body may pass explicit
+ * edited strings `{ language?, framework? }`; when omitted, the detected values are used.
  */
 router.post('/applications/:id/github/apply', requireAuth, async (req, res) => {
   const app = await loadAppForLink(req, res);
@@ -523,30 +598,23 @@ router.post('/applications/:id/github/apply', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'No repository linked to this application' });
   }
 
-  const requested = Array.isArray(req.body.fields) ? req.body.fields : ['language', 'framework'];
   const data = {};
-
-  if (requested.includes('language')) {
-    const langs = link.repo.languages || {};
-    const top = Object.entries(langs)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([lang]) => lang);
-    if (top.length) data.language = top.join(', ');
+  // Explicit (possibly edited) values win; otherwise fall back to what was detected.
+  if (typeof req.body.language === 'string') {
+    data.language = req.body.language.trim();
+  } else {
+    const language = topLanguagesString(link.repo.languages);
+    if (language) data.language = language;
   }
-  if (requested.includes('framework')) {
-    const labels = [
-      ...new Set(
-        (link.repo.dependencies || [])
-          .filter((d) => d.isFramework && d.framework)
-          .map((d) => d.framework),
-      ),
-    ];
-    if (labels.length) data.framework = labels.join(', ');
+  if (typeof req.body.framework === 'string') {
+    data.framework = req.body.framework.trim();
+  } else {
+    const framework = frameworkLabelsString(link.repo.dependencies);
+    if (framework) data.framework = framework;
   }
 
   if (Object.keys(data).length === 0) {
-    return res.status(400).json({ error: 'Nothing detected to apply' });
+    return res.status(400).json({ error: 'Nothing to apply' });
   }
 
   const updated = await prisma.application.update({
@@ -564,6 +632,8 @@ router.delete('/applications/:id/github/link', requireAuth, async (req, res) => 
   const app = await loadAppForLink(req, res);
   if (!app) return;
   await prisma.applicationGitHubRepo.deleteMany({ where: { applicationId: app.id } });
+  // Unlinking also clears the repo URL (it tracked the linked repo); language/framework are kept.
+  await prisma.application.update({ where: { id: app.id }, data: { repoUrl: null } });
   res.json({ ok: true });
 });
 

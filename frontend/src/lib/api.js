@@ -869,6 +869,12 @@ export const api = {
   /** Repos the caller's installation can access (for the link picker). */
   getGithubRepos: () => apiRequest('/api/integrations/github/repos'),
 
+  /** Preview a repo's detected language/framework without linking (for the New Application form). */
+  getGithubRepoIntel: (owner, name) => {
+    const params = new URLSearchParams({ owner, name });
+    return apiRequest(`/api/integrations/github/repo-intel?${params.toString()}`);
+  },
+
   /** Cross-application package search: which apps use a given package. */
   searchGithubDependencies: (name, ecosystem) => {
     const params = new URLSearchParams({ name });
@@ -884,19 +890,21 @@ export const api = {
     return apiRequest(`/api/integrations/github/sbom${qs ? `?${qs}` : ''}`);
   },
 
-  linkApplicationGithubRepo: (applicationId, { owner, name }) =>
+  /** Link a repo by { owner, name } or by { url } (a github.com repo URL). */
+  linkApplicationGithubRepo: (applicationId, body) =>
     apiRequest(`/api/applications/${applicationId}/github/link`, {
       method: 'PUT',
-      body: JSON.stringify({ owner, name }),
+      body: JSON.stringify(body),
     }),
 
   syncApplicationGithubRepo: (applicationId) =>
     apiRequest(`/api/applications/${applicationId}/github/sync`, { method: 'POST' }),
 
-  applyApplicationGithubData: (applicationId, fields) =>
+  /** Persist language/framework from GitHub. Pass explicit { language, framework } to apply edited values. */
+  applyApplicationGithubData: (applicationId, body = {}) =>
     apiRequest(`/api/applications/${applicationId}/github/apply`, {
       method: 'POST',
-      body: JSON.stringify({ fields }),
+      body: JSON.stringify(body),
     }),
 
   unlinkApplicationGithubRepo: (applicationId) =>

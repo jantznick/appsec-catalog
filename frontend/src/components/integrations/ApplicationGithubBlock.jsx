@@ -1,36 +1,21 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../../lib/api.js';
-import { toast } from '../ui/Toast.jsx';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card.jsx';
 import { Button } from '../ui/Button.jsx';
-import { Modal } from '../ui/Modal.jsx';
+import { useRepoLinkFlow } from '../../hooks/useRepoLinkFlow.jsx';
 
 /**
- * Per-application GitHub repo link (one repo per app). Shows detected languages, frameworks, and
- * the parsed dependency inventory, with Sync / Apply / Unlink actions. API access uses the acting
- * user's own GitHub connection (managed under Integration settings).
+ * Per-application GitHub repo panel (Integrations tab). Shows the linked repo's detected languages,
+ * frameworks, and dependency inventory, with Change / Sync / Unlink. All actions run through the
+ * shared repo-link flow (link/change/sync open the Language/Framework modal) and are independent of
+ * the metadata edit form.
  *
  * @param {{ application: object, canManage: boolean, onRefresh: () => Promise<void> }} props
  */
 export function ApplicationGithubBlock({ application, canManage, onRefresh }) {
-  const applicationId = application?.id;
   const repo = application?.githubRepoLink?.repo || null;
-
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [statusLoading, setStatusLoading] = useState(false);
-  const [connected, setConnected] = useState(false);
-  const [reposLoading, setReposLoading] = useState(false);
-  const [repos, setRepos] = useState([]);
-  const [filter, setFilter] = useState('');
-  const [selected, setSelected] = useState(null);
-  const [linking, setLinking] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [applyOpen, setApplyOpen] = useState(false);
-  const [applying, setApplying] = useState(false);
-  const [unlinkOpen, setUnlinkOpen] = useState(false);
-  const [unlinking, setUnlinking] = useState(false);
   const [showAllDeps, setShowAllDeps] = useState(false);
+  const flow = useRepoLinkFlow(application, onRefresh);
 
   const languageEntries = useMemo(() => {
     const langs = repo?.languages || {};
@@ -46,92 +31,6 @@ export function ApplicationGithubBlock({ application, canManage, onRefresh }) {
     [repo],
   );
   const dependencies = repo?.dependencies || [];
-
-  const detectedLanguage = languageEntries.slice(0, 3).map(([l]) => l).join(', ');
-  const detectedFramework = [...new Set(frameworks.map((f) => f.framework).filter(Boolean))].join(', ');
-
-  const filteredRepos = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    if (!q) return repos;
-    return repos.filter((r) => r.fullName.toLowerCase().includes(q));
-  }, [repos, filter]);
-
-  const openPicker = async () => {
-    setPickerOpen(true);
-    setSelected(null);
-    setFilter('');
-    setStatusLoading(true);
-    try {
-      const status = await api.getGithubStatus();
-      setConnected(Boolean(status.connected));
-      if (status.connected) {
-        setReposLoading(true);
-        const { repos: list } = await api.getGithubRepos();
-        setRepos(Array.isArray(list) ? list : []);
-      }
-    } catch (e) {
-      toast.error(e.message || 'Failed to load GitHub repositories');
-    } finally {
-      setStatusLoading(false);
-      setReposLoading(false);
-    }
-  };
-
-  const doLink = async () => {
-    if (!selected) return;
-    setLinking(true);
-    try {
-      await api.linkApplicationGithubRepo(applicationId, { owner: selected.owner, name: selected.name });
-      toast.success(`Linked ${selected.fullName}`);
-      setPickerOpen(false);
-      await onRefresh();
-    } catch (e) {
-      toast.error(e.message || 'Failed to link repository');
-    } finally {
-      setLinking(false);
-    }
-  };
-
-  const doSync = async () => {
-    setSyncing(true);
-    try {
-      await api.syncApplicationGithubRepo(applicationId);
-      toast.success('Repository synced');
-      await onRefresh();
-    } catch (e) {
-      toast.error(e.message || 'Failed to sync repository');
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const doApply = async () => {
-    setApplying(true);
-    try {
-      await api.applyApplicationGithubData(applicationId, ['language', 'framework']);
-      toast.success('Applied detected language and framework');
-      setApplyOpen(false);
-      await onRefresh();
-    } catch (e) {
-      toast.error(e.message || 'Failed to apply detected values');
-    } finally {
-      setApplying(false);
-    }
-  };
-
-  const doUnlink = async () => {
-    setUnlinking(true);
-    try {
-      await api.unlinkApplicationGithubRepo(applicationId);
-      toast.success('Repository unlinked');
-      setUnlinkOpen(false);
-      await onRefresh();
-    } catch (e) {
-      toast.error(e.message || 'Failed to unlink repository');
-    } finally {
-      setUnlinking(false);
-    }
-  };
 
   return (
     <>
@@ -149,9 +48,9 @@ export function ApplicationGithubBlock({ application, canManage, onRefresh }) {
                 .
               </p>
             </div>
-            {canManage && (
-              <Button variant={repo ? 'ghost' : 'primary'} size="sm" onClick={openPicker} className="shrink-0">
-                {repo ? 'Change repo…' : 'Link a GitHub repo'}
+            {canManage && !repo && (
+              <Button variant="primary" size="sm" onClick={flow.openLinkPicker} className="shrink-0">
+                Link a GitHub repo
               </Button>
             )}
           </div>
@@ -191,18 +90,13 @@ export function ApplicationGithubBlock({ application, canManage, onRefresh }) {
                 </div>
                 {canManage && (
                   <div className="flex gap-2 shrink-0">
-                    <Button variant="secondary" size="sm" onClick={doSync} loading={syncing}>
+                    <Button variant="secondary" size="sm" onClick={flow.sync} loading={flow.busy}>
                       Sync
                     </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setApplyOpen(true)}
-                      disabled={!detectedLanguage && !detectedFramework}
-                    >
-                      Apply to fields
+                    <Button variant="secondary" size="sm" onClick={flow.openLinkPicker} disabled={flow.busy}>
+                      Change
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setUnlinkOpen(true)}>
+                    <Button variant="ghost" size="sm" onClick={flow.unlink} loading={flow.unlinking}>
                       Unlink
                     </Button>
                   </div>
@@ -308,140 +202,7 @@ export function ApplicationGithubBlock({ application, canManage, onRefresh }) {
         </CardContent>
       </Card>
 
-      {/* Repo picker */}
-      <Modal
-        isOpen={pickerOpen}
-        onClose={() => !linking && setPickerOpen(false)}
-        title="Link a GitHub repository"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setPickerOpen(false)} disabled={linking}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={doLink} loading={linking} disabled={!selected}>
-              Link repository
-            </Button>
-          </>
-        }
-      >
-        {statusLoading ? (
-          <p className="text-sm text-gray-500">Loading…</p>
-        ) : !connected ? (
-          <div className="text-sm text-gray-700 space-y-2">
-            <p>Your GitHub account isn&apos;t connected yet.</p>
-            <p>
-              Connect it under{' '}
-              <Link to="/settings/integrations" className="text-blue-600 hover:underline">
-                Integration settings
-              </Link>
-              , then come back to link a repository.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <input
-              type="text"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filter repositories…"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-            {reposLoading ? (
-              <p className="text-sm text-gray-500">Loading repositories…</p>
-            ) : filteredRepos.length === 0 ? (
-              <p className="text-sm text-gray-500">
-                No repositories found. Make sure the GitHub App is installed on the repos you want to link.
-              </p>
-            ) : (
-              <ul className="max-h-72 overflow-y-auto divide-y divide-gray-100 rounded-lg border border-gray-200">
-                {filteredRepos.map((r) => {
-                  const isSel = selected?.githubRepoId === r.githubRepoId;
-                  return (
-                    <li key={r.githubRepoId}>
-                      <button
-                        type="button"
-                        onClick={() => setSelected(r)}
-                        className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
-                          isSel ? 'bg-blue-50' : ''
-                        }`}
-                      >
-                        <span className="font-medium text-gray-900 break-all">{r.fullName}</span>
-                        {r.isPrivate ? (
-                          <span className="ml-2 text-xs text-gray-400">private</span>
-                        ) : null}
-                        {r.description ? (
-                          <span className="block text-xs text-gray-500 truncate">{r.description}</span>
-                        ) : null}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        )}
-      </Modal>
-
-      {/* Apply confirm */}
-      <Modal
-        isOpen={applyOpen}
-        onClose={() => !applying && setApplyOpen(false)}
-        title="Apply detected values?"
-        size="sm"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setApplyOpen(false)} disabled={applying}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={doApply} loading={applying}>
-              Apply
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3 text-sm">
-          <p className="text-gray-700">This overwrites the application&apos;s Language and Framework fields:</p>
-          <dl className="space-y-2">
-            <div>
-              <dt className="text-xs font-medium text-gray-500">Language</dt>
-              <dd className="text-gray-800">
-                <span className="text-gray-400 line-through mr-2">{application?.language || '(empty)'}</span>
-                <span className="font-medium">→ {detectedLanguage || '(none detected)'}</span>
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-gray-500">Framework</dt>
-              <dd className="text-gray-800">
-                <span className="text-gray-400 line-through mr-2">{application?.framework || '(empty)'}</span>
-                <span className="font-medium">→ {detectedFramework || '(none detected)'}</span>
-              </dd>
-            </div>
-          </dl>
-        </div>
-      </Modal>
-
-      {/* Unlink confirm */}
-      <Modal
-        isOpen={unlinkOpen}
-        onClose={() => !unlinking && setUnlinkOpen(false)}
-        title="Unlink repository?"
-        size="sm"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setUnlinkOpen(false)} disabled={unlinking}>
-              Cancel
-            </Button>
-            <Button variant="danger" onClick={doUnlink} loading={unlinking}>
-              Unlink
-            </Button>
-          </>
-        }
-      >
-        <p className="text-gray-700">
-          This removes the repository link from this application. The repository data stays cached for any
-          other applications linked to it.
-        </p>
-      </Modal>
+      {flow.modals}
     </>
   );
 }
