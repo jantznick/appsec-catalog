@@ -19,7 +19,7 @@ import { Modal } from '../ui/Modal.jsx';
  *   submitting?: boolean,   // caller's async in-flight state, shows loading on the confirm button
  * }} props
  */
-export function GithubRepoPickerModal({
+export function ScmRepoPickerModal({
   isOpen,
   onClose,
   onSelect,
@@ -42,12 +42,12 @@ export function GithubRepoPickerModal({
     (async () => {
       setStatusLoading(true);
       try {
-        const status = await api.getGithubStatus();
+        const status = await api.getScmStatus();
         if (cancelled) return;
         setConnected(Boolean(status.connected));
         if (status.connected) {
           setReposLoading(true);
-          const { repos: list } = await api.getGithubRepos();
+          const { repos: list } = await api.getScmRepos();
           if (!cancelled) setRepos(Array.isArray(list) ? list : []);
         }
       } catch (e) {
@@ -122,9 +122,9 @@ export function GithubRepoPickerModal({
           ) : (
             <ul className="max-h-72 overflow-y-auto divide-y divide-gray-100 rounded-lg border border-gray-200">
               {filteredRepos.map((r) => {
-                const isSel = selected?.githubRepoId === r.githubRepoId;
+                const isSel = selected?.externalId === r.externalId;
                 return (
-                  <li key={r.githubRepoId}>
+                  <li key={r.externalId}>
                     <button
                       type="button"
                       onClick={() => setSelected(r)}

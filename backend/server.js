@@ -26,7 +26,7 @@ import policyRoutes from './routes/policies.js';
 import productRoutes from './routes/products.js';
 import productUpdateRoutes from './routes/productUpdates.js';
 import integrationRoutes from './routes/integrations.js';
-import githubRoutes from './routes/github.js';
+import scmRoutes from './routes/scm.js';
 import { apiKeyAuth } from './middleware/apiKeyAuth.js';
 
 dotenv.config();
@@ -167,7 +167,7 @@ app.use('/api/policies', policyRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/product-updates', productUpdateRoutes);
 app.use('/api', integrationRoutes);
-app.use('/api', githubRoutes);
+app.use('/api', scmRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

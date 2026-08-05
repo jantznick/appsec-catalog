@@ -1701,7 +1701,7 @@ router.get('/:id', requireAuth, async (req, res) => {
             updatedAt: true,
           },
         },
-        githubRepoLink: {
+        scmRepoLink: {
           include: {
             repo: {
               include: {

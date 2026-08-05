@@ -21,6 +21,7 @@ import { Tabs, Tab, TabPanel } from '../components/ui/Tabs.jsx';
 import { PolicyComplianceView } from '../components/policy/PolicyComplianceView.jsx';
 import { ApplicationIntegrationsSection } from '../components/integrations/ApplicationIntegrationsSection.jsx';
 import { ApplicationDependenciesPanel } from '../components/integrations/ApplicationDependenciesPanel.jsx';
+import { summarizeOsv } from '../utils/osv.js';
 import { useRepoLinkFlow } from '../hooks/useRepoLinkFlow.jsx';
 import { ThreatModelTab } from '../components/threat-model/ThreatModelTab.jsx';
 
@@ -799,7 +800,7 @@ export function ApplicationDetail() {
         companyId: data.companyId || '',
         name: data.name || '',
         description: data.description || '',
-        repoUrl: data.repoUrl || data.githubRepoLink?.repo?.htmlUrl || '',
+        repoUrl: data.repoUrl || data.scmRepoLink?.repo?.htmlUrl || '',
         language: data.language || '',
         framework: data.framework || '',
         serverEnvironment: data.serverEnvironment || '',
@@ -941,7 +942,7 @@ export function ApplicationDetail() {
       setApplication(data);
       setDomains(data.domains || []);
       const gh = {
-        repoUrl: data.repoUrl || data.githubRepoLink?.repo?.htmlUrl || '',
+        repoUrl: data.repoUrl || data.scmRepoLink?.repo?.htmlUrl || '',
         language: data.language || '',
         framework: data.framework || '',
       };
@@ -955,11 +956,39 @@ export function ApplicationDetail() {
 
   const githubFlow = useRepoLinkFlow(application, refreshFromGithubAction);
 
+  const handleRescanAdvisories = async () => {
+    try {
+      const { summary } = await api.rescanApplicationScmAdvisories(id);
+      await refreshFromGithubAction();
+      if (summary?.error) {
+        toast.error(
+          `Couldn't reach OSV.dev — advisories not updated (${summary.error}). The server may need its proxy/CA trust configured.`,
+        );
+      } else if (summary?.flagged > 0) {
+        toast.error(
+          `${summary.flagged} ${summary.flagged === 1 ? 'dependency has' : 'dependencies have'} a known advisory — check Wiz for details`,
+        );
+      } else {
+        toast.success(
+          summary?.unscanned > 0
+            ? `No known advisories on ${summary.scanned} checked ${summary.scanned === 1 ? 'dependency' : 'dependencies'}`
+            : 'No known advisories found',
+        );
+      }
+    } catch (e) {
+      toast.error(e.message || 'Failed to rescan advisories');
+    }
+  };
+
+  // OSV advisory rollup for the linked repo's dependencies, used to color the "View dependencies"
+  // link (red = a dependency has a known advisory, yellow = some couldn't be checked).
+  const depOsv = summarizeOsv(application?.scmRepoLink?.repo?.dependencies);
+
   // The Repository field. GitHub controls (link/change/unlink) run through githubFlow and are
   // rendered identically whether or not the metadata form is being edited — they are NOT form
   // fields and never enter edit mode. When not linked, the plain editable Repository URL remains.
   const renderRepoField = (editing) => {
-    const linkedRepo = application?.githubRepoLink?.repo;
+    const linkedRepo = application?.scmRepoLink?.repo;
     if (linkedRepo) {
       // `relative z-20` lifts this above the card's transparent click-to-edit overlay (z-10) so the
       // GitHub controls are actually clickable and never trigger edit mode.
@@ -1532,7 +1561,7 @@ export function ApplicationDetail() {
                             placeholder="e.g. cloud, on-premises, hybrid"
                           />
                         </div>
-                        <div className="mt-3 pt-3 border-t border-indigo-200 relative z-20">
+                        <div className="mt-3 pt-3 border-t border-indigo-200 relative z-20 flex items-center gap-2 flex-wrap">
                           <button
                             type="button"
                             onClick={() => setShowDependenciesModal(true)}
@@ -1543,6 +1572,22 @@ export function ApplicationDetail() {
                             </svg>
                             View dependencies →
                           </button>
+                          {depOsv.status === 'flagged' && (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700"
+                              title={`${depOsv.flagged} dependenc${depOsv.flagged === 1 ? 'y has' : 'ies have'} a known OSV advisory — see Wiz for details`}
+                            >
+                              ⚠ {depOsv.flagged} flagged
+                            </span>
+                          )}
+                          {depOsv.status === 'partial' && (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700"
+                              title={`${depOsv.unscanned} dependenc${depOsv.unscanned === 1 ? 'y' : 'ies'} couldn't be checked against OSV (declares a version range, not an exact version)`}
+                            >
+                              ⚠ {depOsv.unscanned} unchecked
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -1640,7 +1685,7 @@ export function ApplicationDetail() {
                             <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.serverEnvironment || <span className="text-gray-400 italic">Not set</span>}</p>
                           </div>
                         </div>
-                        <div className="mt-3 pt-3 border-t border-indigo-200 relative z-20">
+                        <div className="mt-3 pt-3 border-t border-indigo-200 relative z-20 flex items-center gap-2 flex-wrap">
                           <button
                             type="button"
                             onClick={() => setShowDependenciesModal(true)}
@@ -1651,6 +1696,22 @@ export function ApplicationDetail() {
                             </svg>
                             View dependencies →
                           </button>
+                          {depOsv.status === 'flagged' && (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700"
+                              title={`${depOsv.flagged} dependenc${depOsv.flagged === 1 ? 'y has' : 'ies have'} a known OSV advisory — see Wiz for details`}
+                            >
+                              ⚠ {depOsv.flagged} flagged
+                            </span>
+                          )}
+                          {depOsv.status === 'partial' && (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700"
+                              title={`${depOsv.unscanned} dependenc${depOsv.unscanned === 1 ? 'y' : 'ies'} couldn't be checked against OSV (declares a version range, not an exact version)`}
+                            >
+                              ⚠ {depOsv.unscanned} unchecked
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -2701,7 +2762,12 @@ export function ApplicationDetail() {
         title="Dependencies"
         size="xl"
       >
-        {application && <ApplicationDependenciesPanel application={application} />}
+        {application && (
+          <ApplicationDependenciesPanel
+            application={application}
+            onRescan={canManageGithub ? handleRescanAdvisories : undefined}
+          />
+        )}
       </Modal>
 
       {/* Add Deployment Modal */}

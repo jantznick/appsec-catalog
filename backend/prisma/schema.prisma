@@ -29,7 +29,7 @@ model User {
   integrationCredentialUpdates IntegrationCredential[] @relation("IntegrationCredentialUpdates")
   securityFindingsJobs      SecurityFindingsJob[]
   productUpdates         ProductUpdate[]
-  githubConnection       GitHubConnection? // The user's connected GitHub account (GitHub App)
+  scmConnections         ScmConnection[] // The user's connected source-control accounts (GitHub, GitLab, …)
 }
 
 /// AppSec Catalog product release notes / "What's New" entries.
@@ -176,7 +176,7 @@ model Application {
   threatModel            ThreatModel?
   productApplications    ProductApplication[]
   applicationToolLinks  ApplicationToolLink[]
-  githubRepoLink        ApplicationGitHubRepo? // Linked GitHub repo (one repo per application)
+  scmRepoLink           ApplicationScmRepo? // Linked source-control repo (one repo per application)
   ingressProducts        ProductIngressPoint[]
   outgoingProductFlows   ProductDataFlow[]            @relation("ProductFlowSource")
   incomingProductFlows   ProductDataFlow[]            @relation("ProductFlowTarget")
@@ -936,53 +936,67 @@ model ApplicationToolLink {
   @@index([provider])
 }
 
-// Per-user GitHub App connection. One per user. Repo reads use installation tokens minted on demand.
-model GitHubConnection {
-  id             String   @id @default(cuid())
-  userId         String   @unique
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  githubUserId   String // GitHub numeric user id (stable)
-  githubLogin    String
-  avatarUrl      String?
-  installationId String // App installation id → used to mint installation access tokens
-  encryptedToken String?  @db.Text // Optional OAuth user token, encrypted with integrationCrypto
-  scopes         String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+// Per-user source-control connection (GitHub today; GitLab / Bitbucket / Azure DevOps in future).
+// One per user for now. `provider` selects the adapter; `host` supports self-hosted instances.
+// GitHub reads use installation tokens minted on demand (installationId is GitHub-specific).
+// Table name kept as GitHubConnection via @@map so the rename needs no data migration.
+model ScmConnection {
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider              String   @default("GITHUB") // GITHUB | GITLAB | BITBUCKET | AZURE_DEVOPS
+  host                  String   @default("github.com") // instance host (self-hosted support)
+  externalUserId        String   @map("githubUserId") // provider's stable user id
+  externalLogin         String   @map("githubLogin")
+  avatarUrl             String?
+  installationId        String? // GitHub App installation id (GitHub-only)
+  encryptedToken        String?  @db.Text // OAuth access token, encrypted with integrationCrypto
+  encryptedRefreshToken String?  @db.Text // OAuth refresh token (providers whose tokens expire)
+  scopes                String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  @@index([githubUserId])
+  // A user may connect many accounts — one row per distinct account (provider + host + identity).
+  @@unique([userId, provider, host, externalUserId], map: "GitHubConnection_userId_provider_host_githubUserId_key")
+  @@index([userId], map: "GitHubConnection_userId_idx")
+  @@index([externalUserId], map: "GitHubConnection_githubUserId_idx")
+  @@map("GitHubConnection")
 }
 
-// Shared repo snapshot — fetched once, referenced by many applications.
-model GitHubRepo {
-  id             String                  @id @default(cuid())
-  githubRepoId   String                  @unique // GitHub numeric repo id
+// Shared repo snapshot — fetched once, referenced by many applications. Provider-agnostic.
+model ScmRepo {
+  id             String               @id @default(cuid())
+  provider       String               @default("GITHUB")
+  host           String               @default("github.com")
+  externalId     String               @map("githubRepoId") // provider's repo id
   fullName       String // owner/name
   owner          String
   name           String
   htmlUrl        String
   defaultBranch  String?
   description    String?
-  isPrivate      Boolean                 @default(false)
+  isPrivate      Boolean              @default(false)
   topics         Json?
   license        String?
-  languages      Json? // { "TypeScript": 12345, ... } from the GitHub languages API
+  languages      Json? // { "TypeScript": 12345, ... }
   lastSyncedAt   DateTime?
   lastSyncedById String?
   dependencies   RepoDependency[]
-  applications   ApplicationGitHubRepo[]
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
+  applications   ApplicationScmRepo[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 
-  @@index([fullName])
+  @@unique([provider, host, externalId], map: "GitHubRepo_provider_host_githubRepoId_key")
+  @@index([fullName], map: "GitHubRepo_fullName_idx")
+  @@map("GitHubRepo")
 }
 
 // Normalized top-level dependency inventory for a repo. Frameworks are the isFramework subset.
 // Enables cross-application queries ("which apps use package X") for CVE / security triage.
 model RepoDependency {
   id           String     @id @default(cuid())
-  githubRepoId String
-  repo         GitHubRepo @relation(fields: [githubRepoId], references: [id], onDelete: Cascade)
+  githubRepoId String // FK to ScmRepo.id (column name kept for a no-op migration)
+  repo         ScmRepo    @relation(fields: [githubRepoId], references: [id], onDelete: Cascade)
   ecosystem    String // npm | pypi | maven | go | rubygems | nuget | composer
   name         String // normalized package name
   version      String? // resolved version (from lockfile) when available
@@ -991,6 +1005,11 @@ model RepoDependency {
   framework    String? // canonical framework label when isFramework
   source       String // manifest the row came from, e.g. package.json
   resolvedFrom String? // lockfile the version came from, e.g. package-lock.json
+  // OSV.dev advisory flagging (informational — Wiz remains the source of truth for vuln data).
+  osvScanned   Boolean    @default(false) // true if this row had a concrete version + mappable ecosystem and was queried
+  osvVulnIds   Json? // array of OSV/GHSA advisory IDs when the pinned version is affected; null/[] when clean
+  osvVulns     Json? // enriched advisory details [{ id, summary, severity, cve }] for friendly display
+  osvScannedAt DateTime? // when the OSV query for this row last ran
   createdAt    DateTime   @default(now())
 
   @@unique([githubRepoId, ecosystem, name])
@@ -999,16 +1018,18 @@ model RepoDependency {
   @@index([isFramework])
 }
 
-// One repo per application; many applications may point at the same GitHubRepo.
-model ApplicationGitHubRepo {
+// One repo per application; many applications may point at the same ScmRepo.
+// Table name kept as ApplicationGitHubRepo via @@map so the rename needs no data migration.
+model ApplicationScmRepo {
   id            String      @id @default(cuid())
   applicationId String      @unique
   application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  githubRepoId  String
-  repo          GitHubRepo  @relation(fields: [githubRepoId], references: [id], onDelete: Cascade)
+  githubRepoId  String // FK to ScmRepo.id (column name kept for a no-op migration)
+  repo          ScmRepo     @relation(fields: [githubRepoId], references: [id], onDelete: Cascade)
   linkedById    String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
-  @@index([githubRepoId])
+  @@index([githubRepoId], map: "ApplicationGitHubRepo_githubRepoId_idx")
+  @@map("ApplicationGitHubRepo")
 }

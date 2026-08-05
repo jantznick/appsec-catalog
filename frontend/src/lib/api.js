@@ -857,58 +857,67 @@ export const api = {
     apiRequest('/api/integrations/admin/company-overview'),
 
   // GitHub integration (per-user account connection + per-application repo linking)
-  /** Per-user connection state: { configured, connected, login, avatarUrl, connectedAt } */
-  getGithubStatus: () => apiRequest('/api/integrations/github/status'),
+  /** Per-user SCM state: { configured, providers, connections: [{id, provider, host, login, ...}] } */
+  getScmStatus: () => apiRequest('/api/integrations/scm/status'),
 
-  /** Full-page navigation target that starts the GitHub App install/OAuth flow. */
-  githubConnectUrl: () => `${API_URL}/api/integrations/github/connect`,
+  /** Full-page navigation target that starts a provider's connect flow. */
+  scmConnectUrl: (provider = 'GITHUB') =>
+    `${API_URL}/api/integrations/scm/connect?provider=${encodeURIComponent(provider)}`,
 
-  disconnectGithub: () =>
-    apiRequest('/api/integrations/github/connection', { method: 'DELETE' }),
+  /** Disconnect one connection by id (or all connections when id is omitted). */
+  disconnectScm: (connectionId) => {
+    const qs = connectionId ? `?id=${encodeURIComponent(connectionId)}` : '';
+    return apiRequest(`/api/integrations/scm/connection${qs}`, { method: 'DELETE' });
+  },
 
   /** Repos the caller's installation can access (for the link picker). */
-  getGithubRepos: () => apiRequest('/api/integrations/github/repos'),
+  getScmRepos: () => apiRequest('/api/integrations/scm/repos'),
 
   /** Preview a repo's detected language/framework without linking (for the New Application form). */
-  getGithubRepoIntel: (owner, name) => {
+  getScmRepoIntel: (owner, name, connectionId) => {
     const params = new URLSearchParams({ owner, name });
-    return apiRequest(`/api/integrations/github/repo-intel?${params.toString()}`);
+    if (connectionId) params.set('connectionId', connectionId);
+    return apiRequest(`/api/integrations/scm/repo-intel?${params.toString()}`);
   },
 
   /** Cross-application package search: which apps use a given package. */
-  searchGithubDependencies: (name, ecosystem) => {
+  searchScmDependencies: (name, ecosystem) => {
     const params = new URLSearchParams({ name });
     if (ecosystem) params.set('ecosystem', ecosystem);
-    return apiRequest(`/api/integrations/github/dependencies?${params.toString()}`);
+    return apiRequest(`/api/integrations/scm/dependencies?${params.toString()}`);
   },
 
   /** Company-scoped dependency inventory (SBOM) across applications. */
-  getGithubSbom: (companyId) => {
+  getScmSbom: (companyId) => {
     const params = new URLSearchParams();
     if (companyId) params.set('companyId', companyId);
     const qs = params.toString();
-    return apiRequest(`/api/integrations/github/sbom${qs ? `?${qs}` : ''}`);
+    return apiRequest(`/api/integrations/scm/sbom${qs ? `?${qs}` : ''}`);
   },
 
   /** Link a repo by { owner, name } or by { url } (a github.com repo URL). */
-  linkApplicationGithubRepo: (applicationId, body) =>
-    apiRequest(`/api/applications/${applicationId}/github/link`, {
+  linkApplicationScmRepo: (applicationId, body) =>
+    apiRequest(`/api/applications/${applicationId}/scm/link`, {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
 
-  syncApplicationGithubRepo: (applicationId) =>
-    apiRequest(`/api/applications/${applicationId}/github/sync`, { method: 'POST' }),
+  syncApplicationScmRepo: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/scm/sync`, { method: 'POST' }),
+
+  /** Re-run the OSV advisory scan against the already-stored dependencies (no SCM re-fetch). */
+  rescanApplicationScmAdvisories: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/scm/rescan-advisories`, { method: 'POST' }),
 
   /** Persist language/framework from GitHub. Pass explicit { language, framework } to apply edited values. */
-  applyApplicationGithubData: (applicationId, body = {}) =>
-    apiRequest(`/api/applications/${applicationId}/github/apply`, {
+  applyApplicationScmData: (applicationId, body = {}) =>
+    apiRequest(`/api/applications/${applicationId}/scm/apply`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
 
-  unlinkApplicationGithubRepo: (applicationId) =>
-    apiRequest(`/api/applications/${applicationId}/github/link`, { method: 'DELETE' }),
+  unlinkApplicationScmRepo: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/scm/link`, { method: 'DELETE' }),
 
   // Security findings export (Tenable WAS + Wiz SAST)
   getAdminSecurityFindingsPreview: () => apiRequest('/api/admin/security-findings/preview'),

@@ -50,7 +50,7 @@ export function Dependencies() {
   const load = async () => {
     try {
       setLoading(true);
-      const data = await api.getGithubSbom();
+      const data = await api.getScmSbom();
       setRows(Array.isArray(data.rows) ? data.rows : []);
       setFacets(data.facets || { ecosystems: [], companies: [] });
       setTruncated(Boolean(data.truncated));

@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent } from '../ui/Card.jsx';
 import { Input } from '../ui/Input.jsx';
 import { Select } from '../ui/Select.jsx';
+import { summarizeOsv, isFlagged } from '../../utils/osv.js';
+import { AdvisoryCell } from './AdvisoryCell.jsx';
+import { AdvisoryDetailsModal } from './AdvisoryDetailsModal.jsx';
 
 const ECOSYSTEM_LABELS = {
   npm: 'npm',
@@ -21,16 +24,34 @@ function SortIcon({ dir }) {
 
 /**
  * Read-only dependency inventory for a single application's linked GitHub repo. Uses the data
- * already present on the application payload (githubRepoLink.repo) — no extra fetch.
+ * already present on the application payload (scmRepoLink.repo) — no extra fetch.
+ *
+ * @param {{ application: object, onRescan?: () => Promise<void> }} props
+ *   onRescan, when provided, renders a "Rescan advisories" button that re-runs the OSV check.
  */
-export function ApplicationDependenciesPanel({ application }) {
-  const repo = application?.githubRepoLink?.repo || null;
+export function ApplicationDependenciesPanel({ application, onRescan }) {
+  const repo = application?.scmRepoLink?.repo || null;
   const allDeps = repo?.dependencies || [];
 
   const [query, setQuery] = useState('');
   const [ecosystem, setEcosystem] = useState('');
   const [frameworksOnly, setFrameworksOnly] = useState(false);
+  const [flaggedOnly, setFlaggedOnly] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
+  const [detailsDep, setDetailsDep] = useState(null);
   const [sort, setSort] = useState({ key: 'name', dir: 'asc' });
+
+  const handleRescan = async () => {
+    if (!onRescan || rescanning) return;
+    setRescanning(true);
+    try {
+      await onRescan();
+    } finally {
+      setRescanning(false);
+    }
+  };
+
+  const osv = useMemo(() => summarizeOsv(allDeps), [allDeps]);
 
   const ecosystems = useMemo(
     () => [...new Set(allDeps.map((d) => d.ecosystem))].sort(),
@@ -42,6 +63,7 @@ export function ApplicationDependenciesPanel({ application }) {
     let out = allDeps.filter((d) => {
       if (ecosystem && d.ecosystem !== ecosystem) return false;
       if (frameworksOnly && !d.isFramework) return false;
+      if (flaggedOnly && !isFlagged(d)) return false;
       if (q && !d.name.toLowerCase().includes(q) && !(d.framework || '').toLowerCase().includes(q)) {
         return false;
       }
@@ -61,7 +83,7 @@ export function ApplicationDependenciesPanel({ application }) {
       return String(av).localeCompare(String(bv)) * dir;
     });
     return out;
-  }, [allDeps, query, ecosystem, frameworksOnly, sort]);
+  }, [allDeps, query, ecosystem, frameworksOnly, flaggedOnly, sort]);
 
   const toggleSort = (key) =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
@@ -90,10 +112,12 @@ export function ApplicationDependenciesPanel({ application }) {
     { key: 'name', label: 'Package' },
     { key: 'version', label: 'Version' },
     { key: 'ecosystem', label: 'Ecosystem' },
+    { key: 'advisory', label: 'Advisory', sortable: false },
     { key: 'source', label: 'Source' },
   ];
 
   return (
+    <>
     <Card>
       <CardContent>
         {/* Header */}
@@ -113,10 +137,91 @@ export function ApplicationDependenciesPanel({ application }) {
               {repo.lastSyncedAt ? ` · synced ${new Date(repo.lastSyncedAt).toLocaleDateString()}` : ''}
             </p>
           </div>
-          <Link to="/dependencies" className="text-xs text-blue-600 hover:underline">
-            View catalog-wide inventory →
-          </Link>
+          <div className="flex items-center gap-3">
+            {onRescan && (
+              <button
+                type="button"
+                onClick={handleRescan}
+                disabled={rescanning}
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                title="Re-run the OSV advisory check against the current dependencies"
+              >
+                <svg
+                  className={`w-3.5 h-3.5 ${rescanning ? 'animate-spin' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                {rescanning ? 'Rescanning…' : 'Rescan advisories'}
+              </button>
+            )}
+            <Link to="/dependencies" className="text-xs text-blue-600 hover:underline">
+              View catalog-wide inventory →
+            </Link>
+          </div>
         </div>
+
+        {/* OSV advisory summary — informational flag only; Wiz is the source of truth. */}
+        {osv.status !== 'none' && (
+          <div
+            className={`mb-4 rounded-lg border px-3 py-2.5 text-xs ${
+              osv.status === 'flagged'
+                ? 'border-red-200 bg-red-50 text-red-800'
+                : osv.status === 'partial'
+                  ? 'border-amber-200 bg-amber-50 text-amber-800'
+                  : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+            }`}
+          >
+            <div className="flex items-start gap-2">
+              <span aria-hidden className="mt-px">
+                {osv.status === 'flagged' ? '⚠️' : osv.status === 'partial' ? '⚠️' : '✓'}
+              </span>
+              <div>
+                <p className="font-medium">
+                  {osv.status === 'flagged'
+                    ? `${osv.flagged} ${osv.flagged === 1 ? 'dependency has' : 'dependencies have'} a known advisory`
+                    : osv.scanned === 0
+                      ? "Dependencies couldn't be checked against OSV"
+                      : osv.unscanned > 0
+                        ? 'No known advisories on checked dependencies'
+                        : 'No known advisories'}
+                </p>
+                <p className="mt-0.5 opacity-90">
+                  {osv.scanned === 0 ? (
+                    <>
+                      None of the {osv.total} dependencies could be checked — OSV.dev may be
+                      unreachable from the server (e.g. a TLS/proxy trust issue). Use “Rescan
+                      advisories” to retry.{' '}
+                    </>
+                  ) : osv.unscanned > 0 ? (
+                    <>
+                      {osv.unscanned} of {osv.total} couldn&apos;t be checked (declares a version
+                      range, not an exact version).{' '}
+                    </>
+                  ) : null}
+                  Advisory flags come from{' '}
+                  <a
+                    href="https://osv.dev"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
+                    OSV.dev
+                  </a>{' '}
+                  and are informational only — check <span className="font-medium">Wiz</span> for
+                  authoritative vulnerability details before acting.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {allDeps.length === 0 ? (
           <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/50 px-4 py-8 text-center text-sm text-gray-600">
@@ -150,6 +255,20 @@ export function ApplicationDependenciesPanel({ application }) {
                 />
                 Frameworks only
               </label>
+              <label
+                className={`flex items-center gap-2 text-sm h-10 ${
+                  osv.flagged > 0 ? 'text-gray-700' : 'text-gray-400'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={flaggedOnly}
+                  disabled={osv.flagged === 0}
+                  onChange={(e) => setFlaggedOnly(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                Flagged only
+              </label>
             </div>
 
             {/* Table */}
@@ -157,16 +276,21 @@ export function ApplicationDependenciesPanel({ application }) {
               <table className="min-w-full divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    {columns.map((col) => (
-                      <th
-                        key={col.key}
-                        onClick={() => toggleSort(col.key)}
-                        className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer select-none whitespace-nowrap"
-                      >
-                        {col.label}
-                        <SortIcon dir={sort.key === col.key ? sort.dir : null} />
-                      </th>
-                    ))}
+                    {columns.map((col) => {
+                      const sortable = col.sortable !== false;
+                      return (
+                        <th
+                          key={col.key}
+                          onClick={sortable ? () => toggleSort(col.key) : undefined}
+                          className={`px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide select-none whitespace-nowrap ${
+                            sortable ? 'cursor-pointer' : ''
+                          }`}
+                        >
+                          {col.label}
+                          {sortable && <SortIcon dir={sort.key === col.key ? sort.dir : null} />}
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -193,6 +317,9 @@ export function ApplicationDependenciesPanel({ application }) {
                         <td className="px-3 py-1.5 text-gray-600">
                           {ECOSYSTEM_LABELS[d.ecosystem] || d.ecosystem}
                         </td>
+                        <td className="px-3 py-1.5">
+                          <AdvisoryCell dep={d} onOpenDetails={setDetailsDep} />
+                        </td>
                         <td className="px-3 py-1.5 text-gray-500 text-xs">{d.source}</td>
                       </tr>
                     ))
@@ -207,5 +334,7 @@ export function ApplicationDependenciesPanel({ application }) {
         )}
       </CardContent>
     </Card>
+    <AdvisoryDetailsModal dep={detailsDep} onClose={() => setDetailsDep(null)} />
+    </>
   );
 }

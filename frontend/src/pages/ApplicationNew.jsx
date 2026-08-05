@@ -9,7 +9,7 @@ import { Textarea } from '../components/ui/Textarea.jsx';
 import { Select } from '../components/ui/Select.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
 import useAuthStore from '../store/authStore.js';
-import { GithubRepoPickerModal } from '../components/integrations/GithubRepoPickerModal.jsx';
+import { ScmRepoPickerModal } from '../components/integrations/ScmRepoPickerModal.jsx';
 
 export function ApplicationNew() {
   const navigate = useNavigate();
@@ -98,12 +98,12 @@ export function ApplicationNew() {
   // Prefill a repo when arriving from the GitHub integration (?repo=owner/name).
   // Prefill the form from a chosen repo: repo URL + name, and (best-effort) the detected language
   // and framework pulled from GitHub. All values remain editable before submit.
-  const prefillFromRepo = async ({ owner, name, fullName, htmlUrl }) => {
+  const prefillFromRepo = async ({ owner, name, fullName, htmlUrl, connectionId }) => {
     const url = htmlUrl || `https://github.com/${fullName}`;
-    setSelectedRepo({ owner, name, fullName, htmlUrl: url });
+    setSelectedRepo({ owner, name, fullName, htmlUrl: url, connectionId });
     setFormData((prev) => ({ ...prev, repoUrl: url, name: prev.name || name }));
     try {
-      const intel = await api.getGithubRepoIntel(owner, name);
+      const intel = await api.getScmRepoIntel(owner, name, connectionId);
       setFormData((prev) => ({
         ...prev,
         language: intel.language || prev.language,
@@ -220,9 +220,10 @@ export function ApplicationNew() {
       // If a GitHub repo was selected, link it now (pulls languages/frameworks/dependencies).
       if (selectedRepo?.owner && selectedRepo?.name) {
         try {
-          await api.linkApplicationGithubRepo(application.id, {
+          await api.linkApplicationScmRepo(application.id, {
             owner: selectedRepo.owner,
             name: selectedRepo.name,
+            connectionId: selectedRepo.connectionId,
           });
           toast.success('Application created and GitHub repo linked');
         } catch (linkErr) {
@@ -686,7 +687,7 @@ export function ApplicationNew() {
         </div>
       </form>
 
-      <GithubRepoPickerModal
+      <ScmRepoPickerModal
         isOpen={githubPickerOpen}
         onClose={() => setGithubPickerOpen(false)}
         onSelect={handleSelectRepo}

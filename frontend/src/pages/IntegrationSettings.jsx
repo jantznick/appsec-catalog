@@ -9,17 +9,20 @@ import { Modal } from '../components/ui/Modal.jsx';
 import useAuthStore from '../store/authStore.js';
 import { integrationProviderLabel } from '../lib/integrationLabels.js';
 import { AddIntegrationModal } from '../components/integrations/AddIntegrationModal.jsx';
-import { GithubRepoPickerModal } from '../components/integrations/GithubRepoPickerModal.jsx';
+import { ScmRepoPickerModal } from '../components/integrations/ScmRepoPickerModal.jsx';
 
 /**
  * Per-user GitHub account connection (GitHub App). Available to any authenticated user —
  * it links their own GitHub so they can attach repos to applications.
  */
-function MyGithubAccountCard() {
+const PROVIDER_LABELS = { GITHUB: 'GitHub', GITLAB: 'GitLab', BITBUCKET: 'Bitbucket', AZURE_DEVOPS: 'Azure DevOps' };
+const providerLabel = (id) => PROVIDER_LABELS[id] || id;
+
+function ConnectedAccountsCard() {
   const navigate = useNavigate();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [disconnectOpen, setDisconnectOpen] = useState(false);
+  const [disconnectTarget, setDisconnectTarget] = useState(null); // a connection object
   const [disconnecting, setDisconnecting] = useState(false);
   const [createPickerOpen, setCreatePickerOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -27,26 +30,25 @@ function MyGithubAccountCard() {
   const loadStatus = async () => {
     try {
       setLoading(true);
-      setStatus(await api.getGithubStatus());
+      setStatus(await api.getScmStatus());
     } catch (e) {
       console.error(e);
-      toast.error(e.message || 'Failed to load GitHub status');
+      toast.error(e.message || 'Failed to load connection status');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    // Surface the callback outcome, then strip the flag from the URL.
-    const flag = searchParams.get('github');
+    const flag = searchParams.get('scm');
     if (flag === 'success') {
-      toast.success('GitHub account connected');
+      toast.success('Account connected');
     } else if (flag === 'error') {
-      toast.error('Could not connect GitHub. Please try again.');
+      toast.error('Could not connect. Please try again.');
     }
     if (flag) {
       const next = new URLSearchParams(searchParams);
-      next.delete('github');
+      next.delete('scm');
       setSearchParams(next, { replace: true });
     }
     loadStatus();
@@ -54,11 +56,12 @@ function MyGithubAccountCard() {
   }, []);
 
   const confirmDisconnect = async () => {
+    if (!disconnectTarget) return;
     setDisconnecting(true);
     try {
-      await api.disconnectGithub();
-      toast.success('GitHub disconnected');
-      setDisconnectOpen(false);
+      await api.disconnectScm(disconnectTarget.id);
+      toast.success('Disconnected');
+      setDisconnectTarget(null);
       await loadStatus();
     } catch (e) {
       toast.error(e.message || 'Failed to disconnect');
@@ -67,13 +70,16 @@ function MyGithubAccountCard() {
     }
   };
 
+  const providers = status?.providers || [];
+  const connections = status?.connections || [];
+
   return (
     <Card className="max-w-2xl mb-8">
       <CardHeader>
-        <CardTitle>My GitHub account</CardTitle>
+        <CardTitle>Connected accounts</CardTitle>
         <p className="text-sm text-gray-600 font-normal mt-1 max-w-2xl">
-          Connect your GitHub account to link repositories to applications and automatically pull
-          languages, frameworks, and dependencies from the source.
+          Connect your source-control accounts to link repositories to applications and automatically
+          pull languages, frameworks, and dependencies. You can connect as many as you like.
         </p>
       </CardHeader>
       <CardContent>
@@ -81,75 +87,82 @@ function MyGithubAccountCard() {
           <p className="text-sm text-gray-500">Loading…</p>
         ) : !status?.configured ? (
           <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/50 px-4 py-6 text-center">
-            <p className="text-sm text-gray-600">GitHub integration is not configured yet.</p>
+            <p className="text-sm text-gray-600">No source-control provider is configured yet.</p>
             <p className="text-sm text-gray-500 mt-2">
-              An administrator needs to register a GitHub App and set its environment variables.
+              An administrator needs to register a provider (e.g. a GitHub App) and set its
+              environment variables.
             </p>
           </div>
-        ) : status.connected ? (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 p-4">
-              <div className="flex items-center gap-3">
-                {status.avatarUrl ? (
-                  <img
-                    src={status.avatarUrl}
-                    alt=""
-                    className="h-10 w-10 rounded-full border border-gray-200"
-                  />
-                ) : null}
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">@{status.login}</p>
-                  <p className="text-xs text-green-800 font-medium">Connected</p>
-                </div>
-              </div>
-              <div className="flex gap-2">
+        ) : (
+          <div className="space-y-4">
+            {connections.length > 0 && (
+              <ul className="space-y-2">
+                {connections.map((c) => (
+                  <li
+                    key={c.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 p-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {c.avatarUrl ? (
+                        <img src={c.avatarUrl} alt="" className="h-9 w-9 rounded-full border border-gray-200" />
+                      ) : null}
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">
+                          @{c.login}
+                          <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 align-middle">
+                            {providerLabel(c.provider)}
+                            {c.host && c.host !== 'github.com' ? ` · ${c.host}` : ''}
+                          </span>
+                        </p>
+                        <p className="text-xs text-green-800 font-medium">Connected</p>
+                      </div>
+                    </div>
+                    <Button variant="secondary" size="sm" onClick={() => setDisconnectTarget(c)}>
+                      Disconnect
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Connect actions — one per configured provider. */}
+            <div className="flex flex-wrap gap-2">
+              {providers.map((p) => (
                 <Button
-                  variant="ghost"
+                  key={p.id}
+                  variant="primary"
                   size="sm"
                   onClick={() => {
-                    window.location.href = api.githubConnectUrl();
+                    window.location.href = api.scmConnectUrl(p.id);
                   }}
                 >
-                  Manage repos
+                  {connections.some((c) => c.provider === p.id) ? `Add another ${providerLabel(p.id)}` : `Connect ${providerLabel(p.id)}`}
                 </Button>
-                <Button variant="secondary" size="sm" onClick={() => setDisconnectOpen(true)}>
-                  Disconnect
+              ))}
+            </div>
+
+            {connections.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-gray-200 bg-gray-50/50 px-4 py-3">
+                <p className="text-sm text-gray-600">
+                  Spin up a new application straight from one of your repositories.
+                </p>
+                <Button variant="secondary" size="sm" onClick={() => setCreatePickerOpen(true)}>
+                  Create application from a repo
                 </Button>
               </div>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-gray-200 bg-gray-50/50 px-4 py-3">
-              <p className="text-sm text-gray-600">
-                Spin up a new application straight from one of your repositories.
-              </p>
-              <Button variant="primary" size="sm" onClick={() => setCreatePickerOpen(true)}>
-                Create application from a repo
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 p-4">
-            <p className="text-sm text-gray-600">Your GitHub account is not connected.</p>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => {
-                window.location.href = api.githubConnectUrl();
-              }}
-            >
-              Connect GitHub
-            </Button>
+            )}
           </div>
         )}
       </CardContent>
 
       <Modal
-        isOpen={disconnectOpen}
-        onClose={() => !disconnecting && setDisconnectOpen(false)}
-        title="Disconnect GitHub?"
+        isOpen={disconnectTarget != null}
+        onClose={() => !disconnecting && setDisconnectTarget(null)}
+        title="Disconnect account?"
         size="sm"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setDisconnectOpen(false)} disabled={disconnecting}>
+            <Button variant="secondary" onClick={() => setDisconnectTarget(null)} disabled={disconnecting}>
               Cancel
             </Button>
             <Button variant="danger" onClick={confirmDisconnect} loading={disconnecting}>
@@ -159,12 +172,13 @@ function MyGithubAccountCard() {
         }
       >
         <p className="text-gray-700">
-          Disconnecting removes your stored GitHub connection. Repositories already linked to
-          applications stay linked, but syncing will require reconnecting.
+          Disconnect {disconnectTarget ? `@${disconnectTarget.login} (${providerLabel(disconnectTarget.provider)})` : 'this account'}?
+          Repositories already linked to applications stay linked, but syncing them will require
+          reconnecting.
         </p>
       </Modal>
 
-      <GithubRepoPickerModal
+      <ScmRepoPickerModal
         isOpen={createPickerOpen}
         onClose={() => setCreatePickerOpen(false)}
         onSelect={(repo) => {
@@ -282,7 +296,7 @@ export function IntegrationSettings() {
         </p>
       </div>
 
-      <MyGithubAccountCard />
+      <ConnectedAccountsCard />
 
       {!admin ? null : loading ? (
         <LoadingPage message="Loading…" />

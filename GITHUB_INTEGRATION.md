@@ -25,7 +25,7 @@ Fill in:
 |---|---|
 | **GitHub App name** | e.g. `AppSec Catalog` (the slug is derived from this) |
 | **Homepage URL** | your app URL, e.g. `http://localhost:3000` |
-| **Callback URL** | `<BACKEND_ORIGIN>/api/integrations/github/callback` — locally `http://localhost:5000/api/integrations/github/callback` |
+| **Callback URL** | `<BACKEND_ORIGIN>/api/integrations/scm/callback` — locally `http://localhost:5000/api/integrations/scm/callback` |
 | **Request user authorization (OAuth) during installation** | ✅ **Check this** (required — without it the install callback carries no user identity) |
 | **Webhook → Active** | ⬜ **Uncheck** (this integration doesn't use webhooks, so no webhook URL is needed) |
 | **Where can this GitHub App be installed?** | **Any account** (required so your users can install it on their own accounts/orgs — "Only on this account" would limit it to yours) |

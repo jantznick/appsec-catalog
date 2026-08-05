@@ -7,7 +7,7 @@ import { Button } from '../ui/Button.jsx';
 import useAuthStore from '../../store/authStore.js';
 import { integrationProviderLabel } from '../../lib/integrationLabels.js';
 import { IntegrationTagPickerModal } from './IntegrationTagPickerModal.jsx';
-import { ApplicationGithubBlock } from './ApplicationGithubBlock.jsx';
+import { ApplicationScmBlock } from './ApplicationScmBlock.jsx';
 
 const TOOL_LINK_PROVIDERS = new Set(['TENABLE_IO', 'WIZ']);
 
@@ -119,7 +119,7 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
 
   return (
     <>
-      <ApplicationGithubBlock
+      <ApplicationScmBlock
         application={application}
         canManage={canViewThisCompany}
         onRefresh={onRefresh}

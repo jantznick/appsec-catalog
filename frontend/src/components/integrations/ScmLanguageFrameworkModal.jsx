@@ -16,7 +16,7 @@ import { Input } from '../ui/Input.jsx';
  *   onSave: () => void, saving?: boolean,
  * }} props
  */
-export function GithubLanguageFrameworkModal({
+export function ScmLanguageFrameworkModal({
   isOpen,
   onClose,
   language,

@@ -3,8 +3,8 @@ import { api } from '../lib/api.js';
 import { toast } from '../components/ui/Toast.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import { Button } from '../components/ui/Button.jsx';
-import { GithubRepoPickerModal } from '../components/integrations/GithubRepoPickerModal.jsx';
-import { GithubLanguageFrameworkModal } from '../components/integrations/GithubLanguageFrameworkModal.jsx';
+import { ScmRepoPickerModal } from '../components/integrations/ScmRepoPickerModal.jsx';
+import { ScmLanguageFrameworkModal } from '../components/integrations/ScmLanguageFrameworkModal.jsx';
 
 /** Detected language/framework strings from a serialized repo (languages + dependencies). */
 function computeDetected(repo) {
@@ -65,7 +65,11 @@ export function useRepoLinkFlow(application, onChanged) {
     const prevF = application?.framework || '';
     setBusy(true);
     try {
-      const res = await api.linkApplicationGithubRepo(applicationId, { owner: repo.owner, name: repo.name });
+      const res = await api.linkApplicationScmRepo(applicationId, {
+        owner: repo.owner,
+        name: repo.name,
+        connectionId: repo.connectionId,
+      });
       setPickerOpen(false);
       toast.success(`Linked ${repo.fullName}`);
       await onChanged();
@@ -83,7 +87,7 @@ export function useRepoLinkFlow(application, onChanged) {
     const prevF = application?.framework || '';
     setBusy(true);
     try {
-      const res = await api.syncApplicationGithubRepo(applicationId);
+      const res = await api.syncApplicationScmRepo(applicationId);
       toast.success('Repository synced');
       await onChanged();
       openLangFrameworkModal(res.repo, prevL, prevF);
@@ -100,7 +104,7 @@ export function useRepoLinkFlow(application, onChanged) {
     if (!applicationId) return;
     setUnlinking(true);
     try {
-      await api.unlinkApplicationGithubRepo(applicationId);
+      await api.unlinkApplicationScmRepo(applicationId);
       toast.success('Repository unlinked');
       setUnlinkConfirmOpen(false);
       await onChanged();
@@ -115,7 +119,7 @@ export function useRepoLinkFlow(application, onChanged) {
     if (!applicationId) return;
     setSaving(true);
     try {
-      await api.applyApplicationGithubData(applicationId, { language: lfLang, framework: lfFramework });
+      await api.applyApplicationScmData(applicationId, { language: lfLang, framework: lfFramework });
       toast.success('Language and framework updated');
       setLfOpen(false);
       await onChanged();
@@ -128,7 +132,7 @@ export function useRepoLinkFlow(application, onChanged) {
 
   const modals = (
     <>
-      <GithubRepoPickerModal
+      <ScmRepoPickerModal
         isOpen={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onSelect={onPickRepo}
@@ -136,7 +140,7 @@ export function useRepoLinkFlow(application, onChanged) {
         confirmLabel="Link repository"
         submitting={busy}
       />
-      <GithubLanguageFrameworkModal
+      <ScmLanguageFrameworkModal
         isOpen={lfOpen}
         onClose={() => setLfOpen(false)}
         language={lfLang}

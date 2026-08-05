@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card.jsx';
 import { Button } from '../ui/Button.jsx';
 import { useRepoLinkFlow } from '../../hooks/useRepoLinkFlow.jsx';
+import { AdvisoryCell } from './AdvisoryCell.jsx';
+import { AdvisoryDetailsModal } from './AdvisoryDetailsModal.jsx';
+import { summarizeOsv } from '../../utils/osv.js';
 
 /**
  * Per-application GitHub repo panel (Integrations tab). Shows the linked repo's detected languages,
@@ -12,9 +15,10 @@ import { useRepoLinkFlow } from '../../hooks/useRepoLinkFlow.jsx';
  *
  * @param {{ application: object, canManage: boolean, onRefresh: () => Promise<void> }} props
  */
-export function ApplicationGithubBlock({ application, canManage, onRefresh }) {
-  const repo = application?.githubRepoLink?.repo || null;
+export function ApplicationScmBlock({ application, canManage, onRefresh }) {
+  const repo = application?.scmRepoLink?.repo || null;
   const [showAllDeps, setShowAllDeps] = useState(false);
+  const [detailsDep, setDetailsDep] = useState(null);
   const flow = useRepoLinkFlow(application, onRefresh);
 
   const languageEntries = useMemo(() => {
@@ -31,6 +35,7 @@ export function ApplicationGithubBlock({ application, canManage, onRefresh }) {
     [repo],
   );
   const dependencies = repo?.dependencies || [];
+  const osv = useMemo(() => summarizeOsv(dependencies), [dependencies]);
 
   return (
     <>
@@ -153,8 +158,18 @@ export function ApplicationGithubBlock({ application, canManage, onRefresh }) {
               {dependencies.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
                       Dependencies ({dependencies.length})
+                      {osv.status === 'flagged' && (
+                        <span className="normal-case rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                          ⚠ {osv.flagged} flagged
+                        </span>
+                      )}
+                      {osv.status === 'partial' && (
+                        <span className="normal-case rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                          ⚠ {osv.unscanned} unchecked
+                        </span>
+                      )}
                     </h4>
                     {dependencies.length > 8 && (
                       <button
@@ -173,6 +188,7 @@ export function ApplicationGithubBlock({ application, canManage, onRefresh }) {
                           <th className="px-3 py-2 text-left font-medium text-gray-500">Ecosystem</th>
                           <th className="px-3 py-2 text-left font-medium text-gray-500">Package</th>
                           <th className="px-3 py-2 text-left font-medium text-gray-500">Version</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">Advisory</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
@@ -190,11 +206,28 @@ export function ApplicationGithubBlock({ application, canManage, onRefresh }) {
                             <td className="px-3 py-1.5 text-gray-600 font-mono text-xs">
                               {d.version || d.versionRange || '—'}
                             </td>
+                            <td className="px-3 py-1.5">
+                              <AdvisoryCell dep={d} onOpenDetails={setDetailsDep} />
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
+                  {osv.status !== 'none' && (
+                    <p className="mt-2 text-[11px] text-gray-400">
+                      Advisory flags come from{' '}
+                      <a
+                        href="https://osv.dev"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-gray-600"
+                      >
+                        OSV.dev
+                      </a>{' '}
+                      and are informational only — check Wiz for authoritative vulnerability details.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -203,6 +236,7 @@ export function ApplicationGithubBlock({ application, canManage, onRefresh }) {
       </Card>
 
       {flow.modals}
+      <AdvisoryDetailsModal dep={detailsDep} onClose={() => setDetailsDep(null)} />
     </>
   );
 }
