@@ -136,7 +136,7 @@ export function UserStats() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow p-6 flex flex-col h-full">
+        <div className="bg-surface rounded-xl border border-gray-200/80 shadow-sm p-6 flex flex-col h-full">
           <div className="flex-grow">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Applications</h2>
             <p className="text-gray-600 mb-4">
@@ -150,7 +150,7 @@ export function UserStats() {
           </Link>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 flex flex-col h-full">
+        <div className="bg-surface rounded-xl border border-gray-200/80 shadow-sm p-6 flex flex-col h-full">
           <div className="flex-grow">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Users</h2>
             <p className="text-gray-600 mb-4">
@@ -164,7 +164,7 @@ export function UserStats() {
           </Link>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 flex flex-col h-full">
+        <div className="bg-surface rounded-xl border border-gray-200/80 shadow-sm p-6 flex flex-col h-full">
           <div className="flex-grow">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Domains</h2>
             <p className="text-gray-600 mb-4">
@@ -178,7 +178,7 @@ export function UserStats() {
           </Link>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 flex flex-col h-full">
+        <div className="bg-surface rounded-xl border border-gray-200/80 shadow-sm p-6 flex flex-col h-full">
           <div className="flex-grow">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Deployment Tokens</h2>
             <p className="text-gray-600 mb-4">
@@ -192,7 +192,7 @@ export function UserStats() {
           </Link>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 flex flex-col h-full">
+        <div className="bg-surface rounded-xl border border-gray-200/80 shadow-sm p-6 flex flex-col h-full">
           <div className="flex-grow">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Deployment Tokens</h2>
             <p className="text-gray-600 mb-4">
@@ -206,7 +206,7 @@ export function UserStats() {
           </Link>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 flex flex-col h-full">
+        <div className="bg-surface rounded-xl border border-gray-200/80 shadow-sm p-6 flex flex-col h-full">
           <div className="flex-grow">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Documentation</h2>
             <p className="text-gray-600 mb-4">

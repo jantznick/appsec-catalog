@@ -486,7 +486,7 @@ export function DomainDetail() {
           {latestSnapshot && latestSnapshot.totalSecurityScore !== null && latestSnapshot.totalSecurityScore !== undefined ? (
             <div className="space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="bg-white border border-gray-200 rounded-lg p-3 md:col-span-1">
+                <div className="bg-surface border border-gray-200 rounded-lg p-3 md:col-span-1">
                   <p className="text-xs text-gray-500 uppercase tracking-wide">Current DNS Security Score</p>
                   <p className={`text-3xl font-bold mt-1 ${getScoreTextColor(latestSnapshot.totalSecurityScore)}`}>
                     {latestSnapshot.totalSecurityScore}
@@ -496,7 +496,7 @@ export function DomainDetail() {
                     Based on latest check: {new Date(latestSnapshot.checkedAt).toLocaleString()}
                   </p>
                 </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-3 md:col-span-2 space-y-2">
+                <div className="bg-surface border border-gray-200 rounded-lg p-3 md:col-span-2 space-y-2">
                   <div>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-gray-600">Metadata completeness</span>
@@ -525,7 +525,7 @@ export function DomainDetail() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="bg-white border border-gray-200 rounded-lg p-3">
+                <div className="bg-surface border border-gray-200 rounded-lg p-3">
                   <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Metadata Checks</p>
                   <div className="space-y-1.5">
                     {latestMetadataChecks.map((check) => (
@@ -547,7 +547,7 @@ export function DomainDetail() {
                   </div>
                 </div>
 
-                <div className="bg-white border border-gray-200 rounded-lg p-3">
+                <div className="bg-surface border border-gray-200 rounded-lg p-3">
                   <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">DNS Checks</p>
                   <div className="space-y-1.5">
                     {latestDnsChecks.map((check) => (
@@ -633,7 +633,7 @@ export function DomainDetail() {
                     <select
                       value={formData.status}
                       onChange={(e) => updateFormField('status', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-surface focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="unknown">unknown</option>
                       <option value="active">active</option>
@@ -728,7 +728,7 @@ export function DomainDetail() {
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="bg-surface divide-y divide-gray-200">
                         {relatedDomains.map((relatedDomain) => (
                           <tr key={relatedDomain.id}>
                             <td className="px-4 py-2 text-sm text-gray-900">
@@ -843,7 +843,7 @@ export function DomainDetail() {
                                 ? 'border-blue-500 bg-blue-50'
                                 : snapshotChanges.length > 0
                                 ? 'border-amber-300 bg-amber-50/40 hover:bg-amber-50/60'
-                                : 'border-gray-200 bg-white hover:bg-gray-50'
+                                : 'border-gray-200 bg-surface hover:bg-gray-50'
                             }`}
                           >
                             <div className="flex items-start justify-between gap-3">
@@ -909,7 +909,7 @@ export function DomainDetail() {
                                       className={`px-2.5 py-1 rounded text-xs font-medium border ${
                                         selectedDnsRecordType === recordType
                                           ? 'bg-blue-600 text-white border-blue-600'
-                                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                          : 'bg-surface text-gray-700 border-gray-300 hover:bg-gray-50'
                                       }`}
                                     >
                                       {recordType}
@@ -1059,7 +1059,7 @@ export function DomainDetail() {
                                 <p className="text-sm text-red-700 mt-1 truncate">{snapshot.error}</p>
                               )}
                             </div>
-                            <div className="w-[150px] h-[150px] rounded border border-gray-200 bg-white overflow-hidden flex-shrink-0">
+                            <div className="w-[150px] h-[150px] rounded border border-gray-200 bg-surface overflow-hidden flex-shrink-0">
                               {snapshot.screenshotUrl ? (
                                 <img
                                   src={snapshot.screenshotUrl}
@@ -1162,7 +1162,7 @@ export function DomainDetail() {
       </Tabs>
 
       {isEditing && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50">
+        <div className="fixed bottom-0 left-0 right-0 bg-surface border-t border-gray-200 shadow-lg z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1253,7 +1253,7 @@ export function DomainDetail() {
                 href={selectedWebSnapshot.finalUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+                className="inline-flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 bg-surface hover:bg-gray-50"
               >
                 Open Site
               </a>
@@ -1304,7 +1304,7 @@ export function DomainDetail() {
               <img
                 src={selectedWebSnapshot.screenshotUrl}
                 alt={`Snapshot for ${domain.name}`}
-                className="w-full max-h-[520px] object-contain rounded border border-gray-200 bg-white"
+                className="w-full max-h-[520px] object-contain rounded border border-gray-200 bg-surface"
               />
             ) : (
               <p className="text-sm text-gray-500">No screenshot captured for this run.</p>

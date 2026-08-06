@@ -192,7 +192,7 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
                     return (
                       <li
                         key={provider}
-                        className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
+                        className="rounded-xl border border-gray-200 bg-surface shadow-sm overflow-hidden"
                       >
                         <div className="p-4 space-y-2">
                           <h3 className="text-base font-semibold text-gray-900">{label}</h3>

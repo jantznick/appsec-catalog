@@ -219,7 +219,7 @@ export function ThreatModelTab({ applicationId }) {
       <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
         {/* Left rail — hierarchy */}
         <div className="space-y-3">
-          <div className="rounded-lg border border-gray-200 bg-white p-2 space-y-1">
+          <div className="rounded-lg border border-gray-200 bg-surface p-2 space-y-1">
             <TreeNode
               label="Whole application"
               sublabel={`${rootThreatCount} threat${rootThreatCount === 1 ? '' : 's'}`}
@@ -264,7 +264,7 @@ export function ThreatModelTab({ applicationId }) {
         </div>
 
         {/* Right pane — the four-question editor for the selected node */}
-        <div className="rounded-lg border border-gray-200 bg-white p-5">
+        <div className="rounded-lg border border-gray-200 bg-surface p-5">
           <FourQuestionEditor
             key={isRoot ? `root:${model?.updatedAt || 'new'}` : `${selectedId}:${selectedComponent?.updatedAt}`}
             node={isRoot ? rootNode : selectedComponent}

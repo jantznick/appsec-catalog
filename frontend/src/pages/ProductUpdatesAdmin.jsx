@@ -196,7 +196,7 @@ export function ProductUpdatesAdmin() {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Product Updates</h1>
-          <p className="text-sm text-gray-600 mt-1">Draft and publish AppSec Catalog release notes.</p>
+          <p className="text-sm text-gray-600 mt-1">Draft and publish Atlas release notes.</p>
         </div>
         <Button variant="outline" onClick={resetForm}>New update</Button>
       </div>

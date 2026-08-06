@@ -360,7 +360,7 @@ export function PendingApprovals() {
                                   className={`p-3 rounded border cursor-pointer transition-all ${
                                     isSelected
                                       ? 'border-blue-500 bg-blue-50'
-                                      : 'border-gray-200 bg-white hover:bg-gray-50'
+                                      : 'border-gray-200 bg-surface hover:bg-gray-50'
                                   }`}
                                 >
                                   <div className="flex items-start justify-between">

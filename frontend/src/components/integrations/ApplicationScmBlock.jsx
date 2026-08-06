@@ -120,7 +120,7 @@ export function ApplicationScmBlock({ application, canManage, onRefresh }) {
                     {languageEntries.map(([lang, bytes]) => (
                       <span
                         key={lang}
-                        className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-700"
+                        className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-surface px-2.5 py-1 text-xs text-gray-700"
                       >
                         <span className="font-medium">{lang}</span>
                         <span className="text-gray-400">

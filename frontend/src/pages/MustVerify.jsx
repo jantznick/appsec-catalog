@@ -7,7 +7,7 @@ export function MustVerify() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="max-w-2xl w-full bg-white rounded-xl shadow-lg p-8">
+      <div className="max-w-2xl w-full bg-surface rounded-xl shadow-lg p-8">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-yellow-100 rounded-full mb-4">
             <svg

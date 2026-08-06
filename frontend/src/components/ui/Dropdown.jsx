@@ -69,7 +69,7 @@ export function Dropdown({ trigger, children, align = 'right' }) {
       </div>
       {isOpen && (
         <div
-          className={`absolute ${alignClasses[align]} mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50`}
+          className={`absolute ${alignClasses[align]} mt-2 w-56 rounded-xl shadow-xl shadow-black/40 bg-surface ring-1 ring-white/10 z-50 overflow-hidden`}
         >
           <div className="py-1" role="menu">
             {childrenWithProps}
@@ -90,7 +90,7 @@ export function DropdownItem({ children, onClick, className = '', divider = fals
     <>
       <button
         onClick={onClick}
-        className={`block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 ${className}`}
+        className={`block w-full text-left px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-blue-50 hover:text-blue-700 ${className}`}
         role="menuitem"
       >
         {children}

@@ -509,7 +509,7 @@ export function ApplicationNew() {
                   helperText="Applications will be created automatically if they don't exist"
                 />
                 {showInterfaceResults && interfaceResults.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  <div className="absolute z-10 w-full mt-1 bg-surface border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                     {interfaceResults.map((app) => (
                       <button
                         key={app.id}
@@ -524,7 +524,7 @@ export function ApplicationNew() {
                   </div>
                 )}
                 {interfaceSearch.trim().length >= 2 && interfaceResults.length === 0 && showInterfaceResults && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-4 text-sm text-gray-600">
+                  <div className="absolute z-10 w-full mt-1 bg-surface border border-gray-300 rounded-lg shadow-lg p-4 text-sm text-gray-600">
                     No applications found. Press Enter to create "{interfaceSearch}"
                   </div>
                 )}

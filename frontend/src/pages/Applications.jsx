@@ -575,7 +575,7 @@ export function Applications() {
                     </tr>
                   ))}
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-surface divide-y divide-gray-200">
                   {table.getRowModel().rows.map(row => (
                     <tr
                       key={row.id}

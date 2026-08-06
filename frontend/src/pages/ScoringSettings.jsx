@@ -227,7 +227,7 @@ function ToolWeightTable({ title, rows, onChange, onAdd, onRemove }) {
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 bg-white">
+          <tbody className="divide-y divide-gray-100 bg-surface">
             {rows.length === 0 ? (
               <tr>
                 <td colSpan="4" className="px-4 py-6 text-center text-sm text-gray-500">
@@ -266,7 +266,7 @@ function ToolWeightTable({ title, rows, onChange, onAdd, onRemove }) {
                             className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium ${
                               checked
                                 ? 'border-blue-200 bg-blue-50 text-blue-700'
-                                : 'border-gray-200 bg-white text-gray-600'
+                                : 'border-gray-200 bg-surface text-gray-600'
                             }`}
                           >
                             <input
@@ -326,7 +326,7 @@ function SensitiveRulesTable({ rules, errors, onAdd, onEdit, onRemove }) {
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 bg-white">
+          <tbody className="divide-y divide-gray-100 bg-surface">
             {rules.length === 0 ? (
               <tr>
                 <td colSpan="5" className="px-4 py-6 text-center text-sm text-gray-500">

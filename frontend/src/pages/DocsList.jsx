@@ -58,7 +58,7 @@ export function DocsList() {
 
         <div className="space-y-8">
           {DOC_SECTIONS.map((section) => (
-            <div key={section.title} className="bg-white rounded-lg shadow p-6">
+            <div key={section.title} className="bg-surface rounded-lg shadow p-6">
               <div className="mb-4">
                 <h2 className="text-xl font-semibold text-gray-900 mb-1">{section.title}</h2>
                 <p className="text-sm text-gray-600">{section.description}</p>

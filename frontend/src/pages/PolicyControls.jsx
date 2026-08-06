@@ -790,7 +790,7 @@ export function PolicyControls() {
                                         
                                         return (
                                           <div key={idx} className="flex items-center gap-2">
-                                            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg border border-gray-200 text-sm">
+                                            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-surface rounded-lg border border-gray-200 text-sm">
                                               <span className="font-medium text-gray-700">{fieldLabel}</span>
                                               <span className="text-gray-400">•</span>
                                               <span className="text-gray-600">{operatorLabel}</span>
@@ -1334,7 +1334,7 @@ export function PolicyControls() {
                     </div>
                   ) : (
                     <>
-                      <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-white">
+                      <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-surface">
                         {divisions.map((division) => (
                           <Checkbox
                             key={division.id}
@@ -1380,7 +1380,7 @@ export function PolicyControls() {
                     </div>
                   ) : (
                     <>
-                      <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-white">
+                      <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-surface">
                         {companies.map((company) => (
                           <Checkbox
                             key={company.id}

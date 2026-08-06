@@ -126,7 +126,7 @@ function PortfolioGroupNode({ data }) {
   return (
     <div className="h-full w-full rounded-xl border-2 border-slate-300 bg-slate-50/55 relative pointer-events-none">
       <div className="absolute -top-3 left-3 right-3 flex justify-center pointer-events-auto">
-        <div className="max-w-[95%] rounded-full border border-slate-300 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-slate-800 shadow-sm truncate">
+        <div className="max-w-[95%] rounded-full border border-slate-300 bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-slate-800 shadow-sm truncate">
           <Link
             to={`/products/${data.productId}`}
             className="nodrag nopan text-blue-700 hover:underline"
@@ -148,7 +148,7 @@ function PortfolioClientNode({ data }) {
   return (
     <>
       <Handle type="source" position={Position.Right} className="!opacity-0 !w-2 !h-2" />
-      <div className="h-full w-full rounded-full border border-slate-300 bg-white text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm">
+      <div className="h-full w-full rounded-full border border-slate-300 bg-surface text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm">
         <Icon className="text-slate-600" size={13} />
         <span className="truncate px-0.5">{String(data?.label || 'Client')}</span>
       </div>
@@ -215,7 +215,7 @@ function PortfolioAppNode({ data }) {
         </div>
       ) : null}
       {hasTooltipDetails ? (
-        <div className="pointer-events-none absolute -top-2 left-1/2 z-20 w-56 -translate-x-1/2 -translate-y-full rounded-md border border-slate-200 bg-white p-2 text-left text-[11px] leading-4 text-slate-700 shadow-md opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+        <div className="pointer-events-none absolute -top-2 left-1/2 z-20 w-56 -translate-x-1/2 -translate-y-full rounded-md border border-slate-200 bg-surface p-2 text-left text-[11px] leading-4 text-slate-700 shadow-md opacity-0 transition-opacity duration-150 group-hover:opacity-100">
           {data?.appType ? (
             <div>
               <span className="font-semibold text-slate-900">Type:</span> {data.appType}
@@ -752,9 +752,9 @@ function PortfolioFlowInner({ initialNodes, initialEdges }) {
           Fit view
         </Button>
       </div>
-      <div className="absolute top-2 left-2 z-10 max-w-[200px] rounded-md border border-gray-200 bg-white/95 px-2 py-1.5 text-[11px] text-gray-700 shadow-sm">
+      <div className="absolute top-2 left-2 z-10 max-w-[200px] rounded-md border border-gray-200 bg-surface/95 px-2 py-1.5 text-[11px] text-gray-700 shadow-sm">
         <div className="flex items-center gap-2">
-          <span className="inline-block h-2.5 w-6 rounded border-2 border-slate-700 bg-white shrink-0" />
+          <span className="inline-block h-2.5 w-6 rounded border-2 border-slate-700 bg-surface shrink-0" />
           <span>Internal</span>
         </div>
         <div className="mt-1 flex items-center gap-2">
@@ -856,7 +856,7 @@ export function CompanyPortfolioGraph({
           ) : null}
         </p>
       )}
-      <div className="h-[520px] border border-gray-200 rounded-lg bg-white">
+      <div className="h-[520px] border border-gray-200 rounded-lg bg-surface">
         {initialNodes.length === 0 ? (
           <p className="text-sm text-gray-500 p-8 text-center">
             No nodes match the current filters. Try adjusting product or facing filters.

@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../store/authStore.js';
 import { AuthModal } from './AuthModal.jsx';
 import { Dropdown, DropdownItem } from './ui/Dropdown.jsx';
+import { Logo } from './Logo.jsx';
 import { api } from '../lib/api.js';
 import { useToastStore } from './ui/Toast.jsx';
 import { usePendingApprovals } from '../contexts/PendingApprovalsContext.jsx';
@@ -80,36 +81,38 @@ export function Layout({ children }) {
     navigate(mode === 'login' ? '/login' : '/register');
   };
 
+  const navLinkClass = (path) => {
+    const isActive = path === '/'
+      ? location.pathname === '/'
+      : location.pathname === path || location.pathname.startsWith(`${path}/`);
+    return `text-sm font-medium px-3 py-2 rounded-lg transition-colors ${
+      isActive
+        ? 'text-white bg-white/15'
+        : 'text-white/70 hover:text-white hover:bg-white/10'
+    }`;
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm border-b border-gray-200">
+    <div className="min-h-screen">
+      <nav className="sticky top-0 z-40 bg-surface/95 backdrop-blur-md border-b border-white/10 shadow-lg shadow-navy-950/40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             {/* Left side: Title, Dashboard, Documentation */}
             <div className="flex items-center space-x-8">
-              <Link to="/" className="text-xl font-bold text-gray-800">
-                AppSec Catalog
+              <Link to="/" className="group">
+                <Logo size={30} tone="light" textClassName="text-xl" />
               </Link>
-              <div className="hidden md:flex items-center space-x-4">
+              <div className="hidden md:flex items-center space-x-1">
                 {isAuthenticated() && (
-                  <Link
-                    to="/dashboard"
-                    className="text-sm text-gray-700 hover:text-gray-800 px-3 py-2 rounded-md"
-                  >
+                  <Link to="/dashboard" className={navLinkClass('/dashboard')}>
                     Dashboard
                   </Link>
                 )}
-                <Link
-                  to="/docs"
-                  className="text-sm text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md"
-                >
+                <Link to="/docs" className={navLinkClass('/docs')}>
                   Documentation
                 </Link>
                 {isAuthenticated() && (
-                  <Link
-                    to="/whats-new"
-                    className="text-sm text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md"
-                  >
+                  <Link to="/whats-new" className={navLinkClass('/whats-new')}>
                     What&apos;s New
                   </Link>
                 )}
@@ -122,7 +125,7 @@ export function Layout({ children }) {
                 <>
                   <Dropdown
                     trigger={
-                      <button className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
+                      <button className="flex items-center space-x-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
                         <svg
                           className="w-5 h-5"
                           fill="none"
@@ -234,7 +237,7 @@ export function Layout({ children }) {
                     </DropdownItem>
                   </Dropdown>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-700">{user.email}</span>
+                    <span className="text-sm text-white/85">{user.email}</span>
                     {isAdmin() && globalPendingCount > 0 && (
                       <button
                         onClick={() => {
@@ -259,7 +262,7 @@ export function Layout({ children }) {
                   </div>
                   <button
                     onClick={handleLogout}
-                    className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                   >
                     Logout
                   </button>
@@ -268,7 +271,7 @@ export function Layout({ children }) {
                 <>
                   <button
                     onClick={() => openAuthModal('login')}
-                    className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                   >
                     Login
                   </button>

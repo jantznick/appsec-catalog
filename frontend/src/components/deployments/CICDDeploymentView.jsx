@@ -265,7 +265,7 @@ export function CICDDeploymentView({
                 </Button>
               )}
             </div>
-            <div className="bg-white border border-gray-300 rounded p-3 font-mono text-sm break-all">
+            <div className="bg-surface border border-gray-300 rounded p-3 font-mono text-sm break-all">
               {tokenValue}
             </div>
             {!isClipboardAvailable() && (

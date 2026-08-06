@@ -313,7 +313,7 @@ export function Dependencies() {
                       </tr>
                     ))}
                   </thead>
-                  <tbody className="divide-y divide-gray-100 bg-white">
+                  <tbody className="divide-y divide-gray-100 bg-surface">
                     {table.getRowModel().rows.length === 0 ? (
                       <tr>
                         <td colSpan={columns.length} className="px-4 py-8 text-center text-sm text-gray-500">

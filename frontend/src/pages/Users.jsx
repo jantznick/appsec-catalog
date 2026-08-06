@@ -424,7 +424,7 @@ export function Users() {
                     </tr>
                   ))}
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-surface divide-y divide-gray-200">
                   {table.getRowModel().rows.map(row => (
                     <tr key={row.id} className="hover:bg-gray-50">
                       {row.getVisibleCells().map(cell => (
@@ -615,7 +615,7 @@ export function Users() {
                   type="text"
                   value={regeneratedInviteUrl}
                   readOnly
-                  className="flex-1 px-4 py-3 text-sm font-mono border-2 border-blue-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 px-4 py-3 text-sm font-mono border-2 border-blue-200 rounded-lg bg-surface focus:outline-none focus:ring-2 focus:ring-blue-500"
                   onClick={(e) => e.target.select()}
                 />
                 {isClipboardAvailable() && (

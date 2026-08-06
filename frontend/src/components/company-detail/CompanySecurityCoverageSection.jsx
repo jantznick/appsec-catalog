@@ -251,7 +251,7 @@ export function CompanySecurityCoverageSection({ loading, error, data }) {
           <p className="text-sm text-gray-600">No applications for this company yet.</p>
         )}
         {!loading && !error && data && data.totalApplications > 0 && (
-          <div className="rounded-lg border border-gray-200 divide-y divide-gray-200 bg-white">
+          <div className="rounded-lg border border-gray-200 divide-y divide-gray-200 bg-surface">
             {data.categories.map((cat) => {
               const { counts } = cat;
               return (

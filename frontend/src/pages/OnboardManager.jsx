@@ -315,7 +315,7 @@ export function OnboardManager() {
                       placeholder="Start typing to search companies..."
                     />
                     {showCompanyResults && filteredCompanies.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      <div className="absolute z-10 w-full mt-1 bg-surface border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                         {filteredCompanies.map((c) => (
                           <button
                             key={c.id}
@@ -331,7 +331,7 @@ export function OnboardManager() {
                       </div>
                     )}
                     {showCompanyResults && companySearch.trim() && filteredCompanies.length === 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-4 text-sm text-gray-600">
+                      <div className="absolute z-10 w-full mt-1 bg-surface border border-gray-300 rounded-lg shadow-lg p-4 text-sm text-gray-600">
                         No companies found. Try "Create New Company" below.
                       </div>
                     )}

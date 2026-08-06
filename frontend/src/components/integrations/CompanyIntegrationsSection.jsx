@@ -286,7 +286,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
                 This company
               </h3>
               {companyScopedProviders.length === 0 ? (
-                <div className="rounded-lg border border-gray-200 bg-white px-4 py-4 text-sm text-gray-600">
+                <div className="rounded-lg border border-gray-200 bg-surface px-4 py-4 text-sm text-gray-600">
                   No company-specific integration yet. You can still rely on catalog-wide connections above.
                   {canManageCompanyCredential && (
                     <span className="block mt-2 text-gray-500">
@@ -305,7 +305,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
                     return (
                       <li
                         key={provider}
-                        className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
+                        className="rounded-xl border border-gray-200 bg-surface shadow-sm overflow-hidden"
                       >
                         <div className="p-4 sm:p-5 space-y-4">
                           <div className="flex flex-wrap items-center gap-2">

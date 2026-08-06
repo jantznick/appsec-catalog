@@ -342,7 +342,7 @@ export function SettingsApiTokens() {
                   Copy this token now. For security, it won’t be shown again.
                 </div>
 
-                <div className="rounded border border-gray-200 bg-white p-3">
+                <div className="rounded border border-gray-200 bg-surface p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-sm text-gray-700">
                       <div className="font-medium">Token</div>

@@ -47,7 +47,7 @@ export function AdminStats() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Total Companies</p>
-                  <p className="text-3xl font-semibold text-gray-800">{stats.companies.total}</p>
+                  <p className="text-3xl font-bold text-gray-900">{stats.companies.total}</p>
                 </div>
                 <div className="p-3 bg-blue-100 rounded-lg">
                   <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -65,7 +65,7 @@ export function AdminStats() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Total Applications</p>
-                  <p className="text-3xl font-semibold text-gray-800">{stats.applications.total}</p>
+                  <p className="text-3xl font-bold text-gray-900">{stats.applications.total}</p>
                 </div>
                 <div className="p-3 bg-green-100 rounded-lg">
                   <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -83,7 +83,7 @@ export function AdminStats() {
               <div className="flex items-center justify-between flex-1">
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Total Users</p>
-                  <p className="text-3xl font-semibold text-gray-800">{stats.users.total}</p>
+                  <p className="text-3xl font-bold text-gray-900">{stats.users.total}</p>
                 </div>
                 <div className="p-3 bg-purple-100 rounded-lg">
                   <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -104,7 +104,7 @@ export function AdminStats() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Pending Approvals</p>
-                  <p className="text-3xl font-semibold text-gray-800">{globalPendingCount}</p>
+                  <p className="text-3xl font-bold text-gray-900">{globalPendingCount}</p>
                 </div>
                 <div className="p-3 bg-yellow-100 rounded-lg">
                   <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -127,7 +127,7 @@ export function AdminStats() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Total Divisions</p>
-                  <p className="text-3xl font-semibold text-gray-800">{stats.divisions?.total || 0}</p>
+                  <p className="text-3xl font-bold text-gray-900">{stats.divisions?.total || 0}</p>
                 </div>
                 <div className="p-3 bg-indigo-100 rounded-lg">
                   <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -149,19 +149,19 @@ export function AdminStats() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-4 bg-gray-50 rounded-lg">
               <p className="text-sm font-medium text-gray-600 mb-1">Onboarded</p>
-              <p className="text-2xl font-semibold text-gray-800">
+              <p className="text-2xl font-bold text-gray-900">
                 {stats.applications.byStatus.onboarded || 0}
               </p>
             </div>
             <div className="p-4 bg-yellow-50 rounded-lg">
               <p className="text-sm font-medium text-gray-600 mb-1">Pending Technical</p>
-              <p className="text-2xl font-semibold text-gray-800">
+              <p className="text-2xl font-bold text-gray-900">
                 {stats.applications.byStatus.pending_technical || 0}
               </p>
             </div>
             <div className="p-4 bg-blue-50 rounded-lg">
               <p className="text-sm font-medium text-gray-600 mb-1">Pending Executive</p>
-              <p className="text-2xl font-semibold text-gray-800">
+              <p className="text-2xl font-bold text-gray-900">
                 {stats.applications.byStatus.pending_executive || 0}
               </p>
             </div>

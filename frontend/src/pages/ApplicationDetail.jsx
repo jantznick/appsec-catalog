@@ -1934,7 +1934,7 @@ export function ApplicationDetail() {
                         setDeploymentEnvironmentFilter(e.target.value);
                         setDeploymentPage(1);
                       }}
-                      className="text-sm border border-gray-300 rounded px-2 py-1 bg-white"
+                      className="text-sm border border-gray-300 rounded px-2 py-1 bg-surface"
                       title="Filter by environment"
                     >
                       <option value="">All Environments</option>
@@ -2225,7 +2225,7 @@ export function ApplicationDetail() {
                           {!formData.apiSecurityNA && (
                             <>
                               {apiSchema && (
-                                <div className="rounded-lg border border-orange-200 bg-white/70 p-3 text-sm text-orange-950">
+                                <div className="rounded-lg border border-orange-200 bg-surface/70 p-3 text-sm text-orange-950">
                                   <p className="font-medium">{apiSchema.filename || 'OpenAPI schema'}</p>
                                   <p className="mt-1 text-xs text-orange-800">
                                     {apiSchema.format?.toUpperCase()} · {formatBytes(apiSchema.sizeBytes)} · {apiSchema.sha256?.slice(0, 12)}
@@ -2255,7 +2255,7 @@ export function ApplicationDetail() {
                                 <div className={`rounded-md border px-3 py-2 text-xs ${
                                   apiSchemaInputError
                                     ? 'border-red-200 bg-red-50 text-red-700'
-                                    : 'border-orange-200 bg-white/70 text-orange-900'
+                                    : 'border-orange-200 bg-surface/70 text-orange-900'
                                 }`}>
                                   {apiSchemaInputError || `Loaded ${apiSchemaSelectedFile.name} (${formatBytes(apiSchemaSelectedFile.size)})`}
                                 </div>
@@ -2490,19 +2490,19 @@ export function ApplicationDetail() {
               ) : apiSchemaVisualization ? (
                 <div className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <div className="rounded-lg border border-gray-200 bg-white p-4">
+                    <div className="rounded-lg border border-gray-200 bg-surface p-4">
                       <p className="text-xs font-medium text-gray-500">Schema</p>
                       <p className="mt-1 text-sm font-semibold text-gray-900">{apiSchemaVisualization.title}</p>
                     </div>
-                    <div className="rounded-lg border border-gray-200 bg-white p-4">
+                    <div className="rounded-lg border border-gray-200 bg-surface p-4">
                       <p className="text-xs font-medium text-gray-500">Version</p>
                       <p className="mt-1 text-sm font-semibold text-gray-900">{apiSchemaVisualization.version || 'Not set'}</p>
                     </div>
-                    <div className="rounded-lg border border-gray-200 bg-white p-4">
+                    <div className="rounded-lg border border-gray-200 bg-surface p-4">
                       <p className="text-xs font-medium text-gray-500">Endpoints</p>
                       <p className="mt-1 text-sm font-semibold text-gray-900">{apiSchemaVisualization.endpoints.length}</p>
                     </div>
-                    <div className="rounded-lg border border-gray-200 bg-white p-4">
+                    <div className="rounded-lg border border-gray-200 bg-surface p-4">
                       <p className="text-xs font-medium text-gray-500">Fields to Review</p>
                       <p className="mt-1 text-sm font-semibold text-gray-900">{apiSchemaVisualization.sensitiveFieldCount}</p>
                     </div>
@@ -2526,7 +2526,7 @@ export function ApplicationDetail() {
                     </div>
                   )}
 
-                  <div className="rounded-lg border border-gray-200 bg-white p-4">
+                  <div className="rounded-lg border border-gray-200 bg-surface p-4">
                     <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
                       <Input
                         label="Search endpoints"
@@ -2589,7 +2589,7 @@ export function ApplicationDetail() {
                       const sensitiveSummary = getEndpointSensitiveSummary(endpoint);
 
                       return (
-                        <div key={endpoint.id} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                        <div key={endpoint.id} className="overflow-hidden rounded-lg border border-gray-200 bg-surface">
                           <button
                             type="button"
                             onClick={() => setExpandedApiEndpointId((current) => current === endpoint.id ? null : endpoint.id)}
@@ -2667,7 +2667,7 @@ export function ApplicationDetail() {
                                         </th>
                                       </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-100 bg-white">
+                                    <tbody className="divide-y divide-gray-100 bg-surface">
                                       {endpoint.sensitiveFields.map((field) => (
                                         <tr key={`${endpoint.id}-${field.location}-${field.path}`}>
                                           <td className="px-3 py-3 font-mono text-sm font-semibold text-gray-900">
@@ -2910,7 +2910,7 @@ export function ApplicationDetail() {
 
       {/* Sticky Save Bar - Only show when editing */}
       {isEditing && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50">
+        <div className="fixed bottom-0 left-0 right-0 bg-surface border-t border-gray-200 shadow-lg z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">

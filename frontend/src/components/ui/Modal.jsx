@@ -43,7 +43,7 @@ export function Modal({
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 transition-opacity"
+        className="fixed inset-0 bg-navy-950/50 backdrop-blur-sm transition-opacity"
         onClick={closeOnOverlayClick ? onClose : undefined}
       />
 
@@ -52,7 +52,7 @@ export function Modal({
         {/* Modal */}
         <div
           className={`
-            relative bg-white rounded-xl shadow-xl w-full ${sizeClasses[size]}
+            relative bg-surface rounded-2xl shadow-2xl ring-1 ring-white/10 w-full ${sizeClasses[size]}
             transform transition-all z-10
           `}
           onClick={(e) => e.stopPropagation()}

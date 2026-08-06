@@ -274,7 +274,7 @@ export function Docs() {
         <div className="flex gap-8">
           {/* Sidebar */}
           <aside className="w-64 flex-shrink-0">
-            <div className="bg-white rounded-lg shadow p-4 sticky top-8 max-h-[calc(100vh-4rem)] overflow-y-auto">
+            <div className="bg-surface rounded-lg shadow p-4 sticky top-8 max-h-[calc(100vh-4rem)] overflow-y-auto">
               <h2 className="font-semibold text-gray-900 mb-4">Documentation</h2>
               <nav className="space-y-6">
                 {DOC_SECTIONS.map((section) => (
@@ -305,7 +305,7 @@ export function Docs() {
 
           {/* Main content */}
           <main className="flex-1">
-            <div className="bg-white rounded-lg shadow p-8">
+            <div className="bg-surface rounded-lg shadow p-8">
               <div className="mb-6">
                 <Link
                   to="/docs"

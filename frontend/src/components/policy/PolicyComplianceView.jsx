@@ -489,7 +489,7 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
                                                   </div>
                                                 )}
                                                 {override.note && override.note.content && (
-                                                  <div className="mt-2 p-2 bg-white rounded border border-blue-200">
+                                                  <div className="mt-2 p-2 bg-surface rounded border border-blue-200">
                                                     <div className="font-medium text-gray-700 mb-1">Note:</div>
                                                     <div className="text-gray-600 whitespace-pre-wrap">{override.note.content}</div>
                                                   </div>

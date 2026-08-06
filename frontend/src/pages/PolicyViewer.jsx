@@ -185,7 +185,7 @@ export function PolicyViewer() {
 
                               return (
                                 <div key={field.id || idx} className="flex items-center gap-2 flex-wrap">
-                                  <div className="inline-flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-gray-200 text-sm shadow-sm">
+                                  <div className="inline-flex items-center gap-2 px-3 py-2 bg-surface rounded-lg border border-gray-200 text-sm shadow-sm">
                                     <span className="font-medium text-gray-800">{fieldLabel}</span>
                                     <span className="text-gray-300">·</span>
                                     <span className="text-gray-600">{operatorLabel}</span>

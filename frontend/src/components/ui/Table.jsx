@@ -10,7 +10,7 @@ export function Table({ children, className = '' }) {
 
 export function TableHeader({ children }) {
   return (
-    <thead className="bg-gray-50">
+    <thead className="bg-gray-50/80">
       {children}
     </thead>
   );
@@ -18,7 +18,7 @@ export function TableHeader({ children }) {
 
 export function TableBody({ children }) {
   return (
-    <tbody className="bg-white divide-y divide-gray-200">
+    <tbody className="bg-surface divide-y divide-gray-200">
       {children}
     </tbody>
   );
@@ -28,7 +28,8 @@ export function TableRow({ children, className = '', onClick }) {
   return (
     <tr
       className={`
-        ${onClick ? 'cursor-pointer hover:bg-gray-50' : ''}
+        transition-colors
+        ${onClick ? 'cursor-pointer hover:bg-blue-50/40' : ''}
         ${className}
       `}
       onClick={onClick}
@@ -42,7 +43,7 @@ export function TableHead({ children, className = '' }) {
   return (
     <th
       className={`
-        px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider
+        px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider
         ${className}
       `}
     >

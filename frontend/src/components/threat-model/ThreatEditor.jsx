@@ -58,7 +58,7 @@ export function ThreatEditor({ threats, stride, threatStatuses, relevantStride =
                 type="button"
                 title={s.question}
                 onClick={() => add({ stride: s.key })}
-                className="text-xs px-2 py-1 rounded-full bg-white border border-blue-200 text-blue-700 hover:bg-blue-100"
+                className="text-xs px-2 py-1 rounded-full bg-surface border border-blue-200 text-blue-700 hover:bg-blue-100"
               >
                 + {s.label}
               </button>
@@ -76,7 +76,7 @@ export function ThreatEditor({ threats, stride, threatStatuses, relevantStride =
                 key={i}
                 type="button"
                 onClick={() => add({ title: s.title, stride: s.stride || null })}
-                className="text-xs px-2 py-1 rounded-full bg-white border border-gray-300 text-gray-700 hover:bg-gray-100"
+                className="text-xs px-2 py-1 rounded-full bg-surface border border-gray-300 text-gray-700 hover:bg-gray-100"
               >
                 + {s.title}
               </button>
@@ -90,7 +90,7 @@ export function ThreatEditor({ threats, stride, threatStatuses, relevantStride =
       )}
 
       {threats.map((t) => (
-        <div key={t.id} className="rounded-lg border border-gray-200 p-4 space-y-3 bg-white">
+        <div key={t.id} className="rounded-lg border border-gray-200 p-4 space-y-3 bg-surface">
           <div className="flex items-start gap-3">
             <div className="flex-1">
               <Input

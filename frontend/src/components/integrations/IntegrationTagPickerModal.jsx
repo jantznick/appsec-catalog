@@ -134,7 +134,7 @@ export function IntegrationTagPickerModal({
             <p className="text-sm text-gray-600">No matching results. Try a different search.</p>
           ) : (
             <ul
-              className="max-h-72 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-inner divide-y divide-gray-100"
+              className="max-h-72 overflow-y-auto rounded-md border border-gray-200 bg-surface shadow-inner divide-y divide-gray-100"
               role="listbox"
             >
               {sorted.map((t) => {
@@ -161,7 +161,7 @@ export function IntegrationTagPickerModal({
                         }`}
                         aria-hidden
                       >
-                        {isSelected ? <span className="h-1.5 w-1.5 rounded-full bg-white" /> : null}
+                        {isSelected ? <span className="h-1.5 w-1.5 rounded-full bg-surface" /> : null}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="text-gray-900 break-words">
