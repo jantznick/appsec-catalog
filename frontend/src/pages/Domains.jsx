@@ -11,6 +11,7 @@ import { Select } from '../components/ui/Select.jsx';
 import { Textarea } from '../components/ui/Textarea.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import useAuthStore from '../store/authStore.js';
+import useScopeStore from '../store/scopeStore.js';
 
 function getStatusBadgeClasses(status) {
   const normalized = (status || 'unknown').toLowerCase();
@@ -30,6 +31,8 @@ function getScoreBadgeClasses(score) {
 
 export function Domains() {
   const { isAdmin, user } = useAuthStore();
+  const scopeCompanyId = useScopeStore((s) => (s.mode === 'company' ? s.companyId : ''));
+  const scopeDivisionId = useScopeStore((s) => (s.mode === 'division' ? s.divisionId : ''));
   const [domains, setDomains] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -50,12 +53,17 @@ export function Domains() {
 
   useEffect(() => {
     loadDomains();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeCompanyId, scopeDivisionId]);
 
   const loadDomains = async () => {
     try {
       setLoading(true);
-      const data = await api.getDomains();
+      const data = await api.getDomains(
+        isAdmin()
+          ? { companyId: scopeCompanyId || undefined, divisionId: scopeDivisionId || undefined }
+          : {}
+      );
       setDomains(Array.isArray(data) ? data : []);
     } catch (error) {
       toast.error('Failed to load domains');

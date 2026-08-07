@@ -7,6 +7,9 @@ import { Logo } from './Logo.jsx';
 import { api } from '../lib/api.js';
 import { useToastStore } from './ui/Toast.jsx';
 import { usePendingApprovals } from '../contexts/PendingApprovalsContext.jsx';
+import { ScopeSelector } from './ScopeSelector.jsx';
+import useScopeStore from '../store/scopeStore.js';
+import { FiFolder, FiX } from 'react-icons/fi';
 
 function DropdownSectionLabel({ children }) {
   return (
@@ -21,6 +24,7 @@ export function Layout({ children }) {
   const location = useLocation();
   const { user, logout, isAdmin, isAuthenticated, loading } = useAuthStore();
   const { globalPendingCount } = usePendingApprovals();
+  const { mode: scopeMode, label: scopeLabel, clearScope } = useScopeStore();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [companyName, setCompanyName] = useState(null);
@@ -123,6 +127,7 @@ export function Layout({ children }) {
             <div className="flex items-center space-x-4">
               {isAuthenticated() && user ? (
                 <>
+                  {isAdmin() && <ScopeSelector />}
                   <Dropdown
                     trigger={
                       <button className="flex items-center space-x-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors">

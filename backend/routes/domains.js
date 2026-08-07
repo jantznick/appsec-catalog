@@ -7,6 +7,7 @@ import { runDnsCheck, buildSnapshotCreateData, detectDnsChanges } from '../servi
 import { buildDomainDnsScore, recomputeSnapshotScoreForMetadata } from '../services/domainDnsScoring.js';
 import { runDomainWebSnapshot, enforceDomainWebSnapshotRetention } from '../services/domainSnapshot.js';
 import { getAuthContext } from '../middleware/authContext.js';
+import { applyCompanyScope } from '../utils/scope.js';
 
 const router = express.Router();
 
@@ -114,6 +115,9 @@ router.get('/', requireAuth, async (req, res) => {
         return res.json([]);
       }
       whereClause.companyId = auth.companyId;
+    } else {
+      // Company/division scope from the admin scope selector.
+      applyCompanyScope(whereClause, auth, req.query);
     }
 
     const domains = await prisma.domain.findMany({

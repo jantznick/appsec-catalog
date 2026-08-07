@@ -16,6 +16,7 @@ import { Input } from '../components/ui/Input.jsx';
 import { Select } from '../components/ui/Select.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import useAuthStore from '../store/authStore.js';
+import useScopeStore from '../store/scopeStore.js';
 
 const ECOSYSTEM_LABELS = {
   npm: 'npm',
@@ -35,6 +36,9 @@ function SortIcon({ dir }) {
 export function Dependencies() {
   const { isAdmin } = useAuthStore();
   const admin = isAdmin();
+  // Company/division come from the global scope selector.
+  const scopeCompanyId = useScopeStore((s) => (s.mode === 'company' ? s.companyId : ''));
+  const scopeDivisionId = useScopeStore((s) => (s.mode === 'division' ? s.divisionId : ''));
 
   const [rows, setRows] = useState([]);
   const [facets, setFacets] = useState({ ecosystems: [], companies: [] });
@@ -43,14 +47,17 @@ export function Dependencies() {
 
   const [globalFilter, setGlobalFilter] = useState('');
   const [ecosystem, setEcosystem] = useState('');
-  const [companyId, setCompanyId] = useState('');
   const [frameworksOnly, setFrameworksOnly] = useState(false);
   const [sorting, setSorting] = useState([{ id: 'name', desc: false }]);
 
   const load = async () => {
     try {
       setLoading(true);
-      const data = await api.getScmSbom();
+      const data = await api.getScmSbom(
+        admin
+          ? { companyId: scopeCompanyId || undefined, divisionId: scopeDivisionId || undefined }
+          : {}
+      );
       setRows(Array.isArray(data.rows) ? data.rows : []);
       setFacets(data.facets || { ecosystems: [], companies: [] });
       setTruncated(Boolean(data.truncated));
@@ -64,17 +71,17 @@ export function Dependencies() {
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeCompanyId, scopeDivisionId]);
 
   // Pre-filter by the faceted controls; react-table handles global search + sort + paging.
   const filteredData = useMemo(() => {
     return rows.filter((r) => {
       if (ecosystem && r.ecosystem !== ecosystem) return false;
-      if (companyId && r.companyId !== companyId) return false;
       if (frameworksOnly && !r.isFramework) return false;
       return true;
     });
-  }, [rows, ecosystem, companyId, frameworksOnly]);
+  }, [rows, ecosystem, frameworksOnly]);
 
   const stats = useMemo(() => {
     const uniquePkgs = new Set(filteredData.map((r) => `${r.ecosystem}:${r.name}`));
@@ -188,15 +195,9 @@ export function Dependencies() {
     { value: '', label: 'All ecosystems' },
     ...facets.ecosystems.map((e) => ({ value: e, label: ECOSYSTEM_LABELS[e] || e })),
   ];
-  const companyOptions = [
-    { value: '', label: 'All companies' },
-    ...facets.companies.map((c) => ({ value: c.id, label: c.name })),
-  ];
-
   const resetFilters = () => {
     setGlobalFilter('');
     setEcosystem('');
-    setCompanyId('');
     setFrameworksOnly(false);
   };
 
@@ -271,15 +272,6 @@ export function Dependencies() {
                     onChange={(e) => setEcosystem(e.target.value)}
                   />
                 </div>
-                {admin && facets.companies.length > 0 && (
-                  <div className="w-52">
-                    <Select
-                      options={companyOptions}
-                      value={companyId}
-                      onChange={(e) => setCompanyId(e.target.value)}
-                    />
-                  </div>
-                )}
                 <label className="flex items-center gap-2 text-sm text-gray-700 h-10">
                   <input
                     type="checkbox"

@@ -145,6 +145,7 @@ export const api = {
   // Company management
   getCompanies: (filters = {}) => {
     const params = new URLSearchParams();
+    if (filters.companyId) params.append('companyId', filters.companyId);
     if (filters.divisionId) params.append('divisionId', filters.divisionId);
     const queryString = params.toString();
     return apiRequest(`/api/companies${queryString ? `?${queryString}` : ''}`);
@@ -519,6 +520,7 @@ export const api = {
   getProducts: (filters = {}) => {
     const params = new URLSearchParams();
     if (filters.companyId) params.append('companyId', filters.companyId);
+    if (filters.divisionId) params.append('divisionId', filters.divisionId);
     const queryString = params.toString();
     return apiRequest(`/api/products${queryString ? `?${queryString}` : ''}`);
   },
@@ -682,8 +684,13 @@ export const api = {
     }),
 
   // Domain management
-  getDomains: () =>
-    apiRequest('/api/domains'),
+  getDomains: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.companyId) params.append('companyId', filters.companyId);
+    if (filters.divisionId) params.append('divisionId', filters.divisionId);
+    const queryString = params.toString();
+    return apiRequest(`/api/domains${queryString ? `?${queryString}` : ''}`);
+  },
 
   getDomain: (id) =>
     apiRequest(`/api/domains/${id}`),
@@ -726,8 +733,13 @@ export const api = {
   },
 
   // Admin endpoints
-  getAdminStats: () =>
-    apiRequest('/api/admin/stats'),
+  getAdminStats: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.companyId) params.append('companyId', filters.companyId);
+    if (filters.divisionId) params.append('divisionId', filters.divisionId);
+    const queryString = params.toString();
+    return apiRequest(`/api/admin/stats${queryString ? `?${queryString}` : ''}`);
+  },
 
   getAdminApplications: (filters = {}) => {
     const params = new URLSearchParams();
@@ -887,10 +899,11 @@ export const api = {
     return apiRequest(`/api/integrations/scm/dependencies?${params.toString()}`);
   },
 
-  /** Company-scoped dependency inventory (SBOM) across applications. */
-  getScmSbom: (companyId) => {
+  /** Company/division-scoped dependency inventory (SBOM) across applications. */
+  getScmSbom: (filters = {}) => {
     const params = new URLSearchParams();
-    if (companyId) params.set('companyId', companyId);
+    if (filters.companyId) params.set('companyId', filters.companyId);
+    if (filters.divisionId) params.set('divisionId', filters.divisionId);
     const qs = params.toString();
     return apiRequest(`/api/integrations/scm/sbom${qs ? `?${qs}` : ''}`);
   },

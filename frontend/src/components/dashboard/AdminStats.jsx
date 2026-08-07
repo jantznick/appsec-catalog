@@ -6,20 +6,27 @@ import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card.jsx';
 import { Button } from '../ui/Button.jsx';
 import { LoadingPage } from '../ui/Loading.jsx';
 import { usePendingApprovals } from '../../contexts/PendingApprovalsContext.jsx';
+import useScopeStore from '../../store/scopeStore.js';
 
 export function AdminStats() {
   const { globalPendingCount } = usePendingApprovals();
+  const scopeCompanyId = useScopeStore((s) => (s.mode === 'company' ? s.companyId : ''));
+  const scopeDivisionId = useScopeStore((s) => (s.mode === 'division' ? s.divisionId : ''));
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadStats();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeCompanyId, scopeDivisionId]);
 
   const loadStats = async () => {
     try {
       setLoading(true);
-      const data = await api.getAdminStats();
+      const data = await api.getAdminStats({
+        companyId: scopeCompanyId || undefined,
+        divisionId: scopeDivisionId || undefined,
+      });
       setStats(data);
     } catch (error) {
       toast.error('Failed to load dashboard stats');

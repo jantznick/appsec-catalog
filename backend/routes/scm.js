@@ -335,6 +335,7 @@ router.get('/integrations/scm/sbom', requireAuth, async (req, res) => {
   const MAX_ROWS = 10000;
 
   let companyScope = null; // null = all companies (admin only)
+  let divisionScope = null; // null = all divisions (admin only)
   if (!auth.isAdmin) {
     if (!auth.companyId) {
       return res.json({ rows: [], facets: { ecosystems: [], companies: [] }, total: 0, truncated: false });
@@ -342,13 +343,22 @@ router.get('/integrations/scm/sbom', requireAuth, async (req, res) => {
     companyScope = auth.companyId;
   } else if (typeof req.query.companyId === 'string' && req.query.companyId.trim()) {
     companyScope = req.query.companyId.trim();
+  } else if (typeof req.query.divisionId === 'string' && req.query.divisionId.trim()) {
+    divisionScope = req.query.divisionId.trim();
   }
+
+  // Prisma filter on the owning application, from the active scope.
+  const applicationScope = companyScope
+    ? { companyId: companyScope }
+    : divisionScope
+      ? { company: { divisionId: divisionScope } }
+      : null;
 
   const deps = await prisma.repoDependency.findMany({
     where: {
       repo: {
-        applications: companyScope
-          ? { some: { application: { companyId: companyScope } } }
+        applications: applicationScope
+          ? { some: { application: applicationScope } }
           : { some: {} },
       },
     },
@@ -365,7 +375,7 @@ router.get('/integrations/scm/sbom', requireAuth, async (req, res) => {
                   id: true,
                   name: true,
                   companyId: true,
-                  company: { select: { id: true, name: true } },
+                  company: { select: { id: true, name: true, divisionId: true } },
                 },
               },
             },
@@ -386,6 +396,7 @@ router.get('/integrations/scm/sbom', requireAuth, async (req, res) => {
       const app = link.application;
       if (!app) continue;
       if (companyScope && app.companyId !== companyScope) continue;
+      if (divisionScope && app.company?.divisionId !== divisionScope) continue;
 
       if (rows.length >= MAX_ROWS) {
         truncated = true;

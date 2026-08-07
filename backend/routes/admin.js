@@ -19,9 +19,34 @@ const router = express.Router();
 router.use(requireAuth);
 router.use(requireAdmin);
 
-// ADMIN-3: Get admin stats
+// ADMIN-3: Get admin stats (optionally narrowed by the admin scope selector)
 router.get('/stats', async (req, res) => {
   try {
+    const { companyId, divisionId } = req.query;
+
+    // Scope fragments for each model, derived from the active scope.
+    // companyId wins over divisionId; empty object = count everything.
+    const companyWhere = companyId
+      ? { id: companyId }
+      : divisionId
+        ? { divisionId }
+        : {};
+    const appWhere = companyId
+      ? { companyId }
+      : divisionId
+        ? { company: { divisionId } }
+        : {};
+    const userWhere = companyId
+      ? { companyId }
+      : divisionId
+        ? { company: { divisionId } }
+        : {};
+    const divisionWhere = companyId
+      ? { companies: { some: { id: companyId } } }
+      : divisionId
+        ? { id: divisionId }
+        : {};
+
     const [
       totalCompanies,
       totalApplications,
@@ -31,21 +56,22 @@ router.get('/stats', async (req, res) => {
       verifiedUsers,
       unverifiedUsers,
     ] = await Promise.all([
-      prisma.company.count(),
-      prisma.application.count(),
-      prisma.user.count(),
-      prisma.division.count(),
+      prisma.company.count({ where: companyWhere }),
+      prisma.application.count({ where: appWhere }),
+      prisma.user.count({ where: userWhere }),
+      prisma.division.count({ where: divisionWhere }),
       prisma.application.groupBy({
         by: ['status'],
         _count: {
           status: true,
         },
+        where: appWhere,
       }),
       prisma.user.count({
-        where: { verifiedAccount: true },
+        where: { ...userWhere, verifiedAccount: true },
       }),
       prisma.user.count({
-        where: { verifiedAccount: false },
+        where: { ...userWhere, verifiedAccount: false },
       }),
     ]);
 

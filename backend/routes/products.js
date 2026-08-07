@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { calculateApplicationScore } from '../services/scoring.js';
 import { evaluateAllControls } from '../services/policy.js';
 import { getAuthContext } from '../middleware/authContext.js';
+import { applyCompanyScope } from '../utils/scope.js';
 
 const router = express.Router();
 
@@ -171,11 +172,11 @@ async function validateProductFlowApplications(productId, companyId, sourceAppli
 router.get('/', requireAuth, async (req, res) => {
   try {
     const auth = getAuthContext(req);
-    const { companyId } = req.query;
 
     let where = {};
     if (auth.isAdmin) {
-      if (companyId) where.companyId = companyId;
+      // Company/division scope from the admin scope selector.
+      applyCompanyScope(where, auth, req.query);
     } else if (auth.companyId) {
       where.companyId = auth.companyId;
     } else {

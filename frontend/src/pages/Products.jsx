@@ -11,10 +11,14 @@ import { Button } from '../components/ui/Button.jsx';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import useAuthStore from '../store/authStore.js';
+import useScopeStore from '../store/scopeStore.js';
 
 export function Products() {
   const navigate = useNavigate();
   const { user, isAdmin } = useAuthStore();
+  // Company/division come from the global scope selector.
+  const scopeCompanyId = useScopeStore((s) => (s.mode === 'company' ? s.companyId : ''));
+  const scopeDivisionId = useScopeStore((s) => (s.mode === 'division' ? s.divisionId : ''));
 
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -30,7 +34,6 @@ export function Products() {
   });
   const [createMappings, setCreateMappings] = useState([]);
   const [companies, setCompanies] = useState([]);
-  const [companyFilter, setCompanyFilter] = useState('');
   const [search, setSearch] = useState('');
   const [formData, setFormData] = useState({
     companyId: '',
@@ -53,7 +56,8 @@ export function Products() {
 
   useEffect(() => {
     loadProducts();
-  }, [companyFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeCompanyId, scopeDivisionId]);
 
   useEffect(() => {
     loadCompanies();
@@ -71,7 +75,11 @@ export function Products() {
   const loadProducts = async () => {
     try {
       setLoading(true);
-      const data = await api.getProducts(isAdmin() ? { companyId: companyFilter || undefined } : {});
+      const data = await api.getProducts(
+        isAdmin()
+          ? { companyId: scopeCompanyId || undefined, divisionId: scopeDivisionId || undefined }
+          : {}
+      );
       setProducts(Array.isArray(data) ? data : []);
     } catch (error) {
       toast.error(error.message || 'Failed to load products');
@@ -277,25 +285,19 @@ export function Products() {
           <CardTitle>Filters</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <Input
               label="Search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name, company, or description..."
             />
-            {isAdmin() && (
-              <Select
-                label="Company"
-                value={companyFilter}
-                onChange={(e) => setCompanyFilter(e.target.value)}
-                options={[
-                  { value: '', label: 'All Companies' },
-                  ...companyOptions,
-                ]}
-              />
-            )}
           </div>
+          {isAdmin() && (
+            <p className="mt-3 text-xs text-gray-500">
+              Filter by company or division using the scope selector in the top nav.
+            </p>
+          )}
         </CardContent>
       </Card>
 

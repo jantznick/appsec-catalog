@@ -152,14 +152,16 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const auth = getAuthContext(req);
     if (auth.isAdmin) {
-      // Admin sees all companies
-      const { divisionId } = req.query;
-      
+      // Admin sees all companies, optionally narrowed by the scope selector.
+      const { divisionId, companyId } = req.query;
+
       const whereClause = {};
-      if (divisionId) {
+      if (companyId) {
+        whereClause.id = companyId;
+      } else if (divisionId) {
         whereClause.divisionId = divisionId;
       }
-      
+
       const companies = await prisma.company.findMany({
         where: whereClause,
         include: {

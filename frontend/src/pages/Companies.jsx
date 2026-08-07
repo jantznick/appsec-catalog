@@ -9,17 +9,19 @@ import { Button } from '../components/ui/Button.jsx';
 import { SecurityFindingsExportModal } from '../components/integrations/SecurityFindingsExportModal.jsx';
 import { CompanyPortfolioExportModal } from '../components/companies/CompanyPortfolioExportModal.jsx';
 import { Input } from '../components/ui/Input.jsx';
-import { Select } from '../components/ui/Select.jsx';
 import { Dropdown, DropdownItem } from '../components/ui/Dropdown.jsx';
 import useAuthStore from '../store/authStore.js';
+import useScopeStore from '../store/scopeStore.js';
 
 export function Companies() {
   const { isAdmin } = useAuthStore();
+  // Company/division come from the global scope selector.
+  const scopeCompanyId = useScopeStore((s) => (s.mode === 'company' ? s.companyId : ''));
+  const scopeDivisionId = useScopeStore((s) => (s.mode === 'division' ? s.divisionId : ''));
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [averageScores, setAverageScores] = useState({}); // Cache average scores by company ID
-  const [divisions, setDivisions] = useState([]);
-  const [divisionFilter, setDivisionFilter] = useState('');
+  const [divisions, setDivisions] = useState([]); // For the portfolio export modal
   
   // Table state
   const [sorting, setSorting] = useState([]);
@@ -28,16 +30,19 @@ export function Companies() {
   const [portfolioExportOpen, setPortfolioExportOpen] = useState(false);
 
   useEffect(() => {
-    if (isAdmin()) {
-      loadDivisions();
-    }
     loadCompanies();
-  }, [divisionFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeCompanyId, scopeDivisionId]);
+
+  useEffect(() => {
+    if (isAdmin()) loadDivisions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadDivisions = async () => {
     try {
       const data = await api.getDivisions();
-      setDivisions(data);
+      setDivisions(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to load divisions:', error);
     }
@@ -46,10 +51,9 @@ export function Companies() {
   const loadCompanies = async () => {
     try {
       setLoading(true);
-      const filters = {};
-      if (divisionFilter) {
-        filters.divisionId = divisionFilter;
-      }
+      const filters = isAdmin()
+        ? { companyId: scopeCompanyId || undefined, divisionId: scopeDivisionId || undefined }
+        : {};
       const data = await api.getCompanies(filters);
       setCompanies(Array.isArray(data) ? data : []);
       
@@ -298,25 +302,19 @@ export function Companies() {
           <CardContent padding="none">
             {/* Filters */}
             <div className="p-4 border-b space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <Input
                   label="Search"
                   value={globalFilter}
                   onChange={(e) => setGlobalFilter(e.target.value)}
                   placeholder="Search companies..."
                 />
-                {isAdmin() && (
-                  <Select
-                    label="Filter by Division"
-                    value={divisionFilter}
-                    onChange={(e) => setDivisionFilter(e.target.value)}
-                    options={[
-                      { value: '', label: 'All Divisions' },
-                      ...divisions.map(d => ({ value: d.id, label: d.name })),
-                    ]}
-                  />
-                )}
               </div>
+              {isAdmin() && (
+                <p className="text-xs text-gray-500">
+                  Filter by company or division using the scope selector in the top nav.
+                </p>
+              )}
             </div>
 
             <div className="overflow-x-auto">
