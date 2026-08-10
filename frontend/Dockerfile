@@ -12,6 +12,12 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# API base URL is baked into the bundle at build time (Vite). Passed from
+# docker-compose (build.args.VITE_API_URL), which sources it from FRONTEND_URL.
+# ENV overrides any VITE_API_URL in a copied .env file, so prod builds are correct.
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
 # Build the application
 RUN npm run build
 

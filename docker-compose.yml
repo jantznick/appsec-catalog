@@ -28,6 +28,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # Baked into the JS bundle at build time. Same origin as FRONTEND_URL
+        # because Caddy serves the frontend and proxies /api on one domain.
+        # Rebuild the frontend image when this changes: docker compose build frontend
+        - VITE_API_URL=${FRONTEND_URL:-http://localhost:3000}
     ports:
       - "3000:3000"
     depends_on:
@@ -89,6 +94,7 @@ services:
       - "443:443/udp" # HTTP/3
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./certs:/etc/caddy/certs:ro   # org-provided cert (atlas-fullchain.crt) + key (atlas.key)
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

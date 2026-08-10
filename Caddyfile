@@ -51,9 +51,15 @@
 #     ...
 # }
 
-# HTTP only for local network (no HTTPS, no certificate warnings)
-# Using :80 to serve HTTP only (works with any hostname)
-:80 {
+# Production (HTTPS with an organization-provided certificate).
+# Caddy serves HTTPS on 443 and auto-redirects HTTP (80) -> HTTPS.
+# The cert file should be the full chain (leaf + intermediates); the key must
+# be unencrypted PEM. Both are mounted read-only via docker-compose (./certs).
+#
+# For local HTTP-only testing, comment out the two lines below and use `:80 {`.
+atlas.hearst.com {
+    tls /etc/caddy/certs/atlas-fullchain.crt /etc/caddy/certs/atlas.key
+
     # Reverse proxy API requests to backend (must come before /)
     handle /api/* {
         reverse_proxy backend:3001 {
