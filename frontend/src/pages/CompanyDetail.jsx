@@ -44,6 +44,7 @@ export function CompanyDetail() {
   const [securityCoverage, setSecurityCoverage] = useState(null);
   const [securityCoverageLoading, setSecurityCoverageLoading] = useState(true);
   const [securityCoverageError, setSecurityCoverageError] = useState(null);
+  const [sammAssessments, setSammAssessments] = useState([]);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -66,6 +67,7 @@ export function CompanyDetail() {
       loadAverageScore();
       loadDomains();
       loadSecurityCoverage();
+      loadSammAssessments();
     }
     if (isAdmin()) {
       loadDivisions();
@@ -122,6 +124,16 @@ export function CompanyDetail() {
       setSecurityCoverage(null);
     } finally {
       setSecurityCoverageLoading(false);
+    }
+  };
+
+  const loadSammAssessments = async () => {
+    if (!id) return;
+    try {
+      const data = await api.getSammAssessments(id);
+      setSammAssessments(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Failed to load SAMM assessments:', error);
     }
   };
 
@@ -497,6 +509,7 @@ export function CompanyDetail() {
         <Tab>Tools & connections</Tab>
         <Tab>Domains</Tab>
         <Tab>Policies</Tab>
+        <Tab>Maturity assessment</Tab>
         {isAdmin() && <Tab>Notes</Tab>}
 
         <TabPanel>
@@ -846,6 +859,45 @@ export function CompanyDetail() {
               entityData={company}
               embeddedInTab
             />
+          </div>
+        </TabPanel>
+
+        <TabPanel>
+          <div className="w-full space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <CardTitle>SAMM maturity assessment</CardTitle>
+                    <p className="mt-1 text-sm text-gray-500">Company-owned assessment tracked by the HTS team and reviewed at least twice per year.</p>
+                  </div>
+                  <Link to={`/samm-assessments?companyId=${encodeURIComponent(id)}&new=1`}>
+                    <Button>Start new assessment</Button>
+                  </Link>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {sammAssessments.length === 0 ? (
+                  <p className="text-sm text-gray-500">No SAMM assessments have been started for this company.</p>
+                ) : (
+                  <div className="divide-y divide-gray-200">
+                    {sammAssessments.map((assessment) => (
+                      <div key={assessment.id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                        <div>
+                          <p className="font-medium text-gray-900">{assessment.status === 'draft' ? 'Draft assessment' : 'Completed assessment'}</p>
+                          <p className="mt-1 text-xs text-gray-500">
+                            {new Date(assessment.createdAt).toLocaleDateString()} · {assessment.summary?.averageScore == null ? 'Score pending' : `${assessment.summary.averageScore}/3`} · {assessment.summary?.assessedPractices || 0} of {assessment.summary?.totalPractices || 15} practices
+                          </p>
+                        </div>
+                        <Link to={`/samm-assessments/${assessment.id}`} className="text-sm font-medium text-blue-700 hover:text-blue-800">
+                          {assessment.status === 'draft' ? 'Continue assessment →' : 'View assessment →'}
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </TabPanel>
 

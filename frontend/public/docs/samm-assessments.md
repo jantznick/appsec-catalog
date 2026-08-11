@@ -1,24 +1,19 @@
+# SAMM Assessments
 
-## Measuring and Improving Your Security Maturity
+Atlas provides a company-level OWASP SAMM 2.0 questionnaire from the **Maturity assessment** tab on each company page. Starting an assessment there automatically uses that company; there is no separate company-selection screen.
 
-SAMM, which stands for the Software Assurance Maturity Model, is an open framework to help organizations formulate and implement a strategy for software security that is tailored to their specific business risks. We use SAMM to help you measure the maturity of your security practices, identify gaps, and create a data-driven roadmap for improvement.
+## Questionnaire
 
-### How SAMM Works
+The assessment uses the OWASP SAMM 2.0 structure with an Atlas-authored, versioned question bank. It includes all five business functions, 15 security practices, and two concrete questions per practice—one for each SAMM stream.
 
-SAMM defines five key business functions related to software development:
+Each question provides four factual operating states. Atlas maps those states internally, averages both stream answers into a practice score, and calculates the company score as the simple average of all 15 practice scores. Users are never asked to select their own maturity level.
 
--   **Governance:** How strategy, policies, and compliance are managed.
--   **Design:** How security is considered in the architecture and design phase.
--   **Implementation:** How secure coding practices are followed and vulnerabilities are avoided.
--   **Verification:** How security is tested and verified throughout the lifecycle.
--   **Operations:** How security is managed in the production environment.
+## Workflow
 
-Within each of these functions, SAMM defines several security practices. We assess your team's adoption and proficiency in each practice, assigning a maturity level from 0 (unaware) to 3 (mastery).
+1. Open a company and select **Maturity assessment**.
+2. Start or resume that company’s draft.
+3. Answer both concrete questions in each practice. Answers save automatically.
+4. Optionally add rationale and an external evidence reference.
+5. Submit after all 15 practices are complete.
 
-### The Assessment Process
-
-1.  **Interviews & Evidence Collection:** The AppSec team will conduct a series of interviews with key stakeholders, including developers, architects, and product managers. We will also review relevant documentation and processes.
-2.  **Scoring & Analysis:** We score your practices against the SAMM framework and analyze the results to identify strengths and weaknesses.
-3.  **Roadmap Workshop:** We present our findings in a collaborative workshop and work with you to create a phased, achievable roadmap for improving your security maturity over the next 6-12 months.
-
-A SAMM assessment is not an audit; it's a collaborative tool for continuous improvement. Our goal is to provide you with the insights you need to build a sustainable and effective security program.
+Submitted assessments remain immutable historical snapshots, and the next assessment is due six months later.

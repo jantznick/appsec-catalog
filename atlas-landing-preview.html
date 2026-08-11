@@ -133,6 +133,25 @@
   .oc .cell{display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;background:rgba(24,36,63,.6);border:1px solid var(--border-soft);border-radius:14px;padding:24px 14px}
   .oc .cell span{font-size:14px;font-weight:500;color:var(--text)}
   .oc-label{margin:56px 0 24px;text-align:center;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.18em;color:var(--muted2)}
+  /* compliance */
+  .comp{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:center;margin-top:56px}
+  .comp-card{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:32px}
+  .comp-card .top{display:flex;align-items:center;justify-content:space-between}
+  .comp-card .ttl{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--heading)}
+  .live{display:inline-flex;align-items:center;gap:6px;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.2);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:500;color:var(--green)}
+  .live .dot{width:6px;height:6px;border-radius:999px;background:var(--green)}
+  .gauge{position:relative;width:176px;height:176px;margin:28px auto}
+  .gauge .val{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .gauge .val b{font-size:36px;font-weight:700;color:var(--heading)}
+  .gauge .val span{margin-top:4px;font-size:12px;font-weight:500;color:var(--muted2)}
+  .comp-rows{display:flex;flex-direction:column;gap:10px}
+  .comp-row{display:flex;align-items:center;justify-content:space-between;background:var(--field);border:1px solid var(--border-soft);border-radius:10px;padding:10px 16px;font-size:14px}
+  .comp-row .k{color:var(--muted)}.comp-row .v{font-weight:600;color:var(--heading)}
+  .comp-note{margin-top:20px;text-align:center;font-size:12px;color:var(--muted2)}
+  .points{display:flex;flex-direction:column;gap:20px}
+  .point{display:flex;gap:16px}
+  .point h3{font-size:16px;font-weight:600;margin:0}
+  .point p{margin-top:4px;font-size:14px;color:var(--muted)}
   /* atlas closing / footer */
   .atlas-mark{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:24px}
   .atlas-mark span{font-size:24px;font-weight:700;color:var(--heading)}
@@ -146,7 +165,7 @@
   footer p{font-size:14px;color:var(--muted2)}
   .note{max-width:1120px;margin:0 auto;padding:14px 24px;font-size:12.5px;color:var(--muted2);text-align:center;opacity:.8}
   @media(max-width:900px){
-    .g3,.g5,.oc,.samm{grid-template-columns:1fr}
+    .g3,.g5,.oc,.samm,.comp{grid-template-columns:1fr}
     .g2{grid-template-columns:1fr}
     .io{grid-template-columns:1fr}
     .flow{flex-direction:column}
@@ -387,12 +406,47 @@
     <div class="head"><p class="eyebrow">The platform behind the program</p><h2 class="h2">Map your application security journey.</h2><p class="lead">The single source of truth for application security across Hearst — and the signal layer that feeds every AI harness.</p></div>
     <div class="grid g3 mt">
       <div class="card"><span class="badge ic-teal"><svg><use href="#i-search"/></svg></span><h3>Know your landscape</h3><p>Centralized inventory, business ownership &amp; criticality, full portfolio visibility.</p></div>
-      <div class="card"><span class="badge ic-grape"><svg><use href="#i-bar"/></svg></span><h3>Measure security health</h3><p>Executive dashboards, risk-reduction metrics, SAMM maturity tracking.</p></div>
-      <div class="card"><span class="badge ic-green"><svg><use href="#i-link"/></svg></span><h3>Connect your ecosystem</h3><p>CI/CD integration, automated evidence collection, no more manual reporting.</p></div>
-      <div class="card"><span class="badge ic-navy"><svg><use href="#i-shield"/></svg></span><h3>Demonstrate compliance</h3><p>Continuous policy monitoring, audit-ready evidence, governance insights.</p></div>
-      <div class="card"><span class="badge ic-teal"><svg><use href="#i-refresh"/></svg></span><h3>Drive continuous improvement</h3><p>Security scorecards, remediation tracking, business-unit benchmarking.</p></div>
+      <div class="card"><span class="badge ic-grape"><svg><use href="#i-bar"/></svg></span><h3>Measure security health</h3><p>Executive dashboards, application security scores, and SAMM maturity tracking.</p></div>
+      <div class="card"><span class="badge ic-green"><svg><use href="#i-refresh"/></svg></span><h3>Drive continuous improvement</h3><p>Security scorecards, remediation tracking, and business-unit benchmarking.</p></div>
     </div>
     <p class="closing">One platform. One inventory. <span class="grad">One security story.</span></p>
+  </div>
+</section>
+
+<!-- POLICY COMPLIANCE -->
+<section class="section surface" id="compliance">
+  <div class="container">
+    <div class="head"><p class="eyebrow">Continuous compliance</p><h2 class="h2">Know your InfoSec policy compliance — on demand, all the time.</h2><p class="lead">Atlas turns the software-development and application-security portions of your Information Security Policy into controls it grades every application against — automatically, and always current. Not once a year at audit time. Any time you look.</p></div>
+    <div class="comp">
+      <div class="comp-card">
+        <div class="top">
+          <span class="ttl"><svg class="icon t-teal"><use href="#i-shield"/></svg>InfoSec Policy Compliance</span>
+          <span class="live"><span class="dot"></span>Live</span>
+        </div>
+        <div class="gauge">
+          <svg width="176" height="176" viewBox="0 0 128 128" style="transform:rotate(-90deg)">
+            <defs><linearGradient id="gg" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse"><stop stop-color="#2bbdd3"/><stop offset="1" stop-color="#9784d0"/></linearGradient></defs>
+            <circle cx="64" cy="64" r="54" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="12"/>
+            <circle cx="64" cy="64" r="54" fill="none" stroke="url(#gg)" stroke-width="12" stroke-linecap="round" stroke-dasharray="339.29" stroke-dashoffset="44.1"/>
+          </svg>
+          <div class="val"><b>87%</b><span>Policy adherence</span></div>
+        </div>
+        <div class="comp-rows">
+          <div class="comp-row"><span class="k">Applications with compliant policies</span><span class="v">96 of 128</span></div>
+          <div class="comp-row"><span class="k">Policies evaluated</span><span class="v">6</span></div>
+          <div class="comp-row"><span class="k">Controls met</span><span class="v">1,204 of 1,384</span></div>
+          <div class="comp-row"><span class="k">Policy exceptions tracked</span><span class="v">4</span></div>
+        </div>
+        <p class="comp-note">Illustrative — the same view is live in the Atlas executive dashboard.</p>
+      </div>
+      <div class="points">
+        <div class="point"><span class="badge sm ic-teal"><svg><use href="#i-layers"/></svg></span><div><h3>Your policy, encoded as controls</h3><p>The SDLC and application-security requirements of your Information Security Policy become concrete, checkable controls — each with an ID, a category, and mappings to the application fields that satisfy it.</p></div></div>
+        <div class="point"><span class="badge sm ic-grape"><svg><use href="#i-cpu"/></svg></span><div><h3>Every app graded automatically</h3><p>Atlas evaluates each application against the controls that apply to it — Meeting or Not Meeting — straight from the metadata already in the catalog. No questionnaire, no spreadsheet.</p></div></div>
+        <div class="point"><span class="badge sm ic-green"><svg><use href="#i-refresh"/></svg></span><div><h3>On demand, always current</h3><p>Compliance is recomputed live every time you look — see exactly where every app stands on any given day, not just at audit time or when the GRC team comes asking.</p></div></div>
+        <div class="point"><span class="badge sm ic-navy"><svg><use href="#i-compass"/></svg></span><div><h3>Scoped to what applies</h3><p>Global, division, company, and conditional policies mean each business is measured against exactly the controls that apply to it — nothing more, nothing less.</p></div></div>
+      </div>
+    </div>
+    <div class="banner"><svg class="icon t-teal"><use href="#i-clip"/></svg><p style="font-weight:500;color:var(--text)">Every control result carries the evidence behind it — and tracked exceptions — giving your GRC and internal-audit teams a clear, current picture across the entire portfolio.</p></div>
   </div>
 </section>
 

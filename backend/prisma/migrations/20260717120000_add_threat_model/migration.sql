@@ -1,5 +1,5 @@
 -- CreateTable
-CREATE TABLE "ThreatModel" (
+CREATE TABLE IF NOT EXISTS "ThreatModel" (
     "id" TEXT NOT NULL,
     "applicationId" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'draft',
@@ -18,7 +18,7 @@ CREATE TABLE "ThreatModel" (
 );
 
 -- CreateTable
-CREATE TABLE "ThreatModelComponent" (
+CREATE TABLE IF NOT EXISTS "ThreatModelComponent" (
     "id" TEXT NOT NULL,
     "threatModelId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -34,16 +34,21 @@ CREATE TABLE "ThreatModelComponent" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "ThreatModel_applicationId_key" ON "ThreatModel"("applicationId");
+CREATE UNIQUE INDEX IF NOT EXISTS "ThreatModel_applicationId_key" ON "ThreatModel"("applicationId");
 
 -- CreateIndex
-CREATE INDEX "ThreatModel_status_idx" ON "ThreatModel"("status");
+CREATE INDEX IF NOT EXISTS "ThreatModel_status_idx" ON "ThreatModel"("status");
 
 -- CreateIndex
-CREATE INDEX "ThreatModelComponent_threatModelId_idx" ON "ThreatModelComponent"("threatModelId");
+CREATE INDEX IF NOT EXISTS "ThreatModelComponent_threatModelId_idx" ON "ThreatModelComponent"("threatModelId");
 
 -- AddForeignKey
-ALTER TABLE "ThreatModel" ADD CONSTRAINT "ThreatModel_applicationId_fkey" FOREIGN KEY ("applicationId") REFERENCES "Application"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ThreatModelComponent" ADD CONSTRAINT "ThreatModelComponent_threatModelId_fkey" FOREIGN KEY ("threatModelId") REFERENCES "ThreatModel"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ThreatModel_applicationId_fkey') THEN
+        ALTER TABLE "ThreatModel" ADD CONSTRAINT "ThreatModel_applicationId_fkey" FOREIGN KEY ("applicationId") REFERENCES "Application"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ThreatModelComponent_threatModelId_fkey') THEN
+        ALTER TABLE "ThreatModelComponent" ADD CONSTRAINT "ThreatModelComponent_threatModelId_fkey" FOREIGN KEY ("threatModelId") REFERENCES "ThreatModel"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END $$;

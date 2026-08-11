@@ -93,6 +93,8 @@ export function ExecutiveDashboard() {
 
   const coverage = data.coverage;
   const scores = data.scores;
+  const compliance = data.compliance || {};
+  const maturity = data.maturity || {};
   const statuses = data.applications.byStatus || {};
   const attentionRows = (data.applicationRows || [])
     .filter((application) => !application.wizConfigured || application.score !== null)
@@ -186,10 +188,29 @@ export function ExecutiveDashboard() {
           subtitle="Policy adherence, controls, and evidence"
           tone="compliance"
         >
-          <TierMetric label="Policy adherence" value="—" detail="Compliance aggregation pending" />
-          <TierMetric label="CI/CD security control adoption" value="—" detail="Control adoption data pending" />
-          <TierMetric label="Evidence completeness" value="—" detail="Evidence model not yet available" />
-          <TierMetric label="Pending approvals" value="—" detail="Approval aggregation pending" />
+          <ProgressMetric
+            label="Policy adherence"
+            numerator={compliance.meetingControls ?? '—'}
+            denominator={compliance.totalControls ?? '—'}
+            percentage={compliance.compliancePercentage}
+            detail={compliance.totalControls ? 'Meeting field-mapped controls' : 'No active controls configured'}
+          />
+          <TierMetric
+            label="Applications with compliant policies"
+            value={compliance.applicationsWithPolicies ? `${compliance.compliantApplications} of ${compliance.applicationsWithPolicies}` : '—'}
+            detail={compliance.applicationsWithPolicies ? 'All applicable controls meeting' : 'Policies have not been assigned or configured'}
+            tone={compliance.applicationsWithPolicies && compliance.compliantApplications === compliance.applicationsWithPolicies ? 'positive' : 'warning'}
+          />
+          <TierMetric
+            label="Policy exceptions"
+            value={compliance.overrideCount ?? '—'}
+            detail="Manual control overrides currently recorded"
+          />
+          <TierMetric
+            label="Evidence completeness"
+            value="—"
+            detail="Requires an evidence model and freshness rules"
+          />
         </TierPanel>
 
         <TierPanel
@@ -203,9 +224,18 @@ export function ExecutiveDashboard() {
             detail={scores.averageScore == null ? 'No scored applications yet' : `${scores.scoredApplicationCount} applications scored`}
             tone="accent"
           />
-          <TierMetric label="Average SAMM score" value="—" detail="SAMM data not yet available" />
-          <TierMetric label="Quarter-over-quarter trend" value="—" detail="Historical snapshots not yet available" />
-          <TierMetric label="Maturity by division" value="—" detail="Division maturity aggregation pending" />
+          <TierMetric
+            label="Average SAMM score"
+            value={maturity.averageScore == null ? '—' : `${maturity.averageScore}/${maturity.scale?.maximum || 3}`}
+            detail={maturity.status === 'not_assessed' ? 'No SAMM assessments recorded' : `${maturity.assessmentCount} assessments`}
+          />
+          <TierMetric
+            label="Functions assessed"
+            value={`${maturity.assessedFunctions || 0} of ${maturity.functions?.length || 5}`}
+            detail={maturity.functions?.join(' · ')}
+          />
+          <TierMetric label="Quarter-over-quarter trend" value="—" detail="Historical assessment snapshots not yet available" />
+          <TierMetric label="Evidence completeness" value="—" detail="Assessment evidence model not yet available" />
         </TierPanel>
       </div>
 

@@ -1,2 +1,2 @@
 -- AlterTable
-ALTER TABLE "Score" DROP COLUMN "threatModelScore";
+ALTER TABLE "Score" DROP COLUMN IF EXISTS "threatModelScore";

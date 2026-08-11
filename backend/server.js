@@ -26,6 +26,7 @@ import policyRoutes from './routes/policies.js';
 import productRoutes from './routes/products.js';
 import productUpdateRoutes from './routes/productUpdates.js';
 import dashboardRoutes from './routes/dashboard.js';
+import sammRoutes from './routes/samm.js';
 import integrationRoutes from './routes/integrations.js';
 import scmRoutes from './routes/scm.js';
 import { apiKeyAuth } from './middleware/apiKeyAuth.js';
@@ -168,6 +169,7 @@ app.use('/api/policies', policyRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/product-updates', productUpdateRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/samm', sammRoutes);
 app.use('/api', integrationRoutes);
 app.use('/api', scmRoutes);
 

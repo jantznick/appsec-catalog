@@ -2,7 +2,7 @@
 -- normalized top-level dependency inventory, and per-application repo links.
 
 -- CreateTable
-CREATE TABLE "GitHubConnection" (
+CREATE TABLE IF NOT EXISTS "GitHubConnection" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "githubUserId" TEXT NOT NULL,
@@ -18,7 +18,7 @@ CREATE TABLE "GitHubConnection" (
 );
 
 -- CreateTable
-CREATE TABLE "GitHubRepo" (
+CREATE TABLE IF NOT EXISTS "GitHubRepo" (
     "id" TEXT NOT NULL,
     "githubRepoId" TEXT NOT NULL,
     "fullName" TEXT NOT NULL,
@@ -40,7 +40,7 @@ CREATE TABLE "GitHubRepo" (
 );
 
 -- CreateTable
-CREATE TABLE "RepoDependency" (
+CREATE TABLE IF NOT EXISTS "RepoDependency" (
     "id" TEXT NOT NULL,
     "githubRepoId" TEXT NOT NULL,
     "ecosystem" TEXT NOT NULL,
@@ -57,7 +57,7 @@ CREATE TABLE "RepoDependency" (
 );
 
 -- CreateTable
-CREATE TABLE "ApplicationGitHubRepo" (
+CREATE TABLE IF NOT EXISTS "ApplicationGitHubRepo" (
     "id" TEXT NOT NULL,
     "applicationId" TEXT NOT NULL,
     "githubRepoId" TEXT NOT NULL,
@@ -69,43 +69,48 @@ CREATE TABLE "ApplicationGitHubRepo" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "GitHubConnection_userId_key" ON "GitHubConnection"("userId");
+CREATE UNIQUE INDEX IF NOT EXISTS "GitHubConnection_userId_key" ON "GitHubConnection"("userId");
 
 -- CreateIndex
-CREATE INDEX "GitHubConnection_githubUserId_idx" ON "GitHubConnection"("githubUserId");
+CREATE INDEX IF NOT EXISTS "GitHubConnection_githubUserId_idx" ON "GitHubConnection"("githubUserId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "GitHubRepo_githubRepoId_key" ON "GitHubRepo"("githubRepoId");
+CREATE UNIQUE INDEX IF NOT EXISTS "GitHubRepo_githubRepoId_key" ON "GitHubRepo"("githubRepoId");
 
 -- CreateIndex
-CREATE INDEX "GitHubRepo_fullName_idx" ON "GitHubRepo"("fullName");
+CREATE INDEX IF NOT EXISTS "GitHubRepo_fullName_idx" ON "GitHubRepo"("fullName");
 
 -- CreateIndex
-CREATE INDEX "RepoDependency_ecosystem_name_idx" ON "RepoDependency"("ecosystem", "name");
+CREATE INDEX IF NOT EXISTS "RepoDependency_ecosystem_name_idx" ON "RepoDependency"("ecosystem", "name");
 
 -- CreateIndex
-CREATE INDEX "RepoDependency_name_idx" ON "RepoDependency"("name");
+CREATE INDEX IF NOT EXISTS "RepoDependency_name_idx" ON "RepoDependency"("name");
 
 -- CreateIndex
-CREATE INDEX "RepoDependency_isFramework_idx" ON "RepoDependency"("isFramework");
+CREATE INDEX IF NOT EXISTS "RepoDependency_isFramework_idx" ON "RepoDependency"("isFramework");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "RepoDependency_githubRepoId_ecosystem_name_key" ON "RepoDependency"("githubRepoId", "ecosystem", "name");
+CREATE UNIQUE INDEX IF NOT EXISTS "RepoDependency_githubRepoId_ecosystem_name_key" ON "RepoDependency"("githubRepoId", "ecosystem", "name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "ApplicationGitHubRepo_applicationId_key" ON "ApplicationGitHubRepo"("applicationId");
+CREATE UNIQUE INDEX IF NOT EXISTS "ApplicationGitHubRepo_applicationId_key" ON "ApplicationGitHubRepo"("applicationId");
 
 -- CreateIndex
-CREATE INDEX "ApplicationGitHubRepo_githubRepoId_idx" ON "ApplicationGitHubRepo"("githubRepoId");
+CREATE INDEX IF NOT EXISTS "ApplicationGitHubRepo_githubRepoId_idx" ON "ApplicationGitHubRepo"("githubRepoId");
 
 -- AddForeignKey
-ALTER TABLE "GitHubConnection" ADD CONSTRAINT "GitHubConnection_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "RepoDependency" ADD CONSTRAINT "RepoDependency_githubRepoId_fkey" FOREIGN KEY ("githubRepoId") REFERENCES "GitHubRepo"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ApplicationGitHubRepo" ADD CONSTRAINT "ApplicationGitHubRepo_applicationId_fkey" FOREIGN KEY ("applicationId") REFERENCES "Application"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ApplicationGitHubRepo" ADD CONSTRAINT "ApplicationGitHubRepo_githubRepoId_fkey" FOREIGN KEY ("githubRepoId") REFERENCES "GitHubRepo"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'GitHubConnection_userId_fkey') THEN
+        ALTER TABLE "GitHubConnection" ADD CONSTRAINT "GitHubConnection_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'RepoDependency_githubRepoId_fkey') THEN
+        ALTER TABLE "RepoDependency" ADD CONSTRAINT "RepoDependency_githubRepoId_fkey" FOREIGN KEY ("githubRepoId") REFERENCES "GitHubRepo"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ApplicationGitHubRepo_applicationId_fkey') THEN
+        ALTER TABLE "ApplicationGitHubRepo" ADD CONSTRAINT "ApplicationGitHubRepo_applicationId_fkey" FOREIGN KEY ("applicationId") REFERENCES "Application"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ApplicationGitHubRepo_githubRepoId_fkey') THEN
+        ALTER TABLE "ApplicationGitHubRepo" ADD CONSTRAINT "ApplicationGitHubRepo_githubRepoId_fkey" FOREIGN KEY ("githubRepoId") REFERENCES "GitHubRepo"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END $$;

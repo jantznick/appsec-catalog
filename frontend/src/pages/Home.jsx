@@ -58,6 +58,35 @@ const ACCENT = {
   navy: { text: 'text-navy-300', bg: 'bg-navy-500/20', ring: 'ring-navy-400/30', bar: 'bg-navy-500' },
 };
 
+// Donut gauge for the compliance card (illustrative — mirrors the dashboard ring).
+function Gauge({ value = 87, label = 'Policy adherence', sub }) {
+  const R = 54;
+  const C = 2 * Math.PI * R;
+  const offset = C * (1 - value / 100);
+  return (
+    <div className="relative mx-auto h-44 w-44">
+      <svg viewBox="0 0 128 128" className="h-44 w-44 -rotate-90">
+        <defs>
+          <linearGradient id="gauge-grad" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#2bbdd3" />
+            <stop offset="1" stopColor="#9784d0" />
+          </linearGradient>
+        </defs>
+        <circle cx="64" cy="64" r={R} fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="12" />
+        <circle
+          cx="64" cy="64" r={R} fill="none" stroke="url(#gauge-grad)" strokeWidth="12"
+          strokeLinecap="round" strokeDasharray={C} strokeDashoffset={offset}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+        <span className="text-4xl font-bold text-gray-900">{value}%</span>
+        <span className="mt-1 text-xs font-medium text-gray-500">{label}</span>
+        {sub && <span className="text-[11px] text-gray-500">{sub}</span>}
+      </div>
+    </div>
+  );
+}
+
 function IconBadge({ icon: Icon, accent = 'teal', size = 'md' }) {
   const a = ACCENT[accent] ?? ACCENT.teal;
   const dim = size === 'lg' ? 'h-14 w-14' : 'h-11 w-11';
@@ -147,10 +176,27 @@ const ASCOE_PILLARS = [
 
 const ATLAS_PILLARS = [
   { icon: FiSearch, accent: 'teal', title: 'Know your landscape', body: 'Centralized inventory, business ownership & criticality, full portfolio visibility.' },
-  { icon: FiBarChart2, accent: 'grape', title: 'Measure security health', body: 'Executive dashboards, risk-reduction metrics, SAMM maturity tracking.' },
-  { icon: FiLink, accent: 'green', title: 'Connect your ecosystem', body: 'CI/CD integration, automated evidence collection, no more manual reporting.' },
-  { icon: FiShield, accent: 'navy', title: 'Demonstrate compliance', body: 'Continuous policy monitoring, audit-ready evidence, governance insights.' },
-  { icon: FiRefreshCw, accent: 'teal', title: 'Drive continuous improvement', body: 'Security scorecards, remediation tracking, business-unit benchmarking.' },
+  { icon: FiBarChart2, accent: 'grape', title: 'Measure security health', body: 'Executive dashboards, application security scores, and SAMM maturity tracking.' },
+  { icon: FiRefreshCw, accent: 'green', title: 'Drive continuous improvement', body: 'Security scorecards, remediation tracking, and business-unit benchmarking.' },
+];
+
+const COMPLIANCE_POINTS = [
+  {
+    icon: FiLayers, accent: 'teal', title: 'Your policy, encoded as controls',
+    body: 'The SDLC and application-security requirements of your Information Security Policy become concrete, checkable controls — each with an ID, a category, and mappings to the application fields that satisfy it.',
+  },
+  {
+    icon: FiCpu, accent: 'grape', title: 'Every app graded automatically',
+    body: 'Atlas evaluates each application against the controls that apply to it — Meeting or Not Meeting — straight from the metadata already in the catalog. No questionnaire, no spreadsheet.',
+  },
+  {
+    icon: FiRefreshCw, accent: 'green', title: 'On demand, always current',
+    body: 'Compliance is recomputed live every time you look — see exactly where every app stands on any given day, not just at audit time or when the GRC team comes asking.',
+  },
+  {
+    icon: FiCompass, accent: 'navy', title: 'Scoped to what applies',
+    body: 'Global, division, company, and conditional policies mean each business is measured against exactly the controls that apply to it — nothing more, nothing less.',
+  },
 ];
 
 // ---- Page ------------------------------------------------------------------
@@ -527,6 +573,67 @@ export function Home() {
           One platform. One inventory.{' '}
           <span className="bg-gradient-to-r from-blue-500 to-grape-500 bg-clip-text text-transparent">One security story.</span>
         </p>
+      </Section>
+
+      {/* ==================== POLICY COMPLIANCE ==================== */}
+      <Section id="compliance" bleed="surface">
+        <SectionHeading
+          eyebrow="Continuous compliance"
+          title="Know your InfoSec policy compliance — on demand, all the time."
+          sub="Atlas turns the software-development and application-security portions of your Information Security Policy into controls it grades every application against — automatically, and always current. Not once a year at audit time. Any time you look."
+        />
+        <div className="mt-14 grid gap-8 lg:grid-cols-2 lg:items-center">
+          {/* live compliance card */}
+          <div className="rounded-2xl bg-surface border border-white/[0.06] p-8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <FiShield className="text-blue-700" />
+                <span className="text-sm font-semibold text-gray-900">InfoSec Policy Compliance</span>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-green-600/10 border border-green-500/20 px-2.5 py-1 text-xs font-medium text-brandgreen-500">
+                <span className="h-1.5 w-1.5 rounded-full bg-brandgreen-500" /> Live
+              </span>
+            </div>
+            <div className="my-7">
+              <Gauge value={87} label="Policy adherence" />
+            </div>
+            <div className="space-y-2.5">
+              {[
+                { k: 'Applications with compliant policies', v: '96 of 128' },
+                { k: 'Policies evaluated', v: '6' },
+                { k: 'Controls met', v: '1,204 of 1,384' },
+                { k: 'Policy exceptions tracked', v: '4' },
+              ].map((r) => (
+                <div key={r.k} className="flex items-center justify-between rounded-lg bg-field border border-white/[0.05] px-4 py-2.5 text-sm">
+                  <span className="text-gray-600">{r.k}</span>
+                  <span className="font-semibold text-gray-900">{r.v}</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-5 text-center text-xs text-gray-500">
+              Illustrative — the same view is live in the Atlas executive dashboard.
+            </p>
+          </div>
+          {/* points */}
+          <div className="space-y-5">
+            {COMPLIANCE_POINTS.map((p) => (
+              <div key={p.title} className="flex gap-4">
+                <span className="shrink-0"><IconBadge icon={p.icon} accent={p.accent} /></span>
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900">{p.title}</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-gray-600">{p.body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="mt-8 flex items-center justify-center gap-3 rounded-2xl bg-navy-800/50 border border-white/[0.06] px-6 py-5 text-center">
+          <FiClipboard className="shrink-0 text-blue-700" />
+          <p className="text-sm font-medium text-gray-700">
+            Every control result carries the evidence behind it — and tracked exceptions — giving your GRC and
+            internal-audit teams a clear, current picture across the entire portfolio.
+          </p>
+        </div>
       </Section>
 
       {/* ========================= FINAL CTA ========================= */}

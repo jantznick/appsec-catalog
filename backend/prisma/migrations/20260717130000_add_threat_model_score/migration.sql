@@ -1,2 +1,2 @@
 -- AlterTable
-ALTER TABLE "Score" ADD COLUMN "threatModelScore" INTEGER;
+ALTER TABLE "Score" ADD COLUMN IF NOT EXISTS "threatModelScore" INTEGER;

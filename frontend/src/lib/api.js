@@ -749,6 +749,53 @@ export const api = {
     return apiRequest(`/api/dashboard/executive${queryString ? `?${queryString}` : ''}`);
   },
 
+  getDeveloperDashboard: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.companyId) params.append('companyId', filters.companyId);
+    if (filters.divisionId) params.append('divisionId', filters.divisionId);
+    const queryString = params.toString();
+    return apiRequest(`/api/dashboard/developer${queryString ? `?${queryString}` : ''}`);
+  },
+
+  getApplicationOwnerDashboard: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.companyId) params.append('companyId', filters.companyId);
+    if (filters.divisionId) params.append('divisionId', filters.divisionId);
+    const queryString = params.toString();
+    return apiRequest(`/api/dashboard/application-owner${queryString ? `?${queryString}` : ''}`);
+  },
+
+  getProgramOperationsDashboard: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.companyId) params.append('companyId', filters.companyId);
+    if (filters.divisionId) params.append('divisionId', filters.divisionId);
+    const queryString = params.toString();
+    return apiRequest(`/api/dashboard/program-operations${queryString ? `?${queryString}` : ''}`);
+  },
+
+  getSammFramework: () => apiRequest('/api/samm/framework'),
+
+  getSammAssessments: (companyId) => {
+    const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : '';
+    return apiRequest(`/api/samm/assessments${query}`);
+  },
+
+  getSammAssessment: (id) => apiRequest(`/api/samm/assessments/${encodeURIComponent(id)}`),
+
+  createSammAssessment: (companyId, data = {}) => apiRequest('/api/samm/assessments', {
+    method: 'POST',
+    body: JSON.stringify({ ...data, companyId }),
+  }),
+
+  saveSammAssessment: (id, data) => apiRequest(`/api/samm/assessments/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+
+  reviewSammAssessment: (id) => apiRequest(`/api/samm/assessments/${encodeURIComponent(id)}/review`, {
+    method: 'POST',
+  }),
+
   getAdminApplications: (filters = {}) => {
     const params = new URLSearchParams();
     if (filters.companyId) params.append('companyId', filters.companyId);

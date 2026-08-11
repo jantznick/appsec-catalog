@@ -30,6 +30,8 @@ model User {
   securityFindingsJobs      SecurityFindingsJob[]
   productUpdates         ProductUpdate[]
   scmConnections         ScmConnection[] // The user's connected source-control accounts (GitHub, GitLab, …)
+  sammAssessmentsCreated SammAssessment[] @relation("SammAssessmentCreator")
+  sammAssessmentsReviewed SammAssessment[] @relation("SammAssessmentReviewer")
 }
 
 /// AppSec Catalog product release notes / "What's New" entries.
@@ -134,6 +136,7 @@ model Company {
   productComponentTypes ProductComponentType[]
   integrationCredentials IntegrationCredential[]
   companyToolLinks      CompanyToolLink[]
+  sammAssessments       SammAssessment[]
 
   @@index([slug])
   @@index([divisionId])
@@ -882,6 +885,96 @@ model PolicyControlOverride {
   @@index([controlId])
   @@index([overriddenAt])
   @@index([noteId])
+}
+
+// Versioned OWASP SAMM questionnaire configuration.
+model SammFramework {
+  id          String          @id @default(cuid())
+  name        String
+  version     String
+  source      String?
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  domains     SammDomain[]
+  assessments SammAssessment[]
+
+  @@unique([name, version])
+  @@index([isActive])
+}
+
+model SammDomain {
+  id           String         @id @default(cuid())
+  frameworkId  String
+  framework    SammFramework  @relation(fields: [frameworkId], references: [id], onDelete: Cascade)
+  key          String
+  name         String
+  description  String?
+  displayOrder Int            @default(0)
+  practices    SammPractice[]
+
+  @@unique([frameworkId, key])
+  @@index([frameworkId, displayOrder])
+}
+
+model SammPractice {
+  id               String                   @id @default(cuid())
+  domainId         String
+  domain           SammDomain               @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  key              String
+  name             String
+  description      String?
+  prompt           String
+  scoringGuidance  String?
+  displayOrder     Int                      @default(0)
+  evidenceRequired Boolean                  @default(false)
+  responses        SammAssessmentResponse[]
+
+  @@unique([domainId, key])
+  @@index([domainId, displayOrder])
+}
+
+model SammAssessment {
+  id          String                   @id @default(cuid())
+  companyId   String
+  company     Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  frameworkId String
+  framework   SammFramework             @relation(fields: [frameworkId], references: [id])
+  createdById String
+  createdBy   User                     @relation("SammAssessmentCreator", fields: [createdById], references: [id])
+  reviewerId  String?
+  reviewer    User?                    @relation("SammAssessmentReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  status      String                   @default("draft") // draft | completed | archived
+  ownerName   String?
+  notes       String?                  @db.Text
+  startedAt   DateTime                 @default(now())
+  submittedAt DateTime?
+  reviewedAt  DateTime?
+  nextDueAt   DateTime?
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  responses   SammAssessmentResponse[]
+
+  @@index([companyId, createdAt(sort: Desc)])
+  @@index([status])
+  @@index([frameworkId])
+}
+
+model SammAssessmentResponse {
+  id                String         @id @default(cuid())
+  assessmentId      String
+  assessment        SammAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  practiceId        String
+  practice          SammPractice   @relation(fields: [practiceId], references: [id])
+  score             Float?
+  answers           Json?
+  rationale         String?        @db.Text
+  evidenceReference String?        @db.Text
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@unique([assessmentId, practiceId])
+  @@index([practiceId])
 }
 
 enum IntegrationScope {

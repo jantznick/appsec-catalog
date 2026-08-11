@@ -39,6 +39,7 @@ import { ProductUpdatesAdmin } from './pages/ProductUpdatesAdmin.jsx';
 import { WhatsNew } from './pages/WhatsNew.jsx';
 import { ScoringSettings } from './pages/ScoringSettings.jsx';
 import { Settings } from './pages/Settings.jsx';
+import { SammAssessments } from './pages/SammAssessments.jsx';
 
 function CatchAllRedirect() {
   const { isAuthenticated, isVerified, loading } = useAuthStore();
@@ -115,6 +116,26 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <Dashboard />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/samm-assessments"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <SammAssessments />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/samm-assessments/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <SammAssessments />
               </Layout>
             </ProtectedRoute>
           }
