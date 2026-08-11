@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Atlas · AppSec Center of Excellence — Preview</title>
+<style>
+  :root{
+    --bg:#0b1327; --surface:#18243f; --surface2:#1e2a46; --field:#0f1a33;
+    --text:#c5cde6; --heading:#eff2fb; --muted:#a8b4d6; --muted2:#8c99c1; --strong:#dde3f3;
+    --teal:#45c4d8; --teal-solid:#17a2ba; --teal-hover:#22a7bd;
+    --grape:#9784d0; --grape-solid:#8b78c9; --green:#34d399; --navy300:#8aa0d6; --amber:#f59e0b;
+    --navy800:#16265a; --navy900:#111d45; --navy950:#0a1230;
+    --border:rgba(255,255,255,.07); --border-soft:rgba(255,255,255,.045);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased}
+  body{
+    margin:0;color:var(--text);line-height:1.6;
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background-color:var(--bg);
+    background-image:
+      radial-gradient(1200px 640px at 100% -12%, rgba(23,162,186,.10), transparent 55%),
+      radial-gradient(1000px 560px at -6% -4%, rgba(43,63,130,.18), transparent 55%),
+      linear-gradient(180deg,#0a1122 0%,#0c1529 48%,#0b1327 100%);
+    background-attachment:fixed;
+  }
+  h1,h2,h3{color:var(--heading);line-height:1.2;letter-spacing:-.01em;margin:0}
+  p{margin:0}
+  a{color:inherit;text-decoration:none}
+  em{font-style:normal}
+  .container{max-width:1120px;margin:0 auto;padding:0 24px}
+  .section{padding:80px 0;position:relative}
+  .section.surface{background:rgba(24,36,63,.4);border-top:1px solid var(--border-soft);border-bottom:1px solid var(--border-soft)}
+  .section.navy{background:linear-gradient(180deg,rgba(17,29,69,.7),rgba(10,18,48,.7));border-top:1px solid var(--border-soft);border-bottom:1px solid var(--border-soft)}
+  .eyebrow{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.18em;color:var(--teal);margin:0 0 14px}
+  .head{max-width:760px;margin:0 auto;text-align:center}
+  .head.left{margin:0;text-align:left}
+  .h2{font-size:clamp(28px,4vw,38px);font-weight:700}
+  .lead{margin-top:16px;font-size:18px;color:var(--muted)}
+  .grid{display:grid;gap:24px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g5{grid-template-columns:repeat(5,1fr)}
+  .mt{margin-top:56px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:30px}
+  .card.sm{padding:24px}
+  .card h3{font-size:19px;font-weight:600;margin-top:18px}
+  .card p{margin-top:8px;font-size:14.5px;color:var(--muted)}
+  .badge{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:14px;border:1px solid}
+  .badge svg{width:24px;height:24px}
+  .badge.sm{width:44px;height:44px}.badge.sm svg{width:20px;height:20px}
+  .ic-teal{color:var(--teal);background:rgba(23,162,186,.15);border-color:rgba(43,189,211,.3)}
+  .ic-grape{color:var(--grape);background:rgba(139,120,201,.15);border-color:rgba(151,132,208,.3)}
+  .ic-green{color:var(--green);background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.28)}
+  .ic-navy{color:var(--navy300);background:rgba(59,83,164,.2);border-color:rgba(92,118,192,.3)}
+  .icon{width:20px;height:20px;flex:0 0 auto;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .t-teal{color:var(--teal)}.t-grape{color:var(--grape)}.t-green{color:var(--green)}.t-navy{color:var(--navy300)}.t-amber{color:var(--amber)}
+  .strong{color:var(--strong)}.head-c{color:var(--heading)}
+  .banner{margin-top:36px;display:flex;align-items:center;justify-content:center;gap:12px;text-align:center;
+    background:rgba(17,29,69,.5);border:1px solid var(--border);border-radius:18px;padding:20px 24px}
+  .banner p{font-weight:600;color:var(--heading)}
+  .btn{display:inline-flex;align-items:center;gap:8px;font-weight:600;border-radius:10px;padding:13px 24px;font-size:16px;cursor:pointer}
+  .btn-primary{background:var(--teal-solid);color:#fff;border:1px solid transparent}
+  .btn-primary:hover{background:var(--teal-hover)}
+  .btn-ghost{border:1px solid rgba(255,255,255,.15);color:var(--strong)}
+  .btn-ghost:hover{background:rgba(255,255,255,.05)}
+  .list{list-style:none;margin:16px 0 0;padding:0}
+  .list li{display:flex;align-items:center;gap:12px;margin-bottom:12px;color:var(--text)}
+  .chip{display:inline-flex;align-items:center;gap:8px;background:rgba(23,162,186,.1);border:1px solid rgba(43,189,211,.2);
+    border-radius:999px;padding:7px 14px;font-size:14px;font-weight:500;color:var(--text)}
+  /* hero */
+  .hero{position:relative;overflow:hidden;text-align:center;padding:110px 0 90px}
+  .glow{position:absolute;border-radius:999px;filter:blur(70px);pointer-events:none}
+  .mark{width:64px;height:64px;border-radius:16px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);
+    display:inline-flex;align-items:center;justify-content:center;margin-bottom:26px}
+  .hero h1{font-size:clamp(38px,6vw,60px);font-weight:700;letter-spacing:-.02em;line-height:1.05;max-width:900px;margin:0 auto}
+  .hero .lead{max-width:640px;margin-left:auto;margin-right:auto}
+  .grad{background:linear-gradient(90deg,#2bbdd3,#9784d0);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .cta-row{margin-top:34px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .trust{margin-top:38px;font-size:14px;font-weight:500;color:var(--muted2)}
+  /* challenge rows */
+  .chal{display:flex;align-items:stretch;gap:12px;margin-bottom:12px}
+  .chal .c{flex:1;display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;font-size:14.5px;font-weight:500;color:var(--strong)}
+  .chal .i{flex:1;display:flex;align-items:center;background:var(--field);border:1px solid var(--border-soft);border-radius:14px;padding:14px 16px;font-size:14.5px;color:var(--muted)}
+  .chal .arr{display:flex;align-items:center;color:var(--muted2)}
+  .future{background:linear-gradient(135deg,rgba(22,38,90,.6),rgba(10,25,55,.4));border:1px solid rgba(43,189,211,.2);border-radius:18px;padding:32px}
+  .future .top{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  /* phases */
+  .phase{position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:24px}
+  .phase .bar{position:absolute;left:0;top:0;height:100%;width:4px}
+  .phase .n{font-size:24px;font-weight:700}
+  .phase .row{display:flex;align-items:baseline;gap:12px}
+  .phase h3{font-size:18px;font-weight:600}
+  .phase .body{margin-top:12px;font-size:14px;color:var(--muted)}
+  .phase .ai{margin-top:16px;border-top:1px solid var(--border);padding-top:12px;display:flex;gap:8px;font-size:12.5px;color:var(--muted2)}
+  .phase .ai svg{width:14px;height:14px;flex:0 0 auto;margin-top:3px}
+  .pill{margin-top:32px;display:flex;align-items:center;justify-content:center;gap:12px;background:rgba(17,29,69,.5);border:1px solid var(--border);border-radius:999px;padding:12px 24px;text-align:center;font-size:14px;color:var(--muted)}
+  /* operating model equation */
+  .eq{margin-top:32px;display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;text-align:center;background:rgba(17,29,69,.5);border:1px solid var(--border);border-radius:18px;padding:24px}
+  .eq .op{font-size:22px;font-weight:700;color:var(--teal)}
+  .eq b{font-size:14px}
+  /* harness */
+  .io{display:grid;grid-template-columns:1fr auto 1fr;gap:24px;align-items:center}
+  .io .col p.lbl{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted2);margin-bottom:12px}
+  .io .item{border-radius:10px;padding:9px 12px;font-size:14px;color:var(--text);margin-bottom:8px}
+  .io .in{background:var(--field);border:1px solid var(--border-soft)}
+  .io .out{background:rgba(23,162,186,.1);border:1px solid rgba(43,189,211,.2)}
+  .hub{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .orb{width:128px;height:128px;border-radius:999px;background:linear-gradient(135deg,rgba(23,162,186,.25),rgba(139,120,201,.25));
+    border:1px solid rgba(43,189,211,.3);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+  .orb b{margin-top:4px;font-size:14px;font-weight:700;color:var(--heading);padding:0 8px;line-height:1.15}
+  .flow{display:flex;gap:12px;margin-top:8px}
+  .flow .step{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center}
+  .flow .step b{font-size:14px;color:var(--heading)}
+  .flow .step p{margin-top:4px;font-size:12px;color:var(--muted2);line-height:1.3}
+  .flow .sep{display:flex;align-items:center;color:var(--muted2)}
+  .outcome{margin-top:24px;display:flex;align-items:center;justify-content:center;gap:12px;text-align:center;
+    background:linear-gradient(90deg,rgba(23,162,186,.15),rgba(139,120,201,.15));border:1px solid rgba(43,189,211,.2);border-radius:18px;padding:20px 24px}
+  .outcome p{font-weight:600;color:var(--heading)}
+  /* samm */
+  .samm{display:grid;grid-template-columns:1fr 1.2fr;gap:48px;align-items:center}
+  .table{overflow:hidden;border-radius:18px;background:var(--surface);border:1px solid var(--border)}
+  .table .thead,.table .trow{display:grid;grid-template-columns:1fr 1fr}
+  .table .thead{background:rgba(17,29,69,.6);padding:12px 24px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted2)}
+  .table .trow{padding:14px 24px;font-size:14px;align-items:center}
+  .table .trow:nth-child(even){background:rgba(255,255,255,.02)}
+  .table .trow b{font-weight:500;color:var(--strong)}
+  .table .trow span{color:var(--muted)}
+  .chips{margin-top:28px;display:flex;flex-wrap:wrap;gap:10px}
+  /* outcomes row */
+  .oc{display:grid;grid-template-columns:repeat(5,1fr);gap:16px}
+  .oc .cell{display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;background:rgba(24,36,63,.6);border:1px solid var(--border-soft);border-radius:14px;padding:24px 14px}
+  .oc .cell span{font-size:14px;font-weight:500;color:var(--text)}
+  .oc-label{margin:56px 0 24px;text-align:center;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.18em;color:var(--muted2)}
+  /* atlas closing / footer */
+  .atlas-mark{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:24px}
+  .atlas-mark span{font-size:24px;font-weight:700;color:var(--heading)}
+  .closing{margin-top:48px;text-align:center;font-size:22px;font-weight:600;color:var(--heading)}
+  .finalcta{position:relative;overflow:hidden;border-top:1px solid var(--border-soft);text-align:center;padding:96px 0}
+  .finalcta .inner{max-width:640px;margin:0 auto;position:relative}
+  footer{border-top:1px solid var(--border-soft);background:rgba(10,18,48,.4)}
+  footer .row{max-width:1120px;margin:0 auto;padding:30px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  footer .brand{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--strong)}
+  footer .brand .sep{color:var(--muted2);font-weight:400}
+  footer p{font-size:14px;color:var(--muted2)}
+  .note{max-width:1120px;margin:0 auto;padding:14px 24px;font-size:12.5px;color:var(--muted2);text-align:center;opacity:.8}
+  @media(max-width:900px){
+    .g3,.g5,.oc,.samm{grid-template-columns:1fr}
+    .g2{grid-template-columns:1fr}
+    .io{grid-template-columns:1fr}
+    .flow{flex-direction:column}
+    .flow .sep{justify-content:center;transform:rotate(90deg)}
+    .oc{grid-template-columns:repeat(2,1fr)}
+  }
+</style>
+</head>
+<body>
+
+<!-- icon symbol library -->
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+  <symbol id="i-trend" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></symbol>
+  <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v2M15 1v2M9 21v2M15 21v2M1 9h2M1 15h2M21 9h2M21 15h2"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+  <symbol id="i-bar" viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-award" viewBox="0 0 24 24"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></symbol>
+  <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-arrow-r" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></symbol>
+  <symbol id="i-arrow-d" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></symbol>
+</svg>
+
+<!-- Atlas mark reusable -->
+<svg style="display:none" aria-hidden="true"><symbol id="atlas" viewBox="0 0 48 48">
+  <defs><linearGradient id="ag" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse"><stop stop-color="#16265a"/><stop offset="1" stop-color="#0e8397"/></linearGradient></defs>
+  <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#ag)"/>
+  <path d="M24 12 L34.5 34 H29.2 L24 22.6 L18.8 34 H13.5 L24 12 Z" fill="#fff"/>
+  <rect x="19.4" y="27.4" width="9.2" height="3.2" rx="1.6" fill="#fff" fill-opacity=".55"/>
+</symbol></svg>
+
+<p class="note">Preview mock for feedback · Atlas / ASCOE landing · not the live app</p>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="glow" style="width:380px;height:380px;top:-120px;right:0;background:rgba(43,189,211,.15)"></div>
+  <div class="glow" style="width:380px;height:380px;bottom:-160px;left:-90px;background:rgba(151,132,208,.15)"></div>
+  <div class="container">
+    <span class="mark"><svg width="44" height="44"><use href="#atlas"/></svg></span>
+    <p class="eyebrow">AppSec Center of Excellence · Powered by Atlas</p>
+    <h1>Security that scales with <span class="grad">development velocity</span>.</h1>
+    <p class="lead">ASCOE embeds application security into how Hearst teams already build software — connecting inventory, pipelines, standards, and AI-assisted workflows into one continuous, governed lifecycle. So teams ship faster <em class="strong">and</em> safer.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#">Join ASCOE <svg class="icon" style="width:18px;height:18px"><use href="#i-arrow-r"/></svg></a>
+      <a class="btn btn-ghost" href="#lifecycle">See how it works <svg class="icon" style="width:18px;height:18px"><use href="#i-arrow-d"/></svg></a>
+    </div>
+    <p class="trust">Security becomes part of the development process — not a gate at the end.</p>
+  </div>
+</section>
+
+<!-- WHY -->
+<section class="section surface" id="why">
+  <div class="container">
+    <div class="head">
+      <p class="eyebrow">The problem</p>
+      <h2 class="h2">Application risk you can't see is risk you can't manage.</h2>
+      <p class="lead">Without a shared program, security stays inconsistent and invisible — until it shows up in production. ASCOE changes the default.</p>
+    </div>
+    <div class="grid g2 mt">
+      <div>
+        <div class="chal"><div class="c"><svg class="icon t-amber"><use href="#i-alert"/></svg>Limited application visibility</div><div class="arr"><svg class="icon"><use href="#i-arrow-r"/></svg></div><div class="i">Unknown risk exposure</div></div>
+        <div class="chal"><div class="c"><svg class="icon t-amber"><use href="#i-alert"/></svg>Inconsistent testing practices</div><div class="arr"><svg class="icon"><use href="#i-arrow-r"/></svg></div><div class="i">Vulnerabilities reach production</div></div>
+        <div class="chal"><div class="c"><svg class="icon t-amber"><use href="#i-alert"/></svg>Manual security reviews</div><div class="arr"><svg class="icon"><use href="#i-arrow-r"/></svg></div><div class="i">Delays and inefficiency</div></div>
+        <div class="chal"><div class="c"><svg class="icon t-amber"><use href="#i-alert"/></svg>Limited reporting</div><div class="arr"><svg class="icon"><use href="#i-arrow-r"/></svg></div><div class="i">Difficult executive oversight</div></div>
+      </div>
+      <div class="future">
+        <div class="top"><span class="badge sm ic-teal"><svg><use href="#i-shield"/></svg></span><h3 style="font-size:18px;font-weight:600">A standardized application security lifecycle that delivers:</h3></div>
+        <ul class="list">
+          <li><svg class="icon t-green"><use href="#i-check"/></svg>Consistent risk management</li>
+          <li><svg class="icon t-green"><use href="#i-check"/></svg>Automated security validation</li>
+          <li><svg class="icon t-green"><use href="#i-check"/></svg>Measurable compliance</li>
+          <li><svg class="icon t-green"><use href="#i-check"/></svg>Executive transparency</li>
+        </ul>
+      </div>
+    </div>
+    <div class="banner"><svg class="icon t-teal"><use href="#i-trend"/></svg><p>Security scales with development velocity.</p></div>
+  </div>
+</section>
+
+<!-- GOALS -->
+<section class="section" id="goals">
+  <div class="container">
+    <div class="head"><p class="eyebrow">One program, three goals</p><h2 class="h2">Visibility, assurance, and governance — by design.</h2></div>
+    <div class="grid g3 mt">
+      <div class="card"><span class="badge ic-teal"><svg><use href="#i-eye"/></svg></span><h3>Visibility</h3><p>Know what applications exist and who owns them.</p></div>
+      <div class="card"><span class="badge ic-grape"><svg><use href="#i-shield"/></svg></span><h3>Assurance</h3><p>Ensure every application undergoes appropriate security testing.</p></div>
+      <div class="card"><span class="badge ic-green"><svg><use href="#i-trend"/></svg></span><h3>Governance</h3><p>Measure, report, and continuously improve security outcomes.</p></div>
+    </div>
+    <p class="oc-label">The business outcomes</p>
+    <div class="oc">
+      <div class="cell"><svg class="icon t-teal"><use href="#i-check"/></svg><span>Reduced production risk</span></div>
+      <div class="cell"><svg class="icon t-teal"><use href="#i-clock"/></svg><span>Earlier vulnerability detection</span></div>
+      <div class="cell"><svg class="icon t-teal"><use href="#i-zap"/></svg><span>Faster remediation</span></div>
+      <div class="cell"><svg class="icon t-teal"><use href="#i-users"/></svg><span>Consistent controls across businesses</span></div>
+      <div class="cell"><svg class="icon t-teal"><use href="#i-clip"/></svg><span>Audit-ready security evidence</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- LIFECYCLE -->
+<section class="section surface" id="lifecycle">
+  <div class="container">
+    <div class="head"><p class="eyebrow">How it works</p><h2 class="h2">One security lifecycle, six phases, always improving.</h2><p class="lead">Security is built into every stage of delivery — and each phase is accelerated by a purpose-built AI harness, with humans in the loop.</p></div>
+    <div class="grid g3 mt">
+      <div class="phase"><span class="bar" style="background:#5c76c0"></span><div class="row"><span class="n t-navy">01</span><h3>Plan &amp; Design</h3></div><p class="body">Secure by design with threat modeling and architecture review.</p><p class="ai"><svg class="icon t-navy"><use href="#i-cpu"/></svg><span>AI-assisted threat models, risk-tier &amp; data classification.</span></p></div>
+      <div class="phase"><span class="bar" style="background:#17a2ba"></span><div class="row"><span class="n t-teal">02</span><h3>Build &amp; Commit</h3></div><p class="body">Secure coding with automated checks and fast feedback.</p><p class="ai"><svg class="icon t-teal"><use href="#i-cpu"/></svg><span>Secure-coding prompts, PR-review copilots.</span></p></div>
+      <div class="phase"><span class="bar" style="background:#9784d0"></span><div class="row"><span class="n t-grape">03</span><h3>CI Security Gates</h3></div><p class="body">Automated validation and policy enforcement before merge or release.</p><p class="ai"><svg class="icon t-grape"><use href="#i-cpu"/></svg><span>Finding correlation, severity gates, exception evidence.</span></p></div>
+      <div class="phase"><span class="bar" style="background:#22a35d"></span><div class="row"><span class="n t-green">04</span><h3>Release &amp; Deploy</h3></div><p class="body">Validate artifacts, ensure integrity, and obtain release sign-off.</p><p class="ai"><svg class="icon t-green"><use href="#i-cpu"/></svg><span>Release-assurance checks, generated release summaries.</span></p></div>
+      <div class="phase"><span class="bar" style="background:#17a2ba"></span><div class="row"><span class="n t-teal">05</span><h3>Runtime Operations</h3></div><p class="body">Monitor, detect, and respond to security issues in production.</p><p class="ai"><svg class="icon t-teal"><use href="#i-cpu"/></svg><span>Runtime-signal summaries, exposure-change alerts.</span></p></div>
+      <div class="phase"><span class="bar" style="background:#5c76c0"></span><div class="row"><span class="n t-navy">06</span><h3>Improve &amp; Govern</h3></div><p class="body">Measure, mature, and feed lessons back into every phase.</p><p class="ai"><svg class="icon t-navy"><use href="#i-cpu"/></svg><span>Metrics narratives, roadmap &amp; champion topics.</span></p></div>
+    </div>
+    <div class="pill"><svg class="icon t-teal"><use href="#i-refresh"/></svg><p><b class="head-c">Continuous improvement</b> — phase 06 governs and feeds back into all phases.</p></div>
+  </div>
+</section>
+
+<!-- OPERATING MODEL -->
+<section class="section" id="operating">
+  <div class="container">
+    <div class="head"><p class="eyebrow">Security as an enabler</p><h2 class="h2">A partnership, not a gate.</h2></div>
+    <div class="grid g2 mt">
+      <div class="card"><div style="display:flex;align-items:center;gap:12px"><span class="badge sm ic-navy"><svg><use href="#i-shield"/></svg></span><h3 style="margin-top:0">Central AppSec <span style="color:var(--muted2);font-weight:400">(HTS AppSec)</span></h3></div>
+        <ul class="list"><li><svg class="icon t-navy"><use href="#i-check"/></svg>Policy &amp; standards</li><li><svg class="icon t-navy"><use href="#i-check"/></svg>Security tooling</li><li><svg class="icon t-navy"><use href="#i-check"/></svg>Governance &amp; reporting</li><li><svg class="icon t-navy"><use href="#i-check"/></svg>Program oversight</li></ul>
+      </div>
+      <div class="card"><div style="display:flex;align-items:center;gap:12px"><span class="badge sm ic-teal"><svg><use href="#i-users"/></svg></span><h3 style="margin-top:0">Business engineering teams</h3></div>
+        <ul class="list"><li><svg class="icon t-teal"><use href="#i-check"/></svg>Execute security practices</li><li><svg class="icon t-teal"><use href="#i-check"/></svg>Remediate findings</li><li><svg class="icon t-teal"><use href="#i-check"/></svg>Maintain evidence</li><li><svg class="icon t-teal"><use href="#i-check"/></svg>Own application risk</li></ul>
+      </div>
+    </div>
+    <div class="eq"><b class="strong">Central security team</b><span class="op">+</span><b class="strong">Business engineering teams</b><span class="op">=</span><b class="t-green" style="font-weight:700">Secure software delivery</b></div>
+    <p style="margin-top:22px;text-align:center;color:var(--muted2)">The program is designed to support development teams — not act as a gatekeeper.</p>
+  </div>
+</section>
+
+<!-- AI HARNESS -->
+<section class="section navy" id="ai">
+  <div class="container">
+    <div class="head"><p class="eyebrow">AI-enabled AppSec</p><h2 class="h2">AI moves faster when it's surrounded by context, standards, and human judgment.</h2><p class="lead">We don't just point AI at code. The program gives AI the application context, control model, and evidence it needs to produce security insight teams can actually trust.</p></div>
+    <div class="grid g3 mt">
+      <div class="card"><span class="badge ic-teal"><svg><use href="#i-db"/></svg></span><h3>Context</h3><p>Application inventory, owners, risk tiers, exposure, and data classification.</p></div>
+      <div class="card"><span class="badge ic-grape"><svg><use href="#i-layers"/></svg></span><h3>Control model</h3><p>Security standards, CI gates, severity policy, exceptions, and release evidence.</p></div>
+      <div class="card"><span class="badge ic-green"><svg><use href="#i-cpu"/></svg></span><h3>AI acceleration</h3><p>Agentic triage, remediation guidance, evidence summaries, and workflow automation.</p></div>
+    </div>
+
+    <div class="card" style="margin-top:24px">
+      <div class="io">
+        <div class="col">
+          <p class="lbl">Inputs</p>
+          <div class="item in">Catalog metadata</div><div class="item in">Source &amp; PR context</div><div class="item in">Scanner findings</div>
+          <div class="item in">ASPM signals</div><div class="item in">Policy &amp; standards</div><div class="item in">Exceptions &amp; evidence</div>
+        </div>
+        <div class="hub">
+          <svg class="icon" style="color:var(--muted2)"><use href="#i-arrow-r"/></svg>
+          <div class="orb"><svg class="icon t-teal" style="width:26px;height:26px"><use href="#i-cpu"/></svg><b>AI Security Harness</b></div>
+          <svg class="icon" style="color:var(--muted2)"><use href="#i-arrow-r"/></svg>
+        </div>
+        <div class="col">
+          <p class="lbl">Outputs</p>
+          <div class="item out">Risk-ranked work queue</div><div class="item out">Remediation guidance</div><div class="item out">Validation prompts</div>
+          <div class="item out">Evidence summaries</div><div class="item out">Metrics narratives</div><div class="item out">Standard updates</div>
+        </div>
+      </div>
+      <p style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px;text-align:center;font-size:14px;color:var(--muted2)">The harness makes AI useful by surrounding it with context, policy, workflow, and human validation.</p>
+    </div>
+
+    <p class="oc-label" style="margin-top:40px">From data to AI-ready guardrails</p>
+    <div class="flow">
+      <div class="step"><b>Inputs</b><p>Inventory, findings, trends, champion insight</p></div>
+      <div class="sep"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
+      <div class="step"><b>Policy</b><p>High-level mandatory requirements</p></div>
+      <div class="sep"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
+      <div class="step"><b>Standards</b><p>Specific required controls</p></div>
+      <div class="sep"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
+      <div class="step"><b>Guidelines</b><p>Recommended implementation approaches</p></div>
+      <div class="sep"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
+      <div class="step"><b>AI Harnesses</b><p>Reusable checks, configs, prompts, pipeline helpers</p></div>
+    </div>
+
+    <p style="max-width:760px;margin:40px auto 0;text-align:center;color:var(--muted)">AI helps the program move faster. The AppSec process makes AI's output useful, auditable, and connected to how Hearst teams actually deliver software.</p>
+    <div class="outcome"><svg class="icon t-teal"><use href="#i-zap"/></svg><p>An AI-enabled secure software factory — with human judgment, business ownership, and measurable assurance.</p></div>
+  </div>
+</section>
+
+<!-- SAMM -->
+<section class="section" id="samm">
+  <div class="container">
+    <div class="samm">
+      <div>
+        <div class="head left"><p class="eyebrow">Aligned to industry standards</p><h2 class="h2">Built on OWASP SAMM.</h2><p class="lead">The program maps directly to a recognized maturity model — so progress is measurable and comparable across every business unit.</p></div>
+        <div class="chips">
+          <span class="chip"><svg class="icon t-green" style="width:15px;height:15px"><use href="#i-check"/></svg>Industry best practices</span>
+          <span class="chip"><svg class="icon t-green" style="width:15px;height:15px"><use href="#i-check"/></svg>Consistent maturity assessment</span>
+          <span class="chip"><svg class="icon t-green" style="width:15px;height:15px"><use href="#i-check"/></svg>Benchmarking across business units</span>
+          <span class="chip"><svg class="icon t-green" style="width:15px;height:15px"><use href="#i-check"/></svg>Continuous-improvement roadmap</span>
+        </div>
+      </div>
+      <div class="table">
+        <div class="thead"><span>Program lifecycle</span><span>SAMM domain</span></div>
+        <div class="trow"><b>Plan &amp; Design</b><span>Governance / Design</span></div>
+        <div class="trow"><b>Build &amp; Commit</b><span>Implementation</span></div>
+        <div class="trow"><b>CI Security Gates</b><span>Verification</span></div>
+        <div class="trow"><b>Release &amp; Deploy</b><span>Operations</span></div>
+        <div class="trow"><b>Runtime Operations</b><span>Operations</span></div>
+        <div class="trow"><b>Improve &amp; Govern</b><span>Governance</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ASCOE -->
+<section class="section surface" id="ascoe">
+  <div class="container">
+    <div class="head"><p class="eyebrow">Connect · Collaborate · Elevate · Secure</p><h2 class="h2">The AppSec Center of Excellence.</h2><p class="lead">A community of developers and security leaders driving secure software delivery across Hearst — through knowledge sharing, collaboration, and shared visibility in Atlas.</p></div>
+    <div class="grid g3 mt">
+      <div class="card"><span class="badge ic-teal"><svg><use href="#i-msg"/></svg></span><h3>Quarterly ASCOE meetings</h3><p>Latest trends &amp; threats, vendor workshops (not sales pitches), shared wins, and peer problem-solving.</p></div>
+      <div class="card"><span class="badge ic-grape"><svg><use href="#i-award"/></svg></span><h3>Champions program</h3><p>A human + AI feedback loop — monthly enablement kits, hands-on Docker labs, and local codebase challenges. Champions help teams apply AI and security tools well, then feed real engineering context back into the program.</p></div>
+      <div class="card"><span class="badge ic-green"><svg><use href="#i-compass"/></svg></span><h3>Atlas platform access</h3><p>Real-time inventory, governance &amp; compliance scoring, automated pipeline integration, and maturity benchmarking.</p></div>
+    </div>
+    <div class="banner" style="margin-top:24px;background:rgba(139,120,201,.1);border-color:rgba(151,132,208,.2)"><svg class="icon t-grape"><use href="#i-book"/></svg><p style="font-weight:500;color:var(--text)">Every member gets a shared library of best practices, standards, and guidelines.</p></div>
+  </div>
+</section>
+
+<!-- ATLAS -->
+<section class="section" id="atlas">
+  <div class="container">
+    <div class="atlas-mark"><svg width="34" height="34"><use href="#atlas"/></svg><span>Atlas</span></div>
+    <div class="head"><p class="eyebrow">The platform behind the program</p><h2 class="h2">Map your application security journey.</h2><p class="lead">The single source of truth for application security across Hearst — and the signal layer that feeds every AI harness.</p></div>
+    <div class="grid g3 mt">
+      <div class="card"><span class="badge ic-teal"><svg><use href="#i-search"/></svg></span><h3>Know your landscape</h3><p>Centralized inventory, business ownership &amp; criticality, full portfolio visibility.</p></div>
+      <div class="card"><span class="badge ic-grape"><svg><use href="#i-bar"/></svg></span><h3>Measure security health</h3><p>Executive dashboards, risk-reduction metrics, SAMM maturity tracking.</p></div>
+      <div class="card"><span class="badge ic-green"><svg><use href="#i-link"/></svg></span><h3>Connect your ecosystem</h3><p>CI/CD integration, automated evidence collection, no more manual reporting.</p></div>
+      <div class="card"><span class="badge ic-navy"><svg><use href="#i-shield"/></svg></span><h3>Demonstrate compliance</h3><p>Continuous policy monitoring, audit-ready evidence, governance insights.</p></div>
+      <div class="card"><span class="badge ic-teal"><svg><use href="#i-refresh"/></svg></span><h3>Drive continuous improvement</h3><p>Security scorecards, remediation tracking, business-unit benchmarking.</p></div>
+    </div>
+    <p class="closing">One platform. One inventory. <span class="grad">One security story.</span></p>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="finalcta">
+  <div class="glow" style="width:320px;height:320px;top:-100px;left:50%;transform:translateX(-50%);background:rgba(43,189,211,.15)"></div>
+  <div class="inner">
+    <h2 class="h2">Build secure software, together.</h2>
+    <p class="lead">Join the AppSec Center of Excellence — powered by Atlas.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#">Join ASCOE <svg class="icon" style="width:18px;height:18px"><use href="#i-arrow-r"/></svg></a>
+      <a class="btn btn-ghost" href="#">Talk to the AppSec team</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="row">
+    <div class="brand"><svg width="26" height="26"><use href="#atlas"/></svg>Atlas <span class="sep">· HEARST</span></div>
+    <p>Delivering secure software, together — powered by Atlas.</p>
+  </div>
+</footer>
+
+</body>
+</html>

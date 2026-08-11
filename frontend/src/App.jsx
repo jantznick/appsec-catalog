@@ -9,8 +9,6 @@ import { Auth } from './pages/Auth.jsx';
 import { MustVerify } from './pages/MustVerify.jsx';
 import { Dashboard } from './pages/Dashboard.jsx';
 import { Home } from './pages/Home.jsx';
-import { DocsList } from './pages/DocsList.jsx';
-import { Docs } from './pages/Docs.jsx';
 import { ComponentsDemo } from './pages/ComponentsDemo.jsx';
 import { Companies } from './pages/Companies.jsx';
 import { CompanyDetail } from './pages/CompanyDetail.jsx';
@@ -82,24 +80,6 @@ function App() {
         } />
         <Route path="/must-verify" element={<MustVerify />} />
         
-        {/* Public docs routes */}
-        <Route
-          path="/docs"
-          element={
-            <Layout>
-              <DocsList />
-            </Layout>
-          }
-        />
-        <Route
-          path="/docs/*"
-          element={
-            <Layout>
-              <Docs />
-            </Layout>
-          }
-        />
-
         {/* Home page - public */}
         <Route
           path="/"

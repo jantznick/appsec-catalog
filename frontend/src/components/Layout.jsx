@@ -85,6 +85,10 @@ export function Layout({ children }) {
     navigate(mode === 'login' ? '/login' : '/register');
   };
 
+  // The marketing landing (/, /login, /register all render <Home/>) renders
+  // full-bleed and manages its own section widths, so skip the padded container.
+  const isLanding = ['/', '/login', '/register'].includes(location.pathname);
+
   const navLinkClass = (path) => {
     const isActive = path === '/'
       ? location.pathname === '/'
@@ -112,9 +116,6 @@ export function Layout({ children }) {
                     Dashboard
                   </Link>
                 )}
-                <Link to="/docs" className={navLinkClass('/docs')}>
-                  Documentation
-                </Link>
                 {isAuthenticated() && (
                   <Link to="/whats-new" className={navLinkClass('/whats-new')}>
                     What&apos;s New
@@ -292,7 +293,7 @@ export function Layout({ children }) {
           </div>
         </div>
       </nav>
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className={isLanding ? '' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'}>
         {children}
       </main>
       <AuthModal
