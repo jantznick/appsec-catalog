@@ -19,21 +19,25 @@ export function Applications() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { isAdmin, user } = useAuthStore();
-  // Company/division come from the global scope selector; the page keeps only
-  // its own local filters (status + search text).
-  const scopeMode = useScopeStore((s) => s.mode);
+  // The global scope selector is the baseline (applies app-wide). This page also
+  // keeps its own local Company/Division filters that refine within the scope;
+  // a local filter, when set, takes precedence over the global scope here.
   const scopeCompanyId = useScopeStore((s) => (s.mode === 'company' ? s.companyId : ''));
   const scopeDivisionId = useScopeStore((s) => (s.mode === 'division' ? s.divisionId : ''));
-  const setCompanyScope = useScopeStore((s) => s.setCompanyScope);
-  const setDivisionScope = useScopeStore((s) => s.setDivisionScope);
   const [applications, setApplications] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [divisions, setDivisions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [scores, setScores] = useState({}); // Cache scores by application ID
   const [filters, setFilters] = useState({
+    companyId: searchParams.get('companyId') || '',
+    divisionId: '',
     status: '',
   });
+
+  // Effective server-side filter: local page filter wins, else the global scope.
+  const effCompanyId = filters.companyId || scopeCompanyId;
+  const effDivisionId = filters.divisionId || scopeDivisionId;
 
   // Table state
   const [sorting, setSorting] = useState([]);
@@ -70,23 +74,18 @@ export function Applications() {
     if (isAdmin()) {
       loadApplications();
     }
-  }, [scopeCompanyId, scopeDivisionId, filters.status]);
-
-  // Deep-link support: a shared /applications?companyId=…&divisionId=… link
-  // sets the global scope once the catalog is available (for the display label).
-  useEffect(() => {
-    if (!isAdmin()) return;
-    const companyIdFromUrl = searchParams.get('companyId');
-    const divisionIdFromUrl = searchParams.get('divisionId');
-    if (companyIdFromUrl && companyIdFromUrl !== scopeCompanyId) {
-      const c = companies.find((x) => x.id === companyIdFromUrl);
-      setCompanyScope(companyIdFromUrl, c?.name || companyIdFromUrl);
-    } else if (divisionIdFromUrl && divisionIdFromUrl !== scopeDivisionId) {
-      const d = divisions.find((x) => x.id === divisionIdFromUrl);
-      setDivisionScope(divisionIdFromUrl, d?.name || divisionIdFromUrl);
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, companies, divisions]);
+  }, [effCompanyId, effDivisionId, filters.status]);
+
+  // Deep-link: a /applications?companyId=… link (e.g. "View all applications"
+  // from a company page) sets the LOCAL company filter — it does not touch the
+  // persistent global scope.
+  useEffect(() => {
+    const companyIdFromUrl = searchParams.get('companyId');
+    if (companyIdFromUrl && isAdmin()) {
+      setFilters(prev => ({ ...prev, companyId: companyIdFromUrl }));
+    }
+  }, [searchParams, isAdmin]);
 
   const loadCompanies = async () => {
     try {
@@ -105,8 +104,8 @@ export function Applications() {
       if (isAdmin()) {
         // Server filters only; search text is applied client-side to avoid refetch + score storms.
         data = await api.getAdminApplications({
-          companyId: scopeCompanyId,
-          divisionId: scopeDivisionId,
+          companyId: effCompanyId,
+          divisionId: effDivisionId,
           status: filters.status,
         });
       } else {
@@ -405,11 +404,18 @@ export function Applications() {
   const filteredData = useMemo(() => {
     let data = [...applications];
 
-    // Apply admin filters (server-side already applied; company/division scoping
-    // is handled globally by the scope selector).
+    // Apply admin filters (server-side already applied, but we mirror them
+    // client-side for consistency). Company/division come from the effective
+    // filter (local page filter, else the global scope).
     if (isAdmin()) {
       if (filters.status) {
         data = data.filter(app => app.status === filters.status);
+      }
+      if (effCompanyId) {
+        data = data.filter(app => app.companyId === effCompanyId);
+      }
+      if (effDivisionId) {
+        data = data.filter(app => app.company?.divisionId === effDivisionId);
       }
     }
 
@@ -424,7 +430,7 @@ export function Applications() {
     }
 
     return data;
-  }, [applications, filters, globalFilter, isAdmin]);
+  }, [applications, filters, effCompanyId, effDivisionId, globalFilter, isAdmin]);
 
   const table = useReactTable({
     data: filteredData,
@@ -476,12 +482,30 @@ export function Applications() {
             <CardTitle>Filters</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <Input
                 label="Search"
                 value={globalFilter}
                 onChange={(e) => setGlobalFilter(e.target.value)}
                 placeholder="Search by name, description, or owner..."
+              />
+              <Select
+                label="Division"
+                value={filters.divisionId}
+                onChange={(e) => handleFilterChange('divisionId', e.target.value)}
+                options={[
+                  { value: '', label: 'All Divisions' },
+                  ...divisions.map(d => ({ value: d.id, label: d.name })),
+                ]}
+              />
+              <Select
+                label="Company"
+                value={filters.companyId}
+                onChange={(e) => handleFilterChange('companyId', e.target.value)}
+                options={[
+                  { value: '', label: 'All Companies' },
+                  ...companies.map(c => ({ value: c.id, label: c.name })),
+                ]}
               />
               <Select
                 label="Status"
@@ -495,9 +519,6 @@ export function Applications() {
                 ]}
               />
             </div>
-            <p className="mt-3 text-xs text-gray-500">
-              Filter by company or division using the scope selector in the top nav.
-            </p>
           </CardContent>
         </Card>
       )}

@@ -26,9 +26,11 @@ import {
   normalizeTenableIoFilter,
   validateWizFilter,
   normalizeWizFilter,
+  validateWizApplicationFilter,
+  normalizeWizApplicationFilter,
 } from '../integrations/resolve.js';
 import { listTenableIoTagValues } from '../integrations/tenableIo.js';
-import { listWizFolders } from '../integrations/wiz.js';
+import { listWizTagsForFolder } from '../integrations/wiz.js';
 import { integrationLog } from '../integrations/log.js';
 import { getAuthContext } from '../middleware/authContext.js';
 import { apiSchemaSummary, buildApiSchemaVisualization, validateAndNormalizeApiSchema } from '../services/apiSchema.js';
@@ -1189,19 +1191,24 @@ router.get('/:id/integrations/:provider/tags', requireAuth, async (req, res) => 
       return res.json({ tags });
     }
     if (provider === PROVIDER_WIZ) {
-      const folders = await listWizFolders(resolved.decrypted, resolved.baseUrl);
-      const tags = folders.map((f) => ({
-        uuid: f.id,
-        value: f.name,
-        display_label: f.name,
-        category_uuid: null,
-      }));
+      const companyLink = await prisma.companyToolLink.findUnique({
+        where: { companyId_provider: { companyId, provider } },
+      });
+      const folderId = companyLink?.filter?.folderId;
+      if (!folderId || typeof folderId !== 'string') {
+        return res.status(400).json({
+          error: 'Company Wiz folder is not linked',
+          message: 'Link the company to a Wiz folder before selecting an application tag.',
+        });
+      }
+      const tags = await listWizTagsForFolder(resolved.decrypted, resolved.baseUrl, folderId);
       integrationLog('info', {
         layer: 'api',
         op: 'GET_application_integration_tags',
         provider,
         applicationId,
         companyId,
+        folderId,
         itemCount: tags.length,
       });
       return res.json({ tags });
@@ -1269,10 +1276,31 @@ router.put('/:id/integrations/:provider/link', requireAuth, async (req, res) => 
       }
       filter = normalized;
     } else if (provider === PROVIDER_WIZ) {
-      const normalized = normalizeWizFilter(req.body);
-      const v = validateWizFilter(normalized);
+      const companyLink = await prisma.companyToolLink.findUnique({
+        where: { companyId_provider: { companyId, provider } },
+      });
+      const companyFolderId = companyLink?.filter?.folderId;
+      if (!companyFolderId || typeof companyFolderId !== 'string') {
+        return res.status(400).json({
+          error: 'Company Wiz folder is not linked',
+          message: 'Link the company to a Wiz folder before linking an application tag.',
+        });
+      }
+      const normalized = normalizeWizApplicationFilter({
+        ...req.body,
+        folderId: companyFolderId,
+        folderName: req.body?.folderName || companyLink.filter?.folderName,
+      });
+      const v = validateWizApplicationFilter(normalized);
       if (!v.ok) {
         return res.status(400).json({ error: v.message });
+      }
+      const tags = await listWizTagsForFolder(resolved.decrypted, resolved.baseUrl, companyFolderId);
+      if (!tags.some((tag) => tag.uuid === normalized.tagValue)) {
+        return res.status(400).json({
+          error: 'Wiz tag is not available in the company folder',
+          message: 'Select a tag returned from the company-scoped Wiz tag list.',
+        });
       }
       filter = normalized;
     } else {

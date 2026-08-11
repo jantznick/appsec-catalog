@@ -461,6 +461,16 @@ router.put(
         if (!v.ok) {
           return res.status(400).json({ error: v.message });
         }
+        // Verify the selected folder against Wiz before persisting the company
+        // boundary. This prevents a stale or cross-tenant folder id from being
+        // treated as a valid scope.
+        const folders = await listWizFolders(resolved.decrypted, resolved.baseUrl);
+        if (!folders.some((folder) => folder.id === normalized.folderId)) {
+          return res.status(400).json({
+            error: 'Wiz folder was not found',
+            message: 'Select a folder returned by the current Wiz credentials.',
+          });
+        }
         filter = normalized;
       } else {
         return res.status(400).json({ error: 'Provider not implemented' });

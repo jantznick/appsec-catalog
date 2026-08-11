@@ -16,7 +16,8 @@ import useScopeStore from '../store/scopeStore.js';
 export function Products() {
   const navigate = useNavigate();
   const { user, isAdmin } = useAuthStore();
-  // Company/division come from the global scope selector.
+  // The global scope selector is the baseline; the local Company filter refines
+  // within it (local wins when set).
   const scopeCompanyId = useScopeStore((s) => (s.mode === 'company' ? s.companyId : ''));
   const scopeDivisionId = useScopeStore((s) => (s.mode === 'division' ? s.divisionId : ''));
 
@@ -34,7 +35,11 @@ export function Products() {
   });
   const [createMappings, setCreateMappings] = useState([]);
   const [companies, setCompanies] = useState([]);
+  const [companyFilter, setCompanyFilter] = useState('');
   const [search, setSearch] = useState('');
+
+  // Effective company filter: local page filter wins, else the global scope.
+  const effCompanyId = companyFilter || scopeCompanyId;
   const [formData, setFormData] = useState({
     companyId: '',
     name: '',
@@ -57,7 +62,7 @@ export function Products() {
   useEffect(() => {
     loadProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeCompanyId, scopeDivisionId]);
+  }, [companyFilter, scopeCompanyId, scopeDivisionId]);
 
   useEffect(() => {
     loadCompanies();
@@ -77,7 +82,7 @@ export function Products() {
       setLoading(true);
       const data = await api.getProducts(
         isAdmin()
-          ? { companyId: scopeCompanyId || undefined, divisionId: scopeDivisionId || undefined }
+          ? { companyId: effCompanyId || undefined, divisionId: scopeDivisionId || undefined }
           : {}
       );
       setProducts(Array.isArray(data) ? data : []);
@@ -285,19 +290,25 @@ export function Products() {
           <CardTitle>Filters</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
               label="Search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name, company, or description..."
             />
+            {isAdmin() && (
+              <Select
+                label="Company"
+                value={companyFilter}
+                onChange={(e) => setCompanyFilter(e.target.value)}
+                options={[
+                  { value: '', label: 'All Companies' },
+                  ...companyOptions,
+                ]}
+              />
+            )}
           </div>
-          {isAdmin() && (
-            <p className="mt-3 text-xs text-gray-500">
-              Filter by company or division using the scope selector in the top nav.
-            </p>
-          )}
         </CardContent>
       </Card>
 

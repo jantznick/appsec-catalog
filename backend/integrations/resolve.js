@@ -105,3 +105,38 @@ export function normalizeWizFilter(body) {
     folderName: folderName || null,
   };
 }
+
+/**
+ * Validate an application-level Wiz tag link. The folder is retained as the
+ * scope boundary so a tag cannot silently be reused after it moves folders.
+ * @param {unknown} filter
+ */
+export function validateWizApplicationFilter(filter) {
+  if (!filter || typeof filter !== 'object') {
+    return { ok: false, message: 'filter must be an object' };
+  }
+  const value = /** @type {{ folderId?: string, tagValue?: string }} */ (filter);
+  if (!value.folderId || typeof value.folderId !== 'string') {
+    return { ok: false, message: 'filter.folderId is required' };
+  }
+  if (!value.tagValue || typeof value.tagValue !== 'string') {
+    return { ok: false, message: 'filter.tagValue is required' };
+  }
+  return { ok: true };
+}
+
+/**
+ * @param {object} body
+ */
+export function normalizeWizApplicationFilter(body) {
+  const folderId = typeof body.folderId === 'string' ? body.folderId.trim() : body.folderId;
+  const folderName = typeof body.folderName === 'string' ? body.folderName.trim() : null;
+  const tagValue = typeof body.tagValue === 'string' ? body.tagValue.trim() : body.tagValue;
+  const tagName = typeof body.tagName === 'string' ? body.tagName.trim() : null;
+  return {
+    folderId,
+    folderName: folderName || null,
+    tagValue,
+    tagName: tagName || tagValue || null,
+  };
+}

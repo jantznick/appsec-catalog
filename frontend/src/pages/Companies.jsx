@@ -9,35 +9,38 @@ import { Button } from '../components/ui/Button.jsx';
 import { SecurityFindingsExportModal } from '../components/integrations/SecurityFindingsExportModal.jsx';
 import { CompanyPortfolioExportModal } from '../components/companies/CompanyPortfolioExportModal.jsx';
 import { Input } from '../components/ui/Input.jsx';
+import { Select } from '../components/ui/Select.jsx';
 import { Dropdown, DropdownItem } from '../components/ui/Dropdown.jsx';
 import useAuthStore from '../store/authStore.js';
 import useScopeStore from '../store/scopeStore.js';
 
 export function Companies() {
   const { isAdmin } = useAuthStore();
-  // Company/division come from the global scope selector.
+  // The global scope selector is the baseline; the local Division filter refines
+  // within it (local wins when set).
   const scopeCompanyId = useScopeStore((s) => (s.mode === 'company' ? s.companyId : ''));
   const scopeDivisionId = useScopeStore((s) => (s.mode === 'division' ? s.divisionId : ''));
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [averageScores, setAverageScores] = useState({}); // Cache average scores by company ID
-  const [divisions, setDivisions] = useState([]); // For the portfolio export modal
-  
+  const [divisions, setDivisions] = useState([]);
+  const [divisionFilter, setDivisionFilter] = useState('');
+
   // Table state
   const [sorting, setSorting] = useState([]);
   const [globalFilter, setGlobalFilter] = useState('');
   const [findingsOpen, setFindingsOpen] = useState(false);
   const [portfolioExportOpen, setPortfolioExportOpen] = useState(false);
 
-  useEffect(() => {
-    loadCompanies();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeCompanyId, scopeDivisionId]);
+  const effDivisionId = divisionFilter || scopeDivisionId;
 
   useEffect(() => {
-    if (isAdmin()) loadDivisions();
+    if (isAdmin()) {
+      loadDivisions();
+    }
+    loadCompanies();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [divisionFilter, scopeCompanyId, scopeDivisionId]);
 
   const loadDivisions = async () => {
     try {
@@ -52,7 +55,7 @@ export function Companies() {
     try {
       setLoading(true);
       const filters = isAdmin()
-        ? { companyId: scopeCompanyId || undefined, divisionId: scopeDivisionId || undefined }
+        ? { companyId: scopeCompanyId || undefined, divisionId: effDivisionId || undefined }
         : {};
       const data = await api.getCompanies(filters);
       setCompanies(Array.isArray(data) ? data : []);
@@ -302,19 +305,25 @@ export function Companies() {
           <CardContent padding="none">
             {/* Filters */}
             <div className="p-4 border-b space-y-4">
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
                   label="Search"
                   value={globalFilter}
                   onChange={(e) => setGlobalFilter(e.target.value)}
                   placeholder="Search companies..."
                 />
+                {isAdmin() && (
+                  <Select
+                    label="Filter by Division"
+                    value={divisionFilter}
+                    onChange={(e) => setDivisionFilter(e.target.value)}
+                    options={[
+                      { value: '', label: 'All Divisions' },
+                      ...divisions.map(d => ({ value: d.id, label: d.name })),
+                    ]}
+                  />
+                )}
               </div>
-              {isAdmin() && (
-                <p className="text-xs text-gray-500">
-                  Filter by company or division using the scope selector in the top nav.
-                </p>
-              )}
             </div>
 
             <div className="overflow-x-auto">

@@ -741,6 +741,14 @@ export const api = {
     return apiRequest(`/api/admin/stats${queryString ? `?${queryString}` : ''}`);
   },
 
+  getExecutiveDashboard: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.companyId) params.append('companyId', filters.companyId);
+    if (filters.divisionId) params.append('divisionId', filters.divisionId);
+    const queryString = params.toString();
+    return apiRequest(`/api/dashboard/executive${queryString ? `?${queryString}` : ''}`);
+  },
+
   getAdminApplications: (filters = {}) => {
     const params = new URLSearchParams();
     if (filters.companyId) params.append('companyId', filters.companyId);

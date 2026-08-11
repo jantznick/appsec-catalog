@@ -120,6 +120,16 @@ function App() {
           }
         />
         <Route
+          path="/dashboard/:dashboardType"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Dashboard />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/components"
           element={
             <ProtectedRoute>

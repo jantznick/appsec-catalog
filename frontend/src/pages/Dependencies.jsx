@@ -36,7 +36,8 @@ function SortIcon({ dir }) {
 export function Dependencies() {
   const { isAdmin } = useAuthStore();
   const admin = isAdmin();
-  // Company/division come from the global scope selector.
+  // The global scope selector is the baseline (scopes the fetch); the local
+  // Company facet refines within the returned rows.
   const scopeCompanyId = useScopeStore((s) => (s.mode === 'company' ? s.companyId : ''));
   const scopeDivisionId = useScopeStore((s) => (s.mode === 'division' ? s.divisionId : ''));
 
@@ -47,6 +48,7 @@ export function Dependencies() {
 
   const [globalFilter, setGlobalFilter] = useState('');
   const [ecosystem, setEcosystem] = useState('');
+  const [companyId, setCompanyId] = useState('');
   const [frameworksOnly, setFrameworksOnly] = useState(false);
   const [sorting, setSorting] = useState([{ id: 'name', desc: false }]);
 
@@ -78,10 +80,11 @@ export function Dependencies() {
   const filteredData = useMemo(() => {
     return rows.filter((r) => {
       if (ecosystem && r.ecosystem !== ecosystem) return false;
+      if (companyId && r.companyId !== companyId) return false;
       if (frameworksOnly && !r.isFramework) return false;
       return true;
     });
-  }, [rows, ecosystem, frameworksOnly]);
+  }, [rows, ecosystem, companyId, frameworksOnly]);
 
   const stats = useMemo(() => {
     const uniquePkgs = new Set(filteredData.map((r) => `${r.ecosystem}:${r.name}`));
@@ -195,9 +198,15 @@ export function Dependencies() {
     { value: '', label: 'All ecosystems' },
     ...facets.ecosystems.map((e) => ({ value: e, label: ECOSYSTEM_LABELS[e] || e })),
   ];
+  const companyOptions = [
+    { value: '', label: 'All companies' },
+    ...facets.companies.map((c) => ({ value: c.id, label: c.name })),
+  ];
+
   const resetFilters = () => {
     setGlobalFilter('');
     setEcosystem('');
+    setCompanyId('');
     setFrameworksOnly(false);
   };
 
@@ -272,6 +281,15 @@ export function Dependencies() {
                     onChange={(e) => setEcosystem(e.target.value)}
                   />
                 </div>
+                {admin && facets.companies.length > 0 && (
+                  <div className="w-52">
+                    <Select
+                      options={companyOptions}
+                      value={companyId}
+                      onChange={(e) => setCompanyId(e.target.value)}
+                    />
+                  </div>
+                )}
                 <label className="flex items-center gap-2 text-sm text-gray-700 h-10">
                   <input
                     type="checkbox"

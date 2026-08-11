@@ -12,7 +12,7 @@ import { ApplicationScmBlock } from './ApplicationScmBlock.jsx';
 const TOOL_LINK_PROVIDERS = new Set(['TENABLE_IO', 'WIZ']);
 
 /**
- * Per-application Tenable tag / Wiz folder links. API credentials come from the app’s company.
+ * Per-application Tenable/Wiz tag links. Wiz tags are scoped by the app's company folder.
  * @param {{ application: object, onRefresh: () => Promise<void> }} props
  */
 export function ApplicationIntegrationsSection({ application, onRefresh }) {
@@ -68,7 +68,7 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
       const data = await api.getApplicationIntegrationTags(applicationId, provider);
       setTags(Array.isArray(data.tags) ? data.tags : []);
       if (provider === 'WIZ') {
-        if (filter?.folderId) setSelectedId(filter.folderId);
+        if (filter?.tagValue) setSelectedId(filter.tagValue);
       } else if (filter?.tagUuid) {
         setSelectedId(filter.tagUuid);
       }
@@ -82,7 +82,7 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
 
   const saveTagLink = async () => {
     if (!tagModalProvider || !selectedId || !applicationId) {
-      toast.error(tagModalProvider === 'WIZ' ? 'Select a folder' : 'Select a tag');
+      toast.error('Select a tag');
       return;
     }
     const tag = tags.find((t) => t.uuid === selectedId);
@@ -90,8 +90,8 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
     try {
       if (tagModalProvider === 'WIZ') {
         await api.putApplicationIntegrationLink(applicationId, tagModalProvider, {
-          folderId: selectedId,
-          folderName: tag?.value || null,
+          tagValue: selectedId,
+          tagName: tag?.value || null,
         });
       } else {
         await api.putApplicationIntegrationLink(applicationId, tagModalProvider, {
@@ -129,7 +129,8 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
         <CardHeader>
           <CardTitle>Integrations (this application)</CardTitle>
           <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-            Link a Tenable tag or Wiz folder to <strong>this application</strong>. API keys are managed
+            Link a Tenable or Wiz tag to <strong>this application</strong>. Wiz tags are limited to the
+            company&apos;s linked folder. API keys are managed
             for the company (
             <Link to={`/companies/${companyId}`} className="text-blue-600 hover:underline">
               company integrations
@@ -209,20 +210,20 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                               <div className="min-w-0">
                                 <p className="text-xs font-medium text-gray-500">
-                                  {provider === 'WIZ' ? 'Folder link' : 'Tag link'}
+                                  Tag link
                                 </p>
                                 {provider === 'WIZ' ? (
-                                  filter?.folderId || filter?.folderName ? (
+                                  filter?.tagValue || filter?.tagName ? (
                                     <p className="text-sm text-gray-800">
-                                      <span className="font-medium">{filter?.folderName || '-'}</span>
+                                      <span className="font-medium">{filter?.tagName || filter?.tagValue || '-'}</span>
                                       {filter?.folderId ? (
                                         <span className="block text-xs font-mono text-gray-500">
-                                          {filter.folderId}
+                                          Scoped to folder {filter.folderId}
                                         </span>
                                       ) : null}
                                     </p>
                                   ) : (
-                                    <p className="text-sm text-gray-600">No folder linked yet.</p>
+                                    <p className="text-sm text-gray-600">No Wiz tag linked yet.</p>
                                   )
                                 ) : filter?.tagUuid || filter?.tagName ? (
                                   <p className="text-sm text-gray-800">
@@ -245,9 +246,9 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
                                   className="shrink-0"
                                 >
                                   {provider === 'WIZ'
-                                    ? filter?.folderId
-                                      ? 'Change folder…'
-                                      : 'Link folder…'
+                                    ? filter?.tagValue
+                                      ? 'Change tag…'
+                                      : 'Link tag…'
                                     : filter?.tagUuid
                                       ? 'Change tag…'
                                       : 'Link tag…'}
@@ -272,11 +273,12 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
         title={
           tagModalProvider
             ? tagModalProvider === 'WIZ'
-              ? `Select folder - ${integrationProviderLabel(tagModalProvider)}`
+              ? `Select tag - ${integrationProviderLabel(tagModalProvider)}`
               : `Select tag - ${integrationProviderLabel(tagModalProvider)}`
             : 'Select'
         }
-        isWiz={tagModalProvider === 'WIZ'}
+        // The company picker selects a Wiz folder; this application picker selects a tag.
+        isWiz={false}
         tags={tags}
         loading={loadingTags}
         selectedUuid={selectedId}

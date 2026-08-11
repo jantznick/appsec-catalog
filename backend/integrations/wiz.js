@@ -350,3 +350,142 @@ export async function listWizFolders(decrypted, graphqlUrl) {
 
   return folders;
 }
+
+const GRAPH_SEARCH_TAGS_QUERY = `
+  query WizGraphSearchForTags(
+    $query: GraphEntityQueryInput
+    $projectId: String!
+    $first: Int
+    $after: String
+  ) {
+    graphSearch(
+      query: $query
+      projectId: $projectId
+      first: $first
+      after: $after
+      # Wiz does not support pagination in quick mode. Tag discovery needs
+      # multiple pages so use the regular graph search mode.
+      quick: false
+    ) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        entities { properties }
+      }
+    }
+  }
+`;
+
+function parseWizProperties(properties) {
+  if (!properties) return null;
+  if (typeof properties === 'object') return properties;
+  if (typeof properties !== 'string') return null;
+  try {
+    return JSON.parse(properties);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeWizTagValues(rawTags) {
+  if (!rawTags) return [];
+  if (Array.isArray(rawTags)) {
+    return rawTags.flatMap((tag) => {
+      if (typeof tag === 'string') return [tag.trim()];
+      if (!tag || typeof tag !== 'object') return [];
+      const key = tag.key || tag.name;
+      const value = tag.value;
+      if (key && value != null) return [`${key}:${value}`];
+      if (value != null) return [String(value).trim()];
+      return [];
+    });
+  }
+  if (typeof rawTags === 'object') {
+    return Object.entries(rawTags).map(([key, value]) => `${key}:${value}`).filter(Boolean);
+  }
+  return [String(rawTags).trim()];
+}
+
+/**
+ * List distinct resource tag values inside a company-scoped Wiz folder.
+ * The folder is sent as a Wiz server-side filter; it is never applied only
+ * in the browser or after an unscoped tenant-wide response.
+ *
+ * @param {{ clientId: string, clientSecret: string }} decrypted
+ * @param {string | null | undefined} graphqlUrl
+ * @param {string} folderId
+ * @returns {Promise<Array<{ uuid: string, value: string, display_label: string }>>}
+ */
+export async function listWizTagsForFolder(decrypted, graphqlUrl, folderId) {
+  const started = Date.now();
+  const url = normalizeWizGraphqlUrl(graphqlUrl || '');
+  const graphqlHost = safeUrlHost(url);
+  if (!folderId || typeof folderId !== 'string') {
+    const err = new Error('Wiz folder id is required before listing application tags');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!decrypted?.clientId || !decrypted?.clientSecret) {
+    const err = new Error('Wiz credentials missing clientId or clientSecret');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const token = await fetchWizAccessToken(decrypted.clientId, decrypted.clientSecret);
+  try {
+      const values = new Set();
+      let after = null;
+      let hasNextPage = true;
+      let page = 0;
+      while (hasNextPage && page < 100) {
+        page += 1;
+        const data = await wizGraphql(url, token, GRAPH_SEARCH_TAGS_QUERY, {
+          first: 50,
+          after,
+          projectId: folderId,
+          // GraphEntityQueryInput requires a resource type in this tenant.
+          // Match the known-good Wiz graphSearch payload supplied for this
+          // integration instead of sending a partial input object.
+          query: {
+            select: true,
+            type: ['VIRTUAL_MACHINE'],
+          },
+        });
+        const connection = data?.graphSearch;
+        if (!connection) throw new Error('Wiz graphSearch response was empty');
+        for (const node of connection.nodes || []) {
+          for (const entity of node?.entities || []) {
+            const props = parseWizProperties(entity?.properties);
+            for (const tag of normalizeWizTagValues(props?.tags)) {
+              if (tag) values.add(tag);
+            }
+          }
+        }
+        hasNextPage = Boolean(connection.pageInfo?.hasNextPage);
+        after = connection.pageInfo?.endCursor || null;
+      }
+      const tags = [...values]
+        .filter((value) => value.startsWith('Application:'))
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+        .map((value) => ({ uuid: value, value, display_label: value }));
+      integrationLog('info', {
+        provider: 'WIZ',
+        op: 'list_tags_for_folder',
+        graphqlHost,
+        folderId,
+        tagCount: tags.length,
+        durationMs: Date.now() - started,
+      });
+      return tags;
+  } catch (error) {
+    integrationLog('error', {
+      provider: 'WIZ',
+      op: 'list_tags_for_folder',
+      graphqlHost,
+      folderId,
+      durationMs: Date.now() - started,
+      error: error?.message || 'Unable to list Wiz tags for folder',
+      detail: error?.detail ? String(error.detail).slice(0, 500) : undefined,
+    });
+    throw error;
+  }
+}
