@@ -1,73 +1,20 @@
-# Caddyfile for AppSec Catalog
-# 
-# PRODUCTION: Replace 'yourdomain.com' with your actual domain
-# Caddy will automatically obtain Let's Encrypt certificates
+# Caddyfile for Orbit (orbit.hearst.com)
 #
-# LOCAL NETWORK: Use your local domain (e.g., appsec.local) with self-signed certificates
+# PRODUCTION — HTTPS only, using the organization-provided DigiCert certificate.
+# Caddy serves HTTPS on 443 and automatically redirects all HTTP (port 80)
+# traffic to HTTPS. The certificate (full chain: leaf + intermediates) and the
+# unencrypted private key are mounted read-only from ./certs via docker-compose.
+#
+# Cert files expected (see docker-compose.yml caddy volume):
+#   /etc/caddy/certs/orbit-fullchain.crt   leaf cert + DigiCert intermediate(s)
+#   /etc/caddy/certs/orbit.key             unencrypted private key (from the CSR)
+#
+# For local HTTP-only testing, replace the site line below with `:80 {` and
+# delete the `tls` line.
 
-# Production configuration (HTTPS with Let's Encrypt)
-# Uncomment and replace 'yourdomain.com' with your actual public domain
-# yourdomain.com {
-#     # Reverse proxy to frontend
-#     handle / {
-#         reverse_proxy frontend:3000 {
-#             header_up Host {host}
-#             header_up X-Real-IP {remote}
-#             header_up X-Forwarded-For {remote}
-#             header_up X-Forwarded-Proto {scheme}
-#         }
-#     }
-# 
-#     # Reverse proxy API requests to backend
-#     handle /api/* {
-#         reverse_proxy backend:3001 {
-#             header_up Host {host}
-#             header_up X-Real-IP {remote}
-#             header_up X-Forwarded-For {remote}
-#             header_up X-Forwarded-Proto {scheme}
-#         }
-#     }
-# 
-#     # Reverse proxy snapshot/static storage requests to backend
-#     handle /storage/* {
-#         reverse_proxy backend:3001 {
-#             header_up Host {host}
-#             header_up X-Real-IP {remote}
-#             header_up X-Forwarded-For {remote}
-#             header_up X-Forwarded-Proto {scheme}
-#         }
-#     }
-# 
-#     # Reverse proxy health check
-#     handle /health {
-#         reverse_proxy backend:3001
-#     }
-# }
+orbit.hearst.com {
+    tls /etc/caddy/certs/orbit-fullchain.crt /etc/caddy/certs/orbit.key
 
-# Local network configuration (HTTP only - no certificate issues)
-# Commented out: HTTPS with self-signed certificates (causes browser trust issues)
-# appsec.companynet.org {
-#     tls internal
-#     ...
-# }
-
-# ===========================================================================
-# PRODUCTION HTTPS — ENABLE AT DOMAIN CUTOVER (not active yet)
-# ===========================================================================
-# Prerequisites before enabling: certs present in ./certs, DNS for
-# atlas.hearst.com pointing here, and FRONTEND_URL=https://atlas.hearst.com.
-# To cut over:
-#   1. Change the active site line below from `:80 {` to `atlas.hearst.com {`
-#   2. Add this line as the first line inside the block:
-#        tls /etc/caddy/certs/atlas-fullchain.crt /etc/caddy/certs/atlas.key
-#   3. Uncomment the ./certs volume in docker-compose.yml (caddy service)
-#   4. Set FRONTEND_URL and rebuild the frontend (see docker-compose.yml)
-# Caddy then serves HTTPS on 443 and auto-redirects HTTP (80) -> HTTPS.
-# ===========================================================================
-
-# HTTP only (no HTTPS, no certificate warnings) — active until cutover.
-# Using :80 to serve HTTP only (works with any hostname).
-:80 {
     # Reverse proxy API requests to backend (must come before /)
     handle /api/* {
         reverse_proxy backend:3001 {
@@ -133,4 +80,3 @@
         }
     }
 }
-

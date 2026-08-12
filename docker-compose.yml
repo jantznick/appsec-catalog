@@ -95,10 +95,9 @@ services:
       - "443:443/udp" # HTTP/3
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
-      # AT CUTOVER: uncomment to mount the org-provided cert
-      # (atlas-fullchain.crt) + key (atlas.key) that the HTTPS Caddyfile block
-      # references. Keep commented while serving plain HTTP on :80.
-      # - ./certs:/etc/caddy/certs:ro
+      # Org-provided DigiCert cert (orbit-fullchain.crt) + key (orbit.key),
+      # referenced by the tls directive in the Caddyfile.
+      - ./certs:/etc/caddy/certs:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
