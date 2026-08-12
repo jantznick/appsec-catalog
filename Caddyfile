@@ -1,27 +1,31 @@
-# Caddyfile for Orbit (orbit.hearst.com)
+# Caddyfile for Orbit — TRANSITION CONFIG
 #
-# PRODUCTION — HTTPS only, using the organization-provided DigiCert certificate.
-# Caddy serves HTTPS on 443 and automatically redirects all HTTP (port 80)
-# traffic to HTTPS. The certificate (full chain: leaf + intermediates) and the
-# unencrypted private key are mounted read-only from ./certs via docker-compose.
+# Serves TWO things at once while the internal DNS record for orbit.hearst.com
+# is still propagating:
+#   1. The current site over HTTP on the existing domain (appsec.companynet.*),
+#      via the :80 catch-all (matches any hostname).
+#   2. orbit.hearst.com over HTTPS with the DigiCert cert — ready for the moment
+#      DNS resolves. Scoped to :443 so it does NOT conflict with the :80 block.
 #
-# Cert files expected (see docker-compose.yml caddy volume):
-#   /etc/caddy/certs/orbit-fullchain.crt   leaf cert + DigiCert intermediate(s)
-#   /etc/caddy/certs/orbit.key             unencrypted private key (from the CSR)
+# Cert files (mounted read-only from ./certs via docker-compose):
+#   /etc/caddy/certs/orbit-fullchain.crt, /etc/caddy/certs/orbit.key
 #
-# For local HTTP-only testing, replace the site line below with `:80 {` and
-# delete the `tls` line.
+# WHEN DNS IS LIVE AND YOU WANT orbit HTTPS-ONLY:
+#   - delete the ":80" block below
+#   - change "orbit.hearst.com:443" to "orbit.hearst.com" (Caddy then serves 443
+#     and auto-redirects HTTP->HTTPS)
+#   - set FRONTEND_URL / VITE_API_URL to https://orbit.hearst.com and rebuild
+#     the frontend
 
-orbit.hearst.com {
-    tls /etc/caddy/certs/orbit-fullchain.crt /etc/caddy/certs/orbit.key
-
+# Shared reverse-proxy routes, imported by both site blocks below.
+# (X-Forwarded-For / X-Forwarded-Proto are set automatically by Caddy, so they
+# are not listed here.)
+(app_routes) {
     # Reverse proxy API requests to backend (must come before /)
     handle /api/* {
         reverse_proxy backend:3001 {
             header_up Host {host}
             header_up X-Real-IP {remote}
-            header_up X-Forwarded-For {remote}
-            header_up X-Forwarded-Proto {scheme}
         }
     }
 
@@ -30,8 +34,6 @@ orbit.hearst.com {
         reverse_proxy backend:3001 {
             header_up Host {host}
             header_up X-Real-IP {remote}
-            header_up X-Forwarded-For {remote}
-            header_up X-Forwarded-Proto {scheme}
         }
     }
 
@@ -45,8 +47,6 @@ orbit.hearst.com {
         reverse_proxy frontend:3000 {
             header_up Host {host}
             header_up X-Real-IP {remote}
-            header_up X-Forwarded-For {remote}
-            header_up X-Forwarded-Proto {scheme}
         }
     }
 
@@ -55,8 +55,6 @@ orbit.hearst.com {
         reverse_proxy frontend:3000 {
             header_up Host {host}
             header_up X-Real-IP {remote}
-            header_up X-Forwarded-For {remote}
-            header_up X-Forwarded-Proto {scheme}
         }
     }
 
@@ -65,8 +63,6 @@ orbit.hearst.com {
         reverse_proxy frontend:3000 {
             header_up Host {host}
             header_up X-Real-IP {remote}
-            header_up X-Forwarded-For {remote}
-            header_up X-Forwarded-Proto {scheme}
         }
     }
 
@@ -75,8 +71,19 @@ orbit.hearst.com {
         reverse_proxy frontend:3000 {
             header_up Host {host}
             header_up X-Real-IP {remote}
-            header_up X-Forwarded-For {remote}
-            header_up X-Forwarded-Proto {scheme}
         }
     }
+}
+
+# orbit.hearst.com over HTTPS (real DigiCert cert). Scoped to :443 so it
+# coexists with the :80 catch-all below. Ready for when DNS resolves.
+orbit.hearst.com:443 {
+    tls /etc/caddy/certs/orbit-fullchain.crt /etc/caddy/certs/orbit.key
+    import app_routes
+}
+
+# Current domain over HTTP (any hostname) — keeps appsec.companynet.* live
+# until the orbit.hearst.com DNS record is in place.
+:80 {
+    import app_routes
 }
