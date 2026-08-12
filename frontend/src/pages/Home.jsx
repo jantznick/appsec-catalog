@@ -648,12 +648,6 @@ export function Home() {
             <Button size="lg" onClick={joinAscoe}>
               {authed ? 'Go to your dashboard' : 'Join ASCOE'} <FiArrowRight />
             </Button>
-            <a
-              href="mailto:appsec@hearst.com"
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/15 px-6 py-3 text-base font-semibold text-gray-800 transition-colors hover:bg-white/5"
-            >
-              Talk to the AppSec team
-            </a>
           </div>
         </div>
       </section>
