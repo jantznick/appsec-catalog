@@ -1,10 +1,10 @@
 zsh:1: command not found: +ATLAS_SAMM_QUESTION_BANK_VERSION+
 zsh:1: command not found: +c.value+
-# Atlas SAMM-Aligned Question Bank
+# Orbit SAMM-Aligned Question Bank
 
 Version: 
 
-This is the approved Atlas-authored questionnaire mapped to the 15 practices and 30 streams in OWASP SAMM 2.0. It is not the SAMMwise questionnaire and is not presented as an official OWASP SAMM Toolbox assessment.
+This is the approved Orbit-authored questionnaire mapped to the 15 practices and 30 streams in OWASP SAMM 2.0. It is not the SAMMwise questionnaire and is not presented as an official OWASP SAMM Toolbox assessment.
 
 Each question has four factual operating states. Values 0–3 are internal scoring metadata and are not displayed as maturity choices in the assessment UI. The two stream values are averaged for the practice score; all 15 practice scores are averaged for the company score.
 

@@ -17,10 +17,10 @@ The evaluation is scoped exactly like the rest of the dashboard: administrators 
 
 1. The control-weighted versus policy-weighted choice is intentionally deferred for now. The current implementation uses control-weighted adherence.
 2. All applications are expected to have applicable policies. The current implementation still reports the number of applications with applicable policies so gaps in policy configuration are visible.
-3. Evidence is the metadata collected in the Atlas catalog and is required at both the application and policy-control level. Evidence may be hosted outside Atlas for now; Atlas should eventually store a reference, reviewer, collection date, and freshness state.
+3. Evidence is the metadata collected in the Orbit catalog and is required at both the application and policy-control level. Evidence may be hosted outside Orbit for now; Orbit should eventually store a reference, reviewer, collection date, and freshness state.
 4. Approved overrides count as meeting. The dashboard counts overrides separately so compliance cannot improve without the exception volume remaining visible.
 
-## Maturity: Atlas SAMM-aligned questionnaire
+## Maturity: Orbit SAMM-aligned questionnaire
 
 The dashboard exposes a SAMM scaffold with the five SAMM business functions:
 
@@ -30,9 +30,9 @@ The dashboard exposes a SAMM scaffold with the five SAMM business functions:
 - Verification
 - Operations
 
-Atlas uses the current OWASP SAMM v2 five-function and 15-practice structure. Its versioned, Atlas-authored question bank contains one concrete question for each stream: two per practice and 30 total. Questions ask about observable processes, controls, and outcomes rather than asking users to choose a maturity level.
+Orbit uses the current OWASP SAMM v2 five-function and 15-practice structure. Its versioned, Orbit-authored question bank contains one concrete question for each stream: two per practice and 30 total. Questions ask about observable processes, controls, and outcomes rather than asking users to choose a maturity level.
 
-Each question has four factual operating states mapped internally to 0–3. Atlas averages both stream answers into a practice score, then averages all 15 practices for the company score. Results are explicitly labeled SAMM-aligned; the official OWASP SAMM Toolbox remains authoritative for formal assessment and benchmarking.
+Each question has four factual operating states mapped internally to 0–3. Orbit averages both stream answers into a practice score, then averages all 15 practices for the company score. Results are explicitly labeled SAMM-aligned; the official OWASP SAMM Toolbox remains authoritative for formal assessment and benchmarking.
 
 The application security score is deliberately not used as a SAMM score. It measures application posture, while SAMM measures the maturity of practices and processes.
 
@@ -41,7 +41,7 @@ The application security score is deliberately not used as a SAMM score. It meas
 1. The implemented assessment is versioned as `atlas-samm-1.0` and mapped to OWASP SAMM 2.0. A future question-bank or SAMM revision should be introduced as a new framework version rather than silently changing historical assessments.
 2. Assessment scope is company-level. The HTS team will track company assessments centrally, while each company owns its responses and review.
 3. Assessments should be completed at least twice per year. Records need an assessment owner, HTS reviewer, assessment date, review date, and next-due date.
-4. Evidence may remain external. Each answer should support an optional evidence reference and notes rather than requiring Atlas attachments initially.
+4. Evidence may remain external. Each answer should support an optional evidence reference and notes rather than requiring Orbit attachments initially.
 5. Aggregation is a simple average. Every practice is included in the denominator, so unanswered or low-scoring practices lower the result.
 6. Every completed assessment becomes a historical snapshot so quarter-over-quarter and year-over-year trends can be displayed.
 

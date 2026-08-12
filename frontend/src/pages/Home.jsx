@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore.js';
-import { AtlasMark } from '../components/Logo.jsx';
+import { OrbitMark } from '../components/Logo.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import {
   FiEye, FiShield, FiTrendingUp, FiCheckCircle, FiClock, FiZap,
@@ -11,9 +11,9 @@ import {
 } from 'react-icons/fi';
 
 /* ============================================================================
-   Atlas / ASCOE marketing landing page (public root `/`).
+   Orbit / ASCOE marketing landing page (public root `/`).
    Full-bleed, single-scroll. Content mirrors the AppSec program slides:
-   goals → why → lifecycle → operating model → AI harness → SAMM → ASCOE → Atlas.
+   goals → why → lifecycle → operating model → AI harness → SAMM → ASCOE → Orbit.
    Renders full width because Layout drops its max-w container on the landing.
    ========================================================================== */
 
@@ -169,7 +169,7 @@ const ASCOE_PILLARS = [
     body: 'A human + AI feedback loop — monthly enablement kits, hands-on Docker labs, and local codebase challenges. Champions help teams apply AI and security tools well, then feed real engineering context back into the program.',
   },
   {
-    icon: FiCompass, accent: 'green', title: 'Atlas platform access',
+    icon: FiCompass, accent: 'green', title: 'Orbit platform access',
     body: 'Real-time inventory, governance & compliance scoring, automated pipeline integration, and maturity benchmarking.',
   },
 ];
@@ -187,7 +187,7 @@ const COMPLIANCE_POINTS = [
   },
   {
     icon: FiCpu, accent: 'grape', title: 'Every app graded automatically',
-    body: 'Atlas evaluates each application against the controls that apply to it — Meeting or Not Meeting — straight from the metadata already in the catalog. No questionnaire, no spreadsheet.',
+    body: 'Orbit evaluates each application against the controls that apply to it — Meeting or Not Meeting — straight from the metadata already in the catalog. No questionnaire, no spreadsheet.',
   },
   {
     icon: FiRefreshCw, accent: 'green', title: 'On demand, always current',
@@ -217,9 +217,9 @@ export function Home() {
         <div className="pointer-events-none absolute -bottom-40 -left-24 h-96 w-96 rounded-full bg-grape-500/15 blur-3xl" />
         <div className="relative mx-auto max-w-7xl px-6 lg:px-8 pt-24 pb-20 sm:pt-28 sm:pb-24 text-center">
           <div className="mx-auto mb-8 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 ring-1 ring-white/15 backdrop-blur-sm">
-            <AtlasMark size={44} />
+            <OrbitMark size={44} />
           </div>
-          <Eyebrow className="mb-5">AppSec Center of Excellence · Powered by Atlas</Eyebrow>
+          <Eyebrow className="mb-5">AppSec Center of Excellence · Powered by Orbit</Eyebrow>
           <h1 className="mx-auto max-w-4xl text-4xl sm:text-6xl font-bold tracking-tight text-gray-900 leading-[1.05]">
             Security that scales with{' '}
             <span className="bg-gradient-to-r from-blue-500 to-grape-500 bg-clip-text text-transparent">
@@ -528,7 +528,7 @@ export function Home() {
         <SectionHeading
           eyebrow="Connect · Collaborate · Elevate · Secure"
           title="The AppSec Center of Excellence."
-          sub="A community of developers and security leaders driving secure software delivery across Hearst — through knowledge sharing, collaboration, and shared visibility in Atlas."
+          sub="A community of developers and security leaders driving secure software delivery across Hearst — through knowledge sharing, collaboration, and shared visibility in Orbit."
         />
         <div className="mt-14 grid gap-6 md:grid-cols-3">
           {ASCOE_PILLARS.map((p) => (
@@ -551,8 +551,8 @@ export function Home() {
       <Section id="atlas">
         <div className="flex flex-col items-center text-center">
           <div className="mb-6 flex items-center gap-2.5">
-            <AtlasMark size={34} />
-            <span className="text-2xl font-bold tracking-tight text-gray-900">Atlas</span>
+            <OrbitMark size={34} />
+            <span className="text-2xl font-bold tracking-tight text-gray-900">Orbit</span>
           </div>
           <SectionHeading
             eyebrow="The platform behind the program"
@@ -580,7 +580,7 @@ export function Home() {
         <SectionHeading
           eyebrow="Continuous compliance"
           title="Know your InfoSec policy compliance — on demand, all the time."
-          sub="Atlas turns the software-development and application-security portions of your Information Security Policy into controls it grades every application against — automatically, and always current. Not once a year at audit time. Any time you look."
+          sub="Orbit turns the software-development and application-security portions of your Information Security Policy into controls it grades every application against — automatically, and always current. Not once a year at audit time. Any time you look."
         />
         <div className="mt-14 grid gap-8 lg:grid-cols-2 lg:items-center">
           {/* live compliance card */}
@@ -611,7 +611,7 @@ export function Home() {
               ))}
             </div>
             <p className="mt-5 text-center text-xs text-gray-500">
-              Illustrative — the same view is live in the Atlas executive dashboard.
+              Illustrative — the same view is live in the Orbit executive dashboard.
             </p>
           </div>
           {/* points */}
@@ -642,7 +642,7 @@ export function Home() {
         <div className="relative mx-auto max-w-4xl px-6 py-24 text-center">
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900">Build secure software, together.</h2>
           <p className="mx-auto mt-4 max-w-xl text-lg text-gray-600">
-            Join the AppSec Center of Excellence — powered by Atlas.
+            Join the AppSec Center of Excellence — powered by Orbit.
           </p>
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Button size="lg" onClick={joinAscoe}>
@@ -662,12 +662,12 @@ export function Home() {
       <footer className="w-full border-t border-white/[0.06] bg-navy-950/40">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 py-8 sm:flex-row">
           <div className="flex items-center gap-2.5">
-            <AtlasMark size={26} />
-            <span className="text-sm font-semibold text-gray-800">Atlas</span>
+            <OrbitMark size={26} />
+            <span className="text-sm font-semibold text-gray-800">Orbit</span>
             <span className="text-sm text-gray-500">· HEARST</span>
           </div>
           <p className="text-sm text-gray-500">
-            Delivering secure software, together — powered by Atlas.
+            Delivering secure software, together — powered by Orbit.
           </p>
         </div>
       </footer>

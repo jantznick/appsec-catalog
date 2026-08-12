@@ -62,7 +62,7 @@ export function WhatsNew() {
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">What&apos;s New</h1>
-        <p className="text-sm text-gray-600 mt-1">Recent Atlas improvements and release notes.</p>
+        <p className="text-sm text-gray-600 mt-1">Recent Orbit improvements and release notes.</p>
       </div>
 
       {loading ? (

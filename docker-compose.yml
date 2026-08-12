@@ -28,11 +28,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        # Baked into the JS bundle at build time. Same origin as FRONTEND_URL
-        # because Caddy serves the frontend and proxies /api on one domain.
-        # Rebuild the frontend image when this changes: docker compose build frontend
-        - VITE_API_URL=${FRONTEND_URL:-http://localhost:3000}
+      # AT CUTOVER: uncomment to bake the API base into the bundle from
+      # FRONTEND_URL (same origin, since Caddy serves frontend + /api on one
+      # domain). Rebuild the frontend image after enabling:
+      #   docker compose build frontend
+      # args:
+      #   - VITE_API_URL=${FRONTEND_URL:-http://localhost:3000}
     ports:
       - "3000:3000"
     depends_on:
@@ -94,7 +95,10 @@ services:
       - "443:443/udp" # HTTP/3
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
-      - ./certs:/etc/caddy/certs:ro   # org-provided cert (atlas-fullchain.crt) + key (atlas.key)
+      # AT CUTOVER: uncomment to mount the org-provided cert
+      # (atlas-fullchain.crt) + key (atlas.key) that the HTTPS Caddyfile block
+      # references. Keep commented while serving plain HTTP on :80.
+      # - ./certs:/etc/caddy/certs:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

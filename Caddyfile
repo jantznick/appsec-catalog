@@ -51,15 +51,23 @@
 #     ...
 # }
 
-# Production (HTTPS with an organization-provided certificate).
-# Caddy serves HTTPS on 443 and auto-redirects HTTP (80) -> HTTPS.
-# The cert file should be the full chain (leaf + intermediates); the key must
-# be unencrypted PEM. Both are mounted read-only via docker-compose (./certs).
-#
-# For local HTTP-only testing, comment out the two lines below and use `:80 {`.
-atlas.hearst.com {
-    tls /etc/caddy/certs/atlas-fullchain.crt /etc/caddy/certs/atlas.key
+# ===========================================================================
+# PRODUCTION HTTPS — ENABLE AT DOMAIN CUTOVER (not active yet)
+# ===========================================================================
+# Prerequisites before enabling: certs present in ./certs, DNS for
+# atlas.hearst.com pointing here, and FRONTEND_URL=https://atlas.hearst.com.
+# To cut over:
+#   1. Change the active site line below from `:80 {` to `atlas.hearst.com {`
+#   2. Add this line as the first line inside the block:
+#        tls /etc/caddy/certs/atlas-fullchain.crt /etc/caddy/certs/atlas.key
+#   3. Uncomment the ./certs volume in docker-compose.yml (caddy service)
+#   4. Set FRONTEND_URL and rebuild the frontend (see docker-compose.yml)
+# Caddy then serves HTTPS on 443 and auto-redirects HTTP (80) -> HTTPS.
+# ===========================================================================
 
+# HTTP only (no HTTPS, no certificate warnings) — active until cutover.
+# Using :80 to serve HTTP only (works with any hostname).
+:80 {
     # Reverse proxy API requests to backend (must come before /)
     handle /api/* {
         reverse_proxy backend:3001 {

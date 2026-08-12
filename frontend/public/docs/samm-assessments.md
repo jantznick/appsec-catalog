@@ -1,12 +1,12 @@
 # SAMM Assessments
 
-Atlas provides a company-level OWASP SAMM 2.0 questionnaire from the **Maturity assessment** tab on each company page. Starting an assessment there automatically uses that company; there is no separate company-selection screen.
+Orbit provides a company-level OWASP SAMM 2.0 questionnaire from the **Maturity assessment** tab on each company page. Starting an assessment there automatically uses that company; there is no separate company-selection screen.
 
 ## Questionnaire
 
-The assessment uses the OWASP SAMM 2.0 structure with an Atlas-authored, versioned question bank. It includes all five business functions, 15 security practices, and two concrete questions per practice—one for each SAMM stream.
+The assessment uses the OWASP SAMM 2.0 structure with an Orbit-authored, versioned question bank. It includes all five business functions, 15 security practices, and two concrete questions per practice—one for each SAMM stream.
 
-Each question provides four factual operating states. Atlas maps those states internally, averages both stream answers into a practice score, and calculates the company score as the simple average of all 15 practice scores. Users are never asked to select their own maturity level.
+Each question provides four factual operating states. Orbit maps those states internally, averages both stream answers into a practice score, and calculates the company score as the simple average of all 15 practice scores. Users are never asked to select their own maturity level.
 
 ## Workflow
 

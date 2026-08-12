@@ -152,7 +152,7 @@ export function DeveloperDashboard() {
           <ActionLink to="/deployment-tokens" title="Manage deployment access" detail="Configure tokens for CI/CD integration." />
         </Tier>
       </DashboardGrid>
-      <PreviewNotice text="Finding counts remain placeholders until Wiz SAST repository mappings are defined; the remaining metrics are derived from Atlas inventory and integrations." />
+      <PreviewNotice text="Finding counts remain placeholders until Wiz SAST repository mappings are defined; the remaining metrics are derived from Orbit inventory and integrations." />
     </div>
   );
 }
@@ -224,7 +224,7 @@ export function ApplicationOwnerDashboard() {
             detail="Manual control overrides recorded"
           />
           <Metric label="Evidence needing refresh" detail="Requires an evidence model and freshness rules" />
-          <ActionLink to="/whats-new" title="Review recent changes" detail="See the latest Atlas workflow and product updates." />
+          <ActionLink to="/whats-new" title="Review recent changes" detail="See the latest Orbit workflow and product updates." />
         </Tier>
       </DashboardGrid>
       <PreviewNotice text="Metrics aggregate across the applications currently in scope. Per-owner scoping and finding counts arrive with role-based access and Wiz SAST." />
@@ -303,7 +303,7 @@ export function ProgramOperationsDashboard() {
           <ActionLink to="/applications" title="Review inventory quality" detail="Open the catalog to correct application records." />
         </Tier>
       </DashboardGrid>
-      <PreviewNotice text="Remediation MTTR and finding counts remain placeholders pending Wiz history; coverage, governance, and data-quality metrics are derived from Atlas today." />
+      <PreviewNotice text="Remediation MTTR and finding counts remain placeholders pending Wiz history; coverage, governance, and data-quality metrics are derived from Orbit today." />
     </div>
   );
 }

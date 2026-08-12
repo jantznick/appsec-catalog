@@ -146,7 +146,7 @@ export function SammAssessments() {
     return (
       <div className="mx-auto max-w-xl px-4 py-16 text-center">
         <h1 className="text-2xl font-semibold text-gray-900">Assessment unavailable</h1>
-        <p className="mt-3 text-sm text-gray-600">The Atlas API did not return the approved maturity question bank. Restart the backend and refresh this page.</p>
+        <p className="mt-3 text-sm text-gray-600">The Orbit API did not return the approved maturity question bank. Restart the backend and refresh this page.</p>
         <Link to={exitPath} className="mt-6 inline-block text-sm font-medium text-blue-700 hover:text-blue-800">Exit assessment</Link>
       </div>
     );
@@ -156,7 +156,7 @@ export function SammAssessments() {
     <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
       <header>
         <div className="flex items-center justify-between gap-4 text-sm">
-          <span className="font-medium text-gray-600">{assessment?.company?.name || 'Company'} · Atlas SAMM-aligned assessment</span>
+          <span className="font-medium text-gray-600">{assessment?.company?.name || 'Company'} · Orbit SAMM-aligned assessment</span>
           <Link to={exitPath} className="text-blue-700 hover:text-blue-800">Save & finish later</Link>
         </div>
         <div className="mt-5 flex items-center gap-4">

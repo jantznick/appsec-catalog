@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ============================================================================
-   Atlas — single dark theme (no toggle)
+   Orbit — single dark theme (no toggle)
    ----------------------------------------------------------------------------
    The app uniformly uses the "light-tint background + dark text" idiom
    (bg-white / bg-*-50 / bg-*-100 with text-gray-900 / text-*-800). We remap the
