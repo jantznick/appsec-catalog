@@ -121,15 +121,19 @@ All four `OKTA_ISSUER` / `OKTA_CLIENT_ID` / `OKTA_CLIENT_SECRET` /
 
 1. **Applications → Create App Integration → OIDC – Web Application.**
 2. **Grant type:** Authorization Code.
-3. **Sign-in redirect URIs** — add both dev and prod callback URLs:
+3. **Sign-in redirect URIs** — the OIDC **callback** (ends in `/callback`); must
+   match `OKTA_REDIRECT_URI` exactly. Add both dev and prod:
    - `http://localhost:5000/api/auth/okta/callback`
    - `https://YOUR-DOMAIN/api/auth/okta/callback`
-4. **Sign-out redirect URIs** (optional, for single-logout):
+4. **Initiate login URI** — the **login** route (ends in `/login`), *not* the
+   callback. Only needed so the **Okta dashboard tile** works (IdP-initiated). Set:
+   - `https://YOUR-DOMAIN/api/auth/okta/login`
+5. **Sign-out redirect URIs** (optional, for single-logout):
    - `http://localhost:3000`
    - `https://YOUR-DOMAIN`
-5. **Assignments:** assign the users/groups who should have access.
-6. Copy the **Client ID** and **Client secret** into `backend/.env`.
-7. *(Optional, group-based admin only)* Add a `groups` claim to your
+6. **Assignments:** assign the users/groups who should have access.
+7. Copy the **Client ID** and **Client secret** into `backend/.env`.
+8. *(Optional, group-based admin only)* Add a `groups` claim to your
    authorization server (**Security → API → Authorization Servers → *server* →
    Claims**): name it `groups`, include it in the **ID token**, filter to the
    groups you care about. Then set `OKTA_ADMIN_GROUP` and add `groups` to
@@ -162,6 +166,45 @@ All four `OKTA_ISSUER` / `OKTA_CLIENT_ID` / `OKTA_CLIENT_SECRET` /
 - Okta secrets stay server-side only; the frontend never sees them.
 
 ---
+
+## Troubleshooting
+
+### Existing users can't link — "email_verified claim is not true"
+Symptom: an existing password user's **first** Okta login fails and redirects to
+`/login?error=okta`; the backend logs
+`Refusing to link Okta identity to existing account for <email>: email_verified claim is not true`.
+
+Cause: email-based linking onto a pre-existing account requires the IdP to assert
+`email_verified === true` (a strict boolean). If your authorization server does
+not emit the claim, emits it as the string `"true"`, or emits `false`, the guard
+blocks the link.
+
+Scope of impact: **only the migration of existing accounts.** Brand-new users
+(no local account yet) are still provisioned normally — the guard does not apply
+to them. Returning Okta users match by `oktaSub` and are also unaffected.
+
+Fixes, in order of preference:
+1. **Emit the claim in Okta (recommended).** On a **custom** authorization server
+   (`/oauth2/default`), `email_verified` is usually not included by default — add
+   it: **Security → API → Authorization Servers → *server* → Claims → Add Claim**,
+   name `email_verified`, include in the **ID token**, value a boolean expression
+   your Okta team maps for your directory (org auth servers typically emit it
+   automatically with the `email` scope). Confirm the emitted value is boolean
+   `true`, not `"true"`.
+2. **Opt into trusting unverified email (code flag).** Because a corporate Okta
+   directory centrally manages emails (users can't self-edit them), some teams
+   accept email linking without the claim. This is gated by
+   `OKTA_ALLOW_UNVERIFIED_EMAIL_LINK=true` (default off). Only enable it if you
+   trust that email addresses in your Okta directory are authoritative — it
+   removes the account-takeover guard for email-based linking.
+3. **Pre-seed `oktaSub`.** If you can map existing users' emails to their Okta
+   `sub` out of band, populate `User.oktaSub` before cutover so they match by
+   `sub` and never hit the guard. Most involved; rarely necessary.
+
+### The Okta dashboard tile errors (`error=okta_state`)
+The tile is IdP-initiated; our flow is SP-initiated. Set the app's **Initiate
+login URI** to `https://YOUR-DOMAIN/api/auth/okta/login` so a tile click starts
+our normal flow. Starting from within the app ("Sign in with Okta") is unaffected.
 
 ## Local development / testing
 

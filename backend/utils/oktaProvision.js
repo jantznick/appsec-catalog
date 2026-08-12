@@ -62,7 +62,19 @@ export async function provisionOktaUser(claims) {
   // Security: only auto-link an Okta identity onto a *pre-existing* local
   // account when the IdP asserts the email is verified. Matching by oktaSub is
   // already a trusted binding, so this guard applies only to email-based links.
-  if (user && !matchedBySub && claims.email_verified !== true) {
+  //
+  // Escape hatch: OKTA_ALLOW_UNVERIFIED_EMAIL_LINK=true bypasses this guard for
+  // deployments whose corporate Okta directory does not emit `email_verified`
+  // but where email addresses are centrally managed and therefore trusted.
+  // Default off (safe). See OKTA_SSO.md → Troubleshooting.
+  const allowUnverifiedLink =
+    process.env.OKTA_ALLOW_UNVERIFIED_EMAIL_LINK === 'true';
+  if (
+    user &&
+    !matchedBySub &&
+    claims.email_verified !== true &&
+    !allowUnverifiedLink
+  ) {
     throw new Error(
       `Refusing to link Okta identity to existing account for ${email}: email_verified claim is not true`
     );

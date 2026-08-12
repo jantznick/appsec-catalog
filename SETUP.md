@@ -171,14 +171,27 @@ password sign-up is disabled.
 1. In the Okta Admin Console: **Applications → Create App Integration → OIDC –
    Web Application**.
 2. **Grant type:** Authorization Code.
-3. **Sign-in redirect URIs** — add both:
+3. **Sign-in redirect URIs** — this is the OIDC **callback** (ends in
+   `/callback`); it must match `OKTA_REDIRECT_URI` in `backend/.env` exactly.
+   Add both:
    - Dev: `http://localhost:5000/api/auth/okta/callback`
    - Prod: `https://YOUR-DOMAIN/api/auth/okta/callback`
-4. **Sign-out redirect URIs** (optional, for single-logout):
+4. **Initiate login URI** (optional — only needed for the Okta dashboard **tile**)
+   — this is our **login** route (ends in `/login`), *not* the callback. Set it so
+   that clicking the app tile in Okta starts our normal SP-initiated flow:
+   - Prod: `https://YOUR-DOMAIN/api/auth/okta/login`
+
+   > ⚠️ The "Sign-in redirect URI" (`…/callback`) and the "Initiate login URI"
+   > (`…/login`) are **different fields pointing at different endpoints** — they
+   > differ only in the last path segment, so don't swap them. The callback is
+   > required; the initiate-login URI is only for the tile shortcut. If you leave
+   > it blank, "Sign in with Okta" from within the app still works; only the Okta
+   > dashboard tile would error.
+5. **Sign-out redirect URIs** (optional, for single-logout):
    - Dev: `http://localhost:3000`
    - Prod: `https://YOUR-DOMAIN`
-5. **Assignments:** assign the users/groups who should have access.
-6. *(Optional — group-based admin only)* Admin is managed manually by default.
+6. **Assignments:** assign the users/groups who should have access.
+7. *(Optional — group-based admin only)* Admin is managed manually by default.
    To drive admin from Okta instead, add a `groups` claim to your authorization
    server (**Security → API → Authorization Servers → *your server* → Claims**):
    name it `groups`, include it in the **ID token**, and filter to the groups you
