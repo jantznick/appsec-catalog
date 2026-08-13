@@ -49,8 +49,14 @@ let cookieDomain = undefined;
 try {
   const url = new URL(frontendUrl);
   cookieDomain = url.hostname;
-  // Don't set domain for localhost (causes issues)
-  if (cookieDomain === 'localhost' || cookieDomain === '127.0.0.1') {
+  // Don't set an explicit cookie Domain for localhost or for a bare IP address.
+  // Per RFC 6265 a Domain attribute cannot be an IP literal, so browsers reject
+  // the Set-Cookie entirely and login won't persist (e.g. the IP-only security-
+  // test instance). Leaving Domain unset makes the cookie host-only, which is
+  // exactly what we want for a single-host deployment. Real domains (prod) are
+  // unaffected.
+  const isIpLiteral = /^\d{1,3}(\.\d{1,3}){3}$/.test(cookieDomain) || cookieDomain.includes(':');
+  if (cookieDomain === 'localhost' || cookieDomain === '127.0.0.1' || isIpLiteral) {
     cookieDomain = undefined;
   }
 } catch (e) {

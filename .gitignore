@@ -16,7 +16,9 @@ dist/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.sectest
 !.env.example
+!.env.sectest.example
 
 # TLS certificates / private keys (mounted into Caddy at runtime)
 certs/

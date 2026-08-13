@@ -1,0 +1,107 @@
+# Side-by-side SECURITY-TEST instance (tiny, single admin user, no domain).
+#
+# Runs a fully isolated second copy of the app on the SAME host as prod without
+# touching it. Isolation comes from the Compose PROJECT NAME (appsec-sectest):
+# Compose namespaces the network, the volumes, and default container names by
+# project, so this instance gets its own DB, its own storage, and its own
+# sessions. The only manual de-conflicting needed is (a) dropping the two
+# hardcoded container_name values from the prod file and (b) publishing on
+# distinct host ports.
+#
+# No reverse proxy (Caddy) here — for a tiny instance we just publish the
+# frontend and backend on two ports. Both are reached at the SAME server IP, and
+# browsers key cookies by host (ignoring port) and treat http://IP:8080 and
+# http://IP:8081 as *same-site*, so the session cookie flows and CORS passes.
+#
+# Deliberately DIFFERENT from prod:
+#   - No Docker socket mount and no /repo mount (admin "deploy" feature is a
+#     host-takeover risk on a pen-test target — removed).
+#   - Postgres is NOT published (backend reaches it on the private network).
+#   - Plain HTTP on an IP (no cert, no domain). secure-cookie is off because the
+#     origin is http://, which is what lets login work over the IP.
+#
+# Run it (see .env.sectest.example for the env file):
+#   docker compose -p appsec-sectest --env-file .env.sectest -f docker-compose.sectest.yml up -d --build
+#
+# Seed the single admin user (first boot only), then log in with it:
+#   docker compose -p appsec-sectest -f docker-compose.sectest.yml exec backend \
+#     node scripts/create-admin.js you@example.com 'a-strong-password'
+#
+# Tear it down (leaves prod untouched; add -v to also wipe the test volumes):
+#   docker compose -p appsec-sectest -f docker-compose.sectest.yml down
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    # No container_name -> Compose names it appsec-sectest-postgres-1 (no clash
+    # with the prod "appsec-catalog-db" container).
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sectest}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sectest_password}
+      POSTGRES_DB: ${POSTGRES_DB:-appsec_catalog_sectest}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sectest} -d ${POSTGRES_DB:-appsec_catalog_sectest}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - appsec-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.sectest
+      args:
+        # Baked into the JS bundle at build time: the PUBLIC origin of the
+        # BACKEND, so the browser calls the API directly. Must be the backend's
+        # published port (8081), same server IP as the frontend.
+        # (Dockerfile.sectest enables this ARG; the prod Dockerfile is untouched.)
+        - VITE_API_URL=${BACKEND_ORIGIN:-http://localhost:8081}
+    ports:
+      - "${FRONTEND_HTTP_PORT:-8080}:3000"
+    depends_on:
+      - backend
+    networks:
+      - appsec-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    # Load the test env file for backend runtime secrets (SESSION_SECRET,
+    # INTEGRATIONS_ENCRYPTION_KEY, etc.). Values under `environment:` below win.
+    env_file:
+      - path: .env.sectest
+        required: false
+    environment:
+      - PORT=3001
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-sectest}:${POSTGRES_PASSWORD:-sectest_password}@postgres:5432/${POSTGRES_DB:-appsec_catalog_sectest}
+      # Drives CORS allowlist + cookie behavior. Set to the FRONTEND origin so
+      # the browser's Origin (the frontend) is accepted. Same IP as the backend
+      # -> hostname matches -> CORS allows credentialed requests.
+      - FRONTEND_URL=${FRONTEND_ORIGIN:-http://localhost:8080}
+      - NODE_ENV=production
+      # Admin-triggered deploy feature is intentionally disabled (no docker.sock
+      # mount is provided, so this path stays inert).
+      - DEPLOY_HOST_WORKDIR=
+      - PRODUCT_UPDATES_GIT_WORKDIR=
+    ports:
+      - "${BACKEND_HTTP_PORT:-8081}:3001"
+    volumes:
+      - backend_storage:/app/storage
+      # NOTE: deliberately NO /var/run/docker.sock and NO /repo mount here.
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - appsec-network
+
+volumes:
+  postgres_data:
+  backend_storage:
+
+networks:
+  appsec-network:
+    driver: bridge
