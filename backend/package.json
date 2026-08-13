@@ -19,7 +19,7 @@
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "express-session": "^1.18.2",
-    "js-yaml": "^4.2.0",
+    "js-yaml": "^4.3.0",
     "octokit": "^5.0.5",
     "openid-client": "^6.8.4",
     "pg": "^8.16.3",
