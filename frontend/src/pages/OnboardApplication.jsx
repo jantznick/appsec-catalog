@@ -354,7 +354,7 @@ export function OnboardApplication() {
                   type="url"
                   value={formData.repoUrl}
                   onChange={(e) => setFormData({ ...formData, repoUrl: e.target.value })}
-                  placeholder="https://github.com/..."
+                  placeholder="https://github.com/..., https://bitbucket.org/..., or https://dev.azure.com/..."
                 />
                 <Select
                   label="How often does it deploy?"

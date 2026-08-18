@@ -1038,7 +1038,7 @@ export function ApplicationDetail() {
           onClick={() => githubFlow.openLinkPicker()}
           disabled={githubFlow.busy}
         >
-          Link a GitHub repo
+          Link a repository
         </Button>
       </div>
     ) : null;

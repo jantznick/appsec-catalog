@@ -6,9 +6,10 @@ import { useRepoLinkFlow } from '../../hooks/useRepoLinkFlow.jsx';
 import { AdvisoryCell } from './AdvisoryCell.jsx';
 import { AdvisoryDetailsModal } from './AdvisoryDetailsModal.jsx';
 import { summarizeOsv } from '../../utils/osv.js';
+import { scmProviderLabel } from '../../lib/integrationLabels.js';
 
 /**
- * Per-application GitHub repo panel (Integrations tab). Shows the linked repo's detected languages,
+ * Per-application source-control repo panel (Integrations tab). Shows the linked repo's detected languages,
  * frameworks, and dependency inventory, with Change / Sync / Unlink. All actions run through the
  * shared repo-link flow (link/change/sync open the Language/Framework modal) and are independent of
  * the metadata edit form.
@@ -43,19 +44,19 @@ export function ApplicationScmBlock({ application, canManage, onRefresh }) {
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <CardTitle>GitHub repository</CardTitle>
+              <CardTitle>Source-control repository</CardTitle>
               <p className="text-sm text-gray-500 mt-1 max-w-2xl">
                 Link a repository to pull languages, frameworks, and dependencies from the source.
                 Uses your own{' '}
                 <Link to="/settings/integrations" className="text-blue-600 hover:underline">
-                  connected GitHub account
+                  connected source-control account
                 </Link>
                 .
               </p>
             </div>
             {canManage && !repo && (
               <Button variant="primary" size="sm" onClick={flow.openLinkPicker} className="shrink-0">
-                Link a GitHub repo
+                Link a repository
               </Button>
             )}
           </div>
@@ -78,6 +79,11 @@ export function ApplicationScmBlock({ application, canManage, onRefresh }) {
                   >
                     {repo.fullName}
                   </a>
+                  {repo.provider ? (
+                    <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600 align-middle">
+                      {scmProviderLabel(repo.provider)}
+                    </span>
+                  ) : null}
                   {repo.isPrivate ? (
                     <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600 align-middle">
                       Private
@@ -123,9 +129,11 @@ export function ApplicationScmBlock({ application, canManage, onRefresh }) {
                         className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-surface px-2.5 py-1 text-xs text-gray-700"
                       >
                         <span className="font-medium">{lang}</span>
-                        <span className="text-gray-400">
-                          {Math.round((bytes / totalLangBytes) * 100)}%
-                        </span>
+                        {languageEntries.length > 1 ? (
+                          <span className="text-gray-400">
+                            {Math.round((bytes / totalLangBytes) * 100)}%
+                          </span>
+                        ) : null}
                       </span>
                     ))}
                   </div>

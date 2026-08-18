@@ -7,16 +7,20 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card.
 import { Button } from '../components/ui/Button.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import useAuthStore from '../store/authStore.js';
-import { integrationProviderLabel } from '../lib/integrationLabels.js';
+import { integrationProviderLabel, scmProviderLabel } from '../lib/integrationLabels.js';
 import { AddIntegrationModal } from '../components/integrations/AddIntegrationModal.jsx';
 import { ScmRepoPickerModal } from '../components/integrations/ScmRepoPickerModal.jsx';
 
 /**
- * Per-user GitHub account connection (GitHub App). Available to any authenticated user —
- * it links their own GitHub so they can attach repos to applications.
+ * Per-user source-control account connection. Available to any authenticated user —
+ * it links their own GitHub / Bitbucket / Azure DevOps so they can attach repos to applications.
  */
-const PROVIDER_LABELS = { GITHUB: 'GitHub', GITLAB: 'GitLab', BITBUCKET: 'Bitbucket', AZURE_DEVOPS: 'Azure DevOps' };
-const providerLabel = (id) => PROVIDER_LABELS[id] || id;
+const DEFAULT_HOSTS = {
+  GITHUB: 'github.com',
+  BITBUCKET: 'bitbucket.org',
+  GITLAB: 'gitlab.com',
+  AZURE_DEVOPS: 'dev.azure.com',
+};
 
 function ConnectedAccountsCard() {
   const navigate = useNavigate();
@@ -110,8 +114,8 @@ function ConnectedAccountsCard() {
                         <p className="text-sm font-semibold text-gray-900 truncate">
                           @{c.login}
                           <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 align-middle">
-                            {providerLabel(c.provider)}
-                            {c.host && c.host !== 'github.com' ? ` · ${c.host}` : ''}
+                            {scmProviderLabel(c.provider)}
+                            {c.host && c.host !== DEFAULT_HOSTS[c.provider] ? ` · ${c.host}` : ''}
                           </span>
                         </p>
                         <p className="text-xs text-green-800 font-medium">Connected</p>
@@ -136,7 +140,7 @@ function ConnectedAccountsCard() {
                     window.location.href = api.scmConnectUrl(p.id);
                   }}
                 >
-                  {connections.some((c) => c.provider === p.id) ? `Add another ${providerLabel(p.id)}` : `Connect ${providerLabel(p.id)}`}
+                  {connections.some((c) => c.provider === p.id) ? `Add another ${scmProviderLabel(p.id)}` : `Connect ${scmProviderLabel(p.id)}`}
                 </Button>
               ))}
             </div>
@@ -172,7 +176,7 @@ function ConnectedAccountsCard() {
         }
       >
         <p className="text-gray-700">
-          Disconnect {disconnectTarget ? `@${disconnectTarget.login} (${providerLabel(disconnectTarget.provider)})` : 'this account'}?
+          Disconnect {disconnectTarget ? `@${disconnectTarget.login} (${scmProviderLabel(disconnectTarget.provider)})` : 'this account'}?
           Repositories already linked to applications stay linked, but syncing them will require
           reconnecting.
         </p>
@@ -183,7 +187,7 @@ function ConnectedAccountsCard() {
         onClose={() => setCreatePickerOpen(false)}
         onSelect={(repo) => {
           setCreatePickerOpen(false);
-          navigate(`/applications/new?repo=${encodeURIComponent(repo.fullName)}`);
+          navigate(`/applications/new?repo=${encodeURIComponent(repo.fullName)}${repo.htmlUrl ? `&repoUrl=${encodeURIComponent(repo.htmlUrl)}` : ''}${repo.connectionId ? `&connectionId=${encodeURIComponent(repo.connectionId)}` : ''}`);
         }}
         title="Create an application from a repository"
         confirmLabel="Continue"
@@ -193,7 +197,7 @@ function ConnectedAccountsCard() {
 }
 
 /**
- * Integration settings. The "My GitHub account" panel is available to every authenticated user;
+ * Integration settings. The connected-accounts panel is available to every authenticated user;
  * catalog-wide (enterprise) and company credential management remain admin-only.
  */
 export function IntegrationSettings() {
@@ -289,7 +293,7 @@ export function IntegrationSettings() {
         </Link>
         <h1 className="text-3xl font-bold text-gray-800 mb-2">Integration settings</h1>
         <p className="text-gray-600 max-w-2xl">
-          Connect your own GitHub account below to link repositories to applications.
+          Connect your own GitHub, Bitbucket, or Azure DevOps account below to link repositories to applications.
           {admin
             ? ' Catalog-wide API credentials below apply to all companies unless a company adds its own keys on its company page.'
             : ''}

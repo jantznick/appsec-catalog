@@ -923,7 +923,7 @@ export const api = {
   getIntegrationAdminCompanyOverview: () =>
     apiRequest('/api/integrations/admin/company-overview'),
 
-  // GitHub integration (per-user account connection + per-application repo linking)
+  // SCM integration (per-user account connection + per-application repo linking)
   /** Per-user SCM state: { configured, providers, connections: [{id, provider, host, login, ...}] } */
   getScmStatus: () => apiRequest('/api/integrations/scm/status'),
 
@@ -963,7 +963,7 @@ export const api = {
     return apiRequest(`/api/integrations/scm/sbom${qs ? `?${qs}` : ''}`);
   },
 
-  /** Link a repo by { owner, name } or by { url } (a github.com repo URL). */
+  /** Link a repo by { owner, name } or by { url } (github.com / bitbucket.org / gitlab.com / Azure DevOps). */
   linkApplicationScmRepo: (applicationId, body) =>
     apiRequest(`/api/applications/${applicationId}/scm/link`, {
       method: 'PUT',
@@ -977,7 +977,7 @@ export const api = {
   rescanApplicationScmAdvisories: (applicationId) =>
     apiRequest(`/api/applications/${applicationId}/scm/rescan-advisories`, { method: 'POST' }),
 
-  /** Persist language/framework from GitHub. Pass explicit { language, framework } to apply edited values. */
+  /** Persist language/framework from the linked repo. Pass explicit { language, framework } to apply edited values. */
   applyApplicationScmData: (applicationId, body = {}) =>
     apiRequest(`/api/applications/${applicationId}/scm/apply`, {
       method: 'POST',

@@ -23,7 +23,7 @@ function SortIcon({ dir }) {
 }
 
 /**
- * Read-only dependency inventory for a single application's linked GitHub repo. Uses the data
+ * Read-only dependency inventory for a single application's linked source-control repo. Uses the data
  * already present on the application payload (scmRepoLink.repo) — no extra fetch.
  *
  * @param {{ application: object, onRescan?: () => Promise<void> }} props
@@ -92,7 +92,7 @@ export function ApplicationDependenciesPanel({ application, onRescan }) {
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <p className="text-sm text-gray-600">No GitHub repository linked to this application.</p>
+          <p className="text-sm text-gray-600">No repository linked to this application.</p>
           <p className="text-sm text-gray-500 mt-2">
             Link one in the <span className="font-medium">Integrations</span> tab to pull its
             dependency inventory.

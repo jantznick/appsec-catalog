@@ -181,6 +181,9 @@ router.get('/integrations/scm/callback', async (req, res) => {
       scopes: identity.scopes,
       externalLogin: identity.login,
     };
+    if (identity.refreshToken) {
+      data.encryptedRefreshToken = encryptIntegrationPayload(identity.refreshToken);
+    }
     await prisma.scmConnection.upsert({
       where: {
         userId_provider_host_externalUserId: {
@@ -273,6 +276,9 @@ router.get('/integrations/scm/repo-intel', requireAuth, async (req, res) => {
     integrationLog('error', { provider: connection.provider, op: 'repo_intel', error: e.message });
     if (e.status === 404) {
       return res.status(404).json({ error: 'Repository not found or not accessible' });
+    }
+    if (e.status === 400) {
+      return res.status(400).json({ error: e.message });
     }
     res.status(502).json({ error: 'SCM API error', message: 'Could not read that repository.' });
   }
@@ -461,12 +467,32 @@ async function loadAppForLink(req, res) {
   return app;
 }
 
-/** Parse a repo URL (GitHub/GitLab/Bitbucket https or ssh) into { owner, name }, or null. */
+/** Parse a repo URL (GitHub/GitLab/Bitbucket/Azure DevOps https or ssh) into { owner, name }, or null. */
+function decodeUrlSeg(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 function parseRepoUrl(url) {
   if (typeof url !== 'string') return null;
-  const m = url
-    .trim()
-    .match(/(?:github|gitlab|bitbucket)\.[a-z.]+[/:]([^/\s]+)\/([^/\s#?]+?)(?:\.git)?(?:[/#?].*)?$/i);
+  const trimmed = url.trim();
+
+  // Azure DevOps Services: https://dev.azure.com/{org}/{project}/_git/{repo}
+  let m = trimmed.match(/dev\.azure\.com\/([^/\s]+)\/([^/\s]+)\/_git\/([^/\s#?]+)/i);
+  if (m) return { owner: `${decodeUrlSeg(m[1])}/${decodeUrlSeg(m[2])}`, name: decodeUrlSeg(m[3]).replace(/\.git$/i, '') };
+
+  // Legacy visualstudio.com: https://{org}.visualstudio.com/[DefaultCollection/]{project}/_git/{repo}
+  m = trimmed.match(/([^.\/\s]+)\.visualstudio\.com\/(?:DefaultCollection\/)?([^/\s]+)\/_git\/([^/\s#?]+)/i);
+  if (m) return { owner: `${decodeUrlSeg(m[1])}/${decodeUrlSeg(m[2])}`, name: decodeUrlSeg(m[3]).replace(/\.git$/i, '') };
+
+  // SSH: git@ssh.dev.azure.com:v3/{org}/{project}/{repo}
+  m = trimmed.match(/ssh\.dev\.azure\.com:v3\/([^/\s]+)\/([^/\s]+)\/([^/\s#?]+)/i);
+  if (m) return { owner: `${decodeUrlSeg(m[1])}/${decodeUrlSeg(m[2])}`, name: decodeUrlSeg(m[3]).replace(/\.git$/i, '') };
+
+  m = trimmed.match(/(?:github|gitlab|bitbucket)\.[a-z.]+[/:]([^/\s]+)\/([^/\s#?]+?)(?:\.git)?(?:[/#?].*)?$/i);
   if (!m) return null;
   return { owner: m[1], name: m[2] };
 }
@@ -560,6 +586,9 @@ router.put('/applications/:id/scm/link', requireAuth, async (req, res) => {
     console.error('Link repo error:', e);
     if (e.status === 404) {
       return res.status(404).json({ error: 'Repository not found or not accessible' });
+    }
+    if (e.status === 400) {
+      return res.status(400).json({ error: e.message });
     }
     res.status(502).json({ error: 'SCM API error', message: 'Could not read that repository.' });
   }

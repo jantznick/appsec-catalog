@@ -1,9 +1,10 @@
 /**
  * SCM provider registry + provider-agnostic helpers.
  *
- * To add a provider (GitLab, Bitbucket, Azure DevOps, self-hosted variants): implement the
- * ScmProvider contract in a new adapter and register it in PROVIDERS below. Everything else — the
- * routes, the dependency/framework/language detection, the storage, and the whole frontend — is
+ * To add a provider (GitLab, self-hosted variants): implement the
+ * ScmProvider contract in a new adapter and register it in PROVIDERS below. GitHub, Bitbucket
+ * Cloud, and Azure DevOps are already registered. Everything else — the routes, the
+ * dependency/framework/language detection, the storage, and the whole frontend — is
  * already provider-agnostic.
  *
  * @typedef {Object} ScmProvider
@@ -11,16 +12,20 @@
  * @property {string} host
  * @property {() => boolean} isConfigured
  * @property {(state: string) => string} startConnect         // begin an OAuth/app connection
- * @property {(code: string) => Promise<{token, externalUserId, login, avatarUrl, scopes}>} exchangeOAuthCode
+ * @property {(code: string) => Promise<{token, refreshToken?, externalUserId, login, avatarUrl, scopes}>} exchangeOAuthCode
  * @property {(connection: object) => Promise<Array<object>>} listRepos
  * @property {(connection: object, owner: string, name: string) => Promise<{metadata, languages, dependencies}>} fetchRepoIntel
  */
 import { githubProvider } from './githubProvider.js';
-import { PROVIDER_GITHUB } from '../../integrations/constants.js';
+import { bitbucketProvider } from './bitbucketProvider.js';
+import { azureDevopsProvider } from './azureDevopsProvider.js';
+import { PROVIDER_GITHUB, PROVIDER_BITBUCKET, PROVIDER_AZURE_DEVOPS } from '../../integrations/constants.js';
 
 /** @type {Record<string, ScmProvider>} */
 const PROVIDERS = {
   [PROVIDER_GITHUB]: githubProvider,
+  [PROVIDER_BITBUCKET]: bitbucketProvider,
+  [PROVIDER_AZURE_DEVOPS]: azureDevopsProvider,
 };
 
 /** @returns {ScmProvider} */
