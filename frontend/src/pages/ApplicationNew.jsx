@@ -95,13 +95,13 @@ export function ApplicationNew() {
     return () => clearTimeout(timer);
   }, [interfaceSearch]);
 
-  // Prefill a repo when arriving from the GitHub integration (?repo=owner/name).
+  // Prefill a repo when arriving from Integration settings (?repo=owner/name).
   // Prefill the form from a chosen repo: repo URL + name, and (best-effort) the detected language
-  // and framework pulled from GitHub. All values remain editable before submit.
+  // and framework pulled from the connected source-control account. All values remain editable before submit.
   const prefillFromRepo = async ({ owner, name, fullName, htmlUrl, connectionId }) => {
-    const url = htmlUrl || `https://github.com/${fullName}`;
+    const url = htmlUrl || '';
     setSelectedRepo({ owner, name, fullName, htmlUrl: url, connectionId });
-    setFormData((prev) => ({ ...prev, repoUrl: url, name: prev.name || name }));
+    setFormData((prev) => ({ ...prev, repoUrl: url || prev.repoUrl, name: prev.name || name }));
     try {
       const intel = await api.getScmRepoIntel(owner, name, connectionId);
       setFormData((prev) => ({
@@ -118,9 +118,17 @@ export function ApplicationNew() {
   useEffect(() => {
     const repoParam = searchParams.get('repo');
     if (!repoParam || !repoParam.includes('/')) return;
-    const [owner, name] = repoParam.split('/');
-    if (!owner || !name) return;
-    prefillFromRepo({ owner, name, fullName: `${owner}/${name}` });
+    const parts = repoParam.split('/').filter(Boolean);
+    if (parts.length < 2) return;
+    const name = parts[parts.length - 1];
+    const owner = parts.slice(0, -1).join('/');
+    prefillFromRepo({
+      owner,
+      name,
+      fullName: `${owner}/${name}`,
+      htmlUrl: searchParams.get('repoUrl') || '',
+      connectionId: searchParams.get('connectionId') || undefined,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -217,7 +225,7 @@ export function ApplicationNew() {
         interfaces: interfaces,
       });
 
-      // If a GitHub repo was selected, link it now (pulls languages/frameworks/dependencies).
+      // If a connected repo was selected, link it now (pulls languages/frameworks/dependencies).
       if (selectedRepo?.owner && selectedRepo?.name) {
         try {
           await api.linkApplicationScmRepo(application.id, {
@@ -225,7 +233,7 @@ export function ApplicationNew() {
             name: selectedRepo.name,
             connectionId: selectedRepo.connectionId,
           });
-          toast.success('Application created and GitHub repo linked');
+          toast.success('Application created and repository linked');
         } catch (linkErr) {
           toast.error(
             `Application created, but linking the repo failed: ${linkErr.message || 'try again from the app'}`,
@@ -296,7 +304,7 @@ export function ApplicationNew() {
                 />
                 <div className="flex flex-wrap items-center gap-2 mt-2">
                   <Button type="button" variant="secondary" size="sm" onClick={() => setGithubPickerOpen(true)}>
-                    Choose from GitHub
+                    Choose from connected repos
                   </Button>
                   {selectedRepo ? (
                     <span className="text-xs text-green-700">
@@ -691,7 +699,7 @@ export function ApplicationNew() {
         isOpen={githubPickerOpen}
         onClose={() => setGithubPickerOpen(false)}
         onSelect={handleSelectRepo}
-        title="Choose a GitHub repository to link"
+        title="Choose a repository to link"
         confirmLabel="Use this repo"
       />
     </div>

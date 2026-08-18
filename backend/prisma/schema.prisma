@@ -1035,7 +1035,7 @@ model ApplicationToolLink {
   @@index([provider])
 }
 
-// Per-user source-control connection (GitHub today; GitLab / Bitbucket / Azure DevOps in future).
+// Per-user source-control connection (GitHub, Bitbucket Cloud, and Azure DevOps today; GitLab in future).
 // One per user for now. `provider` selects the adapter; `host` supports self-hosted instances.
 // GitHub reads use installation tokens minted on demand (installationId is GitHub-specific).
 // Table name kept as GitHubConnection via @@map so the rename needs no data migration.

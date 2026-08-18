@@ -20,7 +20,7 @@ function computeDetected(repo) {
 }
 
 /**
- * Encapsulates the entire GitHub repo link/change/sync/unlink flow as a self-contained unit that is
+ * Encapsulates the entire repo link/change/sync/unlink flow as a self-contained unit that is
  * INDEPENDENT of any metadata edit form. Link/change/sync each open the Language/Framework modal
  * afterward (prefilled with detected values, showing the previous value as helper text); saving
  * persists immediately. Unlink just unlinks. After any change it calls `onChanged()` to refresh.
@@ -45,7 +45,7 @@ export function useRepoLinkFlow(application, onChanged) {
   const [prevFramework, setPrevFramework] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Open the Language/Framework modal only when GitHub actually detected something; otherwise there
+  // Open the Language/Framework modal only when the repo actually detected something; otherwise there
   // is nothing to confirm, so we skip it.
   const openLangFrameworkModal = (repo, previousLanguage, previousFramework) => {
     const det = computeDetected(repo);
@@ -136,7 +136,7 @@ export function useRepoLinkFlow(application, onChanged) {
         isOpen={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onSelect={onPickRepo}
-        title="Link a GitHub repository"
+        title="Link a repository"
         confirmLabel="Link repository"
         submitting={busy}
       />

@@ -223,7 +223,7 @@ export function Dependencies() {
         <h1 className="text-3xl font-bold text-gray-800">Dependencies</h1>
         <p className="text-gray-600 mt-1 max-w-2xl">
           Software bill of materials across {admin ? 'all applications' : 'your applications'} with a
-          linked GitHub repository. Search by package to find where a vulnerable dependency is used.
+          linked source-control repository. Search by package to find where a vulnerable dependency is used.
         </p>
       </div>
 
@@ -253,7 +253,7 @@ export function Dependencies() {
             <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/50 px-4 py-12 text-center">
               <p className="text-sm text-gray-600">No dependencies yet.</p>
               <p className="text-sm text-gray-500 mt-2">
-                Link a GitHub repository to an application (Application → Integrations tab) to populate
+                Link a repository to an application (Application → Integrations tab) to populate
                 its dependency inventory.
               </p>
             </div>

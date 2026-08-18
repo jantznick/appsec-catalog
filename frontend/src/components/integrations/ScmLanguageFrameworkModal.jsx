@@ -3,7 +3,7 @@ import { Button } from '../ui/Button.jsx';
 import { Input } from '../ui/Input.jsx';
 
 /**
- * The Language/Framework step of the GitHub link/change/sync flow. Prefilled with the repo's
+ * The Language/Framework step of the repo link/change/sync flow. Prefilled with the repo's
  * detected values; when a field already had a value, it is shown as "Previous: …" helper text so
  * the user can see what they're replacing. Saving persists immediately (its own flow — never
  * touches the metadata edit form).
@@ -32,7 +32,7 @@ export function ScmLanguageFrameworkModal({
     <Modal
       isOpen={isOpen}
       onClose={() => !saving && onClose()}
-      title="Language & framework from GitHub"
+      title="Language & framework from repository"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={saving}>

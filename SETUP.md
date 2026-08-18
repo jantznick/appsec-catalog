@@ -109,6 +109,10 @@ npm run dev
 - **GitHub** (users connect their own account and link repos to applications for automatic
   language/framework/dependency detection): see [GITHUB_INTEGRATION.md](./GITHUB_INTEGRATION.md).
   One-time admin setup registers a single GitHub App; after that users self-serve.
+- **Bitbucket Cloud** (same flow, OAuth consumer instead of a GitHub App): see
+  [BITBUCKET_INTEGRATION.md](./BITBUCKET_INTEGRATION.md).
+- **Azure DevOps Services** (same flow, Microsoft Entra ID app): see
+  [AZURE_DEVOPS_INTEGRATION.md](./AZURE_DEVOPS_INTEGRATION.md).
 
 ## Production Database Backup / Local Restore
 

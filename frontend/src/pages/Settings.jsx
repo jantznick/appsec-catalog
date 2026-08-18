@@ -71,7 +71,7 @@ const settingsSections = [
       },
       {
         label: 'Integration settings',
-        description: 'Connect your GitHub account; admins configure catalog-wide tool integrations.',
+        description: 'Connect your GitHub, Bitbucket, or Azure DevOps account; admins configure catalog-wide tool integrations.',
         to: '/settings/integrations',
       },
     ],

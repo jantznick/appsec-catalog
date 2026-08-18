@@ -83,9 +83,9 @@ openssl rand -hex 32
 
 Restart the backend after editing `.env`.
 
-> **Verify it's configured:** open **Settings → Integration settings**. The "My GitHub account"
+> **Verify it's configured:** open **Settings → Integration settings**. The connected-accounts
 > panel shows a **Connect GitHub** button when the App env is detected; if it says
-> "not configured," the backend didn't see all five `GITHUB_APP_*` vars.
+> no source-control provider is configured, the backend didn't see all five `GITHUB_APP_*` vars.
 
 ---
 
@@ -96,7 +96,7 @@ Each user, once logged in:
 1. **Settings → Integration settings → Connect GitHub.**
 2. GitHub asks them to **install/authorize** the App and **select which repositories** to grant.
 3. They're redirected back; their account shows as connected.
-4. On any application they can access, **Integrations tab → Link a GitHub repo** → pick a repo.
+4. On any application they can access, **Integrations tab → Link a repository** → pick a repo.
    Languages, frameworks, and dependencies are pulled immediately.
 
 Users can **Sync** (re-pull), **Apply** detected language/framework to the app's fields, and
@@ -117,7 +117,7 @@ company (admins see everything).
 | Symptom | Likely cause |
 |---|---|
 | "GitHub integration is not configured" on the settings panel | One or more of the five `GITHUB_APP_*` vars is missing; restart backend after editing `.env`. |
-| Redirected back with `?github=error` | Callback URL mismatch, "Request user authorization during installation" not enabled, or `INTEGRATIONS_ENCRYPTION_KEY` blank (token can't be encrypted). |
+| Redirected back with `?scm=error` | Callback URL mismatch, "Request user authorization during installation" not enabled, or `INTEGRATIONS_ENCRYPTION_KEY` blank (token can't be encrypted). |
 | Repo picker is empty | The App isn't installed on any repos for that user, or (for org repos) the org install is pending owner approval. |
 | A repo's dependencies look incomplete | Only **root-level** manifests are parsed (`package.json`, `requirements.txt`, `go.mod`, `pom.xml`, `composer.json`, `Gemfile`). Manifests in subfolders (monorepos) aren't picked up yet. Resolved versions come from lockfiles for npm and Composer; other ecosystems show the declared range. |
 
