@@ -1057,4 +1057,46 @@ export const api = {
     }
     return r.text();
   },
+
+  // ---- AI foundation (admin) ----------------------------------------------
+  getAiConfig: () => apiRequest('/api/ai/config'),
+  updateAiConfig: (data) =>
+    apiRequest('/api/ai/config', { method: 'PUT', body: JSON.stringify(data) }),
+  getAiPricing: (activeOnly = false) =>
+    apiRequest(`/api/ai/pricing${activeOnly ? '?activeOnly=true' : ''}`),
+  setAiPricing: (data) =>
+    apiRequest('/api/ai/pricing', { method: 'POST', body: JSON.stringify(data) }),
+  getAiAccess: () => apiRequest('/api/ai/access'),
+  setAiCompanyAccess: (companyId, data) =>
+    apiRequest(`/api/ai/access/${encodeURIComponent(companyId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  getAiUsage: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+    ).toString();
+    return apiRequest(`/api/ai/usage${qs ? `?${qs}` : ''}`);
+  },
+
+  // ---- AI (any authenticated user) ----------------------------------------
+  getAiUsageMine: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+    ).toString();
+    return apiRequest(`/api/ai/usage/mine${qs ? `?${qs}` : ''}`);
+  },
+  getAiAvailability: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+    ).toString();
+    return apiRequest(`/api/ai/availability${qs ? `?${qs}` : ''}`);
+  },
+
+  // ---- Threat-model co-pilot ----------------------------------------------
+  generateThreatModelDraft: (applicationId, body = {}) =>
+    apiRequest(`/api/applications/${encodeURIComponent(applicationId)}/threat-model/ai-draft`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };

@@ -64,6 +64,12 @@ const settingsSections = [
         adminOnly: true,
       },
       {
+        label: 'AI settings',
+        description: 'Enable AI per company, manage model pricing, and review token usage and cost.',
+        to: '/settings/ai',
+        adminOnly: true,
+      },
+      {
         label: 'Integration settings',
         description: 'Connect your GitHub account; admins configure catalog-wide tool integrations.',
         to: '/settings/integrations',

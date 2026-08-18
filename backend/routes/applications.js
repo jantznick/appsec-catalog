@@ -44,6 +44,8 @@ import {
   normalizeArchetype,
   isValidModelStatus,
 } from '../services/threatModel.js';
+import { generateThreatModelDraft } from '../services/threatModelAi.js';
+import { AiError } from '../services/ai/index.js';
 
 /**
  * Get or create system user for automated notes
@@ -1491,6 +1493,59 @@ router.get('/:id/threat-model', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Get threat model error:', error);
     sendAccessError(res, error);
+  }
+});
+
+// AI co-pilot: draft a threat model for this application. Persists NOTHING —
+// returns suggestions the user reviews and accepts through the normal endpoints.
+router.post('/:id/threat-model/ai-draft', requireAuth, async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    await getApplicationForAccess(req.params.id, auth);
+
+    // Full application record for grounding the prompt.
+    const application = await prisma.application.findUnique({
+      where: { id: req.params.id },
+    });
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    const existing = await prisma.threatModel.findUnique({
+      where: { applicationId: req.params.id },
+      include: THREAT_MODEL_INCLUDE,
+    });
+    const { model } = serializeThreatModel(existing);
+
+    const result = await generateThreatModelDraft({
+      application,
+      model,
+      userId: auth?.userId || null,
+    });
+
+    res.json({
+      draft: result.draft,
+      meta: {
+        aiRequestId: result.aiRequestId,
+        model: result.model,
+        usage: result.usage,
+        cost: result.cost,
+      },
+    });
+  } catch (error) {
+    // AI-layer errors (config, access, model) carry a status + code.
+    if (error instanceof AiError) {
+      return res.status(error.status || 500).json({
+        error: error.message,
+        code: error.code,
+        reason: error.reason,
+      });
+    }
+    if (error.statusCode) {
+      return sendAccessError(res, error);
+    }
+    console.error('Threat model AI draft error:', error);
+    res.status(error.status || 500).json({ error: 'Failed to generate draft', message: error.message });
   }
 });
 

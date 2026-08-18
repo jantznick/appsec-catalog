@@ -38,6 +38,7 @@ import { SettingsApiTokens } from './pages/SettingsApiTokens.jsx';
 import { ProductUpdatesAdmin } from './pages/ProductUpdatesAdmin.jsx';
 import { WhatsNew } from './pages/WhatsNew.jsx';
 import { ScoringSettings } from './pages/ScoringSettings.jsx';
+import { AiSettings } from './pages/AiSettings.jsx';
 import { Settings } from './pages/Settings.jsx';
 import { SammAssessments } from './pages/SammAssessments.jsx';
 
@@ -206,6 +207,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <ScoringSettings />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/ai"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <AiSettings />
               </Layout>
             </ProtectedRoute>
           }

@@ -3,6 +3,7 @@ import { api } from '../../lib/api';
 import { Button, LoadingSpinner, Modal, toast } from '../ui';
 import { FourQuestionEditor } from './FourQuestionEditor.jsx';
 import { AddComponentModal } from './AddComponentModal.jsx';
+import { AiDraftReviewModal } from './AiDraftReviewModal.jsx';
 
 const EMPTY_ROOT = {
   scope: '',
@@ -79,6 +80,22 @@ export function ThreatModelTab({ applicationId }) {
   const [selectedId, setSelectedId] = useState('root');
   const [addOpen, setAddOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
+  // AI co-pilot state
+  const [aiAvailable, setAiAvailable] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiApplying, setAiApplying] = useState(false);
+  const [aiDraft, setAiDraft] = useState(null);
+  const [aiMeta, setAiMeta] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getAiAvailability({ applicationId, feature: 'threat_model_generate' })
+      .then((res) => { if (!cancelled) setAiAvailable(Boolean(res?.available)); })
+      .catch(() => { if (!cancelled) setAiAvailable(false); });
+    return () => { cancelled = true; };
+  }, [applicationId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -184,6 +201,70 @@ export function ThreatModelTab({ applicationId }) {
     }
   };
 
+  const generateDraft = async () => {
+    setAiGenerating(true);
+    try {
+      const res = await api.generateThreatModelDraft(applicationId);
+      setAiDraft(res.draft);
+      setAiMeta(res.meta || null);
+    } catch (err) {
+      toast.error(err.message || 'Failed to generate draft');
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  // Merge accepted suggestions into the model via the normal endpoints, so
+  // everything is re-validated server-side. Order: root (Q1 + app threats),
+  // then each accepted component.
+  const applyAiDraft = async (selection) => {
+    setAiApplying(true);
+    try {
+      const union = (a = [], b = []) => Array.from(new Set([...a, ...b]));
+      const rootPayload = {};
+      let touchRoot = false;
+
+      if (selection.appThreats.length > 0) {
+        rootPayload.threats = [...(model?.threats || []), ...selection.appThreats];
+        touchRoot = true;
+      }
+      if (selection.q1.actors.length > 0) {
+        rootPayload.actors = union(model?.actors, selection.q1.actors);
+        touchRoot = true;
+      }
+      if (selection.q1.dataTypes.length > 0) {
+        rootPayload.dataTypes = union(model?.dataTypes, selection.q1.dataTypes);
+        touchRoot = true;
+      }
+      if (selection.q1.scope && !model?.scope) {
+        rootPayload.scope = selection.q1.scope;
+        touchRoot = true;
+      }
+
+      if (touchRoot) {
+        await api.saveThreatModel(applicationId, rootPayload);
+      }
+
+      for (const c of selection.components) {
+        await api.addThreatModelComponent(applicationId, {
+          name: c.name,
+          archetype: c.archetype,
+          scope: c.scope || '',
+          threats: c.threats || [],
+        });
+      }
+
+      await load();
+      setAiDraft(null);
+      setAiMeta(null);
+      toast.success('Applied AI suggestions');
+    } catch (err) {
+      toast.error(err.message || 'Failed to apply suggestions');
+    } finally {
+      setAiApplying(false);
+    }
+  };
+
   if (loading || !options) {
     return (
       <div className="flex justify-center py-12">
@@ -209,11 +290,18 @@ export function ThreatModelTab({ applicationId }) {
             the threats that genuinely matter and a clear plan for each.
           </p>
         </div>
-        {model?.lastReviewedAt && (
-          <span className="text-xs text-gray-500">
-            Last reviewed {new Date(model.lastReviewedAt).toLocaleDateString()}
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {model?.lastReviewedAt && (
+            <span className="text-xs text-gray-500">
+              Last reviewed {new Date(model.lastReviewedAt).toLocaleDateString()}
+            </span>
+          )}
+          {aiAvailable && (
+            <Button variant="outline" size="sm" onClick={generateDraft} loading={aiGenerating}>
+              ✨ Draft with AI
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
@@ -285,6 +373,17 @@ export function ThreatModelTab({ applicationId }) {
         existingArchetypes={components.map((c) => c.archetype)}
         onAdd={addComponent}
         adding={saving}
+      />
+
+      <AiDraftReviewModal
+        isOpen={Boolean(aiDraft)}
+        onClose={() => { setAiDraft(null); setAiMeta(null); }}
+        draft={aiDraft}
+        meta={aiMeta}
+        options={options}
+        existingModel={model}
+        onApply={applyAiDraft}
+        applying={aiApplying}
       />
 
       <Modal

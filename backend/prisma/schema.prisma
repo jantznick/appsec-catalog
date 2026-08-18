@@ -32,6 +32,8 @@ model User {
   scmConnections         ScmConnection[] // The user's connected source-control accounts (GitHub, GitLab, …)
   sammAssessmentsCreated SammAssessment[] @relation("SammAssessmentCreator")
   sammAssessmentsReviewed SammAssessment[] @relation("SammAssessmentReviewer")
+  aiRequests             AiRequest[]
+  aiAccessRules          AiAccessRule[]
 }
 
 /// AppSec Catalog product release notes / "What's New" entries.
@@ -137,6 +139,8 @@ model Company {
   integrationCredentials IntegrationCredential[]
   companyToolLinks      CompanyToolLink[]
   sammAssessments       SammAssessment[]
+  aiRequests            AiRequest[]
+  aiAccessRules         AiAccessRule[]
 
   @@index([slug])
   @@index([divisionId])
@@ -233,6 +237,8 @@ model Application {
   // Technical form fields
   securityTestingDescription String? // Description of security testing in place
   additionalNotes            String? // Any other information about the application
+
+  aiRequests AiRequest[]
 }
 
 model ApplicationApiSchema {
@@ -1125,4 +1131,130 @@ model ApplicationScmRepo {
 
   @@index([githubRepoId], map: "ApplicationGitHubRepo_githubRepoId_idx")
   @@map("ApplicationGitHubRepo")
+}
+
+// ---------------------------------------------------------------------------
+// AI foundation
+//
+// Shared infrastructure for every AI-backed feature. The design goal is a
+// single choke-point (services/ai/runAi.js): no model call happens without an
+// AiRequest ledger row, so token usage and cost are always attributable to a
+// company (and an application/user/feature when known). Prices are snapshotted
+// onto each AiRequest, so editing the price book never rewrites past costs.
+// ---------------------------------------------------------------------------
+
+// Global, admin-managed AI settings. Singleton (id is always "singleton").
+model AiConfig {
+  id              String   @id @default("singleton")
+  globalEnabled   Boolean  @default(false) // master kill-switch for all AI features
+  defaultProvider String   @default("anthropic")
+  defaultModel    String   @default("claude-sonnet-4-5")
+  // Per-call ceiling on generated tokens. Null = fall back to AI_MAX_OUTPUT_TOKENS env.
+  defaultMaxOutputTokens Int?
+  // Optional org-wide monthly budget guardrails (per company). Null = no cap.
+  defaultMonthlyCostLimitUsd Decimal? @db.Decimal(12, 2)
+  updatedAt       DateTime @updatedAt
+  updatedById     String?
+}
+
+// Effective-dated price book. Editing a price closes the current row
+// (effectiveTo = now) and inserts a new one; rows are never mutated in place.
+model AiModelPricing {
+  id       String @id @default(cuid())
+  provider String
+  model    String
+
+  // Price per 1,000,000 tokens, in `currency`.
+  inputPricePerMTok      Decimal  @db.Decimal(12, 4)
+  outputPricePerMTok     Decimal  @db.Decimal(12, 4)
+  cacheReadPricePerMTok  Decimal? @db.Decimal(12, 4)
+  cacheWritePricePerMTok Decimal? @db.Decimal(12, 4)
+  currency               String   @default("USD")
+
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime? // null = currently active price for this provider/model
+  active        Boolean   @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
+  requests AiRequest[]
+
+  @@index([provider, model, active])
+  @@index([effectiveTo])
+}
+
+// One row per model call: the usage + cost ledger.
+model AiRequest {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  // Attribution
+  companyId     String?
+  company       Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  applicationId String?
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  userId        String?
+  user          User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  feature       String // e.g. "threat_model_generate"
+  purpose       String? // free-text sub-context (e.g. "root model draft")
+
+  // Model + token usage
+  provider         String
+  model            String
+  inputTokens      Int    @default(0)
+  outputTokens     Int    @default(0)
+  cacheReadTokens  Int    @default(0)
+  cacheWriteTokens Int    @default(0)
+
+  // Pricing snapshot (frozen at write time so later price edits never change history)
+  pricingId              String?
+  pricing                AiModelPricing? @relation(fields: [pricingId], references: [id], onDelete: SetNull)
+  inputPricePerMTok      Decimal?        @db.Decimal(12, 4)
+  outputPricePerMTok     Decimal?        @db.Decimal(12, 4)
+  cacheReadPricePerMTok  Decimal?        @db.Decimal(12, 4)
+  cacheWritePricePerMTok Decimal?        @db.Decimal(12, 4)
+  inputCost              Decimal?        @db.Decimal(16, 8)
+  outputCost             Decimal?        @db.Decimal(16, 8)
+  totalCost              Decimal?        @db.Decimal(16, 8)
+  currency               String          @default("USD")
+
+  // Ops
+  status       String  @default("success") // success | error | blocked
+  errorMessage String?
+  latencyMs    Int?
+
+  @@index([companyId, createdAt])
+  @@index([applicationId])
+  @@index([feature])
+  @@index([createdAt])
+}
+
+// Gating rule for AI access. companyId is required; userId is null today
+// (company-wide) and becomes the hook for per-user RBAC later. feature null
+// means "all AI features". Optional monthly budget caps.
+model AiAccessRule {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feature   String? // null = applies to all AI features
+
+  // Per-company provider/model selection. Null = inherit the global AiConfig
+  // default. provider and model are set together (a model is provider-specific).
+  provider String?
+  model    String?
+
+  enabled             Boolean  @default(true)
+  monthlyCostLimitUsd Decimal? @db.Decimal(12, 2)
+  monthlyTokenLimit   Int?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+
+  @@unique([companyId, userId, feature])
+  @@index([companyId])
 }

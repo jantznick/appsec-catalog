@@ -29,6 +29,7 @@ import dashboardRoutes from './routes/dashboard.js';
 import sammRoutes from './routes/samm.js';
 import integrationRoutes from './routes/integrations.js';
 import scmRoutes from './routes/scm.js';
+import aiRoutes from './routes/ai.js';
 import { apiKeyAuth } from './middleware/apiKeyAuth.js';
 
 dotenv.config();
@@ -178,6 +179,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/samm', sammRoutes);
 app.use('/api', integrationRoutes);
 app.use('/api', scmRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
