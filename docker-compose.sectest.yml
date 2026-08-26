@@ -70,6 +70,13 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    # The prod entrypoint runs `prisma migrate deploy`, but this repo's migration
+    # history is mis-ordered: the `_init` migration that CREATES the tables is
+    # dated (20251219) AFTER several ALTER migrations (20241223...), so on a fresh
+    # DB `migrate deploy` fails with `relation "Application" does not exist`. Prod
+    # only works because its DB was baselined. For a disposable test DB we skip
+    # migration history and sync the schema directly from schema.prisma.
+    entrypoint: ["sh", "-c", "npx prisma db push --accept-data-loss --skip-generate && node server.js"]
     # Load the test env file for backend runtime secrets (SESSION_SECRET,
     # INTEGRATIONS_ENCRYPTION_KEY, etc.). Values under `environment:` below win.
     env_file:
