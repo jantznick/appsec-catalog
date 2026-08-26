@@ -76,7 +76,7 @@ services:
     # DB `migrate deploy` fails with `relation "Application" does not exist`. Prod
     # only works because its DB was baselined. For a disposable test DB we skip
     # migration history and sync the schema directly from schema.prisma.
-    entrypoint: ["sh", "-c", "npx prisma db push --accept-data-loss --skip-generate && node server.js"]
+    entrypoint: ["sh", "-c", "npx prisma db push --accept-data-loss && node server.js"]
     # Load the test env file for backend runtime secrets (SESSION_SECRET,
     # INTEGRATIONS_ENCRYPTION_KEY, etc.). Values under `environment:` below win.
     env_file:
