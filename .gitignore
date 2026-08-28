@@ -57,3 +57,4 @@ backend/prisma/migrations_backup_*/
 # Docker
 docker-compose.override.yml
 
+backend/.hi-out/*

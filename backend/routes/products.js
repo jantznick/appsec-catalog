@@ -326,7 +326,7 @@ router.post('/component-types', requireAuth, async (req, res) => {
 // Get product score (average of mapped application scores)
 router.get('/:id/score', requireAuth, async (req, res) => {
   try {
-    const product = await getProductForUser(req.params.id, req.session);
+    const product = await getProductForUser(req.params.id, getAuthContext(req));
     if (!product) return res.status(404).json({ error: 'Product not found' });
     if (product === 'forbidden') {
       return res.status(403).json({

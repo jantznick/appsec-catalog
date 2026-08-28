@@ -30,6 +30,7 @@ import sammRoutes from './routes/samm.js';
 import integrationRoutes from './routes/integrations.js';
 import scmRoutes from './routes/scm.js';
 import aiRoutes from './routes/ai.js';
+import docsRoutes from './routes/docs.js';
 import { apiKeyAuth } from './middleware/apiKeyAuth.js';
 
 dotenv.config();
@@ -180,6 +181,7 @@ app.use('/api/samm', sammRoutes);
 app.use('/api', integrationRoutes);
 app.use('/api', scmRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/docs', docsRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

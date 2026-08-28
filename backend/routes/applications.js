@@ -2150,7 +2150,11 @@ router.post('/', requireAuth, async (req, res) => {
     });
 
     // Create initial version
-    await createApplicationVersion(application.id, getAuthContext(req)?.userId || null, 'web_form');
+    await createApplicationVersion(
+      application.id,
+      getAuthContext(req)?.userId || null,
+      getAuthContext(req)?.authType === 'apiKey' ? 'api' : 'web_form'
+    );
 
     res.status(201).json(application);
   } catch (error) {
@@ -2560,7 +2564,11 @@ router.put('/:id', requireAuth, async (req, res) => {
     }
 
     // Create version snapshot after update
-    await createApplicationVersion(application.id, getAuthContext(req)?.userId || null, 'web_form');
+    await createApplicationVersion(
+      application.id,
+      getAuthContext(req)?.userId || null,
+      getAuthContext(req)?.authType === 'apiKey' ? 'api' : 'web_form'
+    );
 
     res.json(application);
   } catch (error) {
