@@ -59,7 +59,8 @@ async function loadScopedApplications(req) {
     ? await prisma.score.findMany({
         where: { applicationId: { in: applicationIds } },
         select: { applicationId: true, totalScore: true, calculatedAt: true },
-        orderBy: { calculatedAt: 'desc' },
+        orderBy: [{ applicationId: 'asc' }, { calculatedAt: 'desc' }],
+        distinct: ['applicationId'],
       })
     : [];
   const latestScoreByApplication = new Map();
@@ -181,7 +182,8 @@ router.get('/executive', requireAuth, async (req, res) => {
       ? await prisma.score.findMany({
           where: { applicationId: { in: applicationIds } },
           select: { applicationId: true, totalScore: true, calculatedAt: true },
-          orderBy: { calculatedAt: 'desc' },
+          orderBy: [{ applicationId: 'asc' }, { calculatedAt: 'desc' }],
+          distinct: ['applicationId'],
         })
       : [];
 

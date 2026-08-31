@@ -38,6 +38,45 @@ const APPLICATION_FIELDS = [
   { key: 'appFirewallNA', label: 'App Firewall N/A', required: false, dataType: 'boolean' },
 ];
 
+/** Lowercase and drop everything that is not a letter or digit, so "SAST Tool" === "sastTool". */
+const canonicalize = (value) => String(value).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/** Headers we accept for the required `name` field. Nothing else may auto-map to it. */
+const NAME_HEADERS = new Set(['name', 'applicationname', 'appname', 'application']);
+
+/**
+ * Propose a CSV header -> field mapping.
+ *
+ * Only exact matches (after canonicalization) against a field key or its label are
+ * proposed. The previous rule mapped any header containing "name" or "app" to the
+ * required `name` field, so "Owner Name" and "App Owner" became the application name —
+ * a wrong mapping is invisible on the review screen in a way an unmapped column is not.
+ * Anything ambiguous is left for the user to map.
+ */
+const autoMapFields = (headers) => {
+  const byCanonical = new Map();
+  for (const field of APPLICATION_FIELDS) {
+    byCanonical.set(canonicalize(field.key), field.key);
+    byCanonical.set(canonicalize(field.label), field.key);
+  }
+
+  const mapping = {};
+  const claimed = new Set();
+
+  for (const header of headers) {
+    const canonical = canonicalize(header);
+    const fieldKey = NAME_HEADERS.has(canonical) ? 'name' : byCanonical.get(canonical);
+
+    // One CSV column per field: a second match is ambiguous, so leave it unmapped.
+    if (fieldKey && !claimed.has(fieldKey)) {
+      mapping[header] = fieldKey;
+      claimed.add(fieldKey);
+    }
+  }
+
+  return mapping;
+};
+
 // Infer data type from CSV column values
 const inferCSVDataType = (header, csvData) => {
   if (!csvData || csvData.length === 0) return 'unknown';
@@ -87,7 +126,9 @@ const getDataTypeLabel = (dataType) => {
 };
 
 export function BulkImportApplicationsModal({ isOpen, onClose, companies, onSuccess }) {
-  const [step, setStep] = useState(1); // 1: Upload, 2: Map fields, 3: Review
+  // 1: Upload, 2: Map fields (import runs from here). A review step before the write
+  // is worth adding - see APP_DATA_FIXES_PLAN.md 0.10.
+  const [step, setStep] = useState(1);
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [csvFile, setCsvFile] = useState(null);
   const [csvHeaders, setCsvHeaders] = useState([]);
@@ -180,21 +221,7 @@ export function BulkImportApplicationsModal({ isOpen, onClose, companies, onSucc
       });
       setCsvDataTypes(inferredTypes);
       
-      // Auto-map common field names (reverse mapping: CSV header -> field key)
-      const autoMapping = {};
-      headers.forEach(header => {
-        const lowerHeader = header.toLowerCase();
-        APPLICATION_FIELDS.forEach(field => {
-          if (field.key === 'name' && (lowerHeader.includes('name') || lowerHeader.includes('app'))) {
-            autoMapping[header] = field.key;
-          } else if (lowerHeader.includes(field.key.toLowerCase()) || lowerHeader === field.label.toLowerCase()) {
-            if (!autoMapping[header]) {
-              autoMapping[header] = field.key;
-            }
-          }
-        });
-      });
-      setFieldMapping(autoMapping);
+      setFieldMapping(autoMapFields(headers));
 
       if (data.length > 0) {
         setStep(2);

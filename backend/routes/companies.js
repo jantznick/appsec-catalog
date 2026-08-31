@@ -369,14 +369,13 @@ router.get('/:id/average-score', requireAuth, async (req, res) => {
 
     const applicationIds = applications.map(app => app.id);
 
-    // Get all scores for these applications, ordered by date
+    // Latest score per application (only that row is used below).
     const allScores = await prisma.score.findMany({
       where: {
         applicationId: { in: applicationIds },
       },
-      orderBy: {
-        calculatedAt: 'desc',
-      },
+      orderBy: [{ applicationId: 'asc' }, { calculatedAt: 'desc' }],
+      distinct: ['applicationId'],
       include: {
         application: {
           select: {

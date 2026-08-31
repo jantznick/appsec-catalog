@@ -4,6 +4,22 @@ import {
   getToolQualityConfig,
 } from './scoringConfig.js';
 
+/**
+ * Prisma `include` covering every relation `calculateApplicationScore` reads.
+ *
+ * Spread this into any query whose result is passed to the scorer. Scoring an
+ * application loaded without `apiSchema` silently drops the whole API-security
+ * category, so a call site with its own hand-written include will disagree with
+ * every other call site.
+ */
+export const SCORING_INCLUDE = {
+  deployments: {
+    orderBy: { deployedAt: 'desc' },
+    take: 1, // Only the most recent deployment affects scan-date freshness.
+  },
+  apiSchema: { select: { id: true } },
+};
+
 const MAX_SCORE_PER_CATEGORY = 50;
 const SCAN_GRACE_PERIOD_DAYS = 1; // Grace period after deployment before scan is required
 const METADATA_REVIEW_MAX_DAYS = 180; // 6 months in days
@@ -83,6 +99,63 @@ export function getKnowledgeSharingFieldBreakdown(app) {
     }
   }
   return { totalScorable, fieldsFilled, missingFields };
+}
+
+/** Canonical facing values; `facing` is a free String column, so compare case-insensitively. */
+export function normalizeFacing(value) {
+  if (typeof value !== 'string') return null;
+  const t = value.trim().toLowerCase();
+  if (t === 'external') return 'External';
+  if (t === 'internal') return 'Internal';
+  return null;
+}
+
+/**
+ * Which sensitive-data classifications an application declares.
+ *
+ * The technical form asks PCI/PII/PHI as three independent checkboxes, but the API
+ * currently flattens them (with several other answers) into the free-text `dataTypes`
+ * column, so there is nothing structured to read. The boolean branch below is written
+ * against the columns that APP_DATA_MODEL_EXPLORATION.md proposes adding; until those
+ * exist it never matches and the string branch is the only live path.
+ *
+ * The string branch compares whole tokens, not substrings: "graphics", "Memphis" and
+ * "Delphi" all contain "PHI", and treating them as a PHI declaration raises the risk
+ * weight on every tool category.
+ *
+ * @param {Object} app
+ * @returns {{ hasPCI: boolean, hasPII: boolean, hasPHI: boolean, declared: boolean }}
+ */
+export function detectDataClassifications(app) {
+  const isTrue = (v) => v === true || v === 'true';
+
+  // Structured columns (not on the model yet - see doc note above).
+  let hasPCI = isTrue(app.pciData);
+  let hasPII = isTrue(app.piiData);
+  let hasPHI = isTrue(app.phiData);
+
+  const hasStructured = hasPCI || hasPII || hasPHI;
+  const hasFreeText = Boolean(app.dataTypes) && !isMetadataValueNA(app.dataTypes);
+
+  if (!hasStructured && hasFreeText) {
+    const tokens = new Set(
+      app.dataTypes
+        .toUpperCase()
+        .split(/[^A-Z]+/)
+        .filter(Boolean),
+    );
+    hasPCI = tokens.has('PCI');
+    hasPII = tokens.has('PII');
+    hasPHI = tokens.has('PHI');
+  }
+
+  return {
+    hasPCI,
+    hasPII,
+    hasPHI,
+    // Whether the application told us anything at all about the data it handles.
+    declared: hasStructured || hasFreeText,
+  };
 }
 
 /**
@@ -292,6 +365,9 @@ function calculateImportanceScore(app) {
   }
   
   // Facing (External = more important) → contributes 0-0.15
+  // `facing` is a free String column written by four different paths, so normalize
+  // before comparing - an imported "internal" must not read as missing data.
+  const facing = isMetadataValueNA(app.facing) ? null : normalizeFacing(app.facing);
   if (isMetadataValueNA(app.facing)) {
     // Treat as missing: assume external (same as else branch below)
     importance += 0.15;
@@ -301,7 +377,7 @@ function calculateImportanceScore(app) {
       contributed: false,
       value: null
     });
-  } else if (app.facing === 'External') {
+  } else if (facing === 'External') {
     importance += 0.15;
     factors.push({
       type: 'facing',
@@ -309,7 +385,7 @@ function calculateImportanceScore(app) {
       contributed: true,
       value: 'External'
     });
-  } else if (app.facing === 'Internal') {
+  } else if (facing === 'Internal') {
     // Internal is explicitly stated, so lower importance
     // Don't add anything (Internal = 0 contribution)
     factors.push({
@@ -331,11 +407,9 @@ function calculateImportanceScore(app) {
   
   // Data Types (PII, PCI, etc.) → check if they contribute to risk
   if (app.dataTypes && !isMetadataValueNA(app.dataTypes)) {
-    const dataTypesLower = app.dataTypes.toLowerCase();
-    const hasPII = dataTypesLower.includes('pii') || dataTypesLower.includes('personal');
-    const hasPCI = dataTypesLower.includes('pci') || dataTypesLower.includes('payment');
+    const { hasPII, hasPCI } = detectDataClassifications(app);
     const hasSensitive = hasPII || hasPCI;
-    
+
     if (hasSensitive) {
       const sensitiveTypes = [];
       if (hasPII) sensitiveTypes.push('PII');
@@ -415,47 +489,28 @@ export function calculateToolUsageScore(app) {
   let totalAchievedPoints = 0;
   let totalPossiblePoints = 0;
 
+  // Risk inputs do not vary by category, so resolve them once.
+  // Important: missing/NA facing should not be a scoring loophole. Assume External when not provided.
+  const facingValue = isMetadataValueNA(app.facing)
+    ? 'External'
+    : normalizeFacing(app.facing) || 'External';
+  const {
+    hasPCI,
+    hasPII,
+    hasPHI,
+    declared: declaredDataTypes,
+  } = detectDataClassifications(app);
+
   for (const category of toolCategories) {
     // 1. Determine the risk-adjusted maximum points for this category
     let riskWeight = 1.0;
-    
+
     // Apply facing risk factor
-    // Important: missing/NA facing should not be a scoring loophole. Assume External when not provided.
-    const facingValue = isMetadataValueNA(app.facing) || !app.facing ? 'External' : app.facing;
     if (riskFactors.facing[facingValue]) {
       riskWeight = Math.max(riskWeight, riskFactors.facing[facingValue]);
     }
-    
-    // Apply data type risk factors using boolean fields (more accurate)
-    // Check for PCI, PII, PHI data types
-    // Note: These are stored as boolean fields but may also be in dataTypes string
-    // We prioritize the boolean fields if available, otherwise fall back to string parsing
-    let hasPCI = false;
-    let hasPII = false;
-    let hasPHI = false;
-    
-    // Check boolean fields first (if they exist on the app object)
-    if (app.pciData === true || app.pciData === 'true') {
-      hasPCI = true;
-    }
-    if (app.piiData === true || app.piiData === 'true') {
-      hasPII = true;
-    }
-    if (app.phiData === true || app.phiData === 'true') {
-      hasPHI = true;
-    }
-    
-    // Fall back to parsing dataTypes string if boolean fields not available
-    if (!hasPCI && !hasPII && !hasPHI && app.dataTypes && !isMetadataValueNA(app.dataTypes)) {
-      const dataTypesArray = app.dataTypes.split(',').map(dt => dt.trim());
-      dataTypesArray.forEach(dt => {
-        if (dt.toUpperCase().includes('PCI')) hasPCI = true;
-        if (dt.toUpperCase().includes('PII')) hasPII = true;
-        if (dt.toUpperCase().includes('PHI')) hasPHI = true;
-      });
-    }
-    
-    // Apply risk factors
+
+    // Apply data type risk factors
     if (hasPCI && riskFactors.dataTypes['PCI']) {
       riskWeight = Math.max(riskWeight, riskFactors.dataTypes['PCI']);
     }
@@ -466,7 +521,7 @@ export function calculateToolUsageScore(app) {
       riskWeight = Math.max(riskWeight, riskFactors.dataTypes['PHI']);
     }
     // If no data type info was provided at all, assume worst-case (so omission can't inflate score).
-    if (!hasPCI && !hasPII && !hasPHI && (!app.dataTypes || isMetadataValueNA(app.dataTypes))) {
+    if (!declaredDataTypes) {
       const worstCaseDataTypeRisk = Math.max(
         riskFactors.dataTypes?.PCI || 1.0,
         riskFactors.dataTypes?.PII || 1.0,
@@ -474,7 +529,7 @@ export function calculateToolUsageScore(app) {
       );
       riskWeight = Math.max(riskWeight, worstCaseDataTypeRisk);
     }
-    
+
     const categoryMaxPoints = BASE_POINTS_PER_CATEGORY * riskWeight;
 
     // 2. N/A categories are excluded from the denominator so their points redistribute to applicable categories.

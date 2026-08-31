@@ -1,7 +1,7 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
-import { calculateApplicationScore } from '../services/scoring.js';
+import { SCORING_INCLUDE, calculateApplicationScore } from '../services/scoring.js';
 import { evaluateAllControls } from '../services/policy.js';
 import { getAuthContext } from '../middleware/authContext.js';
 import { applyCompanyScope } from '../utils/scope.js';
@@ -370,11 +370,7 @@ router.get('/:id/score', requireAuth, async (req, res) => {
             divisionId: true,
           },
         },
-        deployments: {
-          orderBy: { deployedAt: 'desc' },
-          take: 1,
-        },
-        apiSchema: { select: { id: true } },
+        ...SCORING_INCLUDE,
       },
     });
 

@@ -159,6 +159,23 @@ export function OnboardManager() {
     });
   };
 
+  /**
+   * Fold the free-text "Other" aspect into the checkbox list, so a staged application
+   * carries a complete `criticalAspects` value. The API only reads `criticalAspects`;
+   * anything left in `criticalAspectsOther` is discarded.
+   */
+  const normalizeApplication = (form) => {
+    const aspects = [...(form.criticalAspects || [])];
+    if (form.criticalAspectsOther && form.criticalAspectsOther.trim()) {
+      aspects.push(`Other: ${form.criticalAspectsOther.trim()}`);
+    }
+    const { criticalAspectsOther, ...rest } = form;
+    return {
+      ...rest,
+      criticalAspects: aspects.length > 0 ? aspects : null,
+    };
+  };
+
   const handleAddApplication = () => {
     if (!currentForm.name.trim()) {
       toast.error('Application name is required');
@@ -166,7 +183,7 @@ export function OnboardManager() {
     }
 
     // Add current form to applications list
-    setApplications([...applications, { ...currentForm }]);
+    setApplications([...applications, normalizeApplication(currentForm)]);
     resetForm();
     toast.success('Application added to list');
   };
@@ -175,9 +192,20 @@ export function OnboardManager() {
     setApplications(applications.filter((_, i) => i !== index));
   };
 
+  /** Inverse of `normalizeApplication`, so an "Other" value round-trips through editing. */
+  const denormalizeApplication = (app) => {
+    const aspects = app.criticalAspects || [];
+    const other = aspects.find((a) => a.startsWith('Other: '));
+    return {
+      ...app,
+      criticalAspects: aspects.filter((a) => !a.startsWith('Other: ')),
+      criticalAspectsOther: other ? other.slice('Other: '.length) : '',
+    };
+  };
+
   const handleEditApplication = (index) => {
     const appToEdit = applications[index];
-    setCurrentForm({ ...appToEdit });
+    setCurrentForm(denormalizeApplication(appToEdit));
     setApplications(applications.filter((_, i) => i !== index));
     toast.success('Application loaded for editing');
   };
@@ -196,16 +224,7 @@ export function OnboardManager() {
     
     // If current form has a name, include it in the submission
     if (currentForm.name.trim()) {
-      // Format criticalAspects - combine selected aspects with "Other" if provided
-      const criticalAspects = [...(currentForm.criticalAspects || [])];
-      if (currentForm.criticalAspectsOther && currentForm.criticalAspectsOther.trim()) {
-        criticalAspects.push(`Other: ${currentForm.criticalAspectsOther.trim()}`);
-      }
-      
-      appsToSubmit.push({
-        ...currentForm,
-        criticalAspects: criticalAspects.length > 0 ? criticalAspects : null,
-      });
+      appsToSubmit.push(normalizeApplication(currentForm));
     }
 
     // Validate we have at least one application
