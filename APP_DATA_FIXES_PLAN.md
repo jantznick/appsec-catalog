@@ -314,6 +314,11 @@ Not defects, or not decidable without a product call:
 - AI and third-party component inventory
 - Ownership as a relation rather than free text
 - Lifecycle state separate from onboarding state
+- Merging a technical-form submission at approval rather than at submission
+  (exploration doc section 10 — decided, and first in the suggested order). Until it
+  lands, a submitter cannot clear a value: the merge with `existing.*` happens before
+  the version is written, so the cleared field is absent from the diff and the admin
+  is never shown it.
 - Public endpoint exposure and invite-link tokens
 
 `GET /api/applications/public/:id` returning the full application row without

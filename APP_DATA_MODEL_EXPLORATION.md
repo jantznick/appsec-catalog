@@ -4,9 +4,12 @@ Companion to `APP_DATA_FIXES_PLAN.md`, which covers the unambiguous defects. Thi
 document covers the modelling questions: what should be merged, what should be split,
 and what we are not collecting that an AppSec portal needs.
 
-Nothing here is decided. Each section states what exists today, what the problem is,
-the options with their costs, a recommendation, and the questions that need an answer
-before code is written. Open questions are collected at the end.
+Each section states what exists today, what the problem is, the options with their
+costs, a recommendation, and the questions that need an answer before code is written.
+Open questions are collected at the end.
+
+Sections 1–9 are open. **Section 10 (merge at approval, not at submission) is decided**
+and is first in the suggested order.
 
 ---
 
@@ -401,6 +404,121 @@ at integration level 3; four of them have produced a finding in the last ninety 
 
 ---
 
+## 10. Merge at approval, not at submission — DECIDED
+
+Direction agreed: the pending version should record what the submitter actually said,
+and the merge against current state should happen when an admin approves it.
+
+### What happens today
+
+`PUT /public/:id` merges every field with `existing.*` **before** it creates the
+version:
+
+```js
+sastTool: sastTool?.trim() || existing.sastTool,
+interfaces: interfacesJson || existing.interfaces,
+apiSecurityNA: apiSecurityNA === true || apiSecurityNA === 'true' || existing.apiSecurityNA,
+```
+
+So the pending version is a full snapshot in which any field the submitter tried to
+clear holds the **old value**. The approval screen then diffs that version against the
+previous version — old against old — so the field is not in `changedFields` and is not
+rendered. The admin sees nothing to approve or reject.
+
+| Submitter does | Stored in the version | Admin sees |
+|---|---|---|
+| Answers "No" to interfaces | `existing.interfaces` (unchanged) | nothing |
+| Unticks "API Security N/A" | `true` (OR'd with existing) | nothing |
+| Clears the SAST tool | the old tool name | nothing |
+
+The approval gate is not protecting these changes. It is gating a change that was
+already discarded upstream of it.
+
+### The related baseline problem
+
+`PendingApprovals.jsx` compares a pending version against `allVersions[index + 1]` —
+the previous version by number, not the current application. Those diverge in three
+ordinary situations:
+
+- **Partial approval.** Approving with `approvedFields` writes only the ticked fields
+  to the application, but the version row retains all of them. From then on the version
+  and the application disagree permanently, and every later diff is computed against a
+  baseline that never existed in the application.
+- **Two queued submissions.** Two engineers submit; v5 and v6 are both pending. v6 is
+  diffed against v5, which was never applied, so the admin is shown the delta between
+  two drafts. Approving v5 then v6 silently reverts v5, because v6's snapshot was
+  merged against `existing.*` at v6's submit time.
+- **An admin edit in between.** The snapshot is captured at submission, so approving it
+  later overwrites anything the admin changed since — invisibly, because the diff never
+  looked at the live row.
+
+Fixing the merge without fixing the baseline leaves two of these three in place.
+
+### The design
+
+The blocker is that the model cannot distinguish "not answered" from "cleared" — both
+are null. Add a `submittedFields` column to `ApplicationVersion`: a comma-separated
+list of the fields the submission actually carried, mirroring the `approvedFields`
+column already on that model.
+
+Then:
+
+- The version stores only submitted values, nulls included.
+- `submittedFields` marks which nulls are deliberate clears.
+- The approval screen diffs the version against the **live application**, so what the
+  admin sees is the real change.
+- `applyApprovedVersion` writes the intersection of approved and submitted fields.
+
+`ApplicationVersion` is currently doing two jobs — history snapshot (written after
+every authenticated change) and proposed change (written by the technical form). They
+want different shapes, which is why a partial submission has to be padded into a full
+snapshot today. Splitting them into `ApplicationVersion` and something like
+`ApplicationChangeRequest` is the cleaner model; adding `submittedFields` is the
+cheaper one that gets the correct behaviour without a data migration of existing
+history. Recommend the cheaper one now and the split only if change requests grow more
+features (comments, partial re-submission, expiry).
+
+### Size
+
+Medium. About seven files, and the mechanical parts are smaller than they look.
+
+| Work | Notes |
+|---|---|
+| `schema.prisma` + migration | One nullable column. Use `migrate diff` + `migrate deploy`. |
+| `createVersionFromData` | Stop padding from `existing`; record `submittedFields`. |
+| `PUT /public/:id` | Delete the `\|\| existing.*` merge — it gets *shorter*. |
+| `applyApprovedVersion` | Intersect approved with submitted. |
+| New compare-to-current endpoint | Diff a pending version against the live row. |
+| `PendingApprovals.jsx` | Use it, and render a clear as "value → (cleared)". |
+| `VersionHistory.jsx` | Same diff-loading pattern, same change. |
+
+Two things make it smaller than expected:
+
+- `applyApprovedVersion` already applies nulls — its loop guards on `!== undefined`,
+  and Prisma returns `null`, not `undefined`, for empty columns. Once `submittedFields`
+  gates which fields are in play, clearing works with no change to the write itself.
+- `compareVersions` does not need to change. It compares two objects; feeding it the
+  live application instead of a previous version is a caller change.
+
+The real cost is elsewhere:
+
+- **Compatibility.** Pending versions already in the queue have no `submittedFields`.
+  Treat null as "legacy full snapshot, use the old behaviour" so in-flight approvals do
+  not change meaning. One branch, but it has to be right.
+- **The reciprocal-interfaces block** in the approve endpoint keys off
+  `version.interfaces` being truthy, so "cleared" currently reads as "not submitted".
+  It needs the `submittedFields` check too. This is the fiddliest part, and it is also
+  the code that section 7 deletes outright if interfaces become a join table — worth
+  sequencing those together rather than fixing this twice.
+- **No tests.** This is the highest-risk path in the application to change blind. The
+  Phase 1 tests in `APP_DATA_FIXES_PLAN.md` should land first.
+
+Also found while scoping: `GET /:id/versions/compare/:v1/:v2` is registered twice, at
+`routes/applications.js:3567` and `:3728`. Express serves the first; the second is
+dead code and should be deleted as part of this work.
+
+---
+
 ## Open questions, collected
 
 **Products and repos**
@@ -434,15 +552,20 @@ at integration level 3; four of them have produced a finding in the last ninety 
 
 Independent of the answers above, the dependency order is fairly clear:
 
-1. **Classification vocabulary** (section 6) — everything else references it, and it
+1. **Merge at approval** (section 10) — decided, and it makes the approval queue
+   trustworthy. Everything that arrives through the intake flow depends on it, so the
+   longer it waits the more submissions are silently discarded. Needs the Phase 1 tests
+   first.
+2. **Classification vocabulary** (section 6) — everything else references it, and it
    is a code change with no schema migration.
-2. **Lifecycle state** (section 8) — small, self-contained, immediately removes
+3. **Lifecycle state** (section 8) — small, self-contained, immediately removes
    dashboard noise.
-3. **AI archetype in the threat model** (section 4) — small, self-contained, delivers
+4. **AI archetype in the threat model** (section 4) — small, self-contained, delivers
    AI value before the component inventory exists.
-4. **Repo sub-path** (section 1, option A) — fixes monorepo dependency attribution.
-5. **Environments** (section 2) — the largest change, and the one most other things
+5. **Repo sub-path** (section 1, option A) — fixes monorepo dependency attribution.
+6. **Environments** (section 2) — the largest change, and the one most other things
    want to depend on.
-6. **Product-level business facts** (section 1, option B) — after ownership is settled.
-7. **Component inventory** (section 4) — after classification and environments.
-8. **Interfaces as flows** (section 7) — after products are settled.
+7. **Product-level business facts** (section 1, option B) — after ownership is settled.
+8. **Component inventory** (section 4) — after classification and environments.
+9. **Interfaces as flows** (section 7) — after products are settled. Sequence the
+   reciprocal-interfaces handling from section 10 with this, so it is not fixed twice.
