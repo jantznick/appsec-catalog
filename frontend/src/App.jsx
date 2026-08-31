@@ -41,6 +41,7 @@ import { ScoringSettings } from './pages/ScoringSettings.jsx';
 import { AiSettings } from './pages/AiSettings.jsx';
 import { Settings } from './pages/Settings.jsx';
 import { SammAssessments } from './pages/SammAssessments.jsx';
+import { Docs } from './pages/Docs.jsx';
 
 function CatchAllRedirect() {
   const { isAuthenticated, isVerified, loading } = useAuthStore();
@@ -108,6 +109,20 @@ function App() {
         <Route
           path="/invite/:token"
           element={<AcceptInvitation />}
+        />
+
+        {/* Platform documentation - public, no login required */}
+        <Route
+          path="/docs"
+          element={<Navigate to="/docs/overview" replace />}
+        />
+        <Route
+          path="/docs/:slug"
+          element={
+            <Layout>
+              <Docs />
+            </Layout>
+          }
         />
 
         {/* Protected routes */}

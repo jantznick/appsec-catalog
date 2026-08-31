@@ -121,6 +121,9 @@ export function Layout({ children }) {
                     What&apos;s New
                   </Link>
                 )}
+                <Link to="/docs/overview" className={navLinkClass('/docs')}>
+                  Documentation
+                </Link>
               </div>
             </div>
 
@@ -240,6 +243,13 @@ export function Layout({ children }) {
                       }}
                     >
                       What&apos;s New
+                    </DropdownItem>
+                    <DropdownItem
+                      onClick={() => {
+                        navigate('/docs/overview');
+                      }}
+                    >
+                      Documentation
                     </DropdownItem>
                   </Dropdown>
                   <div className="flex items-center gap-2">

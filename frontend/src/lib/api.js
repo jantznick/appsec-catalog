@@ -1013,6 +1013,8 @@ export const api = {
     }),
   getPublishedProductUpdates: (limit = 50) =>
     apiRequest(`/api/product-updates/published?limit=${encodeURIComponent(limit)}`),
+  getPlatformDocsIndex: () => apiRequest('/api/platform-docs'),
+  getPlatformDoc: (slug) => apiRequest(`/api/platform-docs/${encodeURIComponent(slug)}`),
   startAdminSecurityFindingsJob: (body) =>
     apiRequest('/api/admin/security-findings/jobs', { method: 'POST', body: JSON.stringify(body) }),
   getAdminSecurityFindingsJob: (jobId) =>

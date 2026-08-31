@@ -1,329 +1,287 @@
-import { useState, useEffect } from 'react';
-import { useParams, Link, useLocation } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { marked } from 'marked';
+import { api } from '../lib/api.js';
+import { Card } from '../components/ui/Card.jsx';
 
-const DOC_SECTIONS = [
-  {
-    title: 'Getting Started',
-    docs: [
-      { slug: 'program-overview', title: 'Program Overview', file: 'program-overview.md' },
-      { slug: 'new-app-sec-customer-roadmap', title: 'New Customer Roadmap', file: 'new-app-sec-customer-roadmap.md' },
-      { slug: 'application-onboarding-questionnaire', title: 'Application Onboarding Questionnaire', file: 'application-onboarding-questionnaire.md' },
-    ],
+// Presentational only — which accent each top-level group gets. Kept out of
+// the content API since it's a display concern, not part of the doc structure.
+const GROUP_ACCENTS = {
+  'Using Orbit': {
+    tabActive: 'border-blue-500 text-blue-600',
+    chip: 'bg-blue-50 text-blue-700',
+    eyebrow: 'text-blue-700',
   },
-  {
-    title: 'Tools & Capabilities',
-    docs: [
-      { slug: 'app-sec-capabilities', title: 'AppSec Capabilities & Tools', file: 'app-sec-capabilities.md' },
-      { slug: 'scoring-methodology', title: 'Scoring Methodology', file: 'scoring-methodology.md' },
-    ],
+  'The AppSec Program': {
+    tabActive: 'border-teal-500 text-teal-600',
+    chip: 'bg-teal-50 text-teal-700',
+    eyebrow: 'text-teal-700',
   },
-  {
-    title: 'For Developers',
-    docs: [
-      { slug: 'developer-checklist', title: 'Developer Security Checklist', file: 'developer-checklist.md' },
-      { slug: 'threat-modeling-for-developers', title: 'Threat Modeling for Developers', file: 'threat-modeling-for-developers.md' },
-    ],
-  },
-  {
-    title: 'Assessments & Services',
-    docs: [
-      { slug: 'penetration-testing', title: 'Penetration Testing', file: 'penetration-testing.md' },
-      { slug: 'samm-assessments', title: 'SAMM Assessments', file: 'samm-assessments.md' },
-      { slug: 'posture-analysis-questionnaire', title: 'Posture Analysis Questionnaire', file: 'posture-analysis-questionnaire.md' },
-      { slug: 'domain-monitoring', title: 'Domain Monitoring', file: 'domain-monitoring.md' },
-    ],
-  },
-  {
-    title: 'Reference',
-    docs: [
-      { slug: 'app-sec-defined-terms', title: 'AppSec Defined Terms', file: 'app-sec-defined-terms.md' },
-    ],
-  },
-];
+};
+const DEFAULT_ACCENT = GROUP_ACCENTS['Using Orbit'];
 
-// Flatten for easy lookup
-const DOCS = DOC_SECTIONS.flatMap(section => section.docs);
+function slugify(text) {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-');
+}
+
+// marked HTML-escapes heading text (e.g. "&" becomes "&amp;"). That's correct
+// when the heading is injected via dangerouslySetInnerHTML, but the extracted
+// title/TOC text below is rendered as plain React text/children instead —
+// React does not decode HTML entities in text nodes, so without this it would
+// literally show "&amp;" on screen. Decode via the DOM's own entity table.
+function decodeEntities(text) {
+  const el = document.createElement('textarea');
+  el.innerHTML = text;
+  return el.value;
+}
+
+// Pulls the leading <h1> out of rendered markdown so it can be styled as a
+// real page header instead of just another line inside the prose block.
+function splitTitle(html) {
+  const match = html.match(/^<h1>([\s\S]*?)<\/h1>\s*/);
+  if (!match) return { title: null, rest: html };
+  return { title: decodeEntities(match[1].replace(/<[^>]+>/g, '')), rest: html.slice(match[0].length) };
+}
+
+// Injects an id into every <h2>/<h3> so the "On this page" list can link to
+// them, and returns the resulting HTML alongside the extracted TOC entries.
+function addHeadingAnchors(html) {
+  const toc = [];
+  const seen = new Map();
+  const withIds = html.replace(/<h([23])>(.*?)<\/h\1>/g, (match, level, inner) => {
+    const text = decodeEntities(inner.replace(/<[^>]+>/g, ''));
+    let slug = slugify(text);
+    const count = seen.get(slug) || 0;
+    seen.set(slug, count + 1);
+    if (count > 0) slug = `${slug}-${count}`;
+    toc.push({ level: Number(level), text, slug });
+    return `<h${level} id="${slug}">${inner}</h${level}>`;
+  });
+  return { html: withIds, toc };
+}
+
+// Locates the page matching `slug` and the group/section/parent it lives
+// under, so the UI can scope the sidebar, color the active group tab, and
+// show a "Section / Page" breadcrumb.
+function locate(groups, slug) {
+  for (const group of groups) {
+    for (const section of group.sections) {
+      for (const page of section.pages) {
+        if (page.slug === slug) return { group, section, page, parent: null };
+        const child = (page.children || []).find((c) => c.slug === slug);
+        if (child) return { group, section, page: child, parent: page };
+      }
+    }
+  }
+  return { group: null, section: null, page: null, parent: null };
+}
 
 export function Docs() {
-  const params = useParams();
-  const location = useLocation();
-  
-  // Get the path after /docs/ - useParams with wildcard returns { '*': 'path' }
-  // Fallback to extracting from location.pathname if params['*'] is not available
-  let slug = params['*'] || params.slug || '';
-  if (!slug && location.pathname.startsWith('/docs/')) {
-    slug = location.pathname.replace('/docs/', '');
-  }
-  
-  const [content, setContent] = useState('');
+  const { slug } = useParams();
+  const navigate = useNavigate();
+  const contentRef = useRef(null);
+  const [groups, setGroups] = useState([]);
+  const [doc, setDoc] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [docTitle, setDocTitle] = useState('');
-
-  const currentDoc = DOCS.find(d => d.slug === slug);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    console.log('Docs component - slug:', slug, 'params:', params);
-    
-    // If no slug, redirect to docs list
-    if (!slug || slug === '') {
-      console.log('No slug found');
-      setError('Document not found');
-      setLoading(false);
-      return;
-    }
-
-    // Handle nested paths (like products/snyk)
-    if (slug.includes('/')) {
-      setLoading(true);
-      // For nested paths, construct the file path directly
-      const filePath = `${slug}.md`;
-      const fetchUrl = `/docs/${filePath}`;
-      console.log('Fetching nested doc:', fetchUrl);
-      fetch(fetchUrl)
-        .then(res => {
-          console.log('Response status:', res.status, res.statusText, 'URL:', res.url);
-          if (!res.ok) {
-            throw new Error(`Failed to load document: ${res.status} ${res.statusText}`);
-          }
-          return res.text();
-        })
-        .then(text => {
-          console.log('Document loaded successfully, length:', text.length);
-          // Strip frontmatter if present
-          let contentText = text;
-          if (text.startsWith('---')) {
-            const frontmatterEnd = text.indexOf('---', 3);
-            if (frontmatterEnd !== -1) {
-              contentText = text.substring(frontmatterEnd + 3).trim();
-            }
-          }
-          
-          // Try to extract title from frontmatter or use slug
-          const titleMatch = text.match(/^title:\s*["'](.+?)["']/m);
-          const title = titleMatch ? titleMatch[1] : slug.split('/').pop().replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-          setDocTitle(title);
-          setContent(contentText);
-          setError(null);
-        })
-        .catch(err => {
-          console.error('Error loading nested doc:', err);
-          setError(err.message || 'Failed to load document');
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-      return;
-    }
-
-    // Handle regular docs from DOCS array
-    if (!currentDoc) {
-      setError('Document not found');
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    fetch(`/docs/${currentDoc.file}`)
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to load document');
-        return res.text();
+    let cancelled = false;
+    api
+      .getPlatformDocsIndex()
+      .then((data) => {
+        if (!cancelled) setGroups(data.groups || []);
       })
-      .then(text => {
-        setContent(text);
-        setError(null);
-      })
-      .catch(err => {
-        setError(err.message);
-      })
-      .finally(() => {
-        setLoading(false);
+      .catch(() => {
+        // Non-fatal — the page itself can still load without the sidebar populated.
       });
-  }, [slug, currentDoc]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  // Simple markdown to HTML converter
-  const markdownToHtml = (md) => {
-    if (!md) return '';
-    
-    let html = md;
-    
-    // Code blocks first (before other processing)
-    html = html.replace(/```[\s\S]*?```/g, (match) => {
-      const code = match.replace(/```[\w]*\n?/g, '').replace(/```/g, '').trim();
-      return `<pre class="bg-gray-100 p-4 rounded-lg overflow-x-auto my-4 border border-gray-200"><code class="text-sm font-mono">${code}</code></pre>`;
-    });
-    
-    // Inline code
-    html = html.replace(/`([^`\n]+)`/g, '<code class="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono">$1</code>');
-    
-    // Headers
-    html = html.replace(/^#### (.*$)/gim, '<h4 class="text-lg font-semibold text-gray-900 mt-6 mb-3">$1</h4>');
-    html = html.replace(/^### (.*$)/gim, '<h3 class="text-xl font-semibold text-gray-900 mt-6 mb-3">$1</h3>');
-    html = html.replace(/^## (.*$)/gim, '<h2 class="text-2xl font-semibold text-gray-900 mt-8 mb-4 border-b border-gray-200 pb-2">$1</h2>');
-    html = html.replace(/^# (.*$)/gim, '<h1 class="text-3xl font-bold text-gray-900 mt-8 mb-4">$1</h1>');
-    
-    // Horizontal rules
-    html = html.replace(/^---$/gim, '<hr class="my-6 border-gray-300" />');
-    
-    // Bold and italic (bold first)
-    html = html.replace(/\*\*(.*?)\*\*/gim, '<strong class="font-semibold">$1</strong>');
-    html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>');
-    
-    // Links
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2" class="text-blue-600 hover:text-blue-700 underline">$1</a>');
-    
-    // Process lists - convert to HTML first, then wrap
-    const lines = html.split('\n');
-    let inList = false;
-    let listType = null;
-    let result = [];
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const bulletMatch = line.match(/^[\*\-\+] (.*)$/);
-      const numberMatch = line.match(/^\d+\. (.*)$/);
-      
-      if (bulletMatch || numberMatch) {
-        const content = bulletMatch ? bulletMatch[1] : numberMatch[1];
-        const isOrdered = !!numberMatch;
-        
-        if (!inList || listType !== (isOrdered ? 'ol' : 'ul')) {
-          if (inList) {
-            result.push(`</${listType}>`);
-          }
-          listType = isOrdered ? 'ol' : 'ul';
-          result.push(`<${listType} class="mb-4 ml-6 space-y-2 list-${isOrdered ? 'decimal' : 'disc'}">`);
-          inList = true;
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPage() {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await api.getPlatformDoc(slug);
+        if (!cancelled) setDoc(data);
+      } catch (err) {
+        if (!cancelled) {
+          setDoc(null);
+          setError(err?.message || 'Failed to load documentation page');
         }
-        result.push(`<li class="text-gray-700">${content}</li>`);
-      } else {
-        if (inList) {
-          result.push(`</${listType}>`);
-          inList = false;
-          listType = null;
-        }
-        result.push(line);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
-    
-    if (inList) {
-      result.push(`</${listType}>`);
-    }
-    
-    html = result.join('\n');
-    
-    // Process paragraphs (split by double newlines, but preserve existing HTML)
-    html = html.split('\n\n').map(block => {
-      const trimmed = block.trim();
-      if (!trimmed) return '';
-      // Don't wrap if it's already HTML
-      if (trimmed.startsWith('<') && (trimmed.startsWith('<h') || trimmed.startsWith('<p') || trimmed.startsWith('<ul') || trimmed.startsWith('<ol') || trimmed.startsWith('<pre') || trimmed.startsWith('<hr'))) {
-        return trimmed;
-      }
-      // Don't wrap if it's a list
-      if (trimmed.includes('<li>')) {
-        return trimmed;
-      }
-      return `<p class="mb-4 text-gray-700 leading-relaxed">${trimmed}</p>`;
-    }).join('\n');
+    loadPage();
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
 
-    return html;
-  };
+  const located = useMemo(() => locate(groups, slug), [groups, slug]);
+  const activeGroup = located.group || groups[0] || null;
+  const accent = GROUP_ACCENTS[activeGroup?.title] || DEFAULT_ACCENT;
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-600">Loading documentation...</div>
-      </div>
-    );
-  }
+  const { title, html: bodyHtml, toc } = useMemo(() => {
+    if (!doc?.markdown) return { title: null, html: '', toc: [] };
+    const { title: parsedTitle, rest } = splitTitle(marked.parse(doc.markdown));
+    const { html: withAnchors, toc: headings } = addHeadingAnchors(rest);
+    return { title: parsedTitle, html: withAnchors, toc: headings };
+  }, [doc]);
 
-  // Show error only if there's an actual error AND we're not loading
-  // For nested paths (products/...), currentDoc will be undefined, which is fine
-  if (error && !loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Document Not Found</h1>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <Link to="/docs" className="text-blue-600 hover:text-blue-700">
-            ← Back to Documentation
-          </Link>
-        </div>
-      </div>
-    );
-  }
-  
-  // For regular docs, check if currentDoc exists
-  if (!slug.includes('/') && !currentDoc && !loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Document Not Found</h1>
-          <Link to="/docs" className="text-blue-600 hover:text-blue-700">
-            ← Back to Documentation
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  // The content below is injected via dangerouslySetInnerHTML, so its links
+  // are plain <a> tags, not React Router <Link>s — intercept clicks on the
+  // ones we just rewrote to /docs/... so they navigate client-side instead
+  // of doing a full page reload.
+  useEffect(() => {
+    const container = contentRef.current;
+    if (!container) return undefined;
+    const handleClick = (event) => {
+      const link = event.target.closest('a');
+      if (!link) return;
+      const href = link.getAttribute('href') || '';
+      if (!href.startsWith('/docs/')) return;
+      event.preventDefault();
+      navigate(href);
+    };
+    container.addEventListener('click', handleClick);
+    return () => container.removeEventListener('click', handleClick);
+  }, [navigate]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex gap-8">
-          {/* Sidebar */}
-          <aside className="w-64 flex-shrink-0">
-            <div className="bg-surface rounded-lg shadow p-4 sticky top-8 max-h-[calc(100vh-4rem)] overflow-y-auto">
-              <h2 className="font-semibold text-gray-900 mb-4">Documentation</h2>
-              <nav className="space-y-6">
-                {DOC_SECTIONS.map((section) => (
-                  <div key={section.title}>
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                      {section.title}
-                    </h3>
-                    <div className="space-y-1">
-                      {section.docs.map((doc) => (
+    <div className="max-w-6xl mx-auto">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">Documentation</h1>
+        <p className="mt-1 text-gray-600">
+          How to use Orbit, and the AppSec program it helps you run.
+        </p>
+      </div>
+
+      {/* Top-level switcher between the two documentation groups — kept
+          visually distinct (separate color per group, separate sidebar
+          below) so the two don't read as one undifferentiated pile. */}
+      <div className="flex gap-8 mb-8 border-b border-gray-200">
+        {groups.map((group) => {
+          const groupAccent = GROUP_ACCENTS[group.title] || DEFAULT_ACCENT;
+          const isActive = group.title === activeGroup?.title;
+          const firstSlug = group.sections[0]?.pages[0]?.slug;
+          return (
+            <Link
+              key={group.title}
+              to={`/docs/${firstSlug}`}
+              className={`pb-3 -mb-px border-b-2 font-semibold text-sm transition-colors ${
+                isActive ? groupAccent.tabActive : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {group.title}
+            </Link>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-col gap-6 lg:flex-row">
+        <aside className="lg:w-64 flex-shrink-0">
+          <Card padding="sm" className="lg:sticky lg:top-8">
+            <nav className="space-y-5">
+              {(activeGroup?.sections || []).map((section) => (
+                <div key={section.title}>
+                  <h3 className="px-2 mb-2 text-xs font-semibold tracking-wider text-gray-500 uppercase">
+                    {section.title}
+                  </h3>
+                  <div className="space-y-1">
+                    {section.pages.map((p) => (
+                      <div key={p.slug}>
                         <Link
-                          key={doc.slug}
-                          to={`/docs/${doc.slug}`}
+                          to={`/docs/${p.slug}`}
                           className={`block px-3 py-2 rounded text-sm transition-colors ${
-                            slug === doc.slug
-                              ? 'bg-blue-50 text-blue-700 font-medium'
-                              : 'text-gray-700 hover:bg-gray-50'
+                            slug === p.slug ? `${accent.chip} font-medium` : 'text-gray-700 hover:bg-gray-50'
                           }`}
                         >
-                          {doc.title}
+                          {p.title}
                         </Link>
-                      ))}
-                    </div>
+                        {(p.children || []).length > 0 && (
+                          <div className="ml-3 border-l border-gray-200 pl-2 space-y-1">
+                            {p.children.map((child) => (
+                              <Link
+                                key={child.slug}
+                                to={`/docs/${child.slug}`}
+                                className={`block px-3 py-1.5 rounded text-sm transition-colors ${
+                                  slug === child.slug ? `${accent.chip} font-medium` : 'text-gray-600 hover:bg-gray-50'
+                                }`}
+                              >
+                                {child.title}
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </nav>
-            </div>
-          </aside>
+                </div>
+              ))}
+            </nav>
+          </Card>
 
-          {/* Main content */}
-          <main className="flex-1">
-            <div className="bg-surface rounded-lg shadow p-8">
-              <div className="mb-6">
-                <Link
-                  to="/docs"
-                  className="text-sm text-blue-600 hover:text-blue-700 mb-4 inline-block"
-                >
+          <a
+            href="/api/docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 block px-3 py-2 text-sm text-blue-600 hover:text-blue-700"
+          >
+            API Reference ↗
+          </a>
+        </aside>
+
+        <main className="flex-1 min-w-0 flex flex-col gap-6 lg:flex-row-reverse">
+          {toc.length > 1 && (
+            <div className="lg:w-56 flex-shrink-0">
+              <div className="lg:sticky lg:top-8 px-4 py-3 rounded-lg border border-gray-200 bg-gray-50">
+                <p className="mb-2 text-xs font-semibold tracking-wider text-gray-500 uppercase">On this page</p>
+                <ul className="space-y-1.5">
+                  {toc.map((item) => (
+                    <li key={item.slug} className={item.level === 3 ? 'ml-3' : ''}>
+                      <a href={`#${item.slug}`} className="text-sm text-blue-600 hover:text-blue-700">
+                        {item.text}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          <Card padding="lg" className="flex-1 min-w-0">
+            {loading ? (
+              <p className="text-sm text-gray-500">Loading...</p>
+            ) : error ? (
+              <div className="text-center">
+                <h2 className="mb-2 text-2xl font-bold text-gray-900">Page not found</h2>
+                <p className="mb-4 text-sm text-gray-600">{error}</p>
+                <Link to="/docs/overview" className="text-sm text-blue-600 hover:text-blue-700">
                   ← Back to Documentation
                 </Link>
-                <h1 className="text-3xl font-bold text-gray-900 mt-2">{currentDoc ? currentDoc.title : docTitle}</h1>
               </div>
-              <div
-                className="prose max-w-none"
-                dangerouslySetInnerHTML={{ __html: markdownToHtml(content) }}
-              />
-            </div>
-          </main>
-        </div>
+            ) : (
+              <>
+                <p className={`mb-2 text-xs font-semibold tracking-wider uppercase ${accent.eyebrow}`}>
+                  {located.parent ? located.parent.title : located.section?.title}
+                </p>
+                {title && <h1 className="mb-6 text-3xl font-bold text-gray-900">{title}</h1>}
+                <div ref={contentRef} className="prose max-w-none" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+              </>
+            )}
+          </Card>
+        </main>
       </div>
     </div>
   );
 }
-
