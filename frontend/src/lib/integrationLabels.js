@@ -1,6 +1,5 @@
 /** Human-readable names for IntegrationCredential.provider and SCM connection.provider values */
 const INTEGRATION_PROVIDER_LABELS = {
-  TENABLE_IO: 'Tenable.io',
   WIZ: 'Wiz',
   GITHUB: 'GitHub',
   GITLAB: 'GitLab',

@@ -165,7 +165,7 @@ router.get('/applications', async (req, res) => {
   }
 });
 
-// Security findings export (Tenable WAS + Wiz SAST) - real-time vendor calls, async job
+// Security findings export (Wiz SAST) - real-time vendor calls, async job
 router.get('/security-findings/preview', async (req, res) => {
   try {
     const companies = await getExportPreviewList(prisma, { companyIds: null });

@@ -76,7 +76,7 @@ function RunTimeCell({ j, st }) {
 }
 
 /**
- * Tenable + Wiz CSV export jobs (your account).
+ * Wiz CSV export jobs (your account).
  */
 export function SecurityFindingsExportJobs() {
   const [jobs, setJobs] = useState(/** @type {Array<Record<string, unknown>>} */ ([]));
@@ -176,7 +176,7 @@ export function SecurityFindingsExportJobs() {
         </Button>
       </div>
       <p className="text-sm text-gray-600 mb-4 max-w-3xl">
-        Tenable and Wiz CSV exports you started. While a job is running, vendor API calls can take many minutes; this
+        Wiz CSV exports you started. While a job is running, vendor API calls can take many minutes; this
         list refreshes every few seconds until no job is running. You can <strong>Cancel</strong> a running job; the
         worker stops at the next internal step (a long in-flight vendor call may still need to finish). When status
         is <span className="text-green-700">complete</span>, use <strong>Download CSV</strong>. You can

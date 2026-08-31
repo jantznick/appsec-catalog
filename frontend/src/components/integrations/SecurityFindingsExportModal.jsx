@@ -49,7 +49,6 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
   const [companies, setCompanies] = useState(/** @type {Array<{ id: string, name: string, applicationCount: number, integrations: string[] }>} */ ([]));
   const [selected, setSelected] = useState(/** @type {Record<string, boolean>} */ ({}));
   const [separateByApp, setSeparateByApp] = useState(true);
-  const [includeTenable, setIncludeTenable] = useState(true);
   const [includeWiz, setIncludeWiz] = useState(true);
   const [timeMode, setTimeMode] = useState('all');
   const [customDays, setCustomDays] = useState('30');
@@ -62,10 +61,9 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
 
   const buildProvidersBody = useCallback(
     () => ({
-      TENABLE_IO: includeTenable,
       WIZ: includeWiz,
     }),
-    [includeTenable, includeWiz],
+    [includeWiz],
   );
 
   const load = useCallback(async () => {
@@ -83,7 +81,6 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
             return a;
           }, /** @type {Record<string, boolean>} */ ({})),
         );
-        setIncludeTenable(true);
         setIncludeWiz(true);
       } else {
         const d = await api.getCompanySecurityFindingsPreview(companyId);
@@ -92,10 +89,8 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
           setSelected({ [d.companies[0].id]: true });
           const int = d.companies[0].integrations || [];
           if (int.length > 0) {
-            setIncludeTenable(int.includes('Tenable WAS'));
             setIncludeWiz(int.includes('Wiz SAST'));
           } else {
-            setIncludeTenable(true);
             setIncludeWiz(true);
           }
         }
@@ -234,7 +229,7 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
     if (exporting) {
       return;
     }
-    if (!includeTenable && !includeWiz) {
+    if (!includeWiz) {
       toast.error('Select at least one integration');
       return;
     }
@@ -268,7 +263,7 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
     }
   };
 
-  const atLeastOneIntegration = includeTenable || includeWiz;
+  const atLeastOneIntegration = includeWiz;
 
   return (
     <Modal
@@ -296,15 +291,6 @@ export function SecurityFindingsExportModal({ open, onClose, mode, companyId, co
 
       <div className="mb-3 p-3 rounded-md border border-gray-200 bg-gray-50">
         <p className="text-sm font-medium text-gray-800 mb-2">Include in this export</p>
-        <label className="flex items-start gap-2 text-sm text-gray-800 cursor-pointer max-w-full">
-          <Checkbox
-            checked={includeTenable}
-            onChange={(e) => setIncludeTenable(e.target.checked)}
-          />
-          <span className="min-w-0 flex-1 leading-snug">
-            <span className="font-medium">Tenable.io WAS</span> (tag-based counts)
-          </span>
-        </label>
         <label className="flex items-start gap-2 text-sm text-gray-800 cursor-pointer mt-1.5 max-w-full">
           <Checkbox checked={includeWiz} onChange={(e) => setIncludeWiz(e.target.checked)} />
           <span className="min-w-0 flex-1 leading-snug">

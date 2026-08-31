@@ -35,7 +35,7 @@ function highlightParts(text, query) {
 }
 
 /**
- * Tenable / Wiz tag or folder picker: debounced search, category-style primary line, scrollable list.
+ * Wiz tag or folder picker: debounced search, category-style primary line, scrollable list.
  */
 export function IntegrationTagPickerModal({
   isOpen,

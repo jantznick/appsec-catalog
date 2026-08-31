@@ -10,8 +10,8 @@ import { integrationProviderLabel } from '../../lib/integrationLabels.js';
 import { AddIntegrationModal } from './AddIntegrationModal.jsx';
 import { IntegrationTagPickerModal } from './IntegrationTagPickerModal.jsx';
 
-/** Providers that support a non-secret link in CompanyToolLink.filter (Tenable tag, Wiz folder). */
-const TOOL_LINK_PROVIDERS = new Set(['TENABLE_IO', 'WIZ']);
+/** Providers that support a non-secret link in CompanyToolLink.filter (Wiz folder). */
+const TOOL_LINK_PROVIDERS = new Set(['WIZ']);
 
 /**
  * @param {{ companyId: string, company: object, onRefresh: () => Promise<void> }} props
@@ -65,7 +65,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
 
   /**
    * Rows under “This company”: per-company keys, existing tag/folder links, **or** (for admins)
-   * catalog-wide-only + linkable tool (Tenable/Wiz) so the Tag/Folder link UI is reachable when
+   * catalog-wide-only + linkable tool (Wiz) so the Folder link UI is reachable when
    * there are no company-specific API keys.
    */
   const companyScopedProviders = useMemo(() => {
@@ -467,10 +467,7 @@ export function CompanyIntegrationsSection({ companyId, company, onRefresh }) {
         providerOptions={
           providerOptions.length
             ? providerOptions
-            : [
-                { value: 'TENABLE_IO', label: 'Tenable.io' },
-                { value: 'WIZ', label: 'Wiz' },
-              ]
+            : [{ value: 'WIZ', label: 'Wiz' }]
         }
         defaultProvider={addModalProviderPreset}
         title={addModalProviderPreset ? 'Update company integration' : 'Add integration'}
