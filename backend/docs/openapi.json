@@ -33,7 +33,7 @@
     },
     {
       "name": "Application Integrations",
-      "description": "Linking an application to tag/folder-based filters in connected security tools (Tenable.io, Wiz)."
+      "description": "Linking an application to tag/folder-based filters in connected security tools (Wiz)."
     },
     {
       "name": "Application Score",
@@ -69,7 +69,7 @@
     },
     {
       "name": "Integrations",
-      "description": "Enterprise/company-scoped vulnerability-scanner integrations (Tenable.io, Wiz): credential CRUD, tag/folder discovery, and per-company filter links."
+      "description": "Enterprise/company-scoped vulnerability-scanner integrations (Wiz): credential CRUD, tag/folder discovery, and per-company filter links."
     },
     {
       "name": "Notes",
@@ -101,7 +101,7 @@
     },
     {
       "name": "Security Findings",
-      "description": "Asynchronous export of security findings (Tenable.io / Wiz) to CSV. Jobs are created per-company via the /api/companies/{companyId}/security-findings routes, and can be tracked, cancelled, deleted, and downloaded either through those same company-scoped routes or through the unified /api/security-findings/jobs routes, which list and manage all jobs owned by the calling user regardless of which company (or admin multi-company export) they were created for."
+      "description": "Asynchronous export of security findings (Wiz) to CSV. Jobs are created per-company via the /api/companies/{companyId}/security-findings routes, and can be tracked, cancelled, deleted, and downloaded either through those same company-scoped routes or through the unified /api/security-findings/jobs routes, which list and manage all jobs owned by the calling user regardless of which company (or admin multi-company export) they were created for."
     },
     {
       "name": "Source Control",
@@ -2066,7 +2066,7 @@
       "post": {
         "operationId": "createCompanySecurityFindingsJob",
         "summary": "Start a security findings export job for one company",
-        "description": "Kicks off an asynchronous CSV export of Tenable.io/Wiz security findings scoped to a single company (job scope SINGLE_COMPANY). Validates the requested time range and provider selection (at least one of Tenable.io/Wiz must be enabled) before enqueuing the job; the job then runs in the background and is polled via the jobs/:id endpoint below. Caller must be an admin or a member of the target company.",
+        "description": "Kicks off an asynchronous CSV export of Wiz security findings scoped to a single company (job scope SINGLE_COMPANY). Validates the requested time range and provider selection (Wiz must be enabled) before enqueuing the job; the job then runs in the background and is polled via the jobs/:id endpoint below. Caller must be an admin or a member of the target company.",
         "tags": [
           "Security Findings"
         ],
@@ -2118,11 +2118,8 @@
                   },
                   "providers": {
                     "type": "object",
-                    "description": "Which findings providers to include. Both default to true if omitted.",
+                    "description": "Which findings providers to include. Defaults to true if omitted.",
                     "properties": {
-                      "TENABLE_IO": {
-                        "type": "boolean"
-                      },
                       "WIZ": {
                         "type": "boolean"
                       }
@@ -4847,7 +4844,6 @@
             "schema": {
               "type": "string",
               "enum": [
-                "TENABLE_IO",
                 "WIZ"
               ]
             },
@@ -4873,16 +4869,6 @@
                           },
                           "value": {
                             "type": "string"
-                          },
-                          "category_uuid": {
-                            "type": "string",
-                            "nullable": true,
-                            "description": "Tenable.io only."
-                          },
-                          "category_name": {
-                            "type": "string",
-                            "nullable": true,
-                            "description": "Tenable.io only."
                           },
                           "display_label": {
                             "type": "string"
@@ -4989,7 +4975,7 @@
       "put": {
         "operationId": "setApplicationIntegrationLink",
         "summary": "Link an application to a tag/folder in a security tool",
-        "description": "Creates or updates the tag-based filter that scopes which vendor findings belong to this application. For `TENABLE_IO`, the body must include `tagUuid` (from the tags endpoint above). For `WIZ`, the body must include `tagValue`, and that value must be one of the tags returned for the company's already-linked Wiz folder — the folder itself cannot be overridden per application. Requires the provider's integration credentials to already be configured at the company or enterprise level.",
+        "description": "Creates or updates the tag-based filter that scopes which vendor findings belong to this application. The body must include `tagValue`, and that value must be one of the tags returned for the company's already-linked Wiz folder — the folder itself cannot be overridden per application. Requires the provider's integration credentials to already be configured at the company or enterprise level.",
         "tags": [
           "Application Integrations"
         ],
@@ -5015,7 +5001,6 @@
             "schema": {
               "type": "string",
               "enum": [
-                "TENABLE_IO",
                 "WIZ"
               ]
             },
@@ -5028,29 +5013,20 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "description": "Shape depends on `provider`. Tenable.io: tagUuid required. Wiz: tagValue required.",
+                "description": "tagValue is required; must be a tag returned by the tags endpoint for the company's linked folder.",
                 "properties": {
-                  "tagUuid": {
-                    "type": "string",
-                    "description": "Required when provider=TENABLE_IO."
-                  },
                   "tagName": {
                     "type": "string",
                     "nullable": true
                   },
-                  "categoryUuid": {
-                    "type": "string",
-                    "nullable": true,
-                    "description": "Tenable.io only, for display."
-                  },
                   "tagValue": {
                     "type": "string",
-                    "description": "Required when provider=WIZ; must be a tag returned by the tags endpoint for the company's linked folder."
+                    "description": "Required; must be a tag returned by the tags endpoint for the company's linked folder."
                   },
                   "folderName": {
                     "type": "string",
                     "nullable": true,
-                    "description": "Wiz only, informational; the folder ID itself is inherited from the company-level Wiz link."
+                    "description": "Informational; the folder ID itself is inherited from the company-level Wiz link."
                   }
                 }
               }
@@ -5077,7 +5053,6 @@
                         "provider": {
                           "type": "string",
                           "enum": [
-                            "TENABLE_IO",
                             "WIZ"
                           ]
                         },
@@ -12161,7 +12136,7 @@
       "put": {
         "operationId": "putIntegrationCredential",
         "summary": "Save (create or update) an integration credential",
-        "description": "Encrypts and stores an access key/secret pair for a vulnerability-scanner provider (TENABLE_IO or WIZ), either at ENTERPRISE scope (admin only) or COMPANY scope (admin or a member of that company). For WIZ, accessKey/secretKey map to the OAuth client ID/secret and a tenant GraphQL baseUrl is required; the URL is normalized and stored alongside a masked hint of the access key. Upserts on (provider, scope, companyId).",
+        "description": "Encrypts and stores an access key/secret pair for a vulnerability-scanner provider (WIZ), either at ENTERPRISE scope (admin only) or COMPANY scope (admin or a member of that company). accessKey/secretKey map to the OAuth client ID/secret and a tenant GraphQL baseUrl is required; the URL is normalized and stored alongside a masked hint of the access key. Upserts on (provider, scope, companyId).",
         "tags": [
           "Integrations"
         ],
@@ -12178,7 +12153,6 @@
             "schema": {
               "type": "string",
               "enum": [
-                "TENABLE_IO",
                 "WIZ"
               ]
             }
@@ -12336,7 +12310,6 @@
             "schema": {
               "type": "string",
               "enum": [
-                "TENABLE_IO",
                 "WIZ"
               ]
             }
@@ -12433,7 +12406,6 @@
             "schema": {
               "type": "string",
               "enum": [
-                "TENABLE_IO",
                 "WIZ"
               ]
             }
@@ -12492,7 +12464,7 @@
       "get": {
         "operationId": "listIntegrationProviders",
         "summary": "List supported vulnerability-scanner provider ids",
-        "description": "Returns the static list of provider identifiers supported for integration-credential CRUD and tag/folder discovery (currently TENABLE_IO and WIZ). Used by the UI to populate provider pickers.",
+        "description": "Returns the static list of provider identifiers supported for integration-credential CRUD and tag/folder discovery (currently WIZ). Used by the UI to populate provider pickers.",
         "tags": [
           "Integrations"
         ],
@@ -12515,7 +12487,6 @@
                         "type": "string"
                       },
                       "example": [
-                        "TENABLE_IO",
                         "WIZ"
                       ]
                     }
@@ -12531,7 +12502,7 @@
       "get": {
         "operationId": "listCompanyIntegrationTags",
         "summary": "List a provider's tags/folders available to a company",
-        "description": "Resolves the credential that applies to this company (company-scoped, falling back to enterprise-scoped) and calls the live vendor API to list assignable groupings: Tenable.io tag values, or Wiz folders (normalized into the same tag-like shape with folder id as uuid and folder name as value/display_label). Used to populate the picker for the company's integration-link filter.",
+        "description": "Resolves the credential that applies to this company (company-scoped, falling back to enterprise-scoped) and calls the live vendor API to list assignable groupings: Wiz folders (normalized into a tag-like shape with folder id as uuid and folder name as value/display_label). Used to populate the picker for the company's integration-link filter.",
         "tags": [
           "Integrations"
         ],
@@ -12556,7 +12527,6 @@
             "schema": {
               "type": "string",
               "enum": [
-                "TENABLE_IO",
                 "WIZ"
               ]
             }
@@ -12582,10 +12552,6 @@
                             "type": "string"
                           },
                           "display_label": {
-                            "type": "string",
-                            "nullable": true
-                          },
-                          "category_uuid": {
                             "type": "string",
                             "nullable": true
                           }
@@ -12616,7 +12582,7 @@
       "put": {
         "operationId": "setCompanyIntegrationLink",
         "summary": "Set a company's tag/folder filter for a provider",
-        "description": "Persists the tag (Tenable.io) or folder (Wiz) that scopes which vendor findings belong to this company. For Wiz, the selected folder is re-verified against the live Wiz API immediately before saving, so a stale or cross-tenant folder id cannot be persisted as a valid company boundary. Upserts CompanyToolLink on (companyId, provider).",
+        "description": "Persists the folder (Wiz) that scopes which vendor findings belong to this company. The selected folder is re-verified against the live Wiz API immediately before saving, so a stale or cross-tenant folder id cannot be persisted as a valid company boundary. Upserts CompanyToolLink on (companyId, provider).",
         "tags": [
           "Integrations"
         ],
@@ -12641,7 +12607,6 @@
             "schema": {
               "type": "string",
               "enum": [
-                "TENABLE_IO",
                 "WIZ"
               ]
             }
@@ -12652,41 +12617,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "oneOf": [
-                  {
-                    "type": "object",
-                    "description": "TENABLE_IO filter.",
-                    "required": [
-                      "tagUuid"
-                    ],
-                    "properties": {
-                      "tagUuid": {
-                        "type": "string"
-                      },
-                      "tagName": {
-                        "type": "string"
-                      },
-                      "categoryUuid": {
-                        "type": "string"
-                      }
-                    }
+                "type": "object",
+                "description": "WIZ filter.",
+                "required": [
+                  "folderId"
+                ],
+                "properties": {
+                  "folderId": {
+                    "type": "string"
                   },
-                  {
-                    "type": "object",
-                    "description": "WIZ filter.",
-                    "required": [
-                      "folderId"
-                    ],
-                    "properties": {
-                      "folderId": {
-                        "type": "string"
-                      },
-                      "folderName": {
-                        "type": "string"
-                      }
-                    }
+                  "folderName": {
+                    "type": "string"
                   }
-                ]
+                }
               }
             }
           }

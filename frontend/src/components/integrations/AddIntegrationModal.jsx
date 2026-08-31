@@ -140,7 +140,7 @@ export function AddIntegrationModal({
           placeholder={
             isWiz
               ? 'https://api.<tenant>.app.wiz.io/graphql'
-              : 'https://cloud.tenable.com'
+              : 'https://api.example.com'
           }
         />
         {!isWiz ? (

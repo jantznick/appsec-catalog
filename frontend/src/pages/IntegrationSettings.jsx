@@ -431,10 +431,7 @@ export function IntegrationSettings() {
           providerOptions={
             providerOptions.length
               ? providerOptions
-              : [
-                  { value: 'TENABLE_IO', label: 'Tenable.io' },
-                  { value: 'WIZ', label: 'Wiz' },
-                ]
+              : [{ value: 'WIZ', label: 'Wiz' }]
           }
           defaultProvider={addModalProviderPreset}
           title={addModalProviderPreset ? 'Update catalog-wide integration' : 'Add integration'}

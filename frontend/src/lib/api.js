@@ -877,7 +877,7 @@ export const api = {
       body: JSON.stringify({ action, approvedFields, rejectionReason, approvalNotes }),
     }),
 
-  // External integrations (Tenable.io, etc.)
+  // External integrations (Wiz, etc.)
   getIntegrationProviders: () =>
     apiRequest('/api/integrations/providers'),
 
@@ -987,7 +987,7 @@ export const api = {
   unlinkApplicationScmRepo: (applicationId) =>
     apiRequest(`/api/applications/${applicationId}/scm/link`, { method: 'DELETE' }),
 
-  // Security findings export (Tenable WAS + Wiz SAST)
+  // Security findings export (Wiz SAST)
   getAdminSecurityFindingsPreview: () => apiRequest('/api/admin/security-findings/preview'),
   getAdminGitCommits: (limit = 25) =>
     apiRequest(`/api/admin/git/commits?limit=${encodeURIComponent(limit)}`),

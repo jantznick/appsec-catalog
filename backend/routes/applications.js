@@ -17,19 +17,15 @@ import { buildIntegrationSummaryForCompanyId } from '../integrations/summaryForC
 import { getIntegrationsKey } from '../utils/integrationCrypto.js';
 import {
   assertSupportedProvider,
-  PROVIDER_TENABLE_IO,
   PROVIDER_WIZ,
 } from '../integrations/constants.js';
 import {
   resolveIntegrationForCompany,
-  validateTenableIoFilter,
-  normalizeTenableIoFilter,
   validateWizFilter,
   normalizeWizFilter,
   validateWizApplicationFilter,
   normalizeWizApplicationFilter,
 } from '../integrations/resolve.js';
-import { listTenableIoTagValues } from '../integrations/tenableIo.js';
 import { listWizTagsForFolder } from '../integrations/wiz.js';
 import { integrationLog } from '../integrations/log.js';
 import { getAuthContext } from '../middleware/authContext.js';
@@ -1180,18 +1176,6 @@ router.get('/:id/integrations/:provider/tags', requireAuth, async (req, res) => 
       return res.status(403).json({ error: 'Permission denied', message: 'You cannot list tags for this application' });
     }
 
-    if (provider === PROVIDER_TENABLE_IO) {
-      const tags = await listTenableIoTagValues(resolved.decrypted, resolved.baseUrl);
-      integrationLog('info', {
-        layer: 'api',
-        op: 'GET_application_integration_tags',
-        provider,
-        applicationId,
-        companyId,
-        itemCount: tags.length,
-      });
-      return res.json({ tags });
-    }
     if (provider === PROVIDER_WIZ) {
       const companyLink = await prisma.companyToolLink.findUnique({
         where: { companyId_provider: { companyId, provider } },
@@ -1270,14 +1254,7 @@ router.put('/:id/integrations/:provider/link', requireAuth, async (req, res) => 
     }
 
     let filter;
-    if (provider === PROVIDER_TENABLE_IO) {
-      const normalized = normalizeTenableIoFilter(req.body);
-      const v = validateTenableIoFilter(normalized);
-      if (!v.ok) {
-        return res.status(400).json({ error: v.message });
-      }
-      filter = normalized;
-    } else if (provider === PROVIDER_WIZ) {
+    if (provider === PROVIDER_WIZ) {
       const companyLink = await prisma.companyToolLink.findUnique({
         where: { companyId_provider: { companyId, provider } },
       });

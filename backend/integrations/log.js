@@ -4,7 +4,7 @@
  *
  * Set INTEGRATIONS_VERBOSE=1 (or "true") for extra detail (per-page fetches, fallbacks).
  *
- * Security findings CSV export always logs each outbound Tenable/Wiz HTTP request (method, host, path)
+ * Security findings CSV export always logs each outbound Wiz HTTP request (method, host, path)
  * via `logExportVendorRequest` (no env flag).
  */
 
@@ -28,7 +28,7 @@ export function graphQlOpNameFromQuery(gql) {
 
 /**
  * @param {object} p
- * @param {string} p.provider e.g. TENABLE_IO, WIZ
+ * @param {string} p.provider e.g. WIZ
  * @param {string} p.method
  * @param {string} p.url absolute URL
  * @param {string} [p.label] human hint (e.g. pagination, operation name)

@@ -9,10 +9,10 @@ import { integrationProviderLabel } from '../../lib/integrationLabels.js';
 import { IntegrationTagPickerModal } from './IntegrationTagPickerModal.jsx';
 import { ApplicationScmBlock } from './ApplicationScmBlock.jsx';
 
-const TOOL_LINK_PROVIDERS = new Set(['TENABLE_IO', 'WIZ']);
+const TOOL_LINK_PROVIDERS = new Set(['WIZ']);
 
 /**
- * Per-application Tenable/Wiz tag links. Wiz tags are scoped by the app's company folder.
+ * Per-application Wiz tag links, scoped by the app's company folder.
  * @param {{ application: object, onRefresh: () => Promise<void> }} props
  */
 export function ApplicationIntegrationsSection({ application, onRefresh }) {
@@ -129,7 +129,7 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
         <CardHeader>
           <CardTitle>Integrations (this application)</CardTitle>
           <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-            Link a Tenable or Wiz tag to <strong>this application</strong>. Wiz tags are limited to the
+            Link a Wiz tag to <strong>this application</strong>. Wiz tags are limited to the
             company&apos;s linked folder. API keys are managed
             for the company (
             <Link to={`/companies/${companyId}`} className="text-blue-600 hover:underline">
@@ -145,7 +145,7 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
         <CardContent className="space-y-6">
           {showGlobalEmpty ? (
             <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/50 px-4 py-6 text-center text-sm text-gray-600">
-              No integration credentials available for this company. Configure Tenable or Wiz on the
+              No integration credentials available for this company. Configure Wiz on the
               company or catalog-wide first.
             </div>
           ) : null}
@@ -182,7 +182,7 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
               </h3>
               {appScopedProviders.length === 0 ? (
                 <p className="text-sm text-gray-600">
-                  No linkable tool yet. Add catalog-wide or company credentials for Tenable or Wiz.
+                  No linkable tool yet. Add catalog-wide or company credentials for Wiz.
                 </p>
               ) : (
                 <ul className="space-y-4">

@@ -77,7 +77,7 @@ model ApiToken {
   @@index([revokedAt])
 }
 
-/// User-driven Tenable/Wiz CSV export. Completed CSV is kept until row is deleted; no automatic expiry (see ops).
+/// User-driven Wiz CSV export. Completed CSV is kept until row is deleted; no automatic expiry (see ops).
 model SecurityFindingsJob {
   id             String    @id @default(cuid())
   userId         String
@@ -988,16 +988,16 @@ enum IntegrationScope {
   COMPANY
 }
 
-// Global or per-company API credentials for external tools (Tenable.io, future Wiz/Snyk/etc.)
+// Global or per-company API credentials for external tools (Wiz, future Snyk/etc.)
 model IntegrationCredential {
   id               String            @id @default(cuid())
-  provider         String // e.g. TENABLE_IO
+  provider         String // e.g. WIZ
   scope            IntegrationScope
   companyId        String?
   company          Company?          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   encryptedPayload String            @db.Text
   accessKeyHint    String? // Last chars of access key for display only
-  baseUrl          String? // Optional API base (e.g. https://cloud.tenable.com)
+  baseUrl          String? // Optional API base (e.g. https://api.<tenant>.app.wiz.io/graphql)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   updatedByUserId  String?
@@ -1007,7 +1007,7 @@ model IntegrationCredential {
   @@index([companyId])
 }
 
-// Per-company filter metadata for a provider (e.g. Tenable tag UUID) - no secrets
+// Per-company filter metadata for a provider (e.g. Wiz folder id) - no secrets
 model CompanyToolLink {
   id        String   @id @default(cuid())
   companyId String
@@ -1021,7 +1021,7 @@ model CompanyToolLink {
   @@index([provider])
 }
 
-// Per-application filter for a provider (e.g. Tenable tag) - no secrets; credentials come from the app’s company
+// Per-application filter for a provider (e.g. Wiz tag) - no secrets; credentials come from the app’s company
 model ApplicationToolLink {
   id            String      @id @default(cuid())
   applicationId String

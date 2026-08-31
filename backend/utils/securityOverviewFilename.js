@@ -1,5 +1,5 @@
 /**
- * Download filename for security findings (Tenable + Wiz) overview CSVs.
+ * Download filename for security findings (Wiz) overview CSVs.
  * @param {string} s
  * @returns {string} ASCII slug, max 80 chars
  */

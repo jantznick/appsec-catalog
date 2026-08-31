@@ -1,7 +1,6 @@
 import { prisma } from '../prisma/client.js';
 import { resolveIntegrationForCompany } from '../integrations/resolve.js';
-import { PROVIDER_TENABLE_IO, PROVIDER_WIZ } from '../integrations/constants.js';
-import { getTenableWasCountsByTag } from '../integrations/tenableWasFindings.js';
+import { PROVIDER_WIZ } from '../integrations/constants.js';
 import { getWizSastCountsForProject } from '../integrations/wizSastFindings.js';
 
 /**
@@ -39,9 +38,6 @@ export function parseTimeRange(body) {
  * @param {string} p
  */
 function labelProvider(p) {
-  if (p === PROVIDER_TENABLE_IO) {
-    return 'Tenable WAS';
-  }
   if (p === PROVIDER_WIZ) {
     return 'Wiz SAST';
   }
@@ -69,32 +65,6 @@ function addSev(a, b) {
   for (const k of ['critical', 'high', 'medium', 'low', 'info']) {
     a[k] = (a[k] || 0) + (b[k] || 0);
   }
-}
-
-/**
- * @param {string} companyId
- * @param {import('@prisma/client').Prisma.JsonValue} filter
- * @param {object} tr
- * @param {string} [findingsFor] - Tenable server log context (company / app)
- */
-async function tenableFor(companyId, filter, tr, findingsFor) {
-  const res = await resolveIntegrationForCompany(companyId, PROVIDER_TENABLE_IO);
-  if (!res) {
-    return {
-      critical: 0,
-      high: 0,
-      medium: 0,
-      low: 0,
-      info: 0,
-      error: 'Tenable: no credentials for company',
-    };
-  }
-  const f = filter && typeof filter === 'object' && !Array.isArray(filter) ? filter : {};
-  const tagUuid = /** @type {{ tagUuid?: string }} */ (f).tagUuid;
-  if (!tagUuid) {
-    return { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: 'Tenable: no tag in link' };
-  }
-  return getTenableWasCountsByTag(res.decrypted, res.baseUrl, { tagUuid }, tr, findingsFor ? { findingsFor } : {});
 }
 
 /**
@@ -137,26 +107,25 @@ const emptySev = () => ({
 });
 
 /**
- * Which vendors to call for this export. Both default true; at least one must be true.
+ * Which vendors to call for this export. Defaults true.
  * @param {unknown} raw
- * @returns {{ TENABLE_IO: boolean, WIZ: boolean }}
+ * @returns {{ WIZ: boolean }}
  */
 export function parseExportProviders(raw) {
   if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { TENABLE_IO: true, WIZ: true };
+    return { WIZ: true };
   }
   const o = /** @type {Record<string, unknown>} */(raw);
   return {
-    TENABLE_IO: o[PROVIDER_TENABLE_IO] !== false,
     WIZ: o[PROVIDER_WIZ] !== false,
   };
 }
 
 /**
- * @param {{ TENABLE_IO: boolean, WIZ: boolean }} p
+ * @param {{ WIZ: boolean }} p
  */
 export function assertAtLeastOneProvider(p) {
-  if (p[PROVIDER_TENABLE_IO] === false && p[PROVIDER_WIZ] === false) {
+  if (p[PROVIDER_WIZ] === false) {
     const e = new Error('At least one integration must be selected');
     e.statusCode = 400;
     throw e;
@@ -201,7 +170,7 @@ function combinedRowData(t, w, pout, err) {
  * @param {string} companyId
  * @param { 'all' | { from?: string, to?: string, all?: boolean } } tr
  * @param { (s: string) => void | Promise<void> } [onProgress]
- * @param { { TENABLE_IO?: boolean, WIZ?: boolean } } [providers] - omit both in practice disallowed; defaults both true
+ * @param { { WIZ?: boolean } } [providers] - omit in practice disallowed; defaults true
  */
 export async function buildSecurityFindingsCsv(
   prisma,
@@ -210,11 +179,10 @@ export async function buildSecurityFindingsCsv(
     /** @type { 'all' | { from?: string, to?: string, all?: boolean } } */ timeRange,
     /** @type { boolean } */ separateByApp,
     /** @type { (s: string) => void | Promise<void> } */ onProgress = () => {},
-    /** @type { { TENABLE_IO?: boolean, WIZ?: boolean } } */ providers: providersArg,
+    /** @type { { WIZ?: boolean } } */ providers: providersArg,
   },
 ) {
   const pNorm = parseExportProviders(providersArg);
-  const includeTenable = pNorm[PROVIDER_TENABLE_IO];
   const includeWiz = pNorm[PROVIDER_WIZ];
   const tr = timeRange;
   const ids = Array.isArray(companyIds) && companyIds.length > 0 ? companyIds : [];
@@ -247,7 +215,6 @@ export async function buildSecurityFindingsCsv(
     timeTo: tr?.all ? '' : (tr && tr.to) || '',
     companies: companyIds.length,
     providers: {
-      TENABLE_WAS: includeTenable,
       WIZ_SAST: includeWiz,
     },
   };
@@ -273,7 +240,7 @@ export async function buildSecurityFindingsCsv(
   let cIdx = 0;
   await Promise.resolve(
     onProgress(
-      `Starting export for ${companies.length} company/companies - Tenable/Wiz may take many minutes...`,
+      `Starting export for ${companies.length} company/companies - Wiz may take many minutes...`,
     ),
   );
   if (isAdminMultiByApp) {
@@ -283,37 +250,20 @@ export async function buildSecurityFindingsCsv(
       cIdx += 1;
       await Promise.resolve(
         onProgress(
-          `Processing ${co.name} (${cIdx} of ${companies.length}) - Tenable/Wiz in progress, may take minutes...`,
+          `Processing ${co.name} (${cIdx} of ${companies.length}) - Wiz in progress, may take minutes...`,
         ),
       );
-      const coTlink = co.companyToolLinks.find((l) => l.provider === PROVIDER_TENABLE_IO);
       const coWlink = co.companyToolLinks.find((l) => l.provider === PROVIDER_WIZ);
-      if (coTlink || coWlink) {
-        const t0 =
-          coTlink && includeTenable
-            ? await tenableFor(
-                co.id,
-                coTlink.filter,
-                tr,
-                `By app table: ${co.name} (Tenable company link)`,
-              )
-            : coTlink
-              ? emptySev()
-              : null;
-        const w0 =
-          coWlink && includeWiz
-            ? await wizFor(co.id, coWlink.filter, tr)
-            : coWlink
-              ? emptySev()
-              : null;
+      if (coWlink) {
+        const w0 = includeWiz
+          ? await wizFor(co.id, coWlink.filter, tr)
+          : emptySev();
         const p0 = /** @type {string[]} */ ([]);
-        if (coTlink && includeTenable) p0.push(PROVIDER_TENABLE_IO);
-        if (coWlink && includeWiz) p0.push(PROVIDER_WIZ);
-        const tPart = t0 || { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
+        if (includeWiz) p0.push(PROVIDER_WIZ);
         const wPart = w0 || { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
-        const emsg = mergeSourceErrors(tPart, wPart);
+        const emsg = mergeSourceErrors(null, wPart);
         const cd = combinedRowData(
-          tPart,
+          null,
           wPart,
           p0,
           emsg,
@@ -335,9 +285,8 @@ export async function buildSecurityFindingsCsv(
         ]);
       }
       for (const app of co.applications) {
-        const tL = app.applicationToolLinks.find((l) => l.provider === PROVIDER_TENABLE_IO);
         const wL = app.applicationToolLinks.find((l) => l.provider === PROVIDER_WIZ);
-        if (!tL && !wL) {
+        if (!wL) {
           appBlock.push([
             'Application',
             app.name,
@@ -354,31 +303,16 @@ export async function buildSecurityFindingsCsv(
           ]);
           continue;
         }
-        const t0 = tL
-          ? (includeTenable
-              ? await tenableFor(
-                  co.id,
-                  tL.filter,
-                  tr,
-                  `By app table: ${co.name} (Tenable app: ${app.name})`,
-                )
-              : emptySev())
-          : { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
-        const w0 = wL
-          ? (includeWiz
-              ? await wizFor(co.id, wL.filter, tr)
-              : emptySev())
-          : { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
+        const w0 = includeWiz
+          ? await wizFor(co.id, wL.filter, tr)
+          : emptySev();
         const p0 = /** @type {string[]} */ ([]);
-        if (tL && includeTenable) {
-          p0.push(PROVIDER_TENABLE_IO);
-        }
-        if (wL && includeWiz) {
+        if (includeWiz) {
           p0.push(PROVIDER_WIZ);
         }
-        const emsg2 = mergeSourceErrors(t0, w0);
+        const emsg2 = mergeSourceErrors(null, w0);
         const cd = combinedRowData(
-          t0,
+          null,
           w0,
           p0,
           emsg2,
@@ -418,45 +352,14 @@ export async function buildSecurityFindingsCsv(
     cIdx += 1;
     await Promise.resolve(
       onProgress(
-        `Processing ${co.name} (${cIdx} of ${companies.length}) - Tenable/Wiz in progress, may take minutes...`,
+        `Processing ${co.name} (${cIdx} of ${companies.length}) - Wiz in progress, may take minutes...`,
       ),
     );
 
-    const coTlink = co.companyToolLinks.find((l) => l.provider === PROVIDER_TENABLE_IO);
     const coWlink = co.companyToolLinks.find((l) => l.provider === PROVIDER_WIZ);
     if (!separateByApp) {
-      let t0 = /** @type {{ critical: number, high: number, medium: number, low: number, info: number, error?: string | null }} */(emptySev());
       let w0 = /** @type {{ critical: number, high: number, medium: number, low: number, info: number, error?: string | null }} */(emptySev());
       const p0 = /** @type {string[]} */ ([]);
-      if (includeTenable) {
-        if (coTlink) {
-          t0 = await tenableFor(
-            co.id,
-            coTlink.filter,
-            tr,
-            `Aggregated: ${co.name} (Tenable company link)`,
-          );
-          p0.push(PROVIDER_TENABLE_IO);
-        } else {
-          for (const app of co.applications) {
-            const tL = app.applicationToolLinks.find((l) => l.provider === PROVIDER_TENABLE_IO);
-            if (tL) {
-              const part = await tenableFor(
-                co.id,
-                tL.filter,
-                tr,
-                `Aggregated: ${co.name} (Tenable app: ${app.name})`,
-              );
-              addSev(t0, part);
-              if (!p0.includes(PROVIDER_TENABLE_IO)) {
-                p0.push(PROVIDER_TENABLE_IO);
-              }
-            }
-          }
-        }
-      } else {
-        t0 = emptySev();
-      }
       if (includeWiz) {
         if (coWlink) {
           w0 = await wizFor(co.id, coWlink.filter, tr);
@@ -476,8 +379,8 @@ export async function buildSecurityFindingsCsv(
       } else {
         w0 = emptySev();
       }
-      const emsg = mergeSourceErrors(t0, w0);
-      const cd = combinedRowData(t0, w0, p0, emsg);
+      const emsg = mergeSourceErrors(null, w0);
+      const cd = combinedRowData(null, w0, p0, emsg);
       const total =
         cd.critical + cd.high + cd.medium + cd.low + cd.info;
       rows.push([
@@ -497,32 +400,16 @@ export async function buildSecurityFindingsCsv(
       continue;
     }
     const appSubtot = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
-    if (coTlink || coWlink) {
-      const t0 =
-        coTlink && includeTenable
-          ? await tenableFor(
-              co.id,
-              coTlink.filter,
-              tr,
-              `By app table: ${co.name} (Tenable company link)`,
-            )
-          : coTlink
-            ? emptySev()
-            : null;
-      const w0 =
-        coWlink && includeWiz
-          ? await wizFor(co.id, coWlink.filter, tr)
-          : coWlink
-            ? emptySev()
-            : null;
+    if (coWlink) {
+      const w0 = includeWiz
+        ? await wizFor(co.id, coWlink.filter, tr)
+        : emptySev();
       const p0 = /** @type {string[]} */ ([]);
-      if (coTlink && includeTenable) p0.push(PROVIDER_TENABLE_IO);
-      if (coWlink && includeWiz) p0.push(PROVIDER_WIZ);
-      const tPart = t0 || { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
+      if (includeWiz) p0.push(PROVIDER_WIZ);
       const wPart = w0 || { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
-      const emsg = mergeSourceErrors(tPart, wPart);
+      const emsg = mergeSourceErrors(null, wPart);
       const cd = combinedRowData(
-        tPart,
+        null,
         wPart,
         p0,
         emsg,
@@ -545,9 +432,8 @@ export async function buildSecurityFindingsCsv(
       ]);
     }
     for (const app of co.applications) {
-      const tL = app.applicationToolLinks.find((l) => l.provider === PROVIDER_TENABLE_IO);
       const wL = app.applicationToolLinks.find((l) => l.provider === PROVIDER_WIZ);
-      if (!tL && !wL) {
+      if (!wL) {
         const z = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
         addSev(appSubtot, z);
         rows.push([
@@ -566,31 +452,16 @@ export async function buildSecurityFindingsCsv(
         ]);
         continue;
       }
-      const t0 = tL
-        ? (includeTenable
-            ? await tenableFor(
-                co.id,
-                tL.filter,
-                tr,
-                `By app table: ${co.name} (Tenable app: ${app.name})`,
-              )
-            : emptySev())
-        : { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
-      const w0 = wL
-        ? (includeWiz
-            ? await wizFor(co.id, wL.filter, tr)
-            : emptySev())
-        : { critical: 0, high: 0, medium: 0, low: 0, info: 0, error: null };
+      const w0 = includeWiz
+        ? await wizFor(co.id, wL.filter, tr)
+        : emptySev();
       const p0 = /** @type {string[]} */ ([]);
-      if (tL && includeTenable) {
-        p0.push(PROVIDER_TENABLE_IO);
-      }
-      if (wL && includeWiz) {
+      if (includeWiz) {
         p0.push(PROVIDER_WIZ);
       }
-      const emsg2 = mergeSourceErrors(t0, w0);
+      const emsg2 = mergeSourceErrors(null, w0);
       const cd = combinedRowData(
-        t0,
+        null,
         w0,
         p0,
         emsg2,

@@ -8,18 +8,14 @@ import {
 } from '../utils/integrationCrypto.js';
 import {
   assertSupportedProvider,
-  PROVIDER_TENABLE_IO,
   PROVIDER_WIZ,
   SUPPORTED_PROVIDERS,
 } from '../integrations/constants.js';
 import {
   resolveIntegrationForCompany,
-  validateTenableIoFilter,
-  normalizeTenableIoFilter,
   validateWizFilter,
   normalizeWizFilter,
 } from '../integrations/resolve.js';
-import { listTenableIoTagValues } from '../integrations/tenableIo.js';
 import { listWizFolders, normalizeWizGraphqlUrl } from '../integrations/wiz.js';
 import { integrationLog } from '../integrations/log.js';
 import { getAuthContext } from '../middleware/authContext.js';
@@ -350,19 +346,6 @@ router.get(
         });
       }
 
-      if (provider === PROVIDER_TENABLE_IO) {
-        const tags = await listTenableIoTagValues(resolved.decrypted, resolved.baseUrl);
-        integrationLog('info', {
-          layer: 'api',
-          op: 'GET_integration_tags',
-          provider,
-          companyId,
-          credentialScope: resolved.scope,
-          itemCount: tags.length,
-        });
-        return res.json({ tags });
-      }
-
       if (provider === PROVIDER_WIZ) {
         const folders = await listWizFolders(resolved.decrypted, resolved.baseUrl);
         const tags = folders.map((f) => ({
@@ -415,7 +398,7 @@ router.get(
 
 /**
  * PUT /api/companies/:companyId/integrations/:provider/link
- * body: TENABLE_IO → { tagUuid, tagName?, categoryUuid? } · WIZ → { folderId, folderName? }
+ * body: WIZ → { folderId, folderName? }
  */
 router.put(
   '/companies/:companyId/integrations/:provider/link',
@@ -448,14 +431,7 @@ router.put(
       }
 
       let filter;
-      if (provider === PROVIDER_TENABLE_IO) {
-        const normalized = normalizeTenableIoFilter(req.body);
-        const v = validateTenableIoFilter(normalized);
-        if (!v.ok) {
-          return res.status(400).json({ error: v.message });
-        }
-        filter = normalized;
-      } else if (provider === PROVIDER_WIZ) {
+      if (provider === PROVIDER_WIZ) {
         const normalized = normalizeWizFilter(req.body);
         const v = validateWizFilter(normalized);
         if (!v.ok) {

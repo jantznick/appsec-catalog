@@ -49,36 +49,6 @@ export async function resolveIntegrationForCompany(companyId, provider) {
 }
 
 /**
- * Validate filter JSON for Tenable.io link.
- * @param {unknown} filter
- */
-export function validateTenableIoFilter(filter) {
-  if (!filter || typeof filter !== 'object') {
-    return { ok: false, message: 'filter must be an object' };
-  }
-  const tagUuid = /** @type {{ tagUuid?: string }} */ (filter).tagUuid;
-  if (!tagUuid || typeof tagUuid !== 'string') {
-    return { ok: false, message: 'filter.tagUuid is required' };
-  }
-  return { ok: true };
-}
-
-/**
- * Normalize stored filter for TENABLE_IO (persist display fields).
- * @param {object} body
- */
-export function normalizeTenableIoFilter(body) {
-  const tagUuid = body.tagUuid;
-  const tagName = typeof body.tagName === 'string' ? body.tagName : null;
-  const categoryUuid = typeof body.categoryUuid === 'string' ? body.categoryUuid : null;
-  return {
-    tagUuid,
-    tagName,
-    categoryUuid,
-  };
-}
-
-/**
  * Validate Wiz company link (folder binding).
  * @param {unknown} filter
  */
