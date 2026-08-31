@@ -4,46 +4,68 @@ import useAuthStore from '../store/authStore.js';
 
 const PendingApprovalsContext = createContext(null);
 
+/**
+ * Shared poller for the admin notification badges. Counts are kept separate
+ * (they link to different pages and mean different things) but share one
+ * interval so we're not running several timers against the same session.
+ */
 export function PendingApprovalsProvider({ children }) {
   const { user } = useAuthStore();
   const [globalPendingCount, setGlobalPendingCount] = useState(0);
+  const [infoRequestCount, setInfoRequestCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  const loadGlobalPendingCount = useCallback(async () => {
+  const loadCounts = useCallback(async () => {
     if (!user?.isAdmin) {
       setGlobalPendingCount(0);
+      setInfoRequestCount(0);
       return;
     }
-    try {
-      setLoading(true);
-      const data = await api.getPendingVersionsCount();
-      setGlobalPendingCount(data.count || 0);
-    } catch (error) {
-      console.error('Failed to load global pending count:', error);
+    setLoading(true);
+    // Settled rather than all-or-nothing: one failing endpoint shouldn't blank
+    // out the other badge.
+    const [pending, infoRequests] = await Promise.allSettled([
+      api.getPendingVersionsCount(),
+      api.getProgramRequestCount(),
+    ]);
+
+    if (pending.status === 'fulfilled') {
+      setGlobalPendingCount(pending.value?.count || 0);
+    } else {
+      console.error('Failed to load global pending count:', pending.reason);
       setGlobalPendingCount(0);
-    } finally {
-      setLoading(false);
     }
+
+    if (infoRequests.status === 'fulfilled') {
+      setInfoRequestCount(infoRequests.value?.count || 0);
+    } else {
+      console.error('Failed to load information request count:', infoRequests.reason);
+      setInfoRequestCount(0);
+    }
+
+    setLoading(false);
   }, [user?.isAdmin]);
 
   useEffect(() => {
     if (user?.isAdmin) {
-      loadGlobalPendingCount();
-      const interval = setInterval(loadGlobalPendingCount, 30000);
+      loadCounts();
+      const interval = setInterval(loadCounts, 30000);
       return () => clearInterval(interval);
-    } else {
-      setGlobalPendingCount(0);
     }
-  }, [user?.isAdmin, loadGlobalPendingCount]);
+    setGlobalPendingCount(0);
+    setInfoRequestCount(0);
+    return undefined;
+  }, [user?.isAdmin, loadCounts]);
 
   const refresh = useCallback(() => {
-    loadGlobalPendingCount();
-  }, [loadGlobalPendingCount]);
+    loadCounts();
+  }, [loadCounts]);
 
   return (
     <PendingApprovalsContext.Provider
       value={{
         globalPendingCount,
+        infoRequestCount,
         loading,
         refresh,
       }}
@@ -60,4 +82,3 @@ export function usePendingApprovals() {
   }
   return context;
 }
-

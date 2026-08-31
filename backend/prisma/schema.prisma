@@ -34,6 +34,33 @@ model User {
   sammAssessmentsReviewed SammAssessment[] @relation("SammAssessmentReviewer")
   aiRequests             AiRequest[]
   aiAccessRules          AiAccessRule[]
+  handledProgramInfoRequests ProgramInfoRequest[] @relation("ProgramInfoRequestHandler")
+}
+
+/// An unauthenticated "request more information" submission from the public
+/// documentation site. Created by anonymous visitors who don't have access to
+/// the platform yet, so it deliberately captures as little as possible: an
+/// email to reply to, which programs they're interested in, and an optional
+/// message. Admins triage these in-app (NEW -> HANDLED).
+model ProgramInfoRequest {
+  id         String   @id @default(cuid())
+  email      String
+  message    String?
+  /// Comma-separated program keys the requester selected (see
+  /// PROGRAM_OPTIONS in routes/programInfoRequests.js for the canonical list).
+  programs   String
+  /// Documentation page slug the modal was opened from, for context on what
+  /// the requester was reading. Null if it couldn't be determined.
+  sourcePage String?
+  status     String   @default("NEW") // NEW, HANDLED
+  createdAt  DateTime @default(now())
+
+  handledAt   DateTime?
+  handledById String?
+  handledBy   User?     @relation("ProgramInfoRequestHandler", fields: [handledById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([createdAt])
 }
 
 /// AppSec Catalog product release notes / "What's New" entries.

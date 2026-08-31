@@ -1015,6 +1015,21 @@ export const api = {
     apiRequest(`/api/product-updates/published?limit=${encodeURIComponent(limit)}`),
   getPlatformDocsIndex: () => apiRequest('/api/platform-docs'),
   getPlatformDoc: (slug) => apiRequest(`/api/platform-docs/${encodeURIComponent(slug)}`),
+  // "Request more information" from the public docs site. Options + submit are
+  // public (the requester has no account yet); the rest is admin triage.
+  getProgramRequestOptions: () => apiRequest('/api/program-requests/options'),
+  submitProgramRequest: (body) =>
+    apiRequest('/api/program-requests', { method: 'POST', body: JSON.stringify(body) }),
+  getProgramRequestCount: () => apiRequest('/api/program-requests/count'),
+  listProgramRequests: (status = 'all') =>
+    apiRequest(`/api/program-requests?status=${encodeURIComponent(status)}`),
+  updateProgramRequestStatus: (id, status) =>
+    apiRequest(`/api/program-requests/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+  deleteProgramRequest: (id) =>
+    apiRequest(`/api/program-requests/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   startAdminSecurityFindingsJob: (body) =>
     apiRequest('/api/admin/security-findings/jobs', { method: 'POST', body: JSON.stringify(body) }),
   getAdminSecurityFindingsJob: (jobId) =>
