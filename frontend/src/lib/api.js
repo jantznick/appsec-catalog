@@ -339,8 +339,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  getApplicationPublic: (id) =>
-    apiRequest(`/api/applications/public/${id}`),
+  // Returns { id, name, status } only. The technical form is not prefilled with
+  // anything it collects itself - see the route comment in backend/routes/applications.js.
+  getApplicationPublic: (id, companySlug) =>
+    apiRequest(
+      `/api/applications/public/${id}` +
+        (companySlug ? `?companySlug=${encodeURIComponent(companySlug)}` : ''),
+    ),
 
   getCompanyApplicationsPublic: (companySlug) =>
     apiRequest(`/api/applications/public/company/${companySlug}`),

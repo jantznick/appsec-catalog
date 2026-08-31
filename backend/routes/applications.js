@@ -418,29 +418,46 @@ router.get('/public/company/:slug', async (req, res) => {
   }
 });
 
-// Public: Get application by ID (for technical form)
+// Public: Get application by ID (for the technical onboarding form).
+//
+// UNAUTHENTICATED. Anyone holding an application id can call this, so it returns the
+// minimum the technical form needs to render: the name it puts in its heading.
+//
+// The form is not allowed to prefill anything it collects itself. Security tooling,
+// integration levels, scan dates, data handling, auth details, interfaces and contacts
+// are all deliberately absent - submitting the form with a field blank leaves the
+// stored value untouched (see PUT /public/:id), so nothing is lost by omitting them.
+//
+// Pass ?companySlug= to scope the lookup, so an id cannot be read through an unrelated
+// company's onboarding link.
 router.get('/public/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const { companySlug } = req.query;
 
     const application = await prisma.application.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        name: true,
         company: {
           select: {
-            id: true,
-            name: true,
             slug: true,
           },
         },
       },
     });
 
-    if (!application) {
+    // Same response for "no such application" and "wrong company", so the endpoint
+    // cannot be used to test whether an id exists under a different slug.
+    if (!application || (companySlug && application.company?.slug !== companySlug)) {
       return res.status(404).json({ error: 'Application not found' });
     }
 
-    res.json(application);
+    res.json({
+      id: application.id,
+      name: application.name,
+    });
   } catch (error) {
     console.error('Error fetching application:', error);
     res.status(500).json({ error: 'Failed to fetch application' });
