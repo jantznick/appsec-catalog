@@ -87,6 +87,12 @@ const settingsSections = [
         adminOnly: true,
       },
       {
+        label: 'Information requests',
+        description: 'Follow up with people who asked about the program.',
+        to: '/settings/program-requests',
+        adminOnly: true,
+      },
+      {
         label: 'Security export jobs',
         description: 'View security findings export history.',
         to: '/export-jobs',

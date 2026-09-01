@@ -42,6 +42,7 @@ import { AiSettings } from './pages/AiSettings.jsx';
 import { Settings } from './pages/Settings.jsx';
 import { SammAssessments } from './pages/SammAssessments.jsx';
 import { Docs } from './pages/Docs.jsx';
+import { ProgramInfoRequests } from './pages/ProgramInfoRequests.jsx';
 
 function CatchAllRedirect() {
   const { isAuthenticated, isVerified, loading } = useAuthStore();
@@ -212,6 +213,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <ProductUpdatesAdmin />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/program-requests"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProgramInfoRequests />
               </Layout>
             </ProtectedRoute>
           }

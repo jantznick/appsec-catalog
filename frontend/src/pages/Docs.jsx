@@ -3,6 +3,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { marked } from 'marked';
 import { api } from '../lib/api.js';
 import { Card } from '../components/ui/Card.jsx';
+import { Button } from '../components/ui/Button.jsx';
+import { RequestInfoModal } from '../components/docs/RequestInfoModal.jsx';
+import useAuthStore from '../store/authStore.js';
 
 // Presentational only — which accent each top-level group gets. Kept out of
 // the content API since it's a display concern, not part of the doc structure.
@@ -84,6 +87,10 @@ export function Docs() {
   const { slug } = useParams();
   const navigate = useNavigate();
   const contentRef = useRef(null);
+  // `authLoading` matters here: without it the CTA flashes on screen for
+  // signed-in users during the moment before the session resolves.
+  const { isAuthenticated, loading: authLoading } = useAuthStore();
+  const [requestOpen, setRequestOpen] = useState(false);
   const [groups, setGroups] = useState([]);
   const [doc, setDoc] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -277,11 +284,33 @@ export function Docs() {
                 </p>
                 {title && <h1 className="mb-6 text-3xl font-bold text-gray-900">{title}</h1>}
                 <div ref={contentRef} className="prose max-w-none" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+
+                {/* Only shown to visitors who aren't signed in — anyone already
+                    logged in has access, so asking them to request it is noise. */}
+                {!authLoading && !isAuthenticated() && (
+                  <div className="mt-10 pt-6 border-t border-gray-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">Want to get set up?</p>
+                      <p className="text-sm text-gray-600">
+                        Ask Hearst&apos;s AppSec team about bringing your company onto this program.
+                      </p>
+                    </div>
+                    <Button className="shrink-0" onClick={() => setRequestOpen(true)}>
+                      Request more information
+                    </Button>
+                  </div>
+                )}
               </>
             )}
           </Card>
         </main>
       </div>
+
+      <RequestInfoModal
+        isOpen={requestOpen}
+        onClose={() => setRequestOpen(false)}
+        sourcePage={slug}
+      />
     </div>
   );
 }

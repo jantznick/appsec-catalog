@@ -23,7 +23,7 @@ export function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, isAdmin, isAuthenticated, loading } = useAuthStore();
-  const { globalPendingCount } = usePendingApprovals();
+  const { globalPendingCount, infoRequestCount } = usePendingApprovals();
   const { mode: scopeMode, label: scopeLabel, clearScope } = useScopeStore();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login');
@@ -99,6 +99,20 @@ export function Layout({ children }) {
         : 'text-white/70 hover:text-white hover:bg-white/10'
     }`;
   };
+
+  // Everything an admin needs to look at, combined into one number. Drives the
+  // single header indicator next to the account email; the dropdown items carry
+  // their own per-queue badges once the menu is open.
+  const adminAttentionCount = isAdmin() ? globalPendingCount + infoRequestCount : 0;
+
+  const attentionSummary = [
+    globalPendingCount > 0 &&
+      `${globalPendingCount} application change${globalPendingCount !== 1 ? 's' : ''}`,
+    infoRequestCount > 0 &&
+      `${infoRequestCount} information request${infoRequestCount !== 1 ? 's' : ''}`,
+  ]
+    .filter(Boolean)
+    .join(' and ');
 
   return (
     <div className="min-h-screen">
@@ -186,6 +200,19 @@ export function Layout({ children }) {
                             </span>
                           )}
                         </DropdownItem>
+                        <DropdownItem
+                          onClick={() => {
+                            navigate('/settings/program-requests');
+                          }}
+                          className="relative"
+                        >
+                          <span>Information requests</span>
+                          {infoRequestCount > 0 && (
+                            <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
+                              {infoRequestCount > 99 ? '99+' : infoRequestCount}
+                            </span>
+                          )}
+                        </DropdownItem>
                       </>
                     ) : null}
                     <DropdownSectionLabel>Catalog</DropdownSectionLabel>
@@ -254,25 +281,27 @@ export function Layout({ children }) {
                   </Dropdown>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-white/85">{user.email}</span>
-                    {isAdmin() && globalPendingCount > 0 && (
+                    {adminAttentionCount > 0 && (
                       <button
                         onClick={() => {
                           const { addToast, removeToast } = useToastStore.getState();
                           const toastId = addToast({
                             type: 'warning',
-                            message: `There ${globalPendingCount === 1 ? 'is' : 'are'} ${globalPendingCount} application change${globalPendingCount !== 1 ? 's' : ''} to review. Click here to view.`,
+                            message: `There ${adminAttentionCount === 1 ? 'is' : 'are'} ${attentionSummary} to review. Click here to view.`,
                             persistent: true,
                             clickable: true,
                             onClick: () => {
-                              navigate('/pending-approvals');
+                              navigate(
+                                globalPendingCount > 0 ? '/pending-approvals' : '/settings/program-requests'
+                              );
                               removeToast(toastId);
                             },
                           });
                         }}
                         className="relative inline-flex items-center justify-center px-2.5 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full hover:bg-red-700 transition-colors"
-                        title={`${globalPendingCount} pending approval${globalPendingCount !== 1 ? 's' : ''}`}
+                        title={`${attentionSummary} to review`}
                       >
-                        {globalPendingCount > 99 ? '99+' : globalPendingCount}
+                        {adminAttentionCount > 99 ? '99+' : adminAttentionCount}
                       </button>
                     )}
                   </div>
