@@ -18,6 +18,21 @@ const router = express.Router();
 // Frontend base URL used for post-auth redirects.
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
+// Security: when Okta SSO is configured, this deployment is Okta-only. Local
+// password and magic-code login are refused so they cannot serve as an
+// alternate, un-SSO'd way into an account (and so the console-logged magic code
+// is not a live login surface). Break-glass: unset the Okta env vars to restore
+// local login if the IdP is unavailable.
+function blockLocalLoginWhenOktaOnly(req, res, next) {
+  if (isOktaConfigured()) {
+    return res.status(403).json({
+      error: 'Local login disabled',
+      message: 'This deployment uses Okta SSO. Please sign in with Okta.',
+    });
+  }
+  next();
+}
+
 /**
  * Register a new user
  * POST /api/auth/register
@@ -37,7 +52,7 @@ router.post('/register', (req, res) => {
  * Login with email and password
  * POST /api/auth/login
  */
-router.post('/login', async (req, res) => {
+router.post('/login', blockLocalLoginWhenOktaOnly, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -121,7 +136,7 @@ router.post('/login', async (req, res) => {
  * generic response (without issuing a code) so it cannot be used to enumerate
  * accounts or provision new ones.
  */
-router.post('/request-magic-code', async (req, res) => {
+router.post('/request-magic-code', blockLocalLoginWhenOktaOnly, async (req, res) => {
   // Generic response reused for both the known- and unknown-email cases so the
   // caller cannot distinguish whether an account exists.
   const genericResponse = {
@@ -186,7 +201,7 @@ router.post('/request-magic-code', async (req, res) => {
  * Login with magic code
  * POST /api/auth/login-magic
  */
-router.post('/login-magic', async (req, res) => {
+router.post('/login-magic', blockLocalLoginWhenOktaOnly, async (req, res) => {
   try {
     const { code } = req.body;
 

@@ -166,10 +166,15 @@ export function ProgramInfoRequests() {
                           Handled
                         </span>
                       )}
+                      {request.sourcePage === 'account-request' && (
+                        <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 text-xs font-medium">
+                          Account request
+                        </span>
+                      )}
                     </div>
                     <p className="mt-1 text-xs text-gray-500">
                       {formatDate(request.createdAt)}
-                      {request.sourcePage && ` · from the ${request.sourcePage} page`}
+                      {request.sourcePage && request.sourcePage !== 'account-request' && ` · from the ${request.sourcePage} page`}
                       {request.status === 'HANDLED' && request.handledBy && (
                         <> · handled by {request.handledBy.email}</>
                       )}
@@ -202,14 +207,16 @@ export function ProgramInfoRequests() {
                 </div>
 
                 <div className="flex flex-wrap gap-1.5">
-                  {request.programs.map((key) => (
-                    <span
-                      key={key}
-                      className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-xs font-medium"
-                    >
-                      {programLabels[key] || key}
-                    </span>
-                  ))}
+                  {request.programs
+                    .filter((key) => key !== 'account-request')
+                    .map((key) => (
+                      <span
+                        key={key}
+                        className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-xs font-medium"
+                      >
+                        {programLabels[key] || key}
+                      </span>
+                    ))}
                 </div>
 
                 {request.message && (

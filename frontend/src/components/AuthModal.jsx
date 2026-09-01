@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../store/authStore.js';
 import { api, API_BASE_URL } from '../lib/api.js';
 import { Button, Input, Modal, Alert } from './ui/index.js';
+import { AccountRequestModal } from './AccountRequestModal.jsx';
 
 export function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
   const [magicCodeSent, setMagicCodeSent] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [oktaEnabled, setOktaEnabled] = useState(false);
+  const [showAccountRequest, setShowAccountRequest] = useState(false);
   const [oktaError, setOktaError] = useState('');
 
   // Self-service registration is disabled; new accounts come through Okta SSO.
@@ -196,14 +198,12 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
             >
               Sign in with Okta
             </Button>
-            <div className="flex items-center gap-3 my-4">
-              <div className="h-px flex-1 bg-gray-200" />
-              <span className="text-xs uppercase tracking-wide text-gray-400">or</span>
-              <div className="h-px flex-1 bg-gray-200" />
-            </div>
           </div>
         )}
 
+        {/* Local password login is refused by the backend when Okta SSO is
+            configured (Okta-only deployment), so hide the form in that case. */}
+        {!oktaEnabled && (
         <form onSubmit={handlePasswordSubmit} className="space-y-4">
           <div>
             <Input
@@ -271,13 +271,27 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
             </Button>
           </div>
         </form>
+        )}
 
-        <div className="mt-4 text-center">
-          <p className="text-sm text-gray-600">
-            Need an account? New accounts are provisioned through Okta single sign-on.
+        <div className="mt-6 text-center">
+          <p className="text-sm text-gray-600 mb-3">
+            Don&apos;t have an account? Accounts are provisioned through Okta single sign-on.
           </p>
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full"
+            onClick={() => setShowAccountRequest(true)}
+          >
+            Request an account
+          </Button>
         </div>
       </Modal>
+
+      <AccountRequestModal
+        isOpen={showAccountRequest}
+        onClose={() => setShowAccountRequest(false)}
+      />
 
       {/* Nested Magic Code Modal - commented out for now */}
       {/*

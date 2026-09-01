@@ -116,6 +116,8 @@ router.post('/', async (req, res) => {
     const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
     const programs = Array.isArray(req.body?.programs) ? req.body.programs : [];
     const sourcePage = typeof req.body?.sourcePage === 'string' ? req.body.sourcePage.trim() : '';
+    const requestType = typeof req.body?.requestType === 'string' ? req.body.requestType.trim().toUpperCase() : 'PROGRAM_INFO';
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
 
     if (!email) {
       return res.status(400).json({ error: 'Email is required' });
@@ -125,6 +127,46 @@ router.post('/', async (req, res) => {
     }
     if (message.length > MAX_MESSAGE_LENGTH) {
       return res.status(400).json({ error: `Message must be ${MAX_MESSAGE_LENGTH} characters or fewer` });
+    }
+
+    // Account-access requests reuse this table (no dedicated model). They are
+    // tagged with sourcePage='account-request' and carry the requester's name in
+    // the message, since there is no name column. The `programs` field is
+    // required (non-null), so it gets the same sentinel tag rather than a
+    // program key.
+    if (requestType === 'ACCOUNT') {
+      if (!name) {
+        return res.status(400).json({ error: 'Name is required' });
+      }
+      if (name.length > 200) {
+        return res.status(400).json({ error: 'Name must be 200 characters or fewer' });
+      }
+      const composed = `Name: ${name}${message ? `\n\n${message}` : ''}`.slice(0, MAX_MESSAGE_LENGTH * 3);
+      // Dedupe against this requester's own untriaged account request only, so a
+      // pending program-info request from the same email is left untouched.
+      const existing = await prisma.programInfoRequest.findFirst({
+        where: { email, status: 'NEW', sourcePage: 'account-request' },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (existing) {
+        await prisma.programInfoRequest.update({
+          where: { id: existing.id },
+          data: { message: composed },
+        });
+      } else {
+        await prisma.programInfoRequest.create({
+          data: {
+            email,
+            message: composed,
+            programs: 'account-request',
+            sourcePage: 'account-request',
+          },
+        });
+      }
+      return res.status(201).json({
+        success: true,
+        message: "Thanks — your account request has been submitted. An administrator will review it.",
+      });
     }
 
     const selected = [...new Set(programs.filter((k) => VALID_KEYS.has(k)))];
