@@ -33,7 +33,7 @@ yourdomain.com {
 Create or update a `.env` file in the root directory:
 
 ```env
-# Your domain (used for generating invitation links)
+# Your domain (used for post-authentication redirects, e.g. the Okta callback)
 FRONTEND_URL=https://yourdomain.com
 
 # Database settings (if not using defaults)

@@ -2,14 +2,27 @@ import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { validateInvitation, markInvitationUsed } from '../utils/invitation.js';
 import bcrypt from 'bcrypt';
+import { blockWhenOktaOnly } from '../middleware/oktaOnly.js';
 
 const router = express.Router();
+
+// Accepting an invitation sets a local password and establishes a session
+// without ever involving the IdP, so on Okta-only deployments the whole flow is
+// refused — it would otherwise be the one remaining un-SSO'd way into an
+// account. Accounts are provisioned by assigning the Okta app instead. See
+// middleware/oktaOnly.js.
+const blockInvitationsWhenOktaOnly = blockWhenOktaOnly({
+  error: 'Invitations disabled',
+  message: 'This deployment uses Okta SSO. Please sign in with Okta.',
+});
 
 /**
  * Get invitation details (public)
  * GET /api/invitations/:token
+ *
+ * Refused on Okta-only deployments.
  */
-router.get('/:token', async (req, res) => {
+router.get('/:token', blockInvitationsWhenOktaOnly, async (req, res) => {
   try {
     const { token } = req.params;
 
@@ -45,8 +58,10 @@ router.get('/:token', async (req, res) => {
  * 
  * Request body:
  * - password: string (required) - Password to set
+ *
+ * Refused on Okta-only deployments; the UI for it has been removed.
  */
-router.post('/:token/accept', async (req, res) => {
+router.post('/:token/accept', blockInvitationsWhenOktaOnly, async (req, res) => {
   try {
     const { token } = req.params;
     const { password } = req.body;

@@ -4,8 +4,23 @@ import { requireAuth, requireAdmin, requireAdminOrCompanyMember } from '../middl
 import { createInvitation } from '../utils/invitation.js';
 import { hashPassword, comparePassword } from '../utils/password.js';
 import { getAuthContext } from '../middleware/authContext.js';
+import { blockWhenOktaOnly } from '../middleware/oktaOnly.js';
 
 const router = express.Router();
+
+// On Okta-only deployments passwords live in Okta, so the endpoints that set or
+// reset a local password are refused. See middleware/oktaOnly.js.
+const blockPasswordChangeWhenOktaOnly = blockWhenOktaOnly({
+  error: 'Password management disabled',
+  message: 'This deployment uses Okta SSO. Passwords are managed in Okta.',
+});
+
+// Invitations mint a link that sets a local password, so they are refused too:
+// accounts are provisioned by assigning the Okta app, not by inviting.
+const blockInvitesWhenOktaOnly = blockWhenOktaOnly({
+  error: 'Invitations disabled',
+  message: 'This deployment uses Okta SSO. Accounts are provisioned in Okta.',
+});
 
 /**
  * Get pending (unverified) users
@@ -167,8 +182,10 @@ router.post('/:id/verify', requireAuth, requireAdminOrCompanyMember, async (req,
  * Request body:
  * - currentPassword: string (optional if user has no password) - Current password for verification
  * - newPassword: string (required) - New password to set
+ *
+ * Refused on Okta-only deployments; the UI for it has been removed.
  */
-router.put('/me/password', requireAuth, async (req, res) => {
+router.put('/me/password', requireAuth, blockPasswordChangeWhenOktaOnly, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
 
@@ -393,8 +410,10 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
  * - email: string (required) - Email address to invite
  * - companyId: string (optional, admin only) - Company to assign user to
  * - isAdmin: boolean (optional, admin only) - Make user an admin
+ *
+ * Refused on Okta-only deployments; the UI for it has been removed.
  */
-router.post('/invite', requireAuth, async (req, res) => {
+router.post('/invite', requireAuth, blockInvitesWhenOktaOnly, async (req, res) => {
   try {
     const { email, companyId, isAdmin: makeAdmin } = req.body;
 
@@ -521,8 +540,11 @@ router.post('/invite', requireAuth, async (req, res) => {
  * POST /api/users/:id/regenerate-invite
  * - Admin: can regenerate invite for any unverified user
  * - Company member: can regenerate invite for unverified users in their company
+ *
+ * Refused on Okta-only deployments; the UI for it has been removed. (For a
+ * verified user this endpoint was an admin password reset.)
  */
-router.post('/:id/regenerate-invite', requireAuth, async (req, res) => {
+router.post('/:id/regenerate-invite', requireAuth, blockInvitesWhenOktaOnly, async (req, res) => {
   try {
     const { id } = req.params;
 

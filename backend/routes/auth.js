@@ -5,6 +5,7 @@ import { createMagicCode, validateMagicCode, cleanupExpiredMagicCodes } from '..
 import { extractDomain, findCompanyByDomain } from '../utils/domain.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getAuthContext } from '../middleware/authContext.js';
+import { blockWhenOktaOnly } from '../middleware/oktaOnly.js';
 import {
   isOktaConfigured,
   buildAuthorizationRequest,
@@ -18,20 +19,14 @@ const router = express.Router();
 // Frontend base URL used for post-auth redirects.
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
-// Security: when Okta SSO is configured, this deployment is Okta-only. Local
-// password and magic-code login are refused so they cannot serve as an
-// alternate, un-SSO'd way into an account (and so the console-logged magic code
-// is not a live login surface). Break-glass: unset the Okta env vars to restore
-// local login if the IdP is unavailable.
-function blockLocalLoginWhenOktaOnly(req, res, next) {
-  if (isOktaConfigured()) {
-    return res.status(403).json({
-      error: 'Local login disabled',
-      message: 'This deployment uses Okta SSO. Please sign in with Okta.',
-    });
-  }
-  next();
-}
+// On Okta-only deployments, local password and magic-code login are refused so
+// they cannot serve as an alternate, un-SSO'd way into an account (and so the
+// console-logged magic code is not a live login surface). See
+// middleware/oktaOnly.js.
+const blockLocalLoginWhenOktaOnly = blockWhenOktaOnly({
+  error: 'Local login disabled',
+  message: 'This deployment uses Okta SSO. Please sign in with Okta.',
+});
 
 /**
  * Register a new user
