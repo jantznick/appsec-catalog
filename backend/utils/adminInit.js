@@ -1,5 +1,5 @@
 import { prisma } from '../prisma/client.js';
-import { createInvitation } from './invitation.js';
+import { isOktaOnly } from '../middleware/oktaOnly.js';
 
 /**
  * Initialize admin users on server startup
@@ -63,29 +63,17 @@ export async function initializeAdminUsers() {
         console.log(`  ✓ Created admin user: ${email}`);
       }
 
-      // If user doesn't have a password, create an invitation link
-      if (!user.password) {
-        try {
-          // Create invitation for the admin user
-          // Use the user's own ID as invitedBy (system-initiated)
-          const { token, expiresAt } = await createInvitation(
-            email,
-            user.id, // Use the user's own ID as the inviter
-            null, // No company assignment needed for admins
-            true // isAdmin
-          );
-
-          // Generate invitation URL (same format as users route)
-          const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-          const invitationUrl = `${baseUrl}/invite/${token}`;
-
-          console.log(`\n🔗 Admin Invitation Link for ${email}:`);
-          console.log(`   ${invitationUrl}`);
-          console.log(`   Expires: ${expiresAt.toISOString()}`);
-          console.log(`   Use this link to set your password and complete account setup\n`);
-        } catch (inviteError) {
-          console.error(`  ⚠️  Failed to create invitation for ${email}:`, inviteError.message);
-        }
+      // This used to mint an invitation link so the admin could set a password.
+      // The /invite/:token page is gone (Okta owns credentials now), so such a
+      // token would be unredeemable in every configuration — don't create one.
+      if (isOktaOnly()) {
+        console.log(`  ✓ ${email} signs in with Okta`);
+      } else if (!user.password) {
+        // Okta is not configured, so this is a local/break-glass deployment and
+        // password login is still accepted. There is no self-service UI for it.
+        console.log(`\n⚠️  ${email} has no password, and Okta is not configured.`);
+        console.log(`   Set one directly, then use the password form on the login screen:`);
+        console.log(`   node scripts/set-admin-password.js ${email} <password>\n`);
       } else {
         console.log(`  ✓ ${email} already has a password set`);
       }
