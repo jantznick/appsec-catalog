@@ -1,5 +1,6 @@
 import { prisma } from '../prisma/client.js';
 import { createInvitation } from './invitation.js';
+import { isOktaOnly } from '../middleware/oktaOnly.js';
 
 /**
  * Initialize admin users on server startup
@@ -63,8 +64,14 @@ export async function initializeAdminUsers() {
         console.log(`  ✓ Created admin user: ${email}`);
       }
 
-      // If user doesn't have a password, create an invitation link
-      if (!user.password) {
+      // On Okta-only deployments there is no password to set: the admin signs
+      // in with Okta and the account is linked by email. Minting an invitation
+      // here would persist a token that /api/invitations/:token/accept refuses
+      // anyway, so skip it.
+      if (isOktaOnly()) {
+        console.log(`  ✓ ${email} signs in with Okta`);
+      } else if (!user.password) {
+        // If user doesn't have a password, create an invitation link
         try {
           // Create invitation for the admin user
           // Use the user's own ID as invitedBy (system-initiated)
