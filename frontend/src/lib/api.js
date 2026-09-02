@@ -116,32 +116,6 @@ export const api = {
       method: 'DELETE',
     }),
 
-  inviteUser: (data) =>
-    apiRequest('/api/users/invite', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
-  regenerateUserInvite: (userId) =>
-    apiRequest(`/api/users/${userId}/regenerate-invite`, {
-      method: 'POST',
-    }),
-
-  getInvitation: (token) =>
-    apiRequest(`/api/invitations/${token}`),
-
-  acceptInvitation: (token, password) =>
-    apiRequest(`/api/invitations/${token}/accept`, {
-      method: 'POST',
-      body: JSON.stringify({ password }),
-    }),
-
-  changePassword: (data) =>
-    apiRequest('/api/users/me/password', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-
   // Company management
   getCompanies: (filters = {}) => {
     const params = new URLSearchParams();

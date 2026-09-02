@@ -13,18 +13,38 @@ API-token auth) changes.
 
 ## Behavior
 
-### Onboarding is Okta-only
-- `POST /api/auth/register` (self-service password sign-up) returns **403**.
-- `POST /api/auth/request-magic-code` **no longer creates accounts** — it only
-  issues a code to an already-existing user. Unknown emails get a generic
-  response with no code (no account enumeration, no provisioning).
-- New accounts are created **only** through Okta login (or admin invitations).
+### Okta is the only way in
+Signing in with Okta — the "Sign in with Okta" button or the tile on the Okta
+dashboard — is the **only** way to authenticate, and assigning someone the Okta
+app is the **only** way they get an account.
 
-### Login methods that still work
-- **Okta SSO** — for everyone assigned the Okta app.
-- **Password login** (`POST /api/auth/login`) — for existing accounts that already
-  have a password.
-- **Magic-code login** (`POST /api/auth/login-magic`) — for existing accounts.
+When the Okta env vars are set, `middleware/oktaOnly.js` refuses every other
+credential and provisioning endpoint with **403**, so none of them can serve as
+an alternate, un-SSO'd way into an account:
+
+| Endpoint | Surface |
+| --- | --- |
+| `POST /api/auth/login` | password login |
+| `POST /api/auth/request-magic-code` | magic-code issue |
+| `POST /api/auth/login-magic` | magic-code login |
+| `PUT /api/users/me/password` | set / change own password |
+| `POST /api/users/invite` | mint an invite link |
+| `POST /api/users/:id/regenerate-invite` | re-mint an invite link (for a verified user, an admin password reset) |
+| `GET /api/invitations/:token` | read invitation details |
+| `POST /api/invitations/:token/accept` | set a password **and open a session without the IdP** |
+
+`POST /api/auth/register` returns **403** unconditionally.
+
+The matching frontend affordances are all gone: `AuthModal` shows only the Okta
+button, and the Users page has no change-, set-, or reset-password action and no
+invite actions. The `/invite/:token` route, `AcceptInvitation` page,
+`InviteUserModal`, and `ChangePasswordModal` were deleted.
+
+### Requesting an account
+Prospective users can still submit a request through "Request an account" in the
+login modal (`AccountRequestModal` → `routes/programInfoRequests.js`). That is a
+message to the team, **not** a provisioning path: an admin assigns the Okta app
+manually, and the account is created on that person's first Okta login.
 
 ### Account linking / migration
 On each Okta login the user is resolved in this order (`utils/oktaProvision.js`):
@@ -222,7 +242,10 @@ our normal flow. Starting from within the app ("Sign in with Okta") is unaffecte
 
 ## Rollout / future direction
 
-- **Now:** Okta + password/magic-code login coexist; onboarding is Okta-only.
-- **Later (Okta-only):** retire password/magic-code login entirely (optionally
-  keep one break-glass admin), and consider nulling out stored passwords once all
-  users have linked their Okta identity.
+- **Now (Okta-only):** onboarding, login, and password management all go through
+  Okta. Local password/magic-code endpoints still exist but are refused while
+  Okta is configured — unsetting the Okta env vars is the break-glass path if the
+  IdP is unavailable.
+- **Later:** consider deleting the local password endpoints and nulling out
+  stored password hashes once every user has linked their Okta identity, at which
+  point the break-glass path goes away too.

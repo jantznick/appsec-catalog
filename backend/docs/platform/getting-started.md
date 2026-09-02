@@ -1,6 +1,6 @@
 # Getting Started
 
-This page covers the two ways an [Application](/docs/overview) actually ends up in Orbit's catalog, and how a new team member gets access to a company's account. Both onboarding forms and the invitation flow work without an existing login, by design — the right people can get information into Orbit before they need an account.
+This page covers the two ways an [Application](/docs/overview) actually ends up in Orbit's catalog, and how a new team member gets access to a company's account. The onboarding forms work without an existing login, by design — the right people can get information into Orbit before they need an account.
 
 ## Getting applications into the catalog
 
@@ -53,13 +53,15 @@ See [Applications](/docs/applications) for what happens to an application's reco
 
 ## Joining an existing company's account
 
-If your company already uses Orbit, new team members join by invitation rather than self-signup. Opening an invitation shows you the company, role, and (if applicable) administrator status it grants, and lets you set a password. Accepting it verifies your account and logs you straight in. An invalid or expired invitation won't let you through.
+Access to Orbit comes from **Okta**. An administrator assigns you the Orbit app in Okta; after that you sign in with **Sign in with Okta** on the login screen, or by clicking the Orbit tile on your Okta dashboard. There's no separate Orbit password to set or remember.
 
-<details><summary>What accepting an invitation does</summary>
+If you don't have access yet, use **Request an account** on the login screen. That sends a request to the team, who will assign you in Okta — it doesn't create an account by itself.
 
-- Sets your password
+<details><summary>What your first Okta sign-in does</summary>
+
+- Creates your Orbit account if you don't have one, or links Okta to your existing account if the email matches
 - Marks your account as verified
-- Logs you in directly, with no separate login step
-- Applies the company and admin status from the invitation, if not already set
+- Assigns your company based on your email domain, where a match exists
+- Logs you straight in, with no separate Orbit login step
 
 </details>

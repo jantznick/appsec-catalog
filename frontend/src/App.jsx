@@ -22,7 +22,6 @@ import { ProductDetail } from './pages/ProductDetail.jsx';
 import { OnboardManager } from './pages/OnboardManager.jsx';
 import { OnboardApplication } from './pages/OnboardApplication.jsx';
 import { Users } from './pages/Users.jsx';
-import { AcceptInvitation } from './pages/AcceptInvitation.jsx';
 import { Domains } from './pages/Domains.jsx';
 import { DomainDetail } from './pages/DomainDetail.jsx';
 import { DeploymentTokens } from './pages/DeploymentTokens.jsx';
@@ -106,10 +105,6 @@ function App() {
         <Route
           path="/onboard/:slug/application/:applicationId"
           element={<OnboardApplication />}
-        />
-        <Route
-          path="/invite/:token"
-          element={<AcceptInvitation />}
         />
 
         {/* Platform documentation - public, no login required */}

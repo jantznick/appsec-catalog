@@ -38,32 +38,26 @@ The page also surfaces your company's **Average Score**, with quick links to its
 
 </details>
 
-## Inviting and managing teammates
+## Adding and managing teammates
 
-The **Users** page shows the people in your company, plus anyone who hasn't been assigned to a company yet. Invite a teammate by email — as a non-admin, the invite is automatically scoped to your own company — and you'll get a one-time invitation link, valid for 7 days, to send along.
+The **Users** page shows the people in your company, plus anyone who hasn't been assigned to a company yet.
+
+Teammates are added in **Okta**, not in Orbit: an administrator assigns them the Orbit app, and their account is created the first time they sign in with Okta. There is no invite flow and no password to set — Okta handles sign-in and credentials. If you don't yet have access yourself, use **Request an account** on the sign-in screen and someone will assign you in Okta.
 
 Every user shows a **Pending** or **Verified** status. As a company member, you can verify a pending user into your company, but changing someone's company assignment, granting admin rights, or removing a user requires an administrator.
 
 <details>
-<summary>Invite and status details</summary>
-
-**Inviting a teammate:**
-
-1. Click **Invite User** and enter their email address.
-2. As a non-admin, you can't assign the invite to a different company or grant admin rights; the modal tells you as much ("Only administrators can assign users to different companies or grant admin privileges").
-3. Submitting the form creates the invitation and shows you a one-time invitation link to copy and send to your teammate.
-
-That link expires after 7 days, and can be regenerated later using **Get Invite Link** (for a still-pending invite) or **Reset Password** (for an already-verified user) next to their row.
+<summary>Status details</summary>
 
 **Pending vs. verified:** every user shows a status badge:
 
-- **Pending** — the account exists (typically because it was invited, or a teammate signed up using your company's email domain) but hasn't completed setup yet.
+- **Pending** — the account exists but hasn't been approved into a company yet.
   - As a company member, you can click **Verify** on a pending user to approve them into your company.
   - If the user isn't yet assigned anywhere, verifying them automatically assigns them to your company.
   - You cannot change their company assignment or make them an admin — those controls only appear for admins.
-- **Verified** — the account is active and fully set up.
+- **Verified** — the account is active and fully set up. Signing in through Okta verifies an account automatically.
 
-You'll also see a **Role** badge (Admin or User) on every row, and a **Change Password** / **Set Password** button next to your own account.
+You'll also see a **Role** badge (Admin or User) on every row.
 
 **What requires an admin:** editing a user's company assignment or admin status, and removing a user entirely — a non-admin doesn't see these controls at all.
 
