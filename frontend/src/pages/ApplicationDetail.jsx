@@ -1039,14 +1039,16 @@ export function ApplicationDetail() {
               >
                 Change repo
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => githubFlow.unlink()}
-                loading={githubFlow.unlinking}
-              >
-                Unlink
-              </Button>
+              {canDelete() && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => githubFlow.unlink()}
+                  loading={githubFlow.unlinking}
+                >
+                  Unlink
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -1135,6 +1137,11 @@ export function ApplicationDetail() {
     if (application && user?.companyId === application.companyId) return true;
     return false;
   };
+
+  // Deleting catalog records (the application itself, deployments, domain links,
+  // API schemas, threat model components) is admin-only — see requireAdmin on the
+  // matching DELETE routes in backend/routes/applications.js.
+  const canDelete = () => isAdmin();
 
   const handleGenerateTechnicalFormLink = async () => {
     if (!application) return;
@@ -1694,6 +1701,7 @@ export function ApplicationDetail() {
                           onAdd={handleAddDomain}
                           onRemove={handleRemoveDomain}
                           disabled={false}
+                          canRemove={canDelete()}
                         />
                       </div>
                     </div>
@@ -1795,14 +1803,21 @@ export function ApplicationDetail() {
                         </div>
                       </div>
 
-                      {/* Domains Section */}
-                      <div>
+                      {/* Domains Section.
+                          Adding/removing a hosting domain is its own flow — each
+                          fires its own request immediately and is not part of the
+                          form save. So this section sits above the click-to-edit
+                          overlay (z-20 vs the overlay's z-10) and handles its own
+                          clicks, instead of the overlay swallowing them and
+                          flipping the whole card into edit mode. */}
+                      <div className="relative z-20">
                         <label className="block text-sm font-semibold text-gray-700 mb-2">Hosting Domains</label>
                         <DomainPills
                           domains={domains}
                           onAdd={handleAddDomain}
                           onRemove={handleRemoveDomain}
                           disabled={!canEdit()}
+                          canRemove={canDelete()}
                         />
                       </div>
                     </div>
@@ -2017,7 +2032,7 @@ export function ApplicationDetail() {
                           <p className="text-sm text-gray-600 mt-1">{deployment.notes}</p>
                         )}
                       </div>
-                      {canEdit() && (
+                      {canDelete() && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -2270,14 +2285,16 @@ export function ApplicationDetail() {
                                     <Button variant="secondary" size="sm" onClick={handleDownloadApiSchema}>
                                       Download
                                     </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={handleDeleteApiSchema}
-                                      loading={deletingApiSchema}
-                                    >
-                                      Remove
-                                    </Button>
+                                    {canDelete() && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={handleDeleteApiSchema}
+                                        loading={deletingApiSchema}
+                                      >
+                                        Remove
+                                      </Button>
+                                    )}
                                   </div>
                                 </div>
                               )}

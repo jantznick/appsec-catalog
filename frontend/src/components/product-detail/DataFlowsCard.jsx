@@ -14,6 +14,7 @@ export function DataFlowsCard({
   setShowAddFlowModal,
   openRemoveFlowModal,
   openEditFlowModal,
+  canDelete = false,
 }) {
   const [showIngressRows, setShowIngressRows] = useState(true);
   const hasTableRows = dataFlows.length > 0 || (ingressPoints?.length || 0) > 0;
@@ -89,14 +90,16 @@ export function DataFlowsCard({
                         <TableCell>{ingress.channel || 'default'}</TableCell>
                         <TableCell>unidirectional</TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            loading={removingIngressId === ingress.id}
-                            onClick={() => handleRemoveIngressPoint?.(ingress.id)}
-                          >
-                            Remove
-                          </Button>
+                          {canDelete && (
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              loading={removingIngressId === ingress.id}
+                              onClick={() => handleRemoveIngressPoint?.(ingress.id)}
+                            >
+                              Remove
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -113,16 +116,18 @@ export function DataFlowsCard({
                         <TableCell>{flow.protocol || '-'}</TableCell>
                         <TableCell>{flow.direction || '-'}</TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openRemoveFlowModal(flow);
-                            }}
-                          >
-                            Remove
-                          </Button>
+                          {canDelete && (
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openRemoveFlowModal(flow);
+                              }}
+                            >
+                              Remove
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}

@@ -3,7 +3,7 @@ import { Button } from '../ui/Button.jsx';
 import { Input } from '../ui/Input.jsx';
 import { toast } from '../ui/Toast.jsx';
 
-export function DomainPills({ domains = [], onAdd, onRemove, disabled = false }) {
+export function DomainPills({ domains = [], onAdd, onRemove, disabled = false, canRemove = !disabled }) {
   const [newDomain, setNewDomain] = useState('');
   const [isAdding, setIsAdding] = useState(false);
 
@@ -52,11 +52,8 @@ export function DomainPills({ domains = [], onAdd, onRemove, disabled = false })
 
   return (
     <div className="space-y-3">
-      <label className="block text-sm font-medium text-gray-700 mb-3">
-        Hosting Domains
-      </label>
-      
-      {/* Existing domains as pills */}
+      {/* Existing domains as pills. The heading is the caller's — every call site
+          renders its own section label above this component. */}
       {domains.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-4">
           {domains.map((domain) => (
@@ -65,7 +62,7 @@ export function DomainPills({ domains = [], onAdd, onRemove, disabled = false })
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-sm font-medium shadow-sm hover:bg-blue-100 hover:border-blue-300 transition-colors"
             >
               <span className="text-blue-900">{domain.name}</span>
-              {!disabled && (
+              {canRemove && (
                 <button
                   type="button"
                   onClick={() => onRemove(domain.id)}

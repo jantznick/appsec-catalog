@@ -324,6 +324,11 @@ export function ProductDetail() {
     return false;
   };
 
+  // Deleting catalog records (the product itself, app mappings, data flows,
+  // ingress points) is admin-only — see requireAdmin on the matching DELETE
+  // routes in backend/routes/products.js.
+  const canDelete = () => isAdmin();
+
   const handleEditClick = () => {
     if (!canEdit()) return;
     setIsEditing(true);
@@ -878,6 +883,7 @@ export function ProductDetail() {
             setShowTypeSettingsModal={setShowTypeSettingsModal}
             setShowAddMappingModal={setShowAddMappingModal}
             otherComponentValue={OTHER_COMPONENT_VALUE}
+            canDelete={canDelete()}
           />
         </div>
 
@@ -891,6 +897,7 @@ export function ProductDetail() {
           setShowAddFlowModal={setShowAddFlowModal}
           openRemoveFlowModal={openRemoveFlowModal}
           openEditFlowModal={openEditFlowModal}
+          canDelete={canDelete()}
         />
       </div>
 

@@ -243,6 +243,13 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
       bulk_import: 'Bulk Import',
       api: 'API',
       deployment_token: 'Deployment Token',
+      deployment: 'Deployment',
+      scm_link: 'Repo Linked',
+      scm_sync: 'Repo Sync',
+      scm_apply: 'Repo Metadata Applied',
+      scm_unlink: 'Repo Unlinked',
+      interface_link: 'Interface Link',
+      auto_created: 'Auto-created',
     };
     return labels[source] || source || 'Unknown';
   };

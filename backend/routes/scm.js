@@ -1,8 +1,9 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import { prisma } from '../prisma/client.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { getAuthContext } from '../middleware/authContext.js';
+import { createApplicationVersion } from '../utils/applicationVersion.js';
 import { encryptIntegrationPayload } from '../utils/integrationCrypto.js';
 import { integrationLog } from '../integrations/log.js';
 import { PROVIDER_GITHUB } from '../integrations/constants.js';
@@ -498,7 +499,7 @@ function parseRepoUrl(url) {
 }
 
 /** Fetch intel + upsert the shared ScmRepo (+ dependencies), and set the application's repoUrl. */
-async function upsertRepoWithIntel(connection, userId, ownerName, repoName, applicationId) {
+async function upsertRepoWithIntel(connection, userId, ownerName, repoName, applicationId, changeSource = 'scm_sync') {
   const { metadata, languages, dependencies } = await fetchRepoIntel(connection, ownerName, repoName);
   const now = new Date();
   const fields = {
@@ -534,7 +535,16 @@ async function upsertRepoWithIntel(connection, userId, ownerName, repoName, appl
 
   // repoUrl always tracks the linked repo. Language/framework are set separately via .../apply.
   if (applicationId) {
+    // repoUrl is versioned metadata, but a re-sync usually writes the same value —
+    // only snapshot when it actually moves, so repeat syncs don't pad the history.
+    const before = await prisma.application.findUnique({
+      where: { id: applicationId },
+      select: { repoUrl: true },
+    });
     await prisma.application.update({ where: { id: applicationId }, data: { repoUrl: metadata.htmlUrl } });
+    if (before?.repoUrl !== metadata.htmlUrl) {
+      await createApplicationVersion(applicationId, userId, changeSource);
+    }
   }
   return repo.id;
 }
@@ -574,7 +584,7 @@ router.put('/applications/:id/scm/link', requireAuth, async (req, res) => {
 
   try {
     const { userId } = getAuthContext(req);
-    const repoId = await upsertRepoWithIntel(connection, userId, owner, name, app.id);
+    const repoId = await upsertRepoWithIntel(connection, userId, owner, name, app.id, 'scm_link');
     await prisma.applicationScmRepo.upsert({
       where: { applicationId: app.id },
       create: { applicationId: app.id, githubRepoId: repoId, linkedById: userId },
@@ -710,17 +720,26 @@ router.post('/applications/:id/scm/apply', requireAuth, async (req, res) => {
     data,
     select: { id: true, language: true, framework: true },
   });
+  // language / framework are versioned metadata.
+  await createApplicationVersion(app.id, getAuthContext(req)?.userId || null, 'scm_apply');
   res.json({ ok: true, application: updated });
 });
 
 /**
  * DELETE /api/applications/:id/scm/link — unlink the repo (clears repoUrl; keeps language/framework).
  */
-router.delete('/applications/:id/scm/link', requireAuth, async (req, res) => {
+router.delete('/applications/:id/scm/link', requireAuth, requireAdmin, async (req, res) => {
   const app = await loadAppForLink(req, res);
   if (!app) return;
+  const before = await prisma.application.findUnique({
+    where: { id: app.id },
+    select: { repoUrl: true },
+  });
   await prisma.applicationScmRepo.deleteMany({ where: { applicationId: app.id } });
   await prisma.application.update({ where: { id: app.id }, data: { repoUrl: null } });
+  if (before?.repoUrl) {
+    await createApplicationVersion(app.id, getAuthContext(req)?.userId || null, 'scm_unlink');
+  }
   res.json({ ok: true });
 });
 

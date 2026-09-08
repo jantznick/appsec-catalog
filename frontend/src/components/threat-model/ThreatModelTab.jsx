@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../../lib/api';
+import useAuthStore from '../../store/authStore.js';
 import { Button, LoadingSpinner, Modal, toast } from '../ui';
 import { FourQuestionEditor } from './FourQuestionEditor.jsx';
 import { AddComponentModal } from './AddComponentModal.jsx';
@@ -73,6 +74,8 @@ function TreeNode({ label, sublabel, active, badge, onClick }) {
 }
 
 export function ThreatModelTab({ applicationId }) {
+  // Deleting components is admin-only (requireAdmin on the DELETE route).
+  const { isAdmin } = useAuthStore();
   const [options, setOptions] = useState(null);
   const [data, setData] = useState({ model: null });
   const [loading, setLoading] = useState(true);
@@ -361,7 +364,7 @@ export function ThreatModelTab({ applicationId }) {
             saving={saving}
             requiredByBoxes={isRoot ? [] : triggeringBoxLabels(selectedComponent, model)}
             onSave={isRoot ? saveRoot : saveComponent}
-            onDelete={() => setConfirmDeleteOpen(true)}
+            onDelete={isAdmin() ? () => setConfirmDeleteOpen(true) : null}
           />
         </div>
       </div>

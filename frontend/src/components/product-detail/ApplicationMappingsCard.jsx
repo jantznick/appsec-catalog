@@ -43,6 +43,7 @@ export function ApplicationMappingsCard({
   setShowTypeSettingsModal,
   setShowAddMappingModal,
   otherComponentValue,
+  canDelete = false,
 }) {
   const [mappingFlowModal, setMappingFlowModal] = useState(null);
   /** { targetApplicationId, targetAppName, draft } */
@@ -265,16 +266,18 @@ export function ApplicationMappingsCard({
                             </Button>
                           </>
                         ) : null}
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openRemoveMappingModal(mapping);
-                          }}
-                        >
-                          Remove
-                        </Button>
+                        {canDelete && (
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openRemoveMappingModal(mapping);
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

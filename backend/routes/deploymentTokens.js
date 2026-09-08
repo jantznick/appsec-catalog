@@ -2,6 +2,7 @@ import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth } from '../middleware/auth.js';
 import { verifyDeploymentToken } from '../utils/deploymentToken.js';
+import { createApplicationVersion } from '../utils/applicationVersion.js';
 import { getAuthContext } from '../middleware/authContext.js';
 
 const router = express.Router();
@@ -367,6 +368,9 @@ router.post('/', async (req, res) => {
         where: { id: applicationId },
         data: updateData,
       });
+      // No user session on a token push, so the version is attributed to the
+      // system; changeSource is what identifies it in the history.
+      await createApplicationVersion(applicationId, null, 'deployment_token');
     }
 
     res.status(201).json(deployment);

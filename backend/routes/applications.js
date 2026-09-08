@@ -13,6 +13,7 @@ import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { getApexDomain } from '../utils/domainApex.js';
 import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
 import { createApplicationVersion, createVersionFromData, applyApprovedVersion } from '../utils/applicationVersion.js';
+import { syncReciprocalInterfaces, parseInterfaceIds } from '../utils/applicationInterfaces.js';
 import {
   SPLITTABLE_METADATA_FIELDS,
   SPLITTABLE_METADATA_FIELD_SET,
@@ -513,6 +514,9 @@ router.put('/public/:id', async (req, res) => {
                 status: 'onboarded',
               },
             });
+            // Give the placeholder a v1 so its history starts from a real
+            // baseline instead of diffing the first edit against nothing.
+            await createApplicationVersion(interfaceApp.id, null, 'auto_created');
           }
 
           interfaceAppIds.push(interfaceApp.id);
@@ -1369,7 +1373,7 @@ router.put('/:id/api-schema', requireAuth, async (req, res) => {
   }
 });
 
-router.delete('/:id/api-schema', requireAuth, async (req, res) => {
+router.delete('/:id/api-schema', requireAuth, requireAdmin, async (req, res) => {
   try {
     const auth = getAuthContext(req);
     await getApplicationForAccess(req.params.id, auth);
@@ -1715,7 +1719,7 @@ router.put('/:id/threat-model/components/:componentId', requireAuth, async (req,
 });
 
 // Delete a component node.
-router.delete('/:id/threat-model/components/:componentId', requireAuth, async (req, res) => {
+router.delete('/:id/threat-model/components/:componentId', requireAuth, requireAdmin, async (req, res) => {
   try {
     const auth = getAuthContext(req);
     await getApplicationForAccess(req.params.id, auth);
@@ -2063,6 +2067,9 @@ router.post('/', requireAuth, async (req, res) => {
               status: 'onboarded',
             },
           });
+          // Give the placeholder a v1 so its history starts from a real
+          // baseline instead of diffing the first edit against nothing.
+          await createApplicationVersion(interfaceApp.id, getAuthContext(req)?.userId || null, 'auto_created');
         }
 
         interfaceAppIds.push(interfaceApp.id);
@@ -2261,6 +2268,9 @@ router.put('/:id', requireAuth, async (req, res) => {
                 status: 'onboarded',
               },
             });
+            // Give the placeholder a v1 so its history starts from a real
+            // baseline instead of diffing the first edit against nothing.
+            await createApplicationVersion(interfaceApp.id, getAuthContext(req)?.userId || null, 'auto_created');
           }
 
           interfaceAppIds.push(interfaceApp.id);
@@ -2399,125 +2409,17 @@ router.put('/:id', requireAuth, async (req, res) => {
       }
     }
 
-    // Update reciprocal interfaces if interfaces were changed
-    if (interfaces !== undefined && interfaceAppIds.length > 0) {
-      try {
-        // Get current application's ID
-        const currentAppId = application.id;
-        
-        // For each interface application, add this application to their interfaces
-        for (const interfaceAppId of interfaceAppIds) {
-          const interfaceApp = await prisma.application.findUnique({
-            where: { id: interfaceAppId },
-          });
-          
-          if (interfaceApp && interfaceApp.interfaces) {
-            try {
-              const existingInterfaces = JSON.parse(interfaceApp.interfaces);
-              if (!Array.isArray(existingInterfaces)) {
-                // If not an array, initialize it
-                await prisma.application.update({
-                  where: { id: interfaceAppId },
-                  data: {
-                    interfaces: JSON.stringify([currentAppId]),
-                  },
-                });
-              } else if (!existingInterfaces.includes(currentAppId)) {
-                // Add current app to interface app's interfaces
-                existingInterfaces.push(currentAppId);
-                await prisma.application.update({
-                  where: { id: interfaceAppId },
-                  data: {
-                    interfaces: JSON.stringify(existingInterfaces),
-                  },
-                });
-              }
-            } catch (e) {
-              // If parsing fails, create new array
-              await prisma.application.update({
-                where: { id: interfaceAppId },
-                data: {
-                  interfaces: JSON.stringify([currentAppId]),
-                },
-              });
-            }
-          } else if (interfaceApp) {
-            // No interfaces yet, create new
-            await prisma.application.update({
-              where: { id: interfaceAppId },
-              data: {
-                interfaces: JSON.stringify([currentAppId]),
-              },
-            });
-          }
-        }
-        
-        // Also remove this app from interfaces that are no longer in the list
-        if (existing.interfaces) {
-          try {
-            const oldInterfaceIds = JSON.parse(existing.interfaces);
-            if (Array.isArray(oldInterfaceIds)) {
-              const removedIds = oldInterfaceIds.filter(id => !interfaceAppIds.includes(id));
-              for (const removedId of removedIds) {
-                const removedApp = await prisma.application.findUnique({
-                  where: { id: removedId },
-                });
-                if (removedApp && removedApp.interfaces) {
-                  try {
-                    const removedAppInterfaces = JSON.parse(removedApp.interfaces);
-                    if (Array.isArray(removedAppInterfaces)) {
-                      const updated = removedAppInterfaces.filter(id => id !== currentAppId);
-                      await prisma.application.update({
-                        where: { id: removedId },
-                        data: {
-                          interfaces: updated.length > 0 ? JSON.stringify(updated) : null,
-                        },
-                      });
-                    }
-                  } catch (e) {
-                    // Ignore parse errors
-                  }
-                }
-              }
-            }
-          } catch (e) {
-            // Ignore parse errors
-          }
-        }
-      } catch (error) {
-        console.error('Error updating reciprocal interfaces:', error);
-        // Don't fail the request if reciprocal update fails
-      }
-    } else if (interfaces !== undefined && interfaces.length === 0 && existing.interfaces) {
-      // If interfaces were cleared, remove this app from all interface apps
-      try {
-        const oldInterfaceIds = JSON.parse(existing.interfaces);
-        if (Array.isArray(oldInterfaceIds)) {
-          for (const oldInterfaceId of oldInterfaceIds) {
-            const oldInterfaceApp = await prisma.application.findUnique({
-              where: { id: oldInterfaceId },
-            });
-            if (oldInterfaceApp && oldInterfaceApp.interfaces) {
-              try {
-                const oldInterfaces = JSON.parse(oldInterfaceApp.interfaces);
-                if (Array.isArray(oldInterfaces)) {
-                  const updated = oldInterfaces.filter(id => id !== application.id);
-                  await prisma.application.update({
-                    where: { id: oldInterfaceId },
-                    data: {
-                      interfaces: updated.length > 0 ? JSON.stringify(updated) : null,
-                    },
-                  });
-                }
-              } catch (e) {
-                // Ignore parse errors
-              }
-            }
-          }
-        }
-      } catch (e) {
-        // Ignore parse errors
-      }
+    // Update reciprocal interfaces if interfaces were changed. Counterpart apps
+    // get their own version snapshot inside the helper — the write lands on their
+    // metadata, so it belongs in their history too.
+    if (interfaces !== undefined) {
+      await syncReciprocalInterfaces({
+        currentAppId: application.id,
+        nextInterfaceIds: interfaceAppIds,
+        previousInterfaceIds: parseInterfaceIds(existing.interfaces),
+        userId: getAuthContext(req)?.userId || null,
+        changeSource: 'interface_link',
+      });
     }
 
     // Recalculate and save score after update
@@ -3275,7 +3177,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
 });
 
 // Remove domain from application
-router.delete('/:id/domains/:domainId', requireAuth, async (req, res) => {
+router.delete('/:id/domains/:domainId', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { id, domainId } = req.params;
 
@@ -3445,6 +3347,9 @@ router.post('/:id/deployments', requireAuth, async (req, res) => {
         where: { id },
         data: updateData,
       });
+      // currentVersion / deploymentEnvironment / gitBranch are versioned metadata,
+      // so auto-populating them from a deployment belongs in the history.
+      await createApplicationVersion(id, getAuthContext(req)?.userId || null, 'deployment');
     }
 
     res.status(201).json(deployment);
@@ -3455,7 +3360,7 @@ router.post('/:id/deployments', requireAuth, async (req, res) => {
 });
 
 // Delete a deployment
-router.delete('/:id/deployments/:deploymentId', requireAuth, async (req, res) => {
+router.delete('/:id/deployments/:deploymentId', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { id, deploymentId } = req.params;
 
@@ -4039,63 +3944,17 @@ router.post('/:id/versions/:versionId/approve', requireAuth, requireAdmin, async
 
       await applyApprovedVersion(id, version, fieldsToApply);
 
-      // Handle reciprocal interfaces if interfaces were approved
+      // Handle reciprocal interfaces if interfaces were approved. Add-only here:
+      // approving a version links the counterparts it names, it does not unlink
+      // ones the pending version happened to omit.
       if (!fieldsToApply || fieldsToApply.includes('interfaces')) {
-        if (version.interfaces) {
-          try {
-            const interfaceAppIds = JSON.parse(version.interfaces);
-            if (Array.isArray(interfaceAppIds) && interfaceAppIds.length > 0) {
-              // Get current application's ID
-              const currentAppId = application.id;
-              
-              // For each interface application, add this application to their interfaces
-              for (const interfaceAppId of interfaceAppIds) {
-                const interfaceApp = await prisma.application.findUnique({
-                  where: { id: interfaceAppId },
-                });
-                
-                if (interfaceApp && interfaceApp.interfaces) {
-                  try {
-                    const existingInterfaces = JSON.parse(interfaceApp.interfaces);
-                    if (!Array.isArray(existingInterfaces)) {
-                      await prisma.application.update({
-                        where: { id: interfaceAppId },
-                        data: {
-                          interfaces: JSON.stringify([currentAppId]),
-                        },
-                      });
-                    } else if (!existingInterfaces.includes(currentAppId)) {
-                      existingInterfaces.push(currentAppId);
-                      await prisma.application.update({
-                        where: { id: interfaceAppId },
-                        data: {
-                          interfaces: JSON.stringify(existingInterfaces),
-                        },
-                      });
-                    }
-                  } catch (e) {
-                    await prisma.application.update({
-                      where: { id: interfaceAppId },
-                      data: {
-                        interfaces: JSON.stringify([currentAppId]),
-                      },
-                    });
-                  }
-                } else if (interfaceApp) {
-                  await prisma.application.update({
-                    where: { id: interfaceAppId },
-                    data: {
-                      interfaces: JSON.stringify([currentAppId]),
-                    },
-                  });
-                }
-              }
-            }
-          } catch (error) {
-            console.error('Error updating reciprocal interfaces:', error);
-            // Don't fail the request if reciprocal update fails
-          }
-        }
+        await syncReciprocalInterfaces({
+          currentAppId: application.id,
+          nextInterfaceIds: parseInterfaceIds(version.interfaces),
+          previousInterfaceIds: [],
+          userId: getAuthContext(req)?.userId || null,
+          changeSource: 'interface_link',
+        });
       }
 
       // Recalculate and save score after update

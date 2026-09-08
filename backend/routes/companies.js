@@ -911,7 +911,14 @@ router.put('/:id', requireAuth, async (req, res) => {
       updateData.slug = slug;
     }
 
-    if (domains !== undefined && !auth.isAdmin) {
+    // Normalized the same way it is persisted, so an unchanged value round-trips
+    // as a no-op. Non-admins render this field read-only but still submit the
+    // whole form, and echoing back the current value must not be a 403.
+    const normalizedDomains = domains?.trim() || null;
+    const domainsChanged =
+      domains !== undefined && normalizedDomains !== existing.domains;
+
+    if (domainsChanged && !auth.isAdmin) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'Only admins can change company domains',
@@ -922,7 +929,7 @@ router.put('/:id', requireAuth, async (req, res) => {
       where: { id },
       data: {
         ...updateData,
-        ...(domains !== undefined && auth.isAdmin && { domains: domains?.trim() || null }),
+        ...(domainsChanged && auth.isAdmin && { domains: normalizedDomains }),
         ...(divisionId !== undefined && auth.isAdmin && { divisionId: divisionId || null }),
         ...(engManager !== undefined && { engManager: engManager?.trim() || null }),
         ...(language !== undefined && { language: language?.trim() || null }),

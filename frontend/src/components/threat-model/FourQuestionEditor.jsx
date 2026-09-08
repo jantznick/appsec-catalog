@@ -88,7 +88,7 @@ export function FourQuestionEditor({ node, isRoot, options, saving, onSave, onDe
           ) : null}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {!isRoot && (
+          {!isRoot && onDelete && (
             <Button variant="ghost" size="sm" onClick={onDelete} className="text-red-600 hover:bg-red-50">
               Delete
             </Button>

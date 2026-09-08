@@ -768,7 +768,7 @@ router.put('/:id/applications/:applicationId', requireAuth, async (req, res) => 
 });
 
 // Remove application from product
-router.delete('/:id/applications/:applicationId', requireAuth, async (req, res) => {
+router.delete('/:id/applications/:applicationId', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { id, applicationId } = req.params;
 
@@ -897,7 +897,7 @@ router.post('/:id/ingress-points', requireAuth, async (req, res) => {
 });
 
 // Remove ingress point for a product
-router.delete('/:id/ingress-points/:ingressId', requireAuth, async (req, res) => {
+router.delete('/:id/ingress-points/:ingressId', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { id, ingressId } = req.params;
     const product = await prisma.product.findUnique({ where: { id } });
@@ -1057,7 +1057,7 @@ router.put('/:id/data-flows/:flowId', requireAuth, async (req, res) => {
 });
 
 // Delete data flow for a product
-router.delete('/:id/data-flows/:flowId', requireAuth, async (req, res) => {
+router.delete('/:id/data-flows/:flowId', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { id, flowId } = req.params;
     const product = await prisma.product.findUnique({ where: { id } });

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card.jsx';
 import { Button } from '../ui/Button.jsx';
 import { useRepoLinkFlow } from '../../hooks/useRepoLinkFlow.jsx';
+import useAuthStore from '../../store/authStore.js';
 import { AdvisoryCell } from './AdvisoryCell.jsx';
 import { AdvisoryDetailsModal } from './AdvisoryDetailsModal.jsx';
 import { summarizeOsv } from '../../utils/osv.js';
@@ -17,6 +18,9 @@ import { scmProviderLabel } from '../../lib/integrationLabels.js';
  * @param {{ application: object, canManage: boolean, onRefresh: () => Promise<void> }} props
  */
 export function ApplicationScmBlock({ application, canManage, onRefresh }) {
+  // Unlinking deletes the stored ApplicationScmRepo row, so it is admin-only
+  // (requireAdmin on DELETE /api/applications/:id/scm/link).
+  const { isAdmin } = useAuthStore();
   const repo = application?.scmRepoLink?.repo || null;
   const [showAllDeps, setShowAllDeps] = useState(false);
   const [detailsDep, setDetailsDep] = useState(null);
@@ -107,9 +111,11 @@ export function ApplicationScmBlock({ application, canManage, onRefresh }) {
                     <Button variant="secondary" size="sm" onClick={flow.openLinkPicker} disabled={flow.busy}>
                       Change
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={flow.unlink} loading={flow.unlinking}>
-                      Unlink
-                    </Button>
+                    {isAdmin() && (
+                      <Button variant="ghost" size="sm" onClick={flow.unlink} loading={flow.unlinking}>
+                        Unlink
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
