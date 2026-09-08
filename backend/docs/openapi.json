@@ -7453,6 +7453,195 @@
         }
       }
     },
+    "/api/applications/{id}/split": {
+      "post": {
+        "operationId": "splitApplication",
+        "summary": "Split an application into two",
+        "description": "Splits one application into two: the existing application is renamed to `originalName` (defaults to its current name) and a second application named `newName` is created in the same company with the same `status`. `metadataMode` controls how much of the original's metadata the new application starts with — `all` copies every copyable field, `none` creates a blank record, and `selected` copies only the fields listed in `fields`. Only scalar metadata is ever copied: domains, deployments, deployment tokens, product links, interfaces, contacts, notes, the threat model and the API schema all stay with the original application. Requires the caller to be an admin or a member of the application's company. Both applications get a new entry in their version history (`changeSource` is `\"api\"` for API-key callers, `\"web_form\"` for session callers) and a note recording the split.",
+        "tags": [
+          "Applications"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID of the application to split",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "newName"
+                ],
+                "properties": {
+                  "newName": {
+                    "type": "string",
+                    "description": "Name for the newly created application. Must differ from `originalName` (case-insensitive) and must not collide with another application in the same company.",
+                    "example": "Checkout API"
+                  },
+                  "originalName": {
+                    "type": "string",
+                    "description": "New name for the existing application. Omit (or send blank) to leave its current name unchanged.",
+                    "example": "Checkout Web"
+                  },
+                  "metadataMode": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "none",
+                      "selected"
+                    ],
+                    "default": "all",
+                    "description": "How much of the original application's metadata to copy onto the new one."
+                  },
+                  "fields": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Metadata field names to copy; only used when `metadataMode` is `selected`. Accepts the application's scalar metadata fields (for example `description`, `language`, `businessCriticality`, `sastTool`, `deploymentEnvironment`); `name`, `companyId`, `status`, `interfaces` and `metadataLastReviewed` cannot be listed here.",
+                    "example": [
+                      "description",
+                      "language",
+                      "framework",
+                      "businessCriticality"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Application split successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "application": {
+                      "type": "object",
+                      "description": "The original (possibly renamed) application, same shape as GET /api/applications/{id}"
+                    },
+                    "newApplication": {
+                      "type": "object",
+                      "description": "The newly created application, same shape as GET /api/applications/{id}"
+                    },
+                    "copiedFields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "The metadata fields that were copied onto the new application"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or identical names, or an invalid metadataMode / fields list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "The new application must have a different name than the original"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not an admin and does not belong to the application's company",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Application not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Either name is already used by another application in the same company",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Application name already in use"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to split application",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/applications/{id}/generate-technical-link": {
       "post": {
         "operationId": "generateApplicationTechnicalLink",

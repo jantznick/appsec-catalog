@@ -13,6 +13,11 @@ import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { getApexDomain } from '../utils/domainApex.js';
 import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
 import { createApplicationVersion, createVersionFromData, applyApprovedVersion } from '../utils/applicationVersion.js';
+import {
+  SPLITTABLE_METADATA_FIELDS,
+  SPLITTABLE_METADATA_FIELD_SET,
+  SPLIT_METADATA_MODES,
+} from '../utils/applicationSplitFields.js';
 import { buildIntegrationSummaryForCompanyId } from '../integrations/summaryForCompany.js';
 import { getIntegrationsKey } from '../utils/integrationCrypto.js';
 import {
@@ -2551,6 +2556,168 @@ router.put('/:id', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error updating application:', error);
     res.status(500).json({ error: 'Failed to update application' });
+  }
+});
+
+// Split an application in two: rename the original and create a second application
+// alongside it, optionally carrying over the original's metadata. Only scalar
+// metadata is copied — see utils/applicationSplitFields.js for what that covers.
+router.post('/:id/split', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { originalName, newName, metadataMode = 'all', fields } = req.body;
+
+    const existing = await prisma.application.findUnique({
+      where: { id },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin && auth.companyId !== existing.companyId) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only split applications in your company',
+      });
+    }
+
+    const finalOriginalName =
+      typeof originalName === 'string' && originalName.trim() ? originalName.trim() : existing.name;
+    const finalNewName = typeof newName === 'string' ? newName.trim() : '';
+
+    if (!finalNewName) {
+      return res.status(400).json({ error: 'A name for the new application is required' });
+    }
+
+    if (finalNewName.toLowerCase() === finalOriginalName.toLowerCase()) {
+      return res.status(400).json({
+        error: 'The new application must have a different name than the original',
+      });
+    }
+
+    if (!SPLIT_METADATA_MODES.includes(metadataMode)) {
+      return res.status(400).json({
+        error: `metadataMode must be one of: ${SPLIT_METADATA_MODES.join(', ')}`,
+      });
+    }
+
+    let fieldsToCopy = [];
+    if (metadataMode === 'all') {
+      fieldsToCopy = [...SPLITTABLE_METADATA_FIELDS];
+    } else if (metadataMode === 'selected') {
+      if (!Array.isArray(fields)) {
+        return res.status(400).json({
+          error: 'fields must be an array of metadata field names when metadataMode is "selected"',
+        });
+      }
+      const unknownFields = fields.filter((field) => !SPLITTABLE_METADATA_FIELD_SET.has(field));
+      if (unknownFields.length > 0) {
+        return res.status(400).json({
+          error: 'Unknown metadata field(s) requested',
+          message: `These fields cannot be copied by a split: ${unknownFields.join(', ')}`,
+        });
+      }
+      // De-duplicate so a repeated field name can't blow up the copy
+      fieldsToCopy = [...new Set(fields)];
+    }
+
+    // Neither half of the split may collide with another application in the company
+    const nameConflict = await prisma.application.findFirst({
+      where: {
+        companyId: existing.companyId,
+        id: { not: id },
+        OR: [
+          { name: { equals: finalOriginalName, mode: 'insensitive' } },
+          { name: { equals: finalNewName, mode: 'insensitive' } },
+        ],
+      },
+      select: { name: true },
+    });
+
+    if (nameConflict) {
+      return res.status(409).json({
+        error: 'Application name already in use',
+        message: `Another application in this company is already named "${nameConflict.name}"`,
+      });
+    }
+
+    const copiedMetadata = {};
+    for (const field of fieldsToCopy) {
+      copiedMetadata[field] = existing[field];
+    }
+
+    const { original, created } = await prisma.$transaction(async (tx) => {
+      const updatedOriginal = await tx.application.update({
+        where: { id },
+        data: { name: finalOriginalName },
+        include: {
+          company: {
+            select: { id: true, name: true },
+          },
+        },
+      });
+
+      const newApplication = await tx.application.create({
+        data: {
+          ...copiedMetadata,
+          name: finalNewName,
+          companyId: existing.companyId,
+          status: existing.status,
+        },
+        include: {
+          company: {
+            select: { id: true, name: true },
+          },
+        },
+      });
+
+      return { original: updatedOriginal, created: newApplication };
+    });
+
+    const changeSource = auth?.authType === 'apiKey' ? 'api' : 'web_form';
+    await createApplicationVersion(original.id, auth?.userId || null, changeSource);
+    await createApplicationVersion(created.id, auth?.userId || null, changeSource);
+
+    let metadataSummary;
+    if (metadataMode === 'all') {
+      metadataSummary = 'All metadata was copied to the new application.';
+    } else if (metadataMode === 'none') {
+      metadataSummary = 'No metadata was copied to the new application.';
+    } else {
+      metadataSummary = fieldsToCopy.length
+        ? `Metadata copied to the new application: ${fieldsToCopy.join(', ')}.`
+        : 'No metadata was copied to the new application.';
+    }
+
+    const renameNote =
+      finalOriginalName === existing.name
+        ? ''
+        : ` This application was renamed from "${existing.name}" to "${finalOriginalName}" as part of the split.`;
+
+    await createNote(
+      auth?.userId,
+      `Application split: "${created.name}" was created from this application.${renameNote} ${metadataSummary} Domains, deployments, product links, interfaces, threat model and API schema stayed with this application.`,
+      null,
+      original.id
+    );
+
+    await createNote(
+      auth?.userId,
+      `Created by splitting "${existing.name}" (now "${original.name}"). ${metadataSummary}`,
+      null,
+      created.id
+    );
+
+    res.status(201).json({
+      application: original,
+      newApplication: created,
+      copiedFields: fieldsToCopy,
+    });
+  } catch (error) {
+    console.error('Error splitting application:', error);
+    res.status(500).json({ error: 'Failed to split application' });
   }
 });
 

@@ -24,6 +24,7 @@ import { ApplicationDependenciesPanel } from '../components/integrations/Applica
 import { summarizeOsv } from '../utils/osv.js';
 import { useRepoLinkFlow } from '../hooks/useRepoLinkFlow.jsx';
 import { ThreatModelTab } from '../components/threat-model/ThreatModelTab.jsx';
+import { SplitApplicationModal } from '../components/applications/SplitApplicationModal.jsx';
 
 export function ApplicationDetail() {
   const { id } = useParams();
@@ -46,6 +47,7 @@ export function ApplicationDetail() {
   const [generatingLink, setGeneratingLink] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [showDependenciesModal, setShowDependenciesModal] = useState(false);
+  const [showSplitModal, setShowSplitModal] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [interfaces, setInterfaces] = useState([]);
@@ -929,6 +931,27 @@ export function ApplicationDetail() {
     setHasUnsavedChanges(false);
   };
 
+  // A split writes to both applications on the server, so the edit form must not be
+  // holding unsaved changes that would be silently discarded (or re-saved over the split).
+  // Edit mode stays on while the modal is open, so cancelling the split puts the user
+  // back exactly where they were.
+  const handleSplitClick = () => {
+    if (hasUnsavedChanges) {
+      toast.error('Save or cancel your changes before splitting this application');
+      return;
+    }
+    setShowSplitModal(true);
+  };
+
+  const handleSplitComplete = (result) => {
+    setShowSplitModal(false);
+    // Leave edit mode before navigating: the new application's page must not open with
+    // this application's form state still active.
+    setIsEditing(false);
+    setHasUnsavedChanges(false);
+    navigate(`/applications/${result.newApplication.id}`);
+  };
+
   const canManageGithub = isAdmin() || (user?.companyId && user.companyId === application?.companyId);
 
   // GitHub actions (link / change / sync / unlink) are their OWN flow via useRepoLinkFlow: they
@@ -1255,6 +1278,19 @@ export function ApplicationDetail() {
             </p>
           </div>
           <div className="flex gap-3 items-center">
+            {canEdit() && isEditing && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSplitClick}
+                title="Split this application into two"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12h4l3-6h9M8 12l3 6h9m0-12l-3-3m3 3l-3 3m3 9l-3-3m3 3l-3 3" />
+                </svg>
+                Split
+              </Button>
+            )}
             <div className="flex items-center gap-4">
               {canEdit() ? (
                 <div className="flex items-center gap-2">
@@ -2945,6 +2981,14 @@ export function ApplicationDetail() {
           </div>
         </div>
       )}
+
+      {/* Split Application Modal — rendered after the sticky edit bar so it stacks above it */}
+      <SplitApplicationModal
+        isOpen={showSplitModal}
+        onClose={() => setShowSplitModal(false)}
+        application={application}
+        onSplit={handleSplitComplete}
+      />
 
       {/* Cancel Confirmation Modal */}
       <Modal

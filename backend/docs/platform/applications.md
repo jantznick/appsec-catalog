@@ -29,6 +29,16 @@ Three ways an application ends up in the catalog: two public onboarding forms (a
 
 </details>
 
+## Splitting an application
+
+Sometimes a single record turns out to be two things — a front end and its API, or a monolith that has been pulled apart. Splitting turns one record into two without re-entering everything by hand. Start editing the application, and a **Split** button appears in the top-right of the page.
+
+1. Name the new application. Renaming the existing one is optional — leave that field alone to keep its current name
+2. Choose what the new application starts with: **all** of this application's metadata, **none** of it (a blank record), or a **selected** set of fields
+3. Orbit renames the original, creates the new application in the same company with the same status, and adds a note to both recording the split
+
+Only metadata is copied. Domains, deployments, deployment tokens, product links, interfaces, contacts, notes, the threat model and the API schema all stay with the original application — move whatever belongs to the new record over yourself. Both applications get a new entry in their version history, so the split shows up in the audit trail.
+
 ## The application detail page
 
 Opening an application shows its name, company, and product, its status, and an **Application Security Score** — split into Knowledge Sharing (how complete the metadata is) and Tool Usage (how well the application is covered by security tooling and testing), each with its own breakdown and, when there's room to improve, specific **Quick Wins**. **[Read more about how the score is calculated →](/docs/scoring-methodology)**

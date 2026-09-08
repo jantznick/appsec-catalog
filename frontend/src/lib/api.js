@@ -480,6 +480,15 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // Split an application in two: rename the original and create a new application
+  // beside it. `metadataMode` is 'all' | 'none' | 'selected'; `fields` is only used
+  // for 'selected'.
+  splitApplication: (id, { originalName, newName, metadataMode, fields = [] }) =>
+    apiRequest(`/api/applications/${id}/split`, {
+      method: 'POST',
+      body: JSON.stringify({ originalName, newName, metadataMode, fields }),
+    }),
+
   // Admin: trigger VM deploy
   adminTriggerDeploy: (data) =>
     apiRequest('/api/admin/deploy', {
