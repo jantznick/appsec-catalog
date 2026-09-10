@@ -4,6 +4,8 @@ import { requireAuth, requireAdmin, requireAdminOrCompanyMember } from '../middl
 import { createInvitation } from '../utils/invitation.js';
 import { hashPassword, comparePassword } from '../utils/password.js';
 import { getAuthContext } from '../middleware/authContext.js';
+import { companiesWithPermission, contextCan, getPermissionContext } from '../middleware/rbac.js';
+import { ensureDefaultCompanyRole } from '../rbac/defaults.js';
 import { blockWhenOktaOnly } from '../middleware/oktaOnly.js';
 
 const router = express.Router();
@@ -25,22 +27,23 @@ const blockInvitesWhenOktaOnly = blockWhenOktaOnly({
 /**
  * Get pending (unverified) users
  * GET /api/users/pending
- * - Admin: see all unverified users
- * - Company member: see unverified users in their company
+ * - System admin: every unverified user
+ * - Otherwise: unverified users in the companies where the caller holds
+ *   `company.manage_users`
  */
 router.get('/pending', requireAuth, async (req, res) => {
   try {
-    const auth = getAuthContext(req);
+    const ctx = await getPermissionContext(req);
     let whereClause = {
       verifiedAccount: false,
     };
 
-    // If not admin, only show users from their company
-    if (!auth.isAdmin) {
-      if (!auth.companyId) {
+    if (!ctx.isSystemAdmin) {
+      const manageableCompanyIds = companiesWithPermission(ctx, 'company.manage_users');
+      if (manageableCompanyIds.length === 0) {
         return res.json({ users: [] });
       }
-      whereClause.companyId = auth.companyId;
+      whereClause.companyId = { in: manageableCompanyIds };
     }
 
     const users = await prisma.user.findMany({
@@ -87,7 +90,9 @@ router.post('/:id/verify', requireAuth, requireAdminOrCompanyMember, async (req,
     const { id } = req.params;
     const { companyId, isAdmin: makeAdmin } = req.body;
     const auth = getAuthContext(req);
-    const isRequesterAdmin = auth.isAdmin;
+    // Only system admins may set a user's company or admin flag here; the
+    // route middleware has already checked `company.manage_users`.
+    const isRequesterAdmin = (await getPermissionContext(req)).isSystemAdmin;
 
     // Get the target user
     const targetUser = await prisma.user.findUnique({
@@ -160,6 +165,8 @@ router.post('/:id/verify', requireAuth, requireAdminOrCompanyMember, async (req,
         },
       },
     });
+
+    await ensureDefaultCompanyRole(updatedUser.id);
 
     res.json({
       message: 'User verified successfully',
@@ -257,26 +264,24 @@ router.put('/me/password', requireAuth, blockPasswordChangeWhenOktaOnly, async (
 /**
  * Get all users
  * GET /api/users
- * - Admin: see all users
- * - Company member: see users in their company OR users with no company (allows them to add unassigned users to their company)
+ * - System admin: every user
+ * - Otherwise: users in the companies where the caller holds
+ *   `company.manage_users`, plus users with no company yet (so they can be
+ *   claimed into one)
  */
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const auth = getAuthContext(req);
+    const ctx = await getPermissionContext(req);
     let whereClause = {};
 
-    // If not admin, show users from their company OR users with no company
-    if (!auth.isAdmin) {
-      if (!auth.companyId) {
-        // If user has no company, only show unassigned users
-        whereClause.companyId = null;
-      } else {
-        // Show users in their company OR users with no company
-        whereClause.OR = [
-          { companyId: auth.companyId },
-          { companyId: null },
-        ];
-      }
+    if (!ctx.isSystemAdmin) {
+      const manageableCompanyIds = companiesWithPermission(ctx, 'company.manage_users');
+      whereClause.OR = [
+        ...(manageableCompanyIds.length > 0
+          ? [{ companyId: { in: manageableCompanyIds } }]
+          : []),
+        { companyId: null },
+      ];
     }
 
     const users = await prisma.user.findMany({
@@ -387,6 +392,8 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       },
     });
 
+    await ensureDefaultCompanyRole(updatedUser.id);
+
     res.json({
       message: 'User updated successfully',
       user: updatedUser,
@@ -441,20 +448,23 @@ router.post('/invite', requireAuth, blockInvitesWhenOktaOnly, async (req, res) =
     });
 
     const auth = getAuthContext(req);
-    const isRequesterAdmin = auth.isAdmin;
+    const ctx = await getPermissionContext(req);
+    const isRequesterAdmin = ctx.isSystemAdmin;
     let finalCompanyId = companyId || null;
     let finalIsAdmin = Boolean(makeAdmin);
 
-    // If not admin, restrict to their company and no admin status
+    // Non-admins invite into a company they manage users for, and can never
+    // mint a system admin.
     if (!isRequesterAdmin) {
-      if (!auth.companyId) {
+      const targetCompanyId = finalCompanyId || auth.companyId;
+      if (!contextCan(ctx, 'company.manage_users', targetCompanyId)) {
         return res.status(403).json({
           error: 'Permission denied',
-          message: 'You must be assigned to a company to invite users'
+          message: 'You do not have permission to invite users into that company'
         });
       }
-      finalCompanyId = auth.companyId;
-      finalIsAdmin = false; // Company members cannot create admins
+      finalCompanyId = targetCompanyId;
+      finalIsAdmin = false;
     } else {
       // Admin can specify company, validate if provided
       if (companyId) {
@@ -565,7 +575,8 @@ router.post('/:id/regenerate-invite', requireAuth, blockInvitesWhenOktaOnly, asy
 
     // Check if user is already verified
     const auth = getAuthContext(req);
-    const isRequesterAdmin = auth.isAdmin;
+    const ctx = await getPermissionContext(req);
+    const isRequesterAdmin = ctx.isSystemAdmin;
 
     // Only admins can create invite links for verified users (password reset function)
     // Non-admins can only create invites for unverified users
@@ -576,19 +587,14 @@ router.post('/:id/regenerate-invite', requireAuth, blockInvitesWhenOktaOnly, asy
       });
     }
 
-    // Permission check: non-admins can only regenerate invites for users in their company or unassigned users
+    // Non-admins need `company.manage_users` in the target user's company, or
+    // in their own when the target has not been assigned to one yet.
     if (!isRequesterAdmin) {
-      if (!auth.companyId) {
+      const targetCompanyId = user.companyId ?? auth.companyId ?? null;
+      if (!contextCan(ctx, 'company.manage_users', targetCompanyId)) {
         return res.status(403).json({
           error: 'Permission denied',
-          message: 'You must be assigned to a company to regenerate invitations'
-        });
-      }
-      // Allow if user is in requester's company OR user has no company (unassigned)
-      if (user.companyId && user.companyId !== auth.companyId) {
-        return res.status(403).json({
-          error: 'Permission denied',
-          message: 'You can only regenerate invitations for users in your company or unassigned users'
+          message: 'You do not have permission to regenerate invitations for this user'
         });
       }
     }

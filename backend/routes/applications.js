@@ -1,6 +1,7 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { requirePermission, companyFrom, companyScopeFilter, can } from '../middleware/rbac.js';
 import {
   SCORING_INCLUDE,
   calculateApplicationScore,
@@ -194,7 +195,11 @@ async function recordScoreIfChanged(applicationId, scores) {
   }
 }
 
-async function getApplicationForAccess(applicationId, auth) {
+/**
+ * Load an application and check `permission` against its owning company.
+ * Throws a tagged error that sendAccessError turns into a 404 or 403.
+ */
+async function getApplicationForAccess(req, applicationId, permission) {
   const application = await prisma.application.findUnique({
     where: { id: applicationId },
     select: {
@@ -209,8 +214,8 @@ async function getApplicationForAccess(applicationId, auth) {
     throw error;
   }
 
-  if (!auth.isAdmin && auth.companyId !== application.companyId) {
-    const error = new Error('You can only access applications in your company');
+  if (!(await can(req, permission, application.companyId))) {
+    const error = new Error('You do not have permission to do that with this application');
     error.statusCode = 403;
     throw error;
   }
@@ -353,16 +358,12 @@ router.post('/onboard/executive', async (req, res) => {
 // APP-3: Get application list
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const auth = getAuthContext(req);
-    let whereClause = {};
-
-    // Filter by company (user's company or admin sees all)
-    if (!auth.isAdmin) {
-      if (!auth.companyId) {
-        return res.json([]);
-      }
-      whereClause.companyId = auth.companyId;
+    // Limited to the companies where the caller can read applications.
+    const scope = await companyScopeFilter(req, 'application.read');
+    if (!scope) {
+      return res.json([]);
     }
+    let whereClause = { ...scope };
 
     const applications = await prisma.application.findMany({
       where: whereClause,
@@ -763,9 +764,7 @@ router.get('/:id/score', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Application not found' });
     }
 
-    // Check if user has access (admin or member of same company)
-    const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== application.companyId) {
+    if (!(await can(req, 'application.read', application.companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access applications in your company',
@@ -956,9 +955,7 @@ router.get('/:id/policy-compliance', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Application not found' });
     }
 
-    // Check if user has access (admin or member of same company)
-    const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== application.companyId) {
+    if (!(await can(req, 'application.read', application.companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access applications in your company',
@@ -1235,8 +1232,7 @@ router.get('/:id/integrations/:provider/tags', requireAuth, async (req, res) => 
     if (!app) {
       return res.status(404).json({ error: 'Application not found' });
     }
-    const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== app.companyId) {
+    if (!(await can(req, 'application.read', app.companyId))) {
       return res.status(403).json({ error: 'Permission denied', message: 'You cannot access this application' });
     }
 
@@ -1248,7 +1244,7 @@ router.get('/:id/integrations/:provider/tags', requireAuth, async (req, res) => 
         message: 'Save API credentials for this provider (enterprise or company) first.',
       });
     }
-    if (!(auth.isAdmin || auth.companyId === companyId)) {
+    if (!(await can(req, 'integration.manage', companyId))) {
       return res.status(403).json({ error: 'Permission denied', message: 'You cannot list tags for this application' });
     }
 
@@ -1309,8 +1305,7 @@ router.put('/:id/integrations/:provider/link', requireAuth, async (req, res) => 
     if (!app) {
       return res.status(404).json({ error: 'Application not found' });
     }
-    const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== app.companyId) {
+    if (!(await can(req, 'application.edit', app.companyId))) {
       return res.status(403).json({ error: 'Permission denied', message: 'You cannot access this application' });
     }
 
@@ -1322,7 +1317,7 @@ router.put('/:id/integrations/:provider/link', requireAuth, async (req, res) => 
         message: 'Configure API credentials before setting a link.',
       });
     }
-    if (!(auth.isAdmin || auth.companyId === companyId)) {
+    if (!(await can(req, 'integration.manage', companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You cannot set an integration link for this application',
@@ -1389,8 +1384,7 @@ router.put('/:id/integrations/:provider/link', requireAuth, async (req, res) => 
 // API schema: metadata for the current OpenAPI/Swagger schema
 router.get('/:id/api-schema', requireAuth, async (req, res) => {
   try {
-    const auth = getAuthContext(req);
-    await getApplicationForAccess(req.params.id, auth);
+    await getApplicationForAccess(req, req.params.id, 'application.read');
 
     const schema = await prisma.applicationApiSchema.findUnique({
       where: { applicationId: req.params.id },
@@ -1406,8 +1400,7 @@ router.get('/:id/api-schema', requireAuth, async (req, res) => {
 // API schema: upload/paste text content for the current OpenAPI/Swagger schema
 router.put('/:id/api-schema', requireAuth, async (req, res) => {
   try {
-    const auth = getAuthContext(req);
-    await getApplicationForAccess(req.params.id, auth);
+    await getApplicationForAccess(req, req.params.id, 'application.edit');
 
     const normalized = validateAndNormalizeApiSchema({
       content: req.body?.content,
@@ -1442,8 +1435,7 @@ router.put('/:id/api-schema', requireAuth, async (req, res) => {
 
 router.delete('/:id/api-schema', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const auth = getAuthContext(req);
-    await getApplicationForAccess(req.params.id, auth);
+    await getApplicationForAccess(req, req.params.id, 'application.read');
 
     await prisma.applicationApiSchema.delete({
       where: { applicationId: req.params.id },
@@ -1461,8 +1453,7 @@ router.delete('/:id/api-schema', requireAuth, requireAdmin, async (req, res) => 
 
 router.get('/:id/api-schema/download', requireAuth, async (req, res) => {
   try {
-    const auth = getAuthContext(req);
-    await getApplicationForAccess(req.params.id, auth);
+    await getApplicationForAccess(req, req.params.id, 'application.read');
 
     const schema = await prisma.applicationApiSchema.findUnique({
       where: { applicationId: req.params.id },
@@ -1497,8 +1488,7 @@ router.get('/:id/api-schema/download', requireAuth, async (req, res) => {
 
 router.get('/:id/api-schema/visualization', requireAuth, async (req, res) => {
   try {
-    const auth = getAuthContext(req);
-    await getApplicationForAccess(req.params.id, auth);
+    await getApplicationForAccess(req, req.params.id, 'application.read');
 
     const schema = await prisma.applicationApiSchema.findUnique({
       where: { applicationId: req.params.id },
@@ -1534,8 +1524,7 @@ router.get('/threat-model/options', requireAuth, (req, res) => {
 // Get the threat model for an application.
 router.get('/:id/threat-model', requireAuth, async (req, res) => {
   try {
-    const auth = getAuthContext(req);
-    await getApplicationForAccess(req.params.id, auth);
+    await getApplicationForAccess(req, req.params.id, 'application.read');
 
     const model = await prisma.threatModel.findUnique({
       where: { applicationId: req.params.id },
@@ -1553,8 +1542,7 @@ router.get('/:id/threat-model', requireAuth, async (req, res) => {
 // returns suggestions the user reviews and accepts through the normal endpoints.
 router.post('/:id/threat-model/ai-draft', requireAuth, async (req, res) => {
   try {
-    const auth = getAuthContext(req);
-    await getApplicationForAccess(req.params.id, auth);
+    await getApplicationForAccess(req, req.params.id, 'application.edit');
 
     // Full application record for grounding the prompt.
     const application = await prisma.application.findUnique({
@@ -1605,8 +1593,7 @@ router.post('/:id/threat-model/ai-draft', requireAuth, async (req, res) => {
 // Create/update the root threat model (question 1 + app-level threats + status).
 router.put('/:id/threat-model', requireAuth, async (req, res) => {
   try {
-    const auth = getAuthContext(req);
-    await getApplicationForAccess(req.params.id, auth);
+    await getApplicationForAccess(req, req.params.id, 'application.edit');
 
     const body = req.body || {};
     // Partial update: only touch fields present in the request body.
@@ -1692,8 +1679,7 @@ async function ensureThreatModel(applicationId, userId) {
 // Add a component node.
 router.post('/:id/threat-model/components', requireAuth, async (req, res) => {
   try {
-    const auth = getAuthContext(req);
-    await getApplicationForAccess(req.params.id, auth);
+    await getApplicationForAccess(req, req.params.id, 'application.edit');
 
     const body = req.body || {};
     const name = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : '';
@@ -1736,8 +1722,7 @@ router.post('/:id/threat-model/components', requireAuth, async (req, res) => {
 // Update a component node.
 router.put('/:id/threat-model/components/:componentId', requireAuth, async (req, res) => {
   try {
-    const auth = getAuthContext(req);
-    await getApplicationForAccess(req.params.id, auth);
+    await getApplicationForAccess(req, req.params.id, 'application.edit');
 
     const model = await prisma.threatModel.findUnique({
       where: { applicationId: req.params.id },
@@ -1788,8 +1773,7 @@ router.put('/:id/threat-model/components/:componentId', requireAuth, async (req,
 // Delete a component node.
 router.delete('/:id/threat-model/components/:componentId', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const auth = getAuthContext(req);
-    await getApplicationForAccess(req.params.id, auth);
+    await getApplicationForAccess(req, req.params.id, 'application.read');
 
     const model = await prisma.threatModel.findUnique({
       where: { applicationId: req.params.id },
@@ -1913,7 +1897,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 
     // Check if user has access (admin or member of same company)
     const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== application.companyId) {
+    if (!(await can(req, 'application.read', application.companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access applications in your company',
@@ -2075,7 +2059,7 @@ router.post('/', requireAuth, async (req, res) => {
 
     // Check if user has access to this company
     const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== finalCompanyId) {
+    if (!(await can(req, 'application.create', finalCompanyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only create applications for your company',
@@ -2263,7 +2247,7 @@ router.put('/:id', requireAuth, async (req, res) => {
 
     // Check if user has access
     const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== existing.companyId) {
+    if (!(await can(req, 'application.edit', existing.companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only update applications in your company',
@@ -2275,6 +2259,8 @@ router.put('/:id', requireAuth, async (req, res) => {
     const isCompanyChanging = companyId !== undefined && companyId !== existing.companyId;
 
     if (companyId !== undefined) {
+      // Moving an application between companies is a system-admin action: it
+      // takes the record out of reach of everyone scoped to the old company.
       if (isCompanyChanging && !auth.isAdmin) {
         return res.status(403).json({
           error: 'Permission denied',
@@ -2522,7 +2508,7 @@ router.post('/:id/split', requireAuth, async (req, res) => {
     }
 
     const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== existing.companyId) {
+    if (!(await can(req, 'application.edit', existing.companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only split applications in your company',
@@ -2683,14 +2669,14 @@ router.get('/search/name', requireAuth, async (req, res) => {
       },
     };
 
-    // Filter by company if provided, otherwise user's company
+    // Narrow to the requested company, else to everything the caller can read.
+    const scope = await companyScopeFilter(req, 'application.read');
+    if (!scope) {
+      return res.json([]);
+    }
+    Object.assign(whereClause, scope);
     if (companyId) {
-      whereClause.companyId = companyId;
-    } else {
-      const auth = getAuthContext(req);
-      if (!auth.isAdmin && auth.companyId) {
-        whereClause.companyId = auth.companyId;
-      }
+      whereClause.AND = [...(whereClause.AND ?? []), { companyId }];
     }
 
     const applications = await prisma.application.findMany({
@@ -2746,9 +2732,7 @@ router.post('/:id/domains', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Application not found' });
     }
 
-    // Check if user has access (admin or member of same company)
-    const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== application.companyId) {
+    if (!(await can(req, 'domain.edit', application.companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only modify applications in your company',
@@ -2837,9 +2821,7 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Applications array is required and must not be empty' });
     }
 
-    // Check if user has access to this company
-    const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== companyId) {
+    if (!(await can(req, 'application.create', companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only import applications for your company',
@@ -3100,9 +3082,7 @@ router.post('/:id/generate-technical-link', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Application not found' });
     }
 
-    // Check if user has access
-    const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== application.companyId) {
+    if (!(await can(req, 'application.edit', application.companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only generate links for applications in your company',
@@ -3197,7 +3177,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
 });
 
 // Remove domain from application
-router.delete('/:id/domains/:domainId', requireAuth, requireAdmin, async (req, res) => {
+router.delete('/:id/domains/:domainId', requireAuth, requirePermission('domain.delete', companyFrom.application('id')), async (req, res) => {
   try {
     const { id, domainId } = req.params;
 
@@ -3210,9 +3190,7 @@ router.delete('/:id/domains/:domainId', requireAuth, requireAdmin, async (req, r
       return res.status(404).json({ error: 'Application not found' });
     }
 
-    // Check if user has access (admin or member of same company)
-    const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== application.companyId) {
+    if (!(await can(req, 'domain.delete', application.companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only modify applications in your company',
@@ -3280,9 +3258,7 @@ router.get('/:id/deployments', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Application not found' });
     }
 
-    // Check if user has access (admin or member of same company)
-    const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== application.companyId) {
+    if (!(await can(req, 'deployment.read', application.companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access deployments for applications in your company',
@@ -3322,9 +3298,7 @@ router.post('/:id/deployments', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Application not found' });
     }
 
-    // Check if user has access (admin or member of same company)
-    const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== application.companyId) {
+    if (!(await can(req, 'deployment.manage', application.companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only create deployments for applications in your company',
@@ -3380,7 +3354,7 @@ router.post('/:id/deployments', requireAuth, async (req, res) => {
 });
 
 // Delete a deployment
-router.delete('/:id/deployments/:deploymentId', requireAuth, requireAdmin, async (req, res) => {
+router.delete('/:id/deployments/:deploymentId', requireAuth, requirePermission('deployment.delete', companyFrom.application('id')), async (req, res) => {
   try {
     const { id, deploymentId } = req.params;
 
@@ -3401,9 +3375,7 @@ router.delete('/:id/deployments/:deploymentId', requireAuth, requireAdmin, async
       return res.status(400).json({ error: 'Deployment does not belong to this application' });
     }
 
-    // Check if user has access (admin or member of same company)
-    const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== deployment.application.companyId) {
+    if (!(await can(req, 'deployment.manage', deployment.application.companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only delete deployments for applications in your company',
@@ -3443,9 +3415,7 @@ router.post('/:id/deployment-tokens', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Application not found' });
     }
 
-    // Check if user has access (admin or member of same company)
-    const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== application.companyId) {
+    if (!(await can(req, 'deployment.manage', application.companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only create deployment tokens for applications in your company',
@@ -3509,9 +3479,7 @@ router.get('/:id/deployment-tokens', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Application not found' });
     }
 
-    // Check if user has access (admin or member of same company)
-    const auth = getAuthContext(req);
-    if (!auth.isAdmin && auth.companyId !== application.companyId) {
+    if (!(await can(req, 'deployment.read', application.companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only view deployment tokens for applications in your company',
@@ -3551,7 +3519,7 @@ router.get('/:id/deployment-tokens', requireAuth, async (req, res) => {
 });
 
 // ============================================================================
-// VERSION HISTORY (Admin only)
+// VERSION HISTORY (system admin only)
 // ============================================================================
 
 // Global pending versions endpoints (must come before :id routes)

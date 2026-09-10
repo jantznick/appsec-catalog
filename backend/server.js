@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prisma, disconnectPrisma } from './prisma/client.js';
 import { initializeAdminUsers, initializeSystemUser } from './utils/adminInit.js';
+import { syncBuiltInRoles } from './rbac/sync.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import companyRoutes from './routes/companies.js';
@@ -34,6 +35,7 @@ import docsRoutes from './routes/docs.js';
 import platformDocsRoutes from './routes/platformDocs.js';
 import programInfoRequestRoutes from './routes/programInfoRequests.js';
 import changeHistoryRoutes from './routes/changeHistory.js';
+import roleRoutes from './routes/roles.js';
 import { apiKeyAuth } from './middleware/apiKeyAuth.js';
 
 dotenv.config();
@@ -188,6 +190,7 @@ app.use('/api/docs', docsRoutes);
 app.use('/api/platform-docs', platformDocsRoutes);
 app.use('/api/program-requests', programInfoRequestRoutes);
 app.use('/api/change-history', changeHistoryRoutes);
+app.use('/api/roles', roleRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -226,6 +229,11 @@ initializeAdminUsers().catch(error => {
 // Initialize system user on startup
 initializeSystemUser().catch(error => {
   console.error('Failed to initialize system user:', error);
+});
+
+// Reconcile the built-in RBAC roles with the permission catalog on startup
+syncBuiltInRoles().catch(error => {
+  console.error('Failed to sync built-in roles:', error);
 });
 
 app.listen(PORT, '0.0.0.0', () => {
