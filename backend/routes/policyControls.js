@@ -1,6 +1,12 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { getAuthContext, resolveChangeSource } from '../middleware/authContext.js';
+import { recordChange } from '../utils/changeHistory.js';
+
+function summarizeFields(fields) {
+  return (fields || []).map((f) => ({ fieldPath: f.fieldPath, operator: f.operator, value: f.value }));
+}
 
 const router = express.Router();
 
@@ -160,6 +166,15 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       });
     });
 
+    await recordChange({
+      entityType: 'PolicyControl',
+      entityId: control.id,
+      action: 'create',
+      userId: getAuthContext(req)?.userId || null,
+      changeSource: resolveChangeSource(req),
+      after: { ...control, fields: summarizeFields(control.fields) },
+    });
+
     res.status(201).json(control);
   } catch (error) {
     if (error.code === 'P2002') {
@@ -219,18 +234,21 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
     }
 
     // Update control and fields in a transaction
+    let beforeControl = null;
     const control = await prisma.$transaction(async (tx) => {
       // Check if control exists
       const existingControl = await tx.policyControl.findUnique({
         where: { id },
+        include: { fields: { orderBy: { displayOrder: 'asc' } } },
       });
 
       if (!existingControl) {
         throw { code: 'P2025' };
       }
+      beforeControl = existingControl;
 
       // Update the control
-      const updateData = {};
+      const updateData = { updatedById: getAuthContext(req)?.userId || null };
       if (controlId !== undefined) updateData.controlId = controlId.trim();
       if (name !== undefined) updateData.name = name.trim();
       if (description !== undefined) updateData.description = description.trim();
@@ -286,6 +304,16 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       });
     });
 
+    await recordChange({
+      entityType: 'PolicyControl',
+      entityId: control.id,
+      action: 'update',
+      userId: getAuthContext(req)?.userId || null,
+      changeSource: resolveChangeSource(req),
+      before: { ...beforeControl, fields: summarizeFields(beforeControl.fields) },
+      after: { ...control, fields: summarizeFields(control.fields) },
+    });
+
     res.json(control);
   } catch (error) {
     if (error.code === 'P2025') {
@@ -307,6 +335,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
     // Check if control exists
     const control = await prisma.policyControl.findUnique({
       where: { id },
+      include: { fields: { orderBy: { displayOrder: 'asc' } } },
     });
 
     if (!control) {
@@ -316,6 +345,15 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
     // Delete control (fields will be deleted via cascade)
     await prisma.policyControl.delete({
       where: { id },
+    });
+
+    await recordChange({
+      entityType: 'PolicyControl',
+      entityId: control.id,
+      action: 'delete',
+      userId: getAuthContext(req)?.userId || null,
+      changeSource: resolveChangeSource(req),
+      before: { ...control, fields: summarizeFields(control.fields) },
     });
 
     res.json({ message: 'Policy control deleted successfully' });
@@ -338,11 +376,27 @@ router.patch('/:id/reorder', requireAuth, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Display order is required and must be a number' });
     }
 
+    const existingControl = await prisma.policyControl.findUnique({ where: { id } });
+    if (!existingControl) {
+      return res.status(404).json({ error: 'Policy control not found' });
+    }
+
     const control = await prisma.policyControl.update({
       where: { id },
       data: {
         displayOrder,
+        updatedById: getAuthContext(req)?.userId || null,
       },
+    });
+
+    await recordChange({
+      entityType: 'PolicyControl',
+      entityId: control.id,
+      action: 'update',
+      userId: getAuthContext(req)?.userId || null,
+      changeSource: resolveChangeSource(req),
+      before: existingControl,
+      after: control,
     });
 
     res.json(control);

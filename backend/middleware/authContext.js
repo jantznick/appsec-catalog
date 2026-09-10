@@ -19,3 +19,12 @@ export function getAuthContext(req) {
   return null;
 }
 
+/**
+ * Derive a changeSource label from the request's auth mechanism.
+ * Returns 'api' for API-key-authenticated requests, otherwise the given fallback
+ * (e.g. 'web_form' for session-authenticated UI writes).
+ */
+export function resolveChangeSource(req, fallback = 'web_form') {
+  return getAuthContext(req)?.authType === 'apiKey' ? 'api' : fallback;
+}
+

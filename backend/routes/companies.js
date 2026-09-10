@@ -5,7 +5,8 @@ import { generateSlug, ensureUniqueSlug } from '../utils/slug.js';
 import { buildIntegrationSummaryForCompanyId } from '../integrations/summaryForCompany.js';
 import { aggregateCompletenessForCompany } from '../utils/portfolioCompleteness.js';
 import { buildCompanySecurityCoverage } from '../utils/companySecurityCoverage.js';
-import { getAuthContext } from '../middleware/authContext.js';
+import { getAuthContext, resolveChangeSource } from '../middleware/authContext.js';
+import { recordChange } from '../utils/changeHistory.js';
 
 const router = express.Router();
 
@@ -136,6 +137,16 @@ router.post('/public', async (req, res) => {
         name: true,
         slug: true,
       },
+    });
+
+    await recordChange({
+      entityType: 'Company',
+      entityId: company.id,
+      action: 'create',
+      userId: null,
+      changeSource: resolveChangeSource(req, 'public_form'),
+      companyId: company.id,
+      after: company,
     });
 
     res.status(201).json(company);
@@ -843,6 +854,16 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       },
     });
 
+    await recordChange({
+      entityType: 'Company',
+      entityId: company.id,
+      action: 'create',
+      userId: getAuthContext(req)?.userId || null,
+      changeSource: resolveChangeSource(req),
+      companyId: company.id,
+      after: company,
+    });
+
     res.status(201).json(company);
   } catch (error) {
     console.error('Error creating company:', error);
@@ -939,7 +960,19 @@ router.put('/:id', requireAuth, async (req, res) => {
         ...(deploymentType !== undefined && { deploymentType: deploymentType?.trim() || null }),
         ...(authProfiles !== undefined && { authProfiles: authProfiles?.trim() || null }),
         ...(dataTypes !== undefined && { dataTypes: dataTypes?.trim() || null }),
+        updatedById: auth.userId,
       },
+    });
+
+    await recordChange({
+      entityType: 'Company',
+      entityId: company.id,
+      action: 'update',
+      userId: auth.userId,
+      changeSource: resolveChangeSource(req),
+      companyId: company.id,
+      before: existing,
+      after: company,
     });
 
     res.json(company);

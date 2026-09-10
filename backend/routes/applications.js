@@ -34,7 +34,7 @@ import {
 } from '../integrations/resolve.js';
 import { listWizTagsForFolder } from '../integrations/wiz.js';
 import { integrationLog } from '../integrations/log.js';
-import { getAuthContext } from '../middleware/authContext.js';
+import { getAuthContext, resolveChangeSource } from '../middleware/authContext.js';
 import { apiSchemaSummary, buildApiSchemaVisualization, validateAndNormalizeApiSchema } from '../services/apiSchema.js';
 import {
   getThreatModelOptions,
@@ -2142,7 +2142,7 @@ router.post('/', requireAuth, async (req, res) => {
     await createApplicationVersion(
       application.id,
       getAuthContext(req)?.userId || null,
-      getAuthContext(req)?.authType === 'apiKey' ? 'api' : 'web_form'
+      resolveChangeSource(req, 'web_form')
     );
 
     res.status(201).json(application);
@@ -2451,7 +2451,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     await createApplicationVersion(
       application.id,
       getAuthContext(req)?.userId || null,
-      getAuthContext(req)?.authType === 'apiKey' ? 'api' : 'web_form'
+      resolveChangeSource(req, 'web_form')
     );
 
     res.json(application);

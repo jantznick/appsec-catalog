@@ -6,8 +6,9 @@ import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { runDnsCheck, buildSnapshotCreateData, detectDnsChanges } from '../services/domainDns.js';
 import { buildDomainDnsScore, recomputeSnapshotScoreForMetadata } from '../services/domainDnsScoring.js';
 import { runDomainWebSnapshot, enforceDomainWebSnapshotRetention } from '../services/domainSnapshot.js';
-import { getAuthContext } from '../middleware/authContext.js';
+import { getAuthContext, resolveChangeSource } from '../middleware/authContext.js';
 import { applyCompanyScope } from '../utils/scope.js';
+import { recordChange } from '../utils/changeHistory.js';
 
 const router = express.Router();
 
@@ -231,6 +232,16 @@ router.post('/', requireAuth, async (req, res) => {
           },
         },
       },
+    });
+
+    await recordChange({
+      entityType: 'Domain',
+      entityId: domain.id,
+      action: 'create',
+      userId: auth.userId,
+      changeSource: resolveChangeSource(req),
+      companyId: domain.companyId,
+      after: domain,
     });
 
     res.status(201).json(domain);
@@ -564,6 +575,8 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       updateData.status = status?.trim() || 'unknown';
     }
 
+    updateData.updatedById = getAuthContext(req)?.userId || null;
+
     const updatedDomain = await prisma.domain.update({
       where: { id },
       data: updateData,
@@ -599,6 +612,17 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
         },
       });
     }
+
+    await recordChange({
+      entityType: 'Domain',
+      entityId: updatedDomain.id,
+      action: 'update',
+      userId: getAuthContext(req)?.userId || null,
+      changeSource: resolveChangeSource(req),
+      companyId: updatedDomain.companyId,
+      before: existingDomain,
+      after: updatedDomain,
+    });
 
     res.json(updatedDomain);
   } catch (error) {

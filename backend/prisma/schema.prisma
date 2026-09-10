@@ -35,6 +35,7 @@ model User {
   aiRequests             AiRequest[]
   aiAccessRules          AiAccessRule[]
   handledProgramInfoRequests ProgramInfoRequest[] @relation("ProgramInfoRequestHandler")
+  changeHistoryEntries   ChangeHistory[]
 }
 
 /// An unauthenticated "request more information" submission from the public
@@ -168,6 +169,10 @@ model Company {
   sammAssessments       SammAssessment[]
   aiRequests            AiRequest[]
   aiAccessRules         AiAccessRule[]
+  changeHistoryEntries  ChangeHistory[]
+  updatedById           String? // User ID who last updated this company's metadata
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
 
   @@index([slug])
   @@index([divisionId])
@@ -359,6 +364,7 @@ model Product {
   ingressPoints       ProductIngressPoint[]
   dataFlows           ProductDataFlow[]
   scores              ProductScore[]
+  updatedById         String? // User ID who last updated this product
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
@@ -557,6 +563,7 @@ model Domain {
   dnsSnapshots       DomainDnsSnapshot[]
   dnsChanges         DomainDnsChange[]
   webSnapshots       DomainWebSnapshot[]
+  updatedById        String? // User ID who last updated this domain
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
@@ -705,6 +712,7 @@ model Note {
   id        String   @id @default(cuid())
   content   String // The note text content (max 5000 chars)
   createdBy String // User ID who created the note
+  updatedBy String? // User ID who last edited the note (null if never edited)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -807,6 +815,31 @@ model ApplicationMetadataReview {
   @@index([reviewedBy])
 }
 
+// Generic audit trail for resources without dedicated versioning (Product, Domain, Company,
+// Policy, PolicyControl, SammAssessment, Note). Unlike ApplicationVersion (full per-field
+// snapshots + approval workflow, built for restore/review), this stores a JSON diff per change
+// for audit/evidence purposes - no per-resource table needed as new entity types are added.
+model ChangeHistory {
+  id            String   @id @default(cuid())
+  entityType    String // "Product", "Domain", "Company", "Policy", "PolicyControl", "SammAssessment", "Note"
+  entityId      String
+  action        String // "create", "update", "delete"
+  changedBy     String?
+  user          User?    @relation(fields: [changedBy], references: [id], onDelete: SetNull)
+  changeSource  String // e.g. "web_form", "api", "bulk_import", "public_form"
+  companyId     String? // denormalized for company-scoped queries
+  company       Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  changedFields Json? // array of field names that changed (update only)
+  diff          Json? // { field: { from, to } } (update only)
+  snapshot      Json? // tracked-field snapshot (create/delete only)
+  createdAt     DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([changedBy])
+  @@index([companyId])
+  @@index([createdAt])
+}
+
 // Policies - groups of policy controls with scoping rules
 model Policy {
   id           String  @id @default(cuid())
@@ -824,8 +857,9 @@ model Policy {
   divisionPolicies DivisionPolicy[] // Many-to-many with divisions
   companyPolicies  CompanyPolicy[] // Many-to-many with companies
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedById String? // User ID who last updated this policy
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([scope])
   @@index([isActive])
@@ -874,6 +908,7 @@ model PolicyControl {
   updatedAt       DateTime                @updatedAt
   fields          PolicyControlField[] // Field mappings for this control
   overrides       PolicyControlOverride[] // Manual overrides for this control
+  updatedById     String? // User ID who last updated this control
 
   @@index([controlId])
   @@index([isActive])
@@ -984,6 +1019,7 @@ model SammAssessment {
   submittedAt DateTime?
   reviewedAt  DateTime?
   nextDueAt   DateTime?
+  updatedById String? // User ID who last updated this assessment
   createdAt   DateTime                 @default(now())
   updatedAt   DateTime                 @updatedAt
   responses   SammAssessmentResponse[]
