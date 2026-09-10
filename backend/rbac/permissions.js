@@ -61,6 +61,11 @@ export const PERMISSIONS = {
     label: 'Remove company users',
     description: 'Remove a user from the company. Separate from inviting and verifying so that ordinary members cannot eject colleagues.',
   },
+  'company.read_audit': {
+    scope: PermissionScope.COMPANY,
+    label: 'View the change history',
+    description: 'Read the audit trail of who changed what inside the company. Separate from company.read because the trail exposes every past value of every tracked field, including ones a reader can no longer see.',
+  },
   'company.manage_roles': {
     scope: PermissionScope.COMPANY,
     label: 'Manage company roles',

@@ -2,6 +2,7 @@ import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { requirePermission, companyFrom, companyScopeFilter, can } from '../middleware/rbac.js';
+import { recordChange } from '../utils/changeHistory.js';
 import {
   SCORING_INCLUDE,
   calculateApplicationScore,
@@ -1955,6 +1956,17 @@ router.post('/:id/review', requireAuth, requireAdmin, async (req, res) => {
       include: SCORING_INCLUDE,
     });
 
+    await recordChange({
+      entityType: 'Application',
+      entityId: id,
+      action: 'update',
+      userId: getAuthContext(req)?.userId || null,
+      changeSource: resolveChangeSource(req),
+      companyId: updated.companyId,
+      before: application,
+      after: updated,
+    });
+
     // Recalculate score
     const scores = calculateApplicationScore(updated);
     await recordScoreIfChanged(updated.id, scores);
@@ -2178,6 +2190,16 @@ router.post('/', requireAuth, async (req, res) => {
       getAuthContext(req)?.userId || null,
       resolveChangeSource(req, 'web_form')
     );
+
+    await recordChange({
+      entityType: 'Application',
+      entityId: application.id,
+      action: 'create',
+      userId: getAuthContext(req)?.userId || null,
+      changeSource: resolveChangeSource(req),
+      companyId: application.companyId,
+      after: application,
+    });
 
     res.status(201).json(application);
   } catch (error) {
@@ -2481,6 +2503,17 @@ router.put('/:id', requireAuth, async (req, res) => {
       resolveChangeSource(req, 'web_form')
     );
 
+    await recordChange({
+      entityType: 'Application',
+      entityId: application.id,
+      action: 'update',
+      userId: getAuthContext(req)?.userId || null,
+      changeSource: resolveChangeSource(req),
+      companyId: application.companyId,
+      before: existing,
+      after: application,
+    });
+
     res.json(application);
   } catch (error) {
     if (error.statusCode === 400) {
@@ -2641,6 +2674,29 @@ router.post('/:id/split', requireAuth, async (req, res) => {
       null,
       created.id
     );
+
+    // A split is two entity changes: the original is renamed, and a second
+    // application comes into existence carrying some of its metadata.
+    await recordChange({
+      entityType: 'Application',
+      entityId: original.id,
+      action: 'update',
+      userId: auth?.userId || null,
+      changeSource: resolveChangeSource(req),
+      companyId: original.companyId,
+      before: existing,
+      after: original,
+    });
+
+    await recordChange({
+      entityType: 'Application',
+      entityId: created.id,
+      action: 'create',
+      userId: auth?.userId || null,
+      changeSource: resolveChangeSource(req),
+      companyId: created.companyId,
+      after: created,
+    });
 
     res.status(201).json({
       application: original,
@@ -2937,6 +2993,16 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
           data: dbData,
         });
 
+        await recordChange({
+          entityType: 'Application',
+          entityId: created.id,
+          action: 'create',
+          userId: getAuthContext(req)?.userId || null,
+          changeSource: 'bulk_import',
+          companyId: created.companyId,
+          after: created,
+        });
+
         // Associate hosting domains with the application
         if (domainNames.length > 0) {
           for (const domainName of domainNames) {
@@ -3153,6 +3219,16 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
     // Delete the application (cascade will handle related records)
     await prisma.application.delete({
       where: { id },
+    });
+
+    await recordChange({
+      entityType: 'Application',
+      entityId: id,
+      action: 'delete',
+      userId: getAuthContext(req)?.userId || null,
+      changeSource: resolveChangeSource(req),
+      companyId: application.companyId,
+      before: application,
     });
 
     res.json({
@@ -3931,6 +4007,21 @@ router.post('/:id/versions/:versionId/approve', requireAuth, requireAdmin, async
         : null; // null means apply all fields
 
       await applyApprovedVersion(id, version, fieldsToApply);
+
+      // The public/technical form does not touch the application directly - it
+      // queues a pending version - so approval is the point at which those
+      // answers actually land, and is what the trail should show.
+      const appliedApplication = await prisma.application.findUnique({ where: { id } });
+      await recordChange({
+        entityType: 'Application',
+        entityId: id,
+        action: 'update',
+        userId: getAuthContext(req)?.userId || null,
+        changeSource: 'version_approval',
+        companyId: appliedApplication?.companyId ?? application.companyId,
+        before: application,
+        after: appliedApplication,
+      });
 
       // Handle reciprocal interfaces if interfaces were approved. Add-only here:
       // approving a version links the counterparts it names, it does not unlink
