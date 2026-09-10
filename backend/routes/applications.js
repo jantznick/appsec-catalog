@@ -2,6 +2,7 @@ import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import {
+  SCORING_INCLUDE,
   calculateApplicationScore,
   getKnowledgeSharingFieldBreakdown,
   isMetadataValueNA,
@@ -111,6 +112,34 @@ async function createNote(userId, content, companyId = null, applicationId = nul
   }
 }
 
+/** Business criticality is a 1-5 scale. Reject anything else instead of silently coercing it. */
+const BUSINESS_CRITICALITY_MIN = 1;
+const BUSINESS_CRITICALITY_MAX = 5;
+
+/**
+ * @param {unknown} value
+ * @returns {number|null} the parsed rating, or null when not provided
+ * @throws {Error} with statusCode 400 when provided but not an integer in range
+ */
+function parseBusinessCriticality(value) {
+  if (value === null || value === undefined || value === '') return null;
+
+  const parsed = Number(value);
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < BUSINESS_CRITICALITY_MIN ||
+    parsed > BUSINESS_CRITICALITY_MAX
+  ) {
+    const error = new Error(
+      `businessCriticality must be a whole number from ${BUSINESS_CRITICALITY_MIN} to ${BUSINESS_CRITICALITY_MAX}`,
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return parsed;
+}
+
 /**
  * Get field names that were provided in a request
  */
@@ -126,6 +155,44 @@ function getProvidedFields(data, fieldMapping = {}) {
 }
 
 const router = express.Router();
+
+/**
+ * Persist a score only when it differs from the latest stored one.
+ *
+ * `Score` is a history table: a row means "the score changed at this time". Writing a
+ * row per calculation instead makes the history a record of page views, and the
+ * dashboards read every row for every application to find the newest.
+ */
+async function recordScoreIfChanged(applicationId, scores) {
+  try {
+    const latest = await prisma.score.findFirst({
+      where: { applicationId },
+      orderBy: { calculatedAt: 'desc' },
+      select: { knowledgeScore: true, toolScore: true, totalScore: true },
+    });
+
+    if (
+      latest &&
+      latest.knowledgeScore === scores.knowledgeScore &&
+      latest.toolScore === scores.toolScore &&
+      latest.totalScore === scores.totalScore
+    ) {
+      return;
+    }
+
+    await prisma.score.create({
+      data: {
+        applicationId,
+        knowledgeScore: scores.knowledgeScore,
+        toolScore: scores.toolScore,
+        totalScore: scores.totalScore,
+      },
+    });
+  } catch (error) {
+    // Scores are recomputed on read; a failed history write must not fail the request.
+    console.error('Error saving score to database:', error);
+  }
+}
 
 async function getApplicationForAccess(applicationId, auth) {
   const application = await prisma.application.findUnique({
@@ -219,7 +286,7 @@ router.post('/onboard/executive', async (req, res) => {
             description: app.description?.trim() || null,
             facing: app.facing?.trim() || null,
             serverEnvironment: app.serverEnvironment?.trim() || null,
-            businessCriticality: app.businessCriticality ? parseInt(app.businessCriticality) : null,
+            businessCriticality: parseBusinessCriticality(app.businessCriticality),
             criticalAspects: criticalAspects,
             devTeamContact: app.devTeamContact?.trim() || null,
             status: 'pending_technical', // Needs technical form completion
@@ -272,6 +339,9 @@ router.post('/onboard/executive', async (req, res) => {
       });
     }
   } catch (error) {
+    if (error.statusCode === 400) {
+      return res.status(400).json({ error: 'Invalid application data', message: error.message });
+    }
     console.error('Error creating application(s) via executive form:', error);
     res.status(500).json({ 
       error: 'Failed to submit application(s)',
@@ -354,29 +424,46 @@ router.get('/public/company/:slug', async (req, res) => {
   }
 });
 
-// Public: Get application by ID (for technical form)
+// Public: Get application by ID (for the technical onboarding form).
+//
+// UNAUTHENTICATED. Anyone holding an application id can call this, so it returns the
+// minimum the technical form needs to render: the name it puts in its heading.
+//
+// The form is not allowed to prefill anything it collects itself. Security tooling,
+// integration levels, scan dates, data handling, auth details, interfaces and contacts
+// are all deliberately absent - submitting the form with a field blank leaves the
+// stored value untouched (see PUT /public/:id), so nothing is lost by omitting them.
+//
+// Pass ?companySlug= to scope the lookup, so an id cannot be read through an unrelated
+// company's onboarding link.
 router.get('/public/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const { companySlug } = req.query;
 
     const application = await prisma.application.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        name: true,
         company: {
           select: {
-            id: true,
-            name: true,
             slug: true,
           },
         },
       },
     });
 
-    if (!application) {
+    // Same response for "no such application" and "wrong company", so the endpoint
+    // cannot be used to test whether an id exists under a different slug.
+    if (!application || (companySlug && application.company?.slug !== companySlug)) {
       return res.status(404).json({ error: 'Application not found' });
     }
 
-    res.json(application);
+    res.json({
+      id: application.id,
+      name: application.name,
+    });
   } catch (error) {
     console.error('Error fetching application:', error);
     res.status(500).json({ error: 'Failed to fetch application' });
@@ -526,21 +613,17 @@ router.put('/public/:id', async (req, res) => {
       }
     }
 
-    // Process description - concatenate additionalNotes to existing description
-    let description = existing.description || '';
-    if (additionalNotes && additionalNotes.trim()) {
-      if (description) {
-        description = description + '\n\n\n' + additionalNotes.trim();
-      } else {
-        description = additionalNotes.trim();
-      }
-    }
+    // `additionalNotes` has its own column. It used to be appended onto `description`
+    // instead, which grew the business purpose on every resubmission and mixed the
+    // manager's text with the engineer's. The description is the manager's answer and
+    // this form does not ask for it, so leave it alone.
+    const submittedNotes = additionalNotes?.trim() || null;
 
     // Instead of updating the application directly, create a pending version
     // Merge new data with existing data to create a complete snapshot
     const versionData = {
       name: existing.name,
-      description: description || existing.description,
+      description: existing.description,
       owner: existing.owner,
       repoUrl: repoUrl?.trim() || existing.repoUrl,
       language: existing.language,
@@ -556,7 +639,7 @@ router.put('/public/:id', async (req, res) => {
       criticalAspects: existing.criticalAspects,
       devTeamContact: existing.devTeamContact,
       securityTestingDescription: securityTestingDescription?.trim() || existing.securityTestingDescription,
-      additionalNotes: existing.additionalNotes,
+      additionalNotes: submittedNotes || existing.additionalNotes,
       sastTool: sastTool?.trim() || existing.sastTool,
       sastIntegrationLevel: sastIntegrationLevel ? parseInt(sastIntegrationLevel) : existing.sastIntegrationLevel,
       sastIncludesSca:
@@ -672,11 +755,7 @@ router.get('/:id/score', requireAuth, async (req, res) => {
             name: true,
           },
         },
-        deployments: {
-          orderBy: { deployedAt: 'desc' },
-          take: 1, // Only need the most recent deployment for scoring
-        },
-        apiSchema: { select: { id: true } },
+        ...SCORING_INCLUDE,
       },
     });
 
@@ -693,22 +772,10 @@ router.get('/:id/score', requireAuth, async (req, res) => {
       });
     }
 
-    // Calculate score
+    // Calculate score. This endpoint deliberately does not write a Score row: the
+    // score is derived from the application, so viewing one is not a change. Rows are
+    // written by the endpoints that actually mutate the application.
     const scores = calculateApplicationScore(application);
-
-    // Save score to database
-    try {
-      await prisma.score.create({
-        data: {
-          applicationId: application.id,
-          knowledgeScore: scores.knowledgeScore,
-          toolScore: scores.toolScore,          totalScore: scores.totalScore,
-        },
-      });
-    } catch (error) {
-      // Log but don't fail the request if score saving fails
-      console.error('Error saving score to database:', error);
-    }
 
     // Calculate breakdown for knowledge sharing (same rules as calculateKnowledgeSharingScore, including "NA" exclusions)
     const { totalScorable, fieldsFilled, missingFields } =
@@ -1901,29 +1968,12 @@ router.post('/:id/review', requireAuth, requireAdmin, async (req, res) => {
       data: {
         metadataLastReviewed: new Date(),
       },
-      include: {
-        deployments: {
-          orderBy: { deployedAt: 'desc' },
-          take: 1,
-        },
-      },
+      include: SCORING_INCLUDE,
     });
 
     // Recalculate score
     const scores = calculateApplicationScore(updated);
-
-    // Save updated score to database
-    try {
-      await prisma.score.create({
-        data: {
-          applicationId: updated.id,
-          knowledgeScore: scores.knowledgeScore,
-          toolScore: scores.toolScore,          totalScore: scores.totalScore,
-        },
-      });
-    } catch (error) {
-      console.error('Error saving score to database:', error);
-    }
+    await recordScoreIfChanged(updated.id, scores);
 
     // Create review log entry
     try {
@@ -2102,7 +2152,7 @@ router.post('/', requireAuth, async (req, res) => {
         authProfiles: authProfiles?.trim() || null,
         dataTypes: dataTypes?.trim() || null,
         interfaces: interfacesJson,
-        businessCriticality: businessCriticality ? parseInt(businessCriticality) : null,
+        businessCriticality: parseBusinessCriticality(businessCriticality),
         criticalAspects: criticalAspectsStr,
         devTeamContact: devTeamContact?.trim() || null,
         securityTestingDescription: securityTestingDescription?.trim() || null,
@@ -2147,6 +2197,9 @@ router.post('/', requireAuth, async (req, res) => {
 
     res.status(201).json(application);
   } catch (error) {
+    if (error.statusCode === 400) {
+      return res.status(400).json({ error: 'Invalid application data', message: error.message });
+    }
     console.error('Error creating application:', error);
     res.status(500).json({ error: 'Failed to create application' });
   }
@@ -2309,7 +2362,7 @@ router.put('/:id', requireAuth, async (req, res) => {
         ...(authProfiles !== undefined && { authProfiles: authProfiles?.trim() || null }),
         ...(dataTypes !== undefined && { dataTypes: dataTypes?.trim() || null }),
         ...(interfaces !== undefined && { interfaces: interfacesJson }),
-        ...(businessCriticality !== undefined && { businessCriticality: businessCriticality ? parseInt(businessCriticality) : null }),
+        ...(businessCriticality !== undefined && { businessCriticality: parseBusinessCriticality(businessCriticality) }),
         ...(criticalAspects !== undefined && { criticalAspects: criticalAspectsStr }),
         ...(devTeamContact !== undefined && { devTeamContact: devTeamContact?.trim() || null }),
         ...(securityTestingDescription !== undefined && { securityTestingDescription: securityTestingDescription?.trim() || null }),
@@ -2427,22 +2480,10 @@ router.put('/:id', requireAuth, async (req, res) => {
       // Fetch application with deployments for scoring
       const appWithDeployments = await prisma.application.findUnique({
         where: { id: application.id },
-        include: {
-          deployments: {
-            orderBy: { deployedAt: 'desc' },
-            take: 1,
-          },
-          apiSchema: { select: { id: true } },
-        },
+        include: SCORING_INCLUDE,
       });
       const scores = calculateApplicationScore(appWithDeployments);
-      await prisma.score.create({
-        data: {
-          applicationId: application.id,
-          knowledgeScore: scores.knowledgeScore,
-          toolScore: scores.toolScore,          totalScore: scores.totalScore,
-        },
-      });
+      await recordScoreIfChanged(application.id, scores);
     } catch (error) {
       console.error('Error saving score after update:', error);
     }
@@ -2456,6 +2497,9 @@ router.put('/:id', requireAuth, async (req, res) => {
 
     res.json(application);
   } catch (error) {
+    if (error.statusCode === 400) {
+      return res.status(400).json({ error: 'Invalid application data', message: error.message });
+    }
     console.error('Error updating application:', error);
     res.status(500).json({ error: 'Failed to update application' });
   }
@@ -2784,11 +2828,6 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
   try {
     const { companyId, applications } = req.body;
 
-    console.log('=== BULK IMPORT REQUEST ===');
-    console.log('Company ID:', companyId);
-    console.log('Number of applications:', applications?.length || 0);
-    console.log('Raw applications data:', JSON.stringify(applications, null, 2));
-
     // Validate required fields
     if (!companyId) {
       return res.status(400).json({ error: 'Company ID is required' });
@@ -2816,8 +2855,6 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Company not found' });
     }
 
-    console.log('Company found:', company.name);
-
     // Validate all applications have required fields
     for (let i = 0; i < applications.length; i++) {
       const app = applications[i];
@@ -2831,8 +2868,6 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
     // Create all applications
     const createdApplications = await Promise.all(
       applications.map(async (app, index) => {
-        console.log(`\n--- Processing Application ${index + 1} ---`);
-        console.log('Raw app data:', JSON.stringify(app, null, 2));
         // Process criticalAspects - convert array to comma-separated string if needed
         let criticalAspects = null;
         if (app.criticalAspects) {
@@ -2855,18 +2890,14 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
 
         // Process hosting domains - accept multiple domains (comma, semicolon, or newline separated)
         const domainNames = [];
-        console.log(`Checking for hosting domains in app ${index + 1}:`, app.hostingDomains, app.domains);
         if (app.hostingDomains || app.domains) {
           const domainString = String(app.hostingDomains || app.domains).trim();
-          console.log(`Processing hosting domains for app ${index + 1}: "${domainString}"`);
           if (domainString) {
             // Split by comma, semicolon, or newline, then clean up each domain
             const domains = domainString
               .split(/[,;\n]/)
               .map(domain => domain.trim())
               .filter(domain => domain.length > 0);
-            
-            console.log(`Split into ${domains.length} domain(s):`, domains);
             
             // Validate and normalize each domain
             for (const domain of domains) {
@@ -2877,20 +2908,13 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
                 .split('/')[0] // Remove path if present
                 .trim();
               
-              console.log(`Cleaned domain: "${domain}" -> "${cleanDomain}"`);
-              
               if (cleanDomain && isValidDomain(cleanDomain)) {
                 const normalized = normalizeDomain(cleanDomain);
                 domainNames.push(normalized);
-                console.log(`Valid domain added: "${normalized}"`);
-              } else {
-                console.log(`Invalid domain skipped: "${cleanDomain}"`);
               }
             }
           }
         }
-        console.log(`Total valid domains for app ${index + 1}: ${domainNames.length}`, domainNames);
-
         // Prepare database insert data
         const dbData = {
           name: app.name.trim(),
@@ -2906,7 +2930,7 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
           authProfiles: app.authProfiles?.trim() || null,
           dataTypes: app.dataTypes?.trim() || null,
           interfaces: interfacesJson,
-          businessCriticality: app.businessCriticality ? parseInt(app.businessCriticality) : null,
+          businessCriticality: parseBusinessCriticality(app.businessCriticality),
           criticalAspects: criticalAspects,
           devTeamContact: app.devTeamContact?.trim() || null,
           securityTestingDescription: app.securityTestingDescription?.trim() || null,
@@ -2926,9 +2950,6 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
           appFirewallNA: app.appFirewallNA || false,
           status: 'onboarded',
         };
-
-        console.log('Processed DB insert data:', JSON.stringify(dbData, null, 2));
-        console.log('DB Command: prisma.application.create({ data: <above> })');
 
         const created = await prisma.application.create({
           data: dbData,
@@ -2980,14 +3001,9 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
           }
         }
 
-        console.log('Successfully created application:', created.id, created.name);
         return created;
       })
     );
-
-    console.log('\n=== BULK IMPORT COMPLETE ===');
-    console.log(`Successfully created ${createdApplications.length} application(s)`);
-    console.log('Created application IDs:', createdApplications.map(a => a.id));
 
     // Create automatic note for bulk import
     try {
@@ -3046,17 +3062,21 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
       await createApplicationVersion(app.id, getAuthContext(req)?.userId || null, 'bulk_import');
     }
 
+    console.log(
+      `Bulk import: created ${createdApplications.length} application(s) for company ${companyId}`,
+    );
+
     res.status(201).json({
       count: createdApplications.length,
       applications: createdApplications,
       message: `Successfully imported ${createdApplications.length} application(s)`,
     });
   } catch (error) {
-    console.error('\n=== BULK IMPORT ERROR ===');
-    console.error('Error details:', error);
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
-    res.status(500).json({ 
+    if (error.statusCode === 400) {
+      return res.status(400).json({ error: 'Invalid application data', message: error.message });
+    }
+    console.error('Bulk import failed:', error);
+    res.status(500).json({
       error: 'Failed to import applications',
       message: error.message || 'An error occurred while importing applications'
     });
@@ -3961,22 +3981,10 @@ router.post('/:id/versions/:versionId/approve', requireAuth, requireAdmin, async
       try {
         const appWithDeployments = await prisma.application.findUnique({
           where: { id },
-          include: {
-            deployments: {
-              orderBy: { deployedAt: 'desc' },
-              take: 1,
-            },
-            apiSchema: { select: { id: true } },
-          },
+          include: SCORING_INCLUDE,
         });
         const scores = calculateApplicationScore(appWithDeployments);
-        await prisma.score.create({
-          data: {
-            applicationId: id,
-            knowledgeScore: scores.knowledgeScore,
-            toolScore: scores.toolScore,            totalScore: scores.totalScore,
-          },
-        });
+        await recordScoreIfChanged(id, scores);
       } catch (error) {
         console.error('Error saving score after approval:', error);
       }

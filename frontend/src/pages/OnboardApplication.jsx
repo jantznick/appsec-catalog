@@ -18,7 +18,6 @@ export function OnboardApplication() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [useDefaults, setUseDefaults] = useState(true);
   const [interfaces, setInterfaces] = useState([]);
   const [availableApplications, setAvailableApplications] = useState([]);
   const [loadingApplications, setLoadingApplications] = useState(false);
@@ -28,7 +27,6 @@ export function OnboardApplication() {
   const [formData, setFormData] = useState({
     requesterEmail: '',
     name: '',
-    description: '',
     repoUrl: '',
     deploymentFrequency: '',
     deploymentMethod: '',
@@ -117,56 +115,24 @@ export function OnboardApplication() {
     }
   };
 
+  /**
+   * This form is served over an unauthenticated link, so it is deliberately not
+   * prefilled with anything it collects itself - no security tooling, integration
+   * levels, repository URL, data handling, auth details or interfaces. The public
+   * endpoint returns only { id, name }.
+   *
+   * Leaving a field blank is safe: the submit handler creates a pending version in
+   * which each omitted field keeps the value already stored on the application.
+   */
   const loadApplication = async () => {
     try {
       setLoading(true);
-      const app = await api.getApplicationPublic(applicationId);
-      const companyData = await api.getCompanyBySlug(slug);
+      const [app, companyData] = await Promise.all([
+        api.getApplicationPublic(applicationId, slug),
+        api.getCompanyBySlug(slug),
+      ]);
       setCompany(companyData);
-      
-      // Pre-fill form with existing application data
-      setFormData(prev => ({
-        ...prev,
-        name: app.name || '',
-        description: app.description || '',
-        repoUrl: app.repoUrl || '',
-        securityTestingDescription: app.securityTestingDescription || '',
-        additionalNotes: app.additionalNotes || '',
-        sastTool: app.sastTool || '',
-        sastIntegrationLevel: app.sastIntegrationLevel?.toString() || '',
-        sastIncludesSca: !!app.sastIncludesSca,
-        dastTool: app.dastTool || '',
-        dastIntegrationLevel: app.dastIntegrationLevel?.toString() || '',
-        scaTool: app.scaTool || '',
-        scaIntegrationLevel: app.scaIntegrationLevel?.toString() || '',
-        appFirewallTool: app.appFirewallTool || '',
-        appFirewallIntegrationLevel: app.appFirewallIntegrationLevel?.toString() || '',
-        apiSecurityTool: app.apiSecurityTool || '',
-        apiSecurityIntegrationLevel: app.apiSecurityIntegrationLevel?.toString() || '',
-        apiSecurityNA: app.apiSecurityNA || false,
-        appFirewallNA: app.appFirewallNA || false,
-      }));
-      
-      // Load interfaces if they exist
-      if (app.interfaces) {
-        try {
-          const interfaceIds = JSON.parse(app.interfaces);
-          if (Array.isArray(interfaceIds) && interfaceIds.length > 0) {
-            // Fetch interface applications to get names
-            const interfaceApps = await Promise.all(
-              interfaceIds.map(id => api.getApplicationPublic(id))
-            );
-            setInterfaces(interfaceApps.map(app => app.name));
-            // Auto-select "Yes" if interfaces exist
-            setFormData(prev => ({
-              ...prev,
-              hasInterfaces: 'Yes',
-            }));
-          }
-        } catch (e) {
-          console.error('Error parsing interfaces:', e);
-        }
-      }
+      setFormData(prev => ({ ...prev, name: app.name || '' }));
     } catch (error) {
       toast.error('Failed to load application');
       console.error(error);

@@ -90,6 +90,7 @@ export function ApplicationDetail() {
     businessCriticality: '',
     criticalAspects: '',
     securityTestingDescription: '',
+    additionalNotes: '',
     sastTool: '',
     sastIntegrationLevel: '',
     sastIncludesSca: false,
@@ -814,6 +815,7 @@ export function ApplicationDetail() {
         businessCriticality: data.businessCriticality?.toString() || '',
         criticalAspects: data.criticalAspects || '',
         securityTestingDescription: data.securityTestingDescription || '',
+        additionalNotes: data.additionalNotes || '',
         sastTool: data.sastTool || '',
         sastIntegrationLevel: data.sastIntegrationLevel?.toString() || '',
         sastIncludesSca: !!data.sastIncludesSca,
@@ -1481,6 +1483,15 @@ export function ApplicationDetail() {
                           />
                         </div>
                       </div>
+
+                      <Textarea
+                        label="Additional Notes"
+                        value={formData.additionalNotes}
+                        onChange={(e) => handleFieldChange('additionalNotes', e.target.value)}
+                        rows={4}
+                        placeholder="Constraints, quirks, or context that does not fit elsewhere"
+                        helperText="Submitted by the engineering team on the technical onboarding form"
+                      />
                     </>
                   ) : (
                     <div className="space-y-4">
@@ -1551,6 +1562,13 @@ export function ApplicationDetail() {
                             <p className="text-sm text-gray-900 mt-0.5">{formData.criticalAspects || <span className="text-gray-400 italic">Not set</span>}</p>
                           </div>
                         </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Additional Notes</label>
+                        <p className="text-sm text-gray-900 whitespace-pre-wrap leading-relaxed">
+                          {formData.additionalNotes || <span className="text-gray-400 italic">Not set</span>}
+                        </p>
                       </div>
                     </div>
                   )}
