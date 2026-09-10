@@ -3,8 +3,9 @@ import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { SCORING_INCLUDE, calculateApplicationScore } from '../services/scoring.js';
 import { evaluateAllControls } from '../services/policy.js';
-import { getAuthContext } from '../middleware/authContext.js';
+import { getAuthContext, resolveChangeSource } from '../middleware/authContext.js';
 import { applyCompanyScope } from '../utils/scope.js';
+import { recordChange } from '../utils/changeHistory.js';
 
 const router = express.Router();
 
@@ -243,6 +244,16 @@ router.post('/', requireAuth, async (req, res) => {
           select: { id: true, name: true },
         },
       },
+    });
+
+    await recordChange({
+      entityType: 'Product',
+      entityId: product.id,
+      action: 'create',
+      userId: auth.userId,
+      changeSource: resolveChangeSource(req),
+      companyId: product.companyId,
+      after: product,
     });
 
     return res.status(201).json(product);
@@ -494,12 +505,24 @@ router.put('/:id', requireAuth, async (req, res) => {
         }),
         ...(req.body.dataSensitivity !== undefined && { dataSensitivity: payload.dataSensitivity }),
         ...(req.body.complianceNotes !== undefined && { complianceNotes: payload.complianceNotes }),
+        updatedById: auth.userId,
       },
       include: {
         company: {
           select: { id: true, name: true },
         },
       },
+    });
+
+    await recordChange({
+      entityType: 'Product',
+      entityId: product.id,
+      action: 'update',
+      userId: auth.userId,
+      changeSource: resolveChangeSource(req),
+      companyId: product.companyId,
+      before: existing,
+      after: product,
     });
 
     return res.json(product);
@@ -520,6 +543,16 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
 
     await prisma.product.delete({
       where: { id: req.params.id },
+    });
+
+    await recordChange({
+      entityType: 'Product',
+      entityId: existing.id,
+      action: 'delete',
+      userId: getAuthContext(req)?.userId || null,
+      changeSource: resolveChangeSource(req),
+      companyId: existing.companyId,
+      before: existing,
     });
 
     return res.json({ success: true });

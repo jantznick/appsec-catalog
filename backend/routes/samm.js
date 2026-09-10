@@ -1,7 +1,8 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
-import { getAuthContext } from '../middleware/authContext.js';
+import { getAuthContext, resolveChangeSource } from '../middleware/authContext.js';
+import { recordChange } from '../utils/changeHistory.js';
 import {
   ensureSammFramework,
   flattenSammPractices,
@@ -116,6 +117,17 @@ router.post('/assessments', requireAuth, async (req, res) => {
       },
       include: assessmentInclude(),
     });
+
+    await recordChange({
+      entityType: 'SammAssessment',
+      entityId: assessment.id,
+      action: 'create',
+      userId: auth.userId,
+      changeSource: resolveChangeSource(req),
+      companyId: assessment.companyId,
+      after: assessment,
+    });
+
     res.status(201).json(serializeAssessment(assessment));
   } catch (error) {
     console.error('Error creating SAMM assessment:', error);
@@ -186,10 +198,23 @@ router.put('/assessments/:id', requireAuth, async (req, res) => {
           status: complete ? 'completed' : 'draft',
           submittedAt: complete ? now : existing.submittedAt,
           nextDueAt: complete ? new Date(new Date(now).setMonth(now.getMonth() + 6)) : existing.nextDueAt,
+          updatedById: auth.userId,
         },
         include: assessmentInclude(),
       });
     });
+
+    await recordChange({
+      entityType: 'SammAssessment',
+      entityId: assessment.id,
+      action: 'update',
+      userId: auth.userId,
+      changeSource: resolveChangeSource(req),
+      companyId: assessment.companyId,
+      before: existing,
+      after: assessment,
+    });
+
     res.json(serializeAssessment(assessment));
   } catch (error) {
     console.error('Error saving SAMM assessment:', error);
@@ -199,14 +224,27 @@ router.put('/assessments/:id', requireAuth, async (req, res) => {
 
 router.post('/assessments/:id/review', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const assessment = await prisma.sammAssessment.findUnique({ where: { id: req.params.id }, select: { id: true, status: true } });
+    const assessment = await prisma.sammAssessment.findUnique({ where: { id: req.params.id } });
     if (!assessment) return res.status(404).json({ error: 'SAMM assessment not found' });
     if (assessment.status !== 'completed') return res.status(409).json({ error: 'Only completed assessments can be reviewed' });
+    const auth = getAuthContext(req);
     const reviewed = await prisma.sammAssessment.update({
       where: { id: assessment.id },
-      data: { reviewerId: getAuthContext(req).userId, reviewedAt: new Date() },
+      data: { reviewerId: auth.userId, reviewedAt: new Date(), updatedById: auth.userId },
       include: assessmentInclude(),
     });
+
+    await recordChange({
+      entityType: 'SammAssessment',
+      entityId: reviewed.id,
+      action: 'update',
+      userId: auth.userId,
+      changeSource: resolveChangeSource(req),
+      companyId: reviewed.companyId,
+      before: assessment,
+      after: reviewed,
+    });
+
     res.json(serializeAssessment(reviewed));
   } catch (error) {
     console.error('Error reviewing SAMM assessment:', error);

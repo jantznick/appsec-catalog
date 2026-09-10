@@ -1,7 +1,8 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
-import { getAuthContext } from '../middleware/authContext.js';
+import { getAuthContext, resolveChangeSource } from '../middleware/authContext.js';
+import { recordChange } from '../utils/changeHistory.js';
 
 const router = express.Router();
 
@@ -162,6 +163,16 @@ router.post('/company/:companyId', requireAuth, requireAdmin, async (req, res) =
       },
     });
 
+    await recordChange({
+      entityType: 'Note',
+      entityId: note.id,
+      action: 'create',
+      userId: note.createdBy,
+      changeSource: resolveChangeSource(req),
+      companyId,
+      after: note,
+    });
+
     res.status(201).json(note);
   } catch (error) {
     console.error('Error creating company note:', error);
@@ -188,6 +199,7 @@ router.post('/application/:applicationId', requireAuth, requireAdmin, async (req
     // Verify application exists
     const application = await prisma.application.findUnique({
       where: { id: applicationId },
+      select: { id: true, companyId: true },
     });
 
     if (!application) {
@@ -209,6 +221,16 @@ router.post('/application/:applicationId', requireAuth, requireAdmin, async (req
           },
         },
       },
+    });
+
+    await recordChange({
+      entityType: 'Note',
+      entityId: note.id,
+      action: 'create',
+      userId: note.createdBy,
+      changeSource: resolveChangeSource(req),
+      companyId: application.companyId,
+      after: note,
     });
 
     res.status(201).json(note);
@@ -243,11 +265,14 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Note not found' });
     }
 
+    const updatedById = getAuthContext(req)?.userId || null;
+
     // Update note
     const note = await prisma.note.update({
       where: { id },
       data: {
         content: content.trim(),
+        updatedBy: updatedById,
       },
       include: {
         user: {
@@ -263,6 +288,17 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
           },
         },
       },
+    });
+
+    await recordChange({
+      entityType: 'Note',
+      entityId: note.id,
+      action: 'update',
+      userId: updatedById,
+      changeSource: resolveChangeSource(req),
+      companyId: note.companyId ?? null,
+      before: existingNote,
+      after: note,
     });
 
     res.json(note);
@@ -289,6 +325,16 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
     // Delete note
     await prisma.note.delete({
       where: { id },
+    });
+
+    await recordChange({
+      entityType: 'Note',
+      entityId: note.id,
+      action: 'delete',
+      userId: getAuthContext(req)?.userId || null,
+      changeSource: resolveChangeSource(req),
+      companyId: note.companyId ?? null,
+      before: note,
     });
 
     res.json({ message: 'Note deleted successfully' });

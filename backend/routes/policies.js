@@ -5,7 +5,8 @@ import {
   getApplicablePolicySummariesForCompany,
   canCompanyViewPolicy,
 } from '../services/policy.js';
-import { getAuthContext } from '../middleware/authContext.js';
+import { getAuthContext, resolveChangeSource } from '../middleware/authContext.js';
+import { recordChange } from '../utils/changeHistory.js';
 
 const router = express.Router();
 
@@ -313,6 +314,19 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       });
     });
 
+    await recordChange({
+      entityType: 'Policy',
+      entityId: policy.id,
+      action: 'create',
+      userId: getAuthContext(req)?.userId || null,
+      changeSource: resolveChangeSource(req),
+      after: {
+        ...policy,
+        divisionIds: policy.divisionPolicies.map((dp) => dp.divisionId),
+        companyIds: policy.companyPolicies.map((cp) => cp.companyId),
+      },
+    });
+
     res.status(201).json(policy);
   } catch (error) {
     console.error('Error creating policy:', error);
@@ -341,6 +355,10 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
     // Check if policy exists
     const existingPolicy = await prisma.policy.findUnique({
       where: { id },
+      include: {
+        divisionPolicies: { select: { divisionId: true } },
+        companyPolicies: { select: { companyId: true } },
+      },
     });
 
     if (!existingPolicy) {
@@ -398,6 +416,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
           ...(parsedTargetingRules !== undefined && {
             targetingRules: parsedTargetingRules ? JSON.stringify(parsedTargetingRules) : null,
           }),
+          updatedById: getAuthContext(req)?.userId || null,
         },
       });
 
@@ -487,6 +506,24 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       });
     });
 
+    await recordChange({
+      entityType: 'Policy',
+      entityId: policy.id,
+      action: 'update',
+      userId: getAuthContext(req)?.userId || null,
+      changeSource: resolveChangeSource(req),
+      before: {
+        ...existingPolicy,
+        divisionIds: existingPolicy.divisionPolicies.map((dp) => dp.divisionId),
+        companyIds: existingPolicy.companyPolicies.map((cp) => cp.companyId),
+      },
+      after: {
+        ...policy,
+        divisionIds: policy.divisionPolicies.map((dp) => dp.divisionId),
+        companyIds: policy.companyPolicies.map((cp) => cp.companyId),
+      },
+    });
+
     res.json(policy);
   } catch (error) {
     console.error('Error updating policy:', error);
@@ -511,6 +548,8 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
             controls: true,
           },
         },
+        divisionPolicies: { select: { divisionId: true } },
+        companyPolicies: { select: { companyId: true } },
       },
     });
 
@@ -531,6 +570,19 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
       where: { id },
     });
 
+    await recordChange({
+      entityType: 'Policy',
+      entityId: policy.id,
+      action: 'delete',
+      userId: getAuthContext(req)?.userId || null,
+      changeSource: resolveChangeSource(req),
+      before: {
+        ...policy,
+        divisionIds: policy.divisionPolicies.map((dp) => dp.divisionId),
+        companyIds: policy.companyPolicies.map((cp) => cp.companyId),
+      },
+    });
+
     res.json({ message: 'Policy deleted successfully' });
   } catch (error) {
     console.error('Error deleting policy:', error);
@@ -548,9 +600,24 @@ router.patch('/:id/reorder', requireAuth, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'displayOrder is required and must be a number' });
     }
 
+    const existingPolicy = await prisma.policy.findUnique({ where: { id } });
+    if (!existingPolicy) {
+      return res.status(404).json({ error: 'Policy not found' });
+    }
+
     const policy = await prisma.policy.update({
       where: { id },
-      data: { displayOrder },
+      data: { displayOrder, updatedById: getAuthContext(req)?.userId || null },
+    });
+
+    await recordChange({
+      entityType: 'Policy',
+      entityId: policy.id,
+      action: 'update',
+      userId: getAuthContext(req)?.userId || null,
+      changeSource: resolveChangeSource(req),
+      before: existingPolicy,
+      after: policy,
     });
 
     res.json(policy);
