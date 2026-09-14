@@ -25,4 +25,6 @@ Security champions programs work best when someone locally owns them — but bui
 
 ## Getting content
 
-Monthly content packages will be delivered through a dedicated portal being built into Orbit. Until that ships, reach out to Hearst's AppSec team directly to get set up.
+Monthly packages are delivered through [Program Content](/program-content). Each one carries what the facilitator needs to run the meeting, material for champions to review beforehand, and the games and challenges to use on the day.
+
+Sign in to get them. To get your company set up on the program, reach out to Hearst's AppSec team directly.

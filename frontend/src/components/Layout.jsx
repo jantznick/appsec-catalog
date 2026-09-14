@@ -135,6 +135,11 @@ export function Layout({ children }) {
                     What&apos;s New
                   </Link>
                 )}
+                {/* Public: the hub shows a marketing catalog to visitors and
+                    member content once signed in. */}
+                <Link to="/program-content" className={navLinkClass('/program-content')}>
+                  Program Content
+                </Link>
                 <Link to="/docs/overview" className={navLinkClass('/docs')}>
                   Documentation
                 </Link>
@@ -199,6 +204,13 @@ export function Layout({ children }) {
                               {globalPendingCount > 99 ? '99+' : globalPendingCount}
                             </span>
                           )}
+                        </DropdownItem>
+                        <DropdownItem
+                          onClick={() => {
+                            navigate('/settings/program-content');
+                          }}
+                        >
+                          Program content
                         </DropdownItem>
                         <DropdownItem
                           onClick={() => {

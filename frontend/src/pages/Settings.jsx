@@ -116,6 +116,23 @@ const settingsSections = [
       },
     ],
   },
+  {
+    title: 'Program content',
+    description: 'Distribute materials from the AppSec community programs.',
+    adminOnly: true,
+    items: [
+      {
+        label: 'ASCOE & Security Champions content',
+        description: 'Publish session materials and monthly champion packages.',
+        to: '/settings/program-content',
+      },
+      {
+        label: 'Program content portal',
+        description: 'See what members and public visitors see.',
+        to: '/program-content',
+      },
+    ],
+  },
 ];
 
 export function Settings() {

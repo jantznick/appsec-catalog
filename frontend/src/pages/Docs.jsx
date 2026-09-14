@@ -147,16 +147,32 @@ export function Docs() {
 
   // The content below is injected via dangerouslySetInnerHTML, so its links
   // are plain <a> tags, not React Router <Link>s — intercept clicks on the
-  // ones we just rewrote to /docs/... so they navigate client-side instead
-  // of doing a full page reload.
+  // in-app ones so they navigate client-side instead of doing a full page
+  // reload.
+  //
+  // This covers ANY app-relative path, not just /docs/. Docs link out to real
+  // app routes (e.g. /program-content), and those used to fall through to a
+  // hard navigation: the whole SPA re-initialized, which flashes and drops
+  // auth-store state that has to be re-fetched.
   useEffect(() => {
     const container = contentRef.current;
     if (!container) return undefined;
     const handleClick = (event) => {
+      // Leave modified and non-primary clicks alone so cmd/ctrl-click,
+      // middle-click, and shift-click still open tabs/windows as expected.
+      if (event.defaultPrevented) return;
+      if (event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
       const link = event.target.closest('a');
       if (!link) return;
+      if (link.target && link.target !== '_self') return;
+
       const href = link.getAttribute('href') || '';
-      if (!href.startsWith('/docs/')) return;
+      // Single leading slash only: "//host" is protocol-relative and external,
+      // as are absolute URLs and mailto:/tel: schemes.
+      if (!href.startsWith('/') || href.startsWith('//')) return;
+
       event.preventDefault();
       navigate(href);
     };

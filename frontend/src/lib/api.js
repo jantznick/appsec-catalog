@@ -1104,4 +1104,58 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  // ---- Program content (ASCOE sessions, Champions packages) ---------------
+  // `program` is 'ascoe' or 'champions'.
+  getPublicProgramContent: () => apiRequest('/api/program-content/public'),
+  getProgramReleases: (program) =>
+    apiRequest(`/api/program-content/${encodeURIComponent(program)}`),
+  getProgramRelease: (program, slug) =>
+    apiRequest(
+      `/api/program-content/${encodeURIComponent(program)}/${encodeURIComponent(slug)}`
+    ),
+
+  // ---- Program content, admin authoring -----------------------------------
+  getProgramReleasesAdmin: (program, status) =>
+    apiRequest(
+      `/api/program-content/admin/${encodeURIComponent(program)}${
+        status ? `?status=${encodeURIComponent(status)}` : ''
+      }`
+    ),
+  getProgramReleaseAdmin: (program, id) =>
+    apiRequest(`/api/program-content/admin/${encodeURIComponent(program)}/${encodeURIComponent(id)}`),
+  createProgramRelease: (program, data) =>
+    apiRequest(`/api/program-content/admin/${encodeURIComponent(program)}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateProgramRelease: (program, id, data) =>
+    apiRequest(
+      `/api/program-content/admin/${encodeURIComponent(program)}/${encodeURIComponent(id)}`,
+      { method: 'PUT', body: JSON.stringify(data) }
+    ),
+  deleteProgramRelease: (program, id) =>
+    apiRequest(
+      `/api/program-content/admin/${encodeURIComponent(program)}/${encodeURIComponent(id)}`,
+      { method: 'DELETE' }
+    ),
+  createContentAsset: (data) =>
+    apiRequest('/api/program-content/admin/assets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateContentAsset: (id, data) =>
+    apiRequest(`/api/program-content/admin/assets/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteContentAsset: (id) =>
+    apiRequest(`/api/program-content/admin/assets/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+  reorderContentAssets: (order) =>
+    apiRequest('/api/program-content/admin/assets/reorder', {
+      method: 'PUT',
+      body: JSON.stringify({ order }),
+    }),
 };

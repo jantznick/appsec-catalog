@@ -24,4 +24,6 @@ Every Hearst company works through the same lifecycle and policy baseline (see [
 
 ## Getting content
 
-Session materials, recordings, and resources from past ASCOE sessions will be available through a dedicated portal being built into Orbit. Until that ships, reach out to Hearst's AppSec team directly for materials or to be added to the invite list.
+Session materials live in [Program Content](/program-content) — agendas and pre-reads before a session, then decks, recordings, and notes afterwards. Sign in to get them; if you're not in the program yet, the page shows what's been published and how to ask for access.
+
+To be added to the invite list, reach out to Hearst's AppSec team directly.

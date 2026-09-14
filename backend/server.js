@@ -34,6 +34,7 @@ import docsRoutes from './routes/docs.js';
 import platformDocsRoutes from './routes/platformDocs.js';
 import programInfoRequestRoutes from './routes/programInfoRequests.js';
 import changeHistoryRoutes from './routes/changeHistory.js';
+import programContentRoutes from './routes/programContent.js';
 import { apiKeyAuth } from './middleware/apiKeyAuth.js';
 
 dotenv.config();
@@ -114,7 +115,15 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'api-key']
 }));
 app.use(express.json({ limit: '3mb' }));
-app.use('/storage', express.static(path.resolve(__dirname, 'storage')));
+// Domain snapshots are public by design and are the only thing served
+// statically. Scoped to that one subtree rather than all of `storage/`, so
+// anything else kept there (program content uploads, for instance) is reachable
+// only through a route that can check authorization. Snapshot URLs are already
+// written as /storage/domain-snapshots/... so this changes no existing links.
+app.use(
+  '/storage/domain-snapshots',
+  express.static(path.resolve(__dirname, 'storage', 'domain-snapshots'))
+);
 
 // Session configuration
 // Using PrismaSessionStore to store sessions in the database (scalable, survives restarts)
@@ -188,6 +197,7 @@ app.use('/api/docs', docsRoutes);
 app.use('/api/platform-docs', platformDocsRoutes);
 app.use('/api/program-requests', programInfoRequestRoutes);
 app.use('/api/change-history', changeHistoryRoutes);
+app.use('/api/program-content', programContentRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
