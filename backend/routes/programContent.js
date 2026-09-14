@@ -22,9 +22,20 @@
  * Adding a literal route below its parameterized sibling will silently 404.
  */
 import express from 'express';
+import fs from 'node:fs';
+import multer from 'multer';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireVerified, requireAdmin } from '../middleware/auth.js';
 import { getAuthContext } from '../middleware/authContext.js';
+import {
+  MAX_FILE_BYTES,
+  validateUpload,
+  writeAssetFile,
+  resolveAssetPath,
+  deleteAssetFile,
+  deleteReleaseFiles,
+  sanitizeFileName,
+} from '../services/programContentStorage.js';
 import {
   SECTION_LAYOUT,
   normalizeStatus,
@@ -42,6 +53,37 @@ const router = express.Router();
 
 const MAX_TITLE = 200;
 const MAX_TEXT = 20000;
+
+/**
+ * Uploads are buffered in memory rather than streamed to disk so the file can
+ * be validated and checksummed before anything is written — a rejected upload
+ * leaves nothing behind to clean up. Safe at this size cap; revisit if the
+ * limit ever grows past tens of megabytes.
+ *
+ * multer enforces the byte cap itself, which matters: without it a large body
+ * would be fully buffered before our own check could reject it.
+ */
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_FILE_BYTES, files: 1 },
+});
+
+/** Turn multer's own errors into the same JSON shape as everything else. */
+function handleUpload(req, res, next) {
+  upload.single('file')(req, res, (error) => {
+    if (!error) return next();
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        error: `File is larger than the ${Math.round(MAX_FILE_BYTES / 1024 / 1024)}MB limit`,
+      });
+    }
+    if (error.code === 'LIMIT_FILE_COUNT' || error.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({ error: 'Upload one file at a time, in the "file" field' });
+    }
+    console.error('Upload error:', error);
+    return res.status(400).json({ error: 'Upload failed' });
+  });
+}
 
 /**
  * The two programs differ enough to have separate tables, but list/detail/CRUD
@@ -304,7 +346,7 @@ async function buildReleaseData(program, body, { isCreate, existing }) {
 /**
  * @returns {{ error: string } | { data: object }}
  */
-function buildAssetData(body, { isCreate }) {
+function buildAssetData(body, { isCreate, hasFile = false }) {
   const title = trimToNull(body?.title);
   if (!title) return { error: 'Asset title is required' };
   if (title.length > MAX_TITLE) {
@@ -322,10 +364,10 @@ function buildAssetData(body, { isCreate }) {
   const embed = validateEmbedUrl(body?.embedUrl);
   if (!embed.ok) return { error: embed.error };
 
-  // Phase 1 has no uploads, so a link is the only thing that can make an asset
-  // actionable. Without one the card would render with nothing to click.
-  if (isCreate && !external.value && !embed.value) {
-    return { error: 'Add a link to the material, or an embed link for a recording' };
+  // An asset needs at least one way to reach the material — an uploaded file,
+  // a link, or an embed — or it renders as a card with nothing to click.
+  if (isCreate && !external.value && !embed.value && !hasFile) {
+    return { error: 'Attach a file, or add a link to the material' };
   }
 
   const displayOrderRaw = Number.parseInt(String(body?.displayOrder ?? '0'), 10);
@@ -447,7 +489,16 @@ router.put('/admin/assets/reorder', requireAuth, requireAdmin, async (req, res) 
   }
 });
 
-router.post('/admin/assets', requireAuth, requireAdmin, async (req, res) => {
+/**
+ * Create an asset, optionally with its file in the same request.
+ *
+ * `handleUpload` is a no-op for a JSON body (multer only touches multipart), so
+ * this one route serves both a link-only create and a file create. Doing both
+ * in one request is what lets "a file counts as having something to click" be
+ * checked server-side.
+ */
+router.post('/admin/assets', requireAuth, requireAdmin, handleUpload, async (req, res) => {
+  let storedPath = null;
   try {
     const program = PROGRAMS[req.body?.program];
     if (!program) {
@@ -466,14 +517,33 @@ router.post('/admin/assets', requireAuth, requireAdmin, async (req, res) => {
       return res.status(404).json({ error: `${program.label} not found` });
     }
 
-    const built = buildAssetData(req.body, { isCreate: true });
+    const built = buildAssetData(req.body, { isCreate: true, hasFile: Boolean(req.file) });
     if (built.error) {
       return res.status(400).json({ error: built.error });
+    }
+
+    let stored = {};
+    if (req.file) {
+      const validated = validateUpload(req.file);
+      if (!validated.ok) {
+        return res.status(400).json({ error: validated.error });
+      }
+      // Written before the row because the storage path depends only on
+      // program + releaseId, both already known. If the insert then fails, the
+      // catch below removes the file rather than leaving it unreferenced.
+      stored = await writeAssetFile({
+        program: program.key,
+        releaseId,
+        file: req.file,
+        ext: validated.ext,
+      });
+      storedPath = stored.storagePath;
     }
 
     const asset = await prisma.contentAsset.create({
       data: {
         ...built.data,
+        ...stored,
         // Exactly one parent FK is ever set; the other stays null.
         [program.assetFk]: releaseId,
         uploadedBy: getAuthContext(req)?.userId || null,
@@ -483,8 +553,104 @@ router.post('/admin/assets', requireAuth, requireAdmin, async (req, res) => {
 
     res.status(201).json(asset);
   } catch (error) {
+    if (storedPath) {
+      await deleteAssetFile(storedPath);
+    }
     console.error('Error creating content asset:', error);
     res.status(500).json({ error: 'Failed to create asset' });
+  }
+});
+
+/**
+ * Attach (or replace) the stored copy of an asset. Kept separate from the JSON
+ * create/update so metadata validation lives in one place and isn't duplicated
+ * across a multipart variant.
+ */
+router.post('/admin/assets/:id/file', requireAuth, requireAdmin, handleUpload, async (req, res) => {
+  try {
+    const existing = await prisma.contentAsset.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, ascoeSessionId: true, packageId: true, storagePath: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ error: 'Asset not found' });
+    }
+
+    const validated = validateUpload(req.file);
+    if (!validated.ok) {
+      return res.status(400).json({ error: validated.error });
+    }
+
+    const program = existing.ascoeSessionId ? 'ascoe' : 'champions';
+    const releaseId = existing.ascoeSessionId || existing.packageId;
+    if (!releaseId) {
+      return res.status(409).json({ error: 'Asset is not attached to a release' });
+    }
+
+    const stored = await writeAssetFile({
+      program,
+      releaseId,
+      file: req.file,
+      ext: validated.ext,
+    });
+
+    const asset = await prisma.contentAsset.update({
+      where: { id: existing.id },
+      data: stored,
+      select: assetSelect(),
+    });
+
+    // Replacing a file: drop the old bytes only after the row points at the new
+    // ones, so a failure here leaks a file rather than orphaning the asset.
+    if (existing.storagePath && existing.storagePath !== stored.storagePath) {
+      await deleteAssetFile(existing.storagePath);
+    }
+
+    res.json(asset);
+  } catch (error) {
+    console.error('Error storing content asset file:', error);
+    res.status(500).json({ error: 'Failed to store file' });
+  }
+});
+
+/** Remove just the stored copy, keeping the asset and its links. */
+router.delete('/admin/assets/:id/file', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const existing = await prisma.contentAsset.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, storagePath: true, externalUrl: true, embedUrl: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ error: 'Asset not found' });
+    }
+    if (!existing.storagePath) {
+      return res.status(400).json({ error: 'This asset has no stored file' });
+    }
+    // Same rule as the metadata editor: an asset with neither a file nor a link
+    // is a card with nothing to click.
+    if (!existing.externalUrl && !existing.embedUrl) {
+      return res.status(400).json({
+        error: 'Add a link before removing the file, or delete the material entirely',
+      });
+    }
+
+    const asset = await prisma.contentAsset.update({
+      where: { id: existing.id },
+      data: {
+        storagePath: null,
+        fileName: null,
+        mimeType: null,
+        sizeBytes: null,
+        checksumSha256: null,
+      },
+      select: assetSelect(),
+    });
+
+    await deleteAssetFile(existing.storagePath);
+    res.json(asset);
+  } catch (error) {
+    console.error('Error removing content asset file:', error);
+    res.status(500).json({ error: 'Failed to remove file' });
   }
 });
 
@@ -526,8 +692,17 @@ router.put('/admin/assets/:id', requireAuth, requireAdmin, async (req, res) => {
 
 router.delete('/admin/assets/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
-    // Phase 2: unlink the stored file before dropping the row.
+    // Read the path before deleting: the cascade removes the row, and with it
+    // the only record of which file on disk belonged to it.
+    const existing = await prisma.contentAsset.findUnique({
+      where: { id: req.params.id },
+      select: { storagePath: true },
+    });
+
     await prisma.contentAsset.delete({ where: { id: req.params.id } });
+    if (existing?.storagePath) {
+      await deleteAssetFile(existing.storagePath);
+    }
     res.json({ message: 'Asset deleted' });
   } catch (error) {
     if (error?.code === 'P2025') {
@@ -663,10 +838,11 @@ router.delete('/admin/:program/:id', requireAuth, requireAdmin, async (req, res)
   if (!program) return;
 
   try {
-    // Cascades to assets, their download records, and the audience rows. Once
-    // Phase 2 stores files, this handler must also unlink them from disk —
-    // Prisma's cascade drops rows, not bytes.
+    // The cascade takes the assets, their download records, and the audience
+    // rows — but Prisma drops rows, not bytes, so the release's stored files
+    // have to be removed explicitly or they orphan in the volume forever.
     await program.delegate().delete({ where: { id: req.params.id } });
+    await deleteReleaseFiles(program.key, req.params.id);
     res.json({ message: `${program.label} deleted` });
   } catch (error) {
     if (error?.code === 'P2025') {
@@ -674,6 +850,106 @@ router.delete('/admin/:program/:id', requireAuth, requireAdmin, async (req, res)
     }
     console.error(`Error deleting ${program.label}:`, error);
     res.status(500).json({ error: 'Failed to delete program content' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Member download
+//
+// Declared before the member `/:program` routes for the same reason as the
+// admin block: "assets" must not be parsed as a program name.
+// ---------------------------------------------------------------------------
+
+/**
+ * Stream a stored asset to an entitled member.
+ *
+ * Entitlement is re-derived from the asset's PARENT RELEASE rather than taken
+ * from the asset id. An id is guessable and shareable; if this trusted it, a
+ * single leaked id would bypass company scoping entirely.
+ */
+router.get('/assets/:id/download', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const asset = await prisma.contentAsset.findUnique({
+      where: { id: req.params.id },
+      select: {
+        id: true,
+        fileName: true,
+        mimeType: true,
+        sizeBytes: true,
+        storagePath: true,
+        ascoeSession: {
+          select: {
+            status: true,
+            audienceScope: true,
+            companies: { select: { companyId: true } },
+          },
+        },
+        package: {
+          select: {
+            status: true,
+            audienceScope: true,
+            companies: { select: { companyId: true } },
+          },
+        },
+      },
+    });
+
+    // 404 rather than 403 throughout: a 403 would confirm the asset exists.
+    if (!asset?.storagePath) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const release = asset.ascoeSession || asset.package;
+    if (!canMemberSeeRelease(auth, release)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const absolute = resolveAssetPath(asset.storagePath);
+    if (!absolute || !fs.existsSync(absolute)) {
+      console.error('Content asset row points at a missing file:', asset.id, asset.storagePath);
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Record the download before streaming. Doing it first means a client that
+    // disconnects mid-transfer still counts, which is the right bias for
+    // adoption data — and a logging failure must not block the download.
+    prisma.contentAssetDownload
+      .create({
+        data: {
+          assetId: asset.id,
+          userId: auth?.userId || null,
+          companyId: auth?.companyId || null,
+        },
+      })
+      .catch((error) => console.error('Failed to log content asset download:', error));
+
+    const downloadName = sanitizeFileName(asset.fileName);
+    res.setHeader('Content-Type', asset.mimeType || 'application/octet-stream');
+    // Always an attachment, never inline: nothing stored here should be
+    // rendered by the browser in this origin's context.
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (asset.sizeBytes) {
+      res.setHeader('Content-Length', String(asset.sizeBytes));
+    }
+
+    const stream = fs.createReadStream(absolute);
+    stream.on('error', (error) => {
+      console.error('Error streaming content asset:', asset.id, error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to read file' });
+      } else {
+        res.destroy(error);
+      }
+    });
+    stream.pipe(res);
+  } catch (error) {
+    console.error('Error downloading content asset:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to download file' });
+    }
   }
 });
 

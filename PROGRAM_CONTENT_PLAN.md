@@ -356,10 +356,15 @@ section in both program docs. Pulled into Phase 1 because the hub needed a logge
 regardless, which made the catalog endpoint nearly free — and leaving the docs pointing at a
 "portal being built" while the portal existed would have been the odd outcome.
 
-**Phase 2 — uploads and gated downloads. NOT STARTED.** `multer` + hardening, the streaming
-download route, `ContentAssetDownload` writes, admin upload UI, and file cleanup on delete. The
-schema columns and the download table already exist, so this needs no migration. Inline video
-already works via `embedUrl`; what's missing is Orbit hosting a copy of anything.
+**Phase 2 — uploads and gated downloads. DONE.** `multer` with a memory store and a 50MB cap, a
+deny-by-default extension allowlist in `services/programContentStorage.js`, the streaming download
+route, `ContentAssetDownload` writes, admin upload UI, and file cleanup on both asset and release
+delete. No migration was needed — the columns were already there.
+
+One design note: asset *create* accepts multipart, so a file-only asset (no link) can be validated
+and stored in a single request. `multer` ignores non-multipart bodies, so the same route still
+serves a link-only JSON create. Replacing or removing a file on an existing asset uses the separate
+`/assets/:id/file` endpoints, which keeps metadata validation in exactly one place.
 
 **Phase 4 — polish.** `ChangeHistory` integration for the new entity types, announce-on-publish
 (What's New entry or email to member companies), search/tag filtering across releases.

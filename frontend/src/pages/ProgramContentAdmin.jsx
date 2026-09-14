@@ -97,6 +97,8 @@ export function ProgramContentAdmin() {
   const [form, setForm] = useState(emptyRelease);
   const [assetForm, setAssetForm] = useState(emptyAsset);
   const [editingAssetId, setEditingAssetId] = useState(null);
+  const [pendingFile, setPendingFile] = useState(null);
+  const [removingFile, setRemovingFile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingAsset, setSavingAsset] = useState(false);
@@ -146,11 +148,13 @@ export function ProgramContentAdmin() {
     setForm({ ...emptyRelease });
     setAssetForm({ ...emptyAsset });
     setEditingAssetId(null);
+    setPendingFile(null);
   };
 
   const editRelease = (release) => {
     setSelectedId(release.id);
     setEditingAssetId(null);
+    setPendingFile(null);
     setAssetForm({ ...emptyAsset });
     setForm({
       slug: release.slug || '',
@@ -223,8 +227,26 @@ export function ProgramContentAdmin() {
     }
   };
 
+  const removeAssetFile = async () => {
+    if (!editingAssetId) return;
+    try {
+      setRemovingFile(true);
+      await api.removeContentAssetFile(editingAssetId);
+      const refreshed = await api.getProgramReleaseAdmin(program, selectedId);
+      setReleases((current) =>
+        current.map((release) => (release.id === refreshed.id ? refreshed : release))
+      );
+      toast.success('File removed');
+    } catch (error) {
+      toast.error(error?.message || 'Failed to remove file');
+    } finally {
+      setRemovingFile(false);
+    }
+  };
+
   const editAsset = (asset) => {
     setEditingAssetId(asset.id);
+    setPendingFile(null);
     setAssetForm({
       kind: asset.kind || 'document',
       section: asset.section || 'materials',
@@ -242,8 +264,18 @@ export function ProgramContentAdmin() {
       setSavingAsset(true);
       if (editingAssetId) {
         await api.updateContentAsset(editingAssetId, assetForm);
+        // Metadata and file are separate endpoints on edit, so a replacement
+        // file is a second call against the asset that already exists.
+        if (pendingFile) {
+          await api.uploadContentAssetFile(editingAssetId, pendingFile);
+        }
       } else {
-        await api.createContentAsset({ ...assetForm, program, releaseId: selectedId });
+        // Create sends the file in the same request, so an asset backed only by
+        // a file (no link) is valid on arrival.
+        await api.createContentAsset(
+          { ...assetForm, program, releaseId: selectedId },
+          pendingFile
+        );
       }
       // Re-read the release so the section grouping comes from the backend
       // rather than being reassembled here.
@@ -253,6 +285,7 @@ export function ProgramContentAdmin() {
       );
       setAssetForm({ ...emptyAsset });
       setEditingAssetId(null);
+      setPendingFile(null);
       toast.success(editingAssetId ? 'Material updated' : 'Material added');
     } catch (error) {
       toast.error(error?.message || 'Failed to save material');
@@ -283,6 +316,7 @@ export function ProgramContentAdmin() {
   };
 
   const allAssets = (selected?.sections || []).flatMap((section) => section.assets);
+  const editingAsset = allAssets.find((asset) => asset.id === editingAssetId) || null;
   const isAscoe = program === 'ascoe';
 
   return (
@@ -559,6 +593,8 @@ export function ProgramContentAdmin() {
                             </p>
                             <p className="text-xs text-gray-500">
                               {asset.kind} · {asset.section}
+                              {asset.fileName ? ' · file' : ''}
+                              {asset.externalUrl ? ' · link' : ''}
                               {asset.embedUrl ? ' · embedded' : ''}
                             </p>
                           </div>
@@ -619,6 +655,38 @@ export function ProgramContentAdmin() {
                       }
                       rows={2}
                     />
+                    <div className="rounded-lg border border-gray-200 p-3 space-y-2">
+                      <p className="text-sm font-medium text-gray-700">File</p>
+                      {editingAsset?.fileName && !pendingFile && (
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm text-gray-600 break-all">
+                            {editingAsset.fileName}
+                            {editingAsset.sizeBytes
+                              ? ` · ${Math.max(1, Math.round(editingAsset.sizeBytes / 1024))} KB`
+                              : ''}
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={removeAssetFile}
+                            loading={removingFile}
+                          >
+                            Remove file
+                          </Button>
+                        </div>
+                      )}
+                      <input
+                        type="file"
+                        onChange={(e) => setPendingFile(e.target.files?.[0] || null)}
+                        className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-blue-500"
+                      />
+                      <p className="text-xs text-gray-500">
+                        Optional — up to 50MB. PDF, Office, CSV, text, images, zip. Members download
+                        it through Orbit; recordings should use the embed link below instead.
+                        {editingAsset?.fileName ? ' Choosing a file replaces the current one.' : ''}
+                      </p>
+                    </div>
+
                     <Input
                       label="Link (SharePoint, OneDrive, article URL)"
                       value={assetForm.externalUrl}
@@ -645,6 +713,7 @@ export function ProgramContentAdmin() {
                           onClick={() => {
                             setEditingAssetId(null);
                             setAssetForm({ ...emptyAsset });
+                            setPendingFile(null);
                           }}
                         >
                           Cancel
