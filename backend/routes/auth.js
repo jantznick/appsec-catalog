@@ -183,11 +183,15 @@ router.post('/request-magic-code', blockLocalLoginWhenOktaOnly, async (req, res)
     console.log(`\n🔑 Magic Code for ${user.email}: ${code}`);
     console.log(`   Expires at: ${expiresAt.toISOString()}\n`);
 
-    res.json({
-      ...genericResponse,
-      // In production, don't return the code. For development, we can return it.
-      ...(process.env.NODE_ENV !== 'production' && { code }),
-    });
+    // NEVER return the code in the response, in any environment. The console
+    // log above is the only retrieval path by design (which is what the generic
+    // response message tells the user to do). Returning it made
+    // /request-magic-code + /login-magic a complete unauthenticated auth bypass
+    // on any deployment where NODE_ENV was unset or not exactly 'production'
+    // and Okta was not configured: request a code for any known email, read it
+    // out of the response, redeem it, and you hold that user's session with
+    // their isAdmin flag.
+    res.json(genericResponse);
   } catch (error) {
     console.error('Magic code request error:', error);
     res.status(500).json({ 
