@@ -9,6 +9,7 @@ import {
   ProgramOperationsDashboard,
 } from '../components/dashboard/PersonaDashboards.jsx';
 import { Dropdown, DropdownItem } from '../components/ui/Dropdown.jsx';
+import { ProgramContentCallout } from '../components/program-content/ProgramContentCallout.jsx';
 import { api } from '../lib/api.js';
 import { FiChevronDown, FiGrid } from 'react-icons/fi';
 
@@ -175,6 +176,11 @@ export function Dashboard() {
       ) : (
         <PlaceholderDashboard dashboard={activeDashboard} />
       )}
+
+      {/* Below the active dashboard rather than inside each one, so it shows
+          regardless of which is selected. Renders nothing when no program
+          content is shared with the viewer's company. */}
+      <ProgramContentCallout />
     </div>
   );
 }

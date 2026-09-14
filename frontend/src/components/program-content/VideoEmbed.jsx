@@ -25,7 +25,10 @@ export function VideoEmbed({ embedUrl, externalUrl, title }) {
 
   return (
     <div className="space-y-2">
-      <div className="relative w-full overflow-hidden rounded-lg bg-gray-900" style={{ paddingTop: '56.25%' }}>
+      {/* bg-field, not bg-gray-900 — the neutral ramp is inverted in this
+          theme, so gray-900 is near-white and would flash bright before the
+          player paints. */}
+      <div className="relative w-full overflow-hidden rounded-lg bg-field" style={{ paddingTop: '56.25%' }}>
         <iframe
           src={embedUrl}
           title={title || 'Session recording'}

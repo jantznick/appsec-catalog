@@ -68,7 +68,7 @@ function ReleaseCard({ release, program, featured = false }) {
   return (
     <Link
       to={`/program-content/${program.key}/${release.slug}`}
-      className={`block rounded-lg border bg-white p-4 transition-colors hover:border-blue-400 ${
+      className={`block rounded-lg border bg-surface-2 p-4 transition-colors hover:border-blue-400 ${
         featured ? 'border-blue-300 shadow-sm' : 'border-gray-200'
       }`}
     >
@@ -125,7 +125,7 @@ function PublicCatalog({ catalog }) {
                   {releases.map((release) => (
                     <li
                       key={`${program.key}-${release.slug}`}
-                      className="rounded-lg border border-gray-200 bg-white p-4"
+                      className="rounded-lg border border-gray-200 bg-surface-2 p-4"
                     >
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <div className="min-w-0">
