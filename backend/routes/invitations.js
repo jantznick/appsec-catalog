@@ -1,5 +1,6 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
+import { ensureDefaultCompanyRole } from '../rbac/defaults.js';
 import { validateInvitation, markInvitationUsed } from '../utils/invitation.js';
 import bcrypt from 'bcrypt';
 import { blockWhenOktaOnly } from '../middleware/oktaOnly.js';
@@ -117,6 +118,7 @@ router.post('/:token/accept', blockInvitationsWhenOktaOnly, async (req, res) => 
           email: true,
           verifiedAccount: true,
           isAdmin: true,
+          companyId: true,
           company: {
             select: {
               id: true,
@@ -141,6 +143,7 @@ router.post('/:token/accept', blockInvitationsWhenOktaOnly, async (req, res) => 
           email: true,
           verifiedAccount: true,
           isAdmin: true,
+          companyId: true,
           company: {
             select: {
               id: true,
@@ -153,6 +156,10 @@ router.post('/:token/accept', blockInvitationsWhenOktaOnly, async (req, res) => 
 
     // Mark invitation as used
     await markInvitationUsed(token);
+
+    // A user landing in a company needs the default company role, or they
+    // arrive with no permissions at all.
+    await ensureDefaultCompanyRole(user.id);
 
     // Create session to automatically log the user in
     req.session.userId = user.id;

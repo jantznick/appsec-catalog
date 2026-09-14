@@ -36,6 +36,89 @@ model User {
   aiAccessRules          AiAccessRule[]
   handledProgramInfoRequests ProgramInfoRequest[] @relation("ProgramInfoRequestHandler")
   changeHistoryEntries   ChangeHistory[]
+  roleAssignments        UserRole[]                  @relation("UserRoleSubject")
+  grantedRoleAssignments UserRole[]                  @relation("UserRoleGrantor")
+}
+
+/// Scope a role operates at.
+/// SYSTEM roles carry global permissions and are not tied to a company.
+/// COMPANY roles are evaluated against one company at a time.
+enum RoleScope {
+  SYSTEM
+  COMPANY
+}
+
+/// A named bundle of permissions.
+///
+/// `companyId` is null for global roles — that covers every role today,
+/// including the built-in ones. It exists so a company can own custom roles
+/// later without another migration; a role with a companyId can only ever be
+/// assigned within that company.
+///
+/// Built-in roles (`isSystem = true`) are defined in rbac/builtInRoles.js and
+/// re-synced on boot. They cannot be edited or deleted through the API.
+model Role {
+  id          String           @id @default(cuid())
+  key         String
+  name        String
+  description String?
+  scope       RoleScope        @default(COMPANY)
+  isSystem    Boolean          @default(false)
+  companyId   String?
+  company     Company?         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  permissions RolePermission[]
+  assignments UserRole[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Global roles are additionally constrained to one row per key by the
+  // partial index `Role_key_global_key` (see migration); Postgres treats NULL
+  // companyId values as distinct, so this composite unique can't cover them.
+  // Prisma can't express a partial index, so `migrate diff` will offer to drop
+  // it — keep it.
+  @@unique([key, companyId])
+  @@index([scope])
+  @@index([companyId])
+}
+
+/// One permission string (see rbac/permissions.js) granted by a role.
+model RolePermission {
+  id         String   @id @default(cuid())
+  roleId     String
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission String
+  createdAt  DateTime @default(now())
+
+  @@unique([roleId, permission])
+  @@index([permission])
+}
+
+/// A role granted to a user.
+///
+/// For COMPANY-scoped roles, `companyId` narrows the grant to a single company;
+/// a null `companyId` means the role applies to every company the user belongs
+/// to. With one company per user today those are equivalent, but the
+/// distinction is what makes "company admin everywhere" vs "company admin of
+/// Acme only" work once users can belong to several companies.
+model UserRole {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("UserRoleSubject", fields: [userId], references: [id], onDelete: Cascade)
+  roleId      String
+  role        Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  grantedById String?
+  grantedBy   User?    @relation("UserRoleGrantor", fields: [grantedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  // As with Role.key, the null-companyId case is covered by the partial index
+  // `UserRole_user_role_global_key` in the migration. Prisma can't express it,
+  // so `migrate diff` will offer to drop it — keep it.
+  @@unique([userId, roleId, companyId])
+  @@index([userId])
+  @@index([companyId])
+  @@index([roleId])
 }
 
 /// An unauthenticated "request more information" submission from the public
@@ -170,6 +253,8 @@ model Company {
   aiRequests            AiRequest[]
   aiAccessRules         AiAccessRule[]
   changeHistoryEntries  ChangeHistory[]
+  roles                 Role[] // company-owned custom roles (none yet; see Role.companyId)
+  roleAssignments       UserRole[]
   updatedById           String? // User ID who last updated this company's metadata
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt

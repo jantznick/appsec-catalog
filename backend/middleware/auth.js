@@ -59,45 +59,54 @@ export function requireAdmin(req, res, next) {
 }
 
 /**
- * Middleware to check if user is admin OR member of same company as target user
- * Expects req.params.id to be the target user's ID
+ * Middleware for acting on another user's account.
+ *
+ * System admins always pass. Otherwise the caller needs `company.manage_users`
+ * in the target user's company — or, when the target has no company yet, in
+ * their own, since verifying an unassigned user is how they get claimed into
+ * one.
+ *
+ * Expects req.params.id to be the target user's ID.
  */
 export async function requireAdminOrCompanyMember(req, res, next) {
   const auth = getAuthContext(req);
   if (!auth?.userId) {
-    return res.status(401).json({ 
+    return res.status(401).json({
       error: 'Authentication required',
       message: 'You must be logged in to access this resource'
     });
   }
-  
+
+  const { getPermissionContext, contextCan } = await import('../rbac/context.js');
+  const ctx = await getPermissionContext(req);
+
   // Admins can always access
-  if (auth.isAdmin) {
+  if (ctx?.isSystemAdmin) {
     return next();
   }
-  
+
   // Get target user's companyId
   const { prisma } = await import('../prisma/client.js');
   const targetUser = await prisma.user.findUnique({
     where: { id: req.params.id },
     select: { companyId: true },
   });
-  
+
   if (!targetUser) {
-    return res.status(404).json({ 
+    return res.status(404).json({
       error: 'User not found',
       message: 'The requested user does not exist'
     });
   }
-  
-  // Check if user is in the same company
-  if (!auth.companyId || auth.companyId !== targetUser.companyId) {
-    return res.status(403).json({ 
+
+  const companyId = targetUser.companyId ?? auth.companyId ?? null;
+  if (!contextCan(ctx, 'company.manage_users', companyId)) {
+    return res.status(403).json({
       error: 'Permission denied',
-      message: 'You can only access users in your company'
+      message: 'You do not have permission to manage users in that company'
     });
   }
-  
+
   next();
 }
 

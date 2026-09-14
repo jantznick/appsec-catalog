@@ -1,14 +1,29 @@
 import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import {
+  requirePermission,
+  companyFrom,
+  companyScopeFilter,
+  can,
+} from '../middleware/rbac.js';
 import { generateSlug, ensureUniqueSlug } from '../utils/slug.js';
 import { buildIntegrationSummaryForCompanyId } from '../integrations/summaryForCompany.js';
 import { aggregateCompletenessForCompany } from '../utils/portfolioCompleteness.js';
 import { buildCompanySecurityCoverage } from '../utils/companySecurityCoverage.js';
 import { getAuthContext, resolveChangeSource } from '../middleware/authContext.js';
 import { recordChange } from '../utils/changeHistory.js';
+import { ensureDefaultCompanyRole } from '../rbac/defaults.js';
 
 const router = express.Router();
+
+// Ejecting someone from a company is a company-admin action, not a system one
+// — but it is deliberately not covered by `company.manage_users`, which
+// ordinary members hold so they can invite and verify colleagues.
+const requireCompanyUserRemoval = requirePermission(
+  'company.remove_users',
+  companyFrom.param('id'),
+);
 
 function escapeCsvField(value) {
   const s = value == null ? '' : String(value);
@@ -158,80 +173,65 @@ router.post('/public', async (req, res) => {
 
 
 // COMP-1: Get company list
-// Admin: all companies, Regular user: only their company
+// Scoped to the companies the caller can read; system admins see all.
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const auth = getAuthContext(req);
-    if (auth.isAdmin) {
-      // Admin sees all companies, optionally narrowed by the scope selector.
-      const { divisionId, companyId } = req.query;
-
-      const whereClause = {};
-      if (companyId) {
-        whereClause.id = companyId;
-      } else if (divisionId) {
-        whereClause.divisionId = divisionId;
-      }
-
-      const companies = await prisma.company.findMany({
-        where: whereClause,
-        include: {
-          division: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          _count: {
-            select: {
-              users: true,
-              applications: true,
-            },
-          },
-        },
-        orderBy: {
-          name: 'asc',
-        },
-      });
-
-      const scopedCredRows = await prisma.integrationCredential.findMany({
-        where: { scope: 'COMPANY', companyId: { not: null } },
-        select: { companyId: true },
-      });
-      const companyIdsWithScopedIntegrations = new Set(
-        [...new Set(scopedCredRows.map((r) => r.companyId))].filter(Boolean),
-      );
-
-      return res.json(
-        companies.map((c) => ({
-          ...c,
-          hasCompanyScopedIntegrations: companyIdsWithScopedIntegrations.has(c.id),
-        })),
-      );
-    } else {
-      // Regular user sees only their company
-      if (!auth.companyId) {
-        return res.json([]);
-      }
-      const company = await prisma.company.findUnique({
-        where: { id: auth.companyId },
-        include: {
-          division: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          _count: {
-            select: {
-              users: true,
-              applications: true,
-            },
-          },
-        },
-      });
-      return res.json(company ? [company] : []);
+    const scope = await companyScopeFilter(req, 'company.read', 'id');
+    if (!scope) {
+      return res.json([]);
     }
+
+    // The scope selector narrows further, it never widens.
+    const { divisionId, companyId } = req.query;
+    const whereClause = { ...scope };
+    if (companyId) {
+      whereClause.AND = [...(whereClause.AND ?? []), { id: companyId }];
+    } else if (divisionId) {
+      whereClause.divisionId = divisionId;
+    }
+
+    const companies = await prisma.company.findMany({
+      where: whereClause,
+      include: {
+        division: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        _count: {
+          select: {
+            users: true,
+            applications: true,
+          },
+        },
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+
+    // Which companies have their own integration credentials, so the list can
+    // badge them. Only meaningful to system admins, who manage credentials.
+    const auth = getAuthContext(req);
+    if (!auth.isAdmin) {
+      return res.json(companies);
+    }
+
+    const scopedCredRows = await prisma.integrationCredential.findMany({
+      where: { scope: 'COMPANY', companyId: { not: null } },
+      select: { companyId: true },
+    });
+    const companyIdsWithScopedIntegrations = new Set(
+      [...new Set(scopedCredRows.map((r) => r.companyId))].filter(Boolean),
+    );
+
+    return res.json(
+      companies.map((c) => ({
+        ...c,
+        hasCompanyScopedIntegrations: companyIdsWithScopedIntegrations.has(c.id),
+      })),
+    );
   } catch (error) {
     console.error('Error fetching companies:', error);
     res.status(500).json({ error: 'Failed to fetch companies' });
@@ -240,11 +240,10 @@ router.get('/', requireAuth, async (req, res) => {
 
 /**
  * CSV summary: company, product names (comma-separated), counts, application names, count.
- * Admin: any companies. Members: only their company (other IDs rejected).
+ * Limited to companies the caller holds `company.read` on; any other ID is rejected.
  */
 router.post('/export-portfolio', requireAuth, async (req, res) => {
   try {
-    const auth = getAuthContext(req);
     const rawIds = req.body?.companyIds;
     if (!Array.isArray(rawIds) || rawIds.length === 0) {
       return res.status(400).json({ error: 'companyIds must be a non-empty array' });
@@ -254,20 +253,17 @@ router.post('/export-portfolio', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'No valid company IDs' });
     }
 
-    let allowedIds = companyIds;
-    if (!auth.isAdmin) {
-      if (!auth.companyId) {
-        return res.status(403).json({ error: 'Permission denied' });
-      }
-      const foreign = companyIds.filter((id) => id !== auth.companyId);
-      if (foreign.length > 0) {
-        return res.status(403).json({
-          error: 'Permission denied',
-          message: 'You can only export your own company',
-        });
-      }
-      allowedIds = companyIds.filter((id) => id === auth.companyId);
+    // Every requested company must be readable; asking for one that isn't is
+    // an error rather than a silent trim, so the caller knows what they got.
+    const readable = await Promise.all(companyIds.map((id) => can(req, 'company.read', id)));
+    const foreign = companyIds.filter((_, i) => !readable[i]);
+    if (foreign.length > 0) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You can only export companies you have access to',
+      });
     }
+    const allowedIds = companyIds;
 
     const companies = await prisma.company.findMany({
       where: { id: { in: allowedIds } },
@@ -351,19 +347,9 @@ router.post('/export-portfolio', requireAuth, async (req, res) => {
 });
 
 // Get company average score
-router.get('/:id/average-score', requireAuth, async (req, res) => {
+router.get('/:id/average-score', requireAuth, requirePermission('company.read', companyFrom.param('id')), async (req, res) => {
   try {
     const { id } = req.params;
-    const auth = getAuthContext(req);
-
-    // Check if user has access (admin or member of company)
-    if (!auth.isAdmin && auth.companyId !== id) {
-      return res.status(403).json({
-        error: 'Permission denied',
-        message: 'You can only access your own company',
-      });
-    }
-
     // Get all applications for this company
     const applications = await prisma.application.findMany({
       where: { companyId: id },
@@ -464,18 +450,9 @@ function safeAsciiFilename(s) {
 }
 
 /** Admin or company members: CSV of app name and technical onboarding form URL for each application. */
-router.get('/:id/technical-onboarding-form-links', requireAuth, async (req, res) => {
+router.get('/:id/technical-onboarding-form-links', requireAuth, requirePermission('company.read', companyFrom.param('id')), async (req, res) => {
   try {
     const { id } = req.params;
-    const auth = getAuthContext(req);
-
-    if (!auth.isAdmin && auth.companyId !== id) {
-      return res.status(403).json({
-        error: 'Permission denied',
-        message: 'You can only access your own company',
-      });
-    }
-
     let company = await prisma.company.findUnique({
       where: { id },
       select: { id: true, name: true, slug: true },
@@ -525,18 +502,9 @@ router.get('/:id/technical-onboarding-form-links', requireAuth, async (req, res)
 });
 
 /** Portfolio map: all applications, product groupings, mappings, flows, and ingress (read-only). */
-router.get('/:id/portfolio-architecture', requireAuth, async (req, res) => {
+router.get('/:id/portfolio-architecture', requireAuth, requirePermission('company.read', companyFrom.param('id')), async (req, res) => {
   try {
     const { id } = req.params;
-    const auth = getAuthContext(req);
-
-    if (!auth.isAdmin && auth.companyId !== id) {
-      return res.status(403).json({
-        error: 'Permission denied',
-        message: 'You can only access your own company',
-      });
-    }
-
     const company = await prisma.company.findUnique({
       where: { id },
       select: { id: true },
@@ -642,18 +610,9 @@ router.get('/:id/portfolio-architecture', requireAuth, async (req, res) => {
 });
 
 /** Security tool coverage by category (SAST, SCA, DAST, WAF, API) for company detail. */
-router.get('/:id/security-coverage', requireAuth, async (req, res) => {
+router.get('/:id/security-coverage', requireAuth, requirePermission('company.read', companyFrom.param('id')), async (req, res) => {
   try {
     const { id } = req.params;
-    const auth = getAuthContext(req);
-
-    if (!auth.isAdmin && auth.companyId !== id) {
-      return res.status(403).json({
-        error: 'Permission denied',
-        message: 'You can only access your own company',
-      });
-    }
-
     const applications = await prisma.application.findMany({
       where: { companyId: id },
       select: {
@@ -689,19 +648,9 @@ router.get('/:id/security-coverage', requireAuth, async (req, res) => {
 });
 
 // COMP-2: Get company detail
-router.get('/:id', requireAuth, async (req, res) => {
+router.get('/:id', requireAuth, requirePermission('company.read', companyFrom.param('id')), async (req, res) => {
   try {
     const { id } = req.params;
-    const auth = getAuthContext(req);
-
-    // Check if user has access (admin or member of company)
-    if (!auth.isAdmin && auth.companyId !== id) {
-      return res.status(403).json({
-        error: 'Permission denied',
-        message: 'You can only access your own company',
-      });
-    }
-
     const company = await prisma.company.findUnique({
       where: { id },
       select: {
@@ -755,7 +704,10 @@ router.get('/:id', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Company not found' });
     }
 
-    const isAdminSession = !!auth.isAdmin;
+    // The flag here only widens the summary to include *enterprise* credential
+    // hints, which span every company — that stays a system-admin view, not
+    // something a company's own admin should see.
+    const isAdminSession = !!getAuthContext(req).isAdmin;
     const integrationSummary = await buildIntegrationSummaryForCompanyId(prisma, id, isAdminSession);
 
     res.json({ ...company, integrationSummary });
@@ -766,19 +718,9 @@ router.get('/:id', requireAuth, async (req, res) => {
 });
 
 // Get domains for a company
-router.get('/:id/domains', requireAuth, async (req, res) => {
+router.get('/:id/domains', requireAuth, requirePermission('domain.read', companyFrom.param('id')), async (req, res) => {
   try {
     const { id } = req.params;
-    const auth = getAuthContext(req);
-
-    // Check if user has access (admin or member of company)
-    if (!auth.isAdmin && auth.companyId !== id) {
-      return res.status(403).json({
-        error: 'Permission denied',
-        message: 'You can only access your own company',
-      });
-    }
-
     // Get all domains for this company
     const domains = await prisma.domain.findMany({
       where: { companyId: id },
@@ -870,8 +812,11 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-// COMP-4: Update company (Admin only)
-router.put('/:id', requireAuth, async (req, res) => {
+// COMP-4: Update company.
+// Needs `company.edit` on the company. Name, email domains and division stay
+// system-admin only: they decide which company a new user is auto-assigned to
+// and how companies roll up, so they are not a company's own to change.
+router.put('/:id', requireAuth, requirePermission('company.edit', companyFrom.param('id')), async (req, res) => {
   try {
     const { id } = req.params;
     const auth = getAuthContext(req);
@@ -896,14 +841,6 @@ router.put('/:id', requireAuth, async (req, res) => {
 
     if (!existing) {
       return res.status(404).json({ error: 'Company not found' });
-    }
-
-    // Check if user has access (admin or member of company)
-    if (!auth.isAdmin && auth.companyId !== id) {
-      return res.status(403).json({
-        error: 'Permission denied',
-        message: 'You can only update your own company',
-      });
     }
 
     // Only admins can change name and domains
@@ -981,7 +918,10 @@ router.put('/:id', requireAuth, async (req, res) => {
   }
 });
 
-// COMP-5: Assign user to company (Admin only)
+// COMP-5: Assign user to company (system admin only).
+// This pulls an arbitrary user — possibly one belonging to another company —
+// into this one, so it stays a system-admin action rather than something
+// `company.manage_users` covers.
 router.post('/:id/users', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { id: companyId } = req.params;
@@ -1021,6 +961,8 @@ router.post('/:id/users', requireAuth, requireAdmin, async (req, res) => {
       },
     });
 
+    await ensureDefaultCompanyRole(updatedUser.id);
+
     res.json(updatedUser);
   } catch (error) {
     console.error('Error assigning user to company:', error);
@@ -1028,8 +970,8 @@ router.post('/:id/users', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-// COMP-6: Remove user from company (Admin only)
-router.delete('/:id/users/:userId', requireAuth, requireAdmin, async (req, res) => {
+// COMP-6: Remove user from company
+router.delete('/:id/users/:userId', requireAuth, requireCompanyUserRemoval, async (req, res) => {
   try {
     const { id: companyId, userId } = req.params;
 

@@ -5,6 +5,11 @@ import { createMagicCode, validateMagicCode, cleanupExpiredMagicCodes } from '..
 import { extractDomain, findCompanyByDomain } from '../utils/domain.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getAuthContext } from '../middleware/authContext.js';
+import {
+  getPermissionContext,
+  resetPermissionContext,
+  serializePermissionContext,
+} from '../rbac/context.js';
 import { blockWhenOktaOnly } from '../middleware/oktaOnly.js';
 import {
   isOktaConfigured,
@@ -302,7 +307,12 @@ router.get('/me', requireAuth, async (req, res) => {
       req.session.verified = user.verifiedAccount;
     }
 
-    res.json({ user });
+    // Resolve permissions after the session sync above so a company change made
+    // by an admin is reflected on the user's next /me rather than a login later.
+    resetPermissionContext(req);
+    const permissions = serializePermissionContext(await getPermissionContext(req));
+
+    res.json({ user, permissions });
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ 

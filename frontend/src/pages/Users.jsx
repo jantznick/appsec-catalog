@@ -9,10 +9,14 @@ import { Input } from '../components/ui/Input.jsx';
 import { VerifyUserModal } from '../components/users/VerifyUserModal.jsx';
 import { EditUserModal } from '../components/users/EditUserModal.jsx';
 import { DeleteUserModal } from '../components/users/DeleteUserModal.jsx';
+import { ManageRolesModal } from '../components/users/ManageRolesModal.jsx';
 import useAuthStore from '../store/authStore.js';
 
 export function Users() {
-  const { isAdmin, user: currentUser, isAuthenticated } = useAuthStore();
+  const { isAdmin, canAnywhere, user: currentUser, isAuthenticated } = useAuthStore();
+  // System admins manage roles anywhere; company admins only where they hold
+  // company.manage_roles.
+  const canManageRoles = isAdmin() || canAnywhere('company.manage_roles');
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -20,6 +24,7 @@ export function Users() {
   const [verifyModalOpen, setVerifyModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [rolesModalOpen, setRolesModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   
   // Table state
@@ -70,6 +75,17 @@ export function Users() {
     // Refresh current user if they updated themselves
     const authStore = useAuthStore.getState();
     await authStore.init();
+  };
+
+  const handleRolesClick = (user) => {
+    setSelectedUser(user);
+    setRolesModalOpen(true);
+  };
+
+  const handleRolesChanged = async () => {
+    // A user changing their own roles needs the session payload refreshed.
+    const authStore = useAuthStore.getState();
+    await authStore.refresh();
   };
 
   const handleDeleteClick = (user) => {
@@ -130,7 +146,7 @@ export function Users() {
     },
     {
       accessorKey: 'isAdmin',
-      header: 'Role',
+      header: 'System Role',
       cell: ({ row }) => {
         const isAdmin = row.original.isAdmin;
         return (
@@ -139,7 +155,7 @@ export function Users() {
               ? 'bg-purple-100 text-purple-800' 
               : 'bg-gray-100 text-gray-800'
           }`}>
-            {isAdmin ? 'Admin' : 'User'}
+            {isAdmin ? 'System Admin' : 'User'}
           </span>
         );
       },
@@ -165,6 +181,15 @@ export function Users() {
             )}
             {/* No password or invite actions: accounts and credentials are
                 managed entirely in Okta. */}
+            {canManageRoles && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleRolesClick(user)}
+              >
+                Roles
+              </Button>
+            )}
             {isAdmin() && (
               <>
                 <Button
@@ -190,7 +215,7 @@ export function Users() {
       },
       enableSorting: false,
     },
-  ], [currentUser]);
+  ], [currentUser, canManageRoles]);
 
   // Filter data based on global filter and verification filter
   const filteredData = useMemo(() => {
@@ -470,6 +495,16 @@ export function Users() {
         }}
         user={selectedUser}
         onConfirm={handleDeleteConfirm}
+      />
+
+      <ManageRolesModal
+        isOpen={rolesModalOpen}
+        onClose={() => {
+          setRolesModalOpen(false);
+          setSelectedUser(null);
+        }}
+        user={selectedUser}
+        onChanged={handleRolesChanged}
       />
 
     </div>

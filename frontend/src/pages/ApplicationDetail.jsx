@@ -29,7 +29,7 @@ import { SplitApplicationModal } from '../components/applications/SplitApplicati
 export function ApplicationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isAdmin, user } = useAuthStore();
+  const { isAdmin, can, user } = useAuthStore();
   const [application, setApplication] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -138,8 +138,12 @@ export function ApplicationDetail() {
     notes: '',
   });
 
+  // Version history and approvals are system-admin only; there is no
+  // delegatable permission for them (see backend/rbac/permissions.js).
+  const canReviewVersions = Boolean(user?.isAdmin);
+
   const loadPendingVersionsCount = useCallback(async () => {
-    if (!id || !user?.isAdmin) {
+    if (!id || !canReviewVersions) {
       setPendingVersionsCount(0);
       return;
     }
@@ -152,7 +156,7 @@ export function ApplicationDetail() {
       console.error('Failed to load pending versions count:', error);
       setPendingVersionsCount(0);
     }
-  }, [id, user?.isAdmin]);
+  }, [id, canReviewVersions]);
 
   useEffect(() => {
     loadIntegrationLevels();
@@ -168,14 +172,14 @@ export function ApplicationDetail() {
   }, [id, user?.isAdmin]);
 
   useEffect(() => {
-    if (id && user?.isAdmin) {
+    if (id && canReviewVersions) {
       loadPendingVersionsCount();
       const interval = setInterval(loadPendingVersionsCount, 30000);
       return () => clearInterval(interval);
     } else {
       setPendingVersionsCount(0);
     }
-  }, [id, user?.isAdmin, loadPendingVersionsCount]);
+  }, [id, canReviewVersions, loadPendingVersionsCount]);
 
   useEffect(() => {
     if (application && isEditing) {
@@ -1134,16 +1138,17 @@ export function ApplicationDetail() {
     }
   };
 
-  const canEdit = () => {
-    if (isAdmin()) return true;
-    if (application && user?.companyId === application.companyId) return true;
-    return false;
-  };
+  const canEdit = () => can('application.edit', application?.companyId);
 
-  // Deleting catalog records (the application itself, deployments, domain links,
-  // API schemas, threat model components) is admin-only — see requireAdmin on the
-  // matching DELETE routes in backend/routes/applications.js.
+  // Deleting the application itself, its API schema and its threat-model
+  // components is system-admin only. Domain links and deployments have their
+  // own delegatable permissions, so a Company Admin can remove those.
   const canDelete = () => isAdmin();
+  const canDeleteDomainLink = () => can('domain.delete', application?.companyId);
+  const canDeleteDeployment = () => can('deployment.delete', application?.companyId);
+
+  // Version history and the review queue.
+  const canReview = () => canReviewVersions;
 
   const handleGenerateTechnicalFormLink = async () => {
     if (!application) return;
@@ -1370,12 +1375,12 @@ export function ApplicationDetail() {
       <Tabs defaultTab={0}>
         <Tab>App Data</Tab>
         <Tab>Deployments</Tab>
-        {isAdmin() && <Tab>App Timeline</Tab>}
+        {canReview() && <Tab>App Timeline</Tab>}
         <Tab>Security</Tab>
         <Tab>Threat Model</Tab>
         {!formData.apiSecurityNA && <Tab>API Schema</Tab>}
         <Tab>Infosec Policy Compliance</Tab>
-        {isAdmin() && <Tab badge={pendingVersionsCount}>Application Metadata History</Tab>}
+        {canReview() && <Tab badge={pendingVersionsCount}>Application Metadata History</Tab>}
         <Tab>Integrations</Tab>
 
         {/* App Data Tab */}
@@ -1719,7 +1724,7 @@ export function ApplicationDetail() {
                           onAdd={handleAddDomain}
                           onRemove={handleRemoveDomain}
                           disabled={false}
-                          canRemove={canDelete()}
+                          canRemove={canDeleteDomainLink()}
                         />
                       </div>
                     </div>
@@ -1835,7 +1840,7 @@ export function ApplicationDetail() {
                           onAdd={handleAddDomain}
                           onRemove={handleRemoveDomain}
                           disabled={!canEdit()}
-                          canRemove={canDelete()}
+                          canRemove={canDeleteDomainLink()}
                         />
                       </div>
                     </div>
@@ -2050,7 +2055,7 @@ export function ApplicationDetail() {
                           <p className="text-sm text-gray-600 mt-1">{deployment.notes}</p>
                         )}
                       </div>
-                      {canDelete() && (
+                      {canDeleteDeployment() && (
                         <Button
                           variant="outline"
                           size="sm"

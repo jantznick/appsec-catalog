@@ -6,6 +6,19 @@ import { prisma } from '../prisma/client.js';
  * aren't columns on the row itself but are set inline in the same create/update transaction.
  */
 export const TRACKED_FIELDS = {
+  Application: [
+    'name', 'description', 'owner', 'repoUrl', 'companyId', 'language', 'framework',
+    'serverEnvironment', 'facing', 'deploymentType', 'authProfiles', 'dataTypes', 'status',
+    'sastTool', 'sastIntegrationLevel', 'sastIncludesSca',
+    'dastTool', 'dastIntegrationLevel',
+    'scaTool', 'scaIntegrationLevel',
+    'appFirewallTool', 'appFirewallIntegrationLevel', 'appFirewallNA',
+    'apiSecurityTool', 'apiSecurityIntegrationLevel', 'apiSecurityNA',
+    'currentVersion', 'deploymentEnvironment', 'gitBranch',
+    'lastSastScanDate', 'lastDastScanDate', 'lastScaScanDate',
+    'interfaces', 'businessCriticality', 'criticalAspects', 'devTeamContact',
+    'securityTestingDescription', 'additionalNotes', 'metadataLastReviewed',
+  ],
   Product: ['name', 'description', 'owner', 'facing', 'status', 'lifecycleStage', 'businessCriticality', 'dataSensitivity', 'complianceNotes'],
   Domain: ['name', 'description', 'owner', 'status', 'apexDomain'],
   Company: ['name', 'slug', 'domains', 'divisionId', 'engManager', 'language', 'framework', 'serverEnvironment', 'facing', 'deploymentType', 'authProfiles', 'dataTypes'],
