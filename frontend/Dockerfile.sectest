@@ -22,6 +22,12 @@ RUN npm run build
 # Production stage
 FROM nginx:alpine
 
+LABEL Product="Orbit" \
+      Application="frontend" \
+      org.opencontainers.image.title="Orbit Frontend" \
+      org.opencontainers.image.description="Orbit application security catalog web UI" \
+      org.opencontainers.image.vendor="Hearst"
+
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 RUN echo 'server { \

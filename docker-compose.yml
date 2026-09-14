@@ -1,9 +1,49 @@
 version: '3.8'
 
+# ---------------------------------------------------------------------------
+# Resource tags (Docker labels)
+# ---------------------------------------------------------------------------
+# Every container carries Product / Application / Environment labels so they
+# show up as tags in Wiz's container + image inventory, using the same keys as
+# our cloud resource tags. Product is constant (Orbit); Application identifies
+# the component.
+#
+# Environment is taken straight from NODE_ENV - the SAME variable that decides
+# how the app actually behaves (backend/server.js requires SESSION_SECRET and
+# enforces secure cookies only when NODE_ENV === 'production'). That coupling is
+# the point: the tag reports the mode the workload is really running in, so a
+# laptop or a test box started with NODE_ENV=production shows up in Wiz as
+# Environment=production and gets flagged, instead of a separate cosmetic tag
+# quietly labelling it "dev" while it runs hardened-prod config. Do not
+# decouple these - a divergence here is a finding, not a bug.
+#
+# Because the backend only hardens on the literal string 'production', any
+# instance that needs prod hardening tags as production. Distinguishing
+# staging/test from prod therefore needs a second dimension, not a different
+# NODE_ENV (see APPSEC_CATALOG_DEPLOY_ENV below).
+#
+# Product + Application are also baked into our own images via LABEL in
+# frontend/Dockerfile and backend/Dockerfile; these container labels additionally
+# cover the third-party images (postgres, caddy) and supply Environment, which
+# must not be baked into an image.
+#
+# Verify after `docker compose up -d`:
+#   docker ps --filter "label=Product=Orbit" --format '{{.Names}}'
+#   docker inspect -f '{{json .Config.Labels}}' appsec-catalog-db
+#   # every container should agree with the backend's own mode:
+#   docker compose exec backend printenv NODE_ENV
+#
+# NOTE: `docker compose up` recreates containers whose labels changed, so
+# applying or changing these restarts the stack.
+
 services:
   postgres:
     image: postgres:16-alpine
     container_name: appsec-catalog-db
+    labels:
+      Product: Orbit
+      Application: database
+      Environment: ${NODE_ENV:-production}
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-appsec}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-appsec_password}
@@ -34,6 +74,10 @@ services:
       #   docker compose build frontend
       # args:
       #   - VITE_API_URL=${FRONTEND_URL:-http://localhost:3000}
+    labels:
+      Product: Orbit
+      Application: frontend
+      Environment: ${NODE_ENV:-production}
     ports:
       - "3000:3000"
     depends_on:
@@ -45,6 +89,10 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    labels:
+      Product: Orbit
+      Application: backend
+      Environment: ${NODE_ENV:-production}
     # Optional: load env files into the container (e.g. if you don’t bake .env into the image).
     # Do not set INTEGRATIONS_ENCRYPTION_KEY= in `environment` with an empty default - that
     # blocks dotenv from filling it from a mounted/copied .env (dotenv won’t override set vars).
@@ -88,6 +136,10 @@ services:
   caddy:
     image: caddy:2-alpine
     container_name: appsec-catalog-caddy
+    labels:
+      Product: Orbit
+      Application: reverse-proxy
+      Environment: ${NODE_ENV:-production}
     restart: unless-stopped
     ports:
       - "80:80"      # HTTP (redirects to HTTPS)
