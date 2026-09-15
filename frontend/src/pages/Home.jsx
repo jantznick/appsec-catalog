@@ -539,12 +539,18 @@ export function Home() {
             </div>
           ))}
         </div>
-        <div className="mt-6 flex items-center justify-center gap-3 rounded-2xl bg-grape-600/10 border border-grape-500/20 px-6 py-4 text-center">
+        {/* The one place on this page that names the shared content, so it
+            doubles as the public entry point to the program content catalog. */}
+        <Link
+          to="/program-content"
+          className="mt-6 flex items-center justify-center gap-3 rounded-2xl bg-grape-600/10 border border-grape-500/20 px-6 py-4 text-center transition-colors hover:bg-grape-600/15 hover:border-grape-500/40"
+        >
           <FiBookOpen className="text-grape-600" />
           <p className="text-sm font-medium text-gray-700">
-            Every member gets a shared library of best practices, standards, and guidelines.
+            Every member gets a shared library of best practices, standards, and guidelines —{' '}
+            <span className="text-grape-600">see what&apos;s published</span>
           </p>
-        </div>
+        </Link>
       </Section>
 
       {/* =========================== ATLAS =========================== */}

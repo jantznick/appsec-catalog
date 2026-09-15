@@ -50,6 +50,51 @@ async function apiRequest(endpoint, options = {}) {
   }
 }
 
+/**
+ * Upload a single file as multipart/form-data.
+ *
+ * Separate from apiRequest because that always sets a JSON Content-Type, and
+ * multipart bodies must be left alone — the browser generates the boundary,
+ * and setting the header manually produces a request the server can't parse.
+ */
+async function uploadRequest(endpoint, { fields = {}, file = null, method = 'POST' } = {}) {
+  const body = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined || value === null) continue;
+    body.append(key, String(value));
+  }
+  if (file) body.append('file', file);
+
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    method,
+    body,
+    credentials: 'include',
+  });
+
+  const text = await response.text();
+  if (!response.ok) {
+    let data = {};
+    if (text.trim()) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { error: text.slice(0, 500) };
+      }
+    }
+    const err = new Error(data.message || data.error || 'Upload failed');
+    err.status = response.status;
+    err.body = data;
+    throw err;
+  }
+
+  if (response.status === 204 || !text.trim()) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
 export const api = {
   // Auth endpoints
   register: (email, password) =>
@@ -1122,5 +1167,71 @@ export const api = {
     apiRequest(`/api/applications/${encodeURIComponent(applicationId)}/threat-model/ai-draft`, {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+
+  // ---- Program content (ASCOE sessions, Champions packages) ---------------
+  // `program` is 'ascoe' or 'champions'.
+  getPublicProgramContent: () => apiRequest('/api/program-content/public'),
+  getProgramReleases: (program) =>
+    apiRequest(`/api/program-content/${encodeURIComponent(program)}`),
+  getProgramRelease: (program, slug) =>
+    apiRequest(
+      `/api/program-content/${encodeURIComponent(program)}/${encodeURIComponent(slug)}`
+    ),
+
+  // ---- Program content, admin authoring -----------------------------------
+  getProgramReleasesAdmin: (program, status) =>
+    apiRequest(
+      `/api/program-content/admin/${encodeURIComponent(program)}${
+        status ? `?status=${encodeURIComponent(status)}` : ''
+      }`
+    ),
+  getProgramReleaseAdmin: (program, id) =>
+    apiRequest(`/api/program-content/admin/${encodeURIComponent(program)}/${encodeURIComponent(id)}`),
+  createProgramRelease: (program, data) =>
+    apiRequest(`/api/program-content/admin/${encodeURIComponent(program)}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateProgramRelease: (program, id, data) =>
+    apiRequest(
+      `/api/program-content/admin/${encodeURIComponent(program)}/${encodeURIComponent(id)}`,
+      { method: 'PUT', body: JSON.stringify(data) }
+    ),
+  deleteProgramRelease: (program, id) =>
+    apiRequest(
+      `/api/program-content/admin/${encodeURIComponent(program)}/${encodeURIComponent(id)}`,
+      { method: 'DELETE' }
+    ),
+  /**
+   * Creates the asset and, when a file is given, stores it in the same request
+   * so the server can accept a file-only asset (no link) atomically.
+   */
+  createContentAsset: (data, file = null) =>
+    file
+      ? uploadRequest('/api/program-content/admin/assets', { fields: data, file })
+      : apiRequest('/api/program-content/admin/assets', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+  updateContentAsset: (id, data) =>
+    apiRequest(`/api/program-content/admin/assets/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteContentAsset: (id) =>
+    apiRequest(`/api/program-content/admin/assets/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+  reorderContentAssets: (order) =>
+    apiRequest('/api/program-content/admin/assets/reorder', {
+      method: 'PUT',
+      body: JSON.stringify({ order }),
+    }),
+  uploadContentAssetFile: (id, file) =>
+    uploadRequest(`/api/program-content/admin/assets/${encodeURIComponent(id)}/file`, { file }),
+  removeContentAssetFile: (id) =>
+    apiRequest(`/api/program-content/admin/assets/${encodeURIComponent(id)}/file`, {
+      method: 'DELETE',
     }),
 };

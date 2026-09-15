@@ -36,6 +36,10 @@ model User {
   aiAccessRules          AiAccessRule[]
   handledProgramInfoRequests ProgramInfoRequest[] @relation("ProgramInfoRequestHandler")
   changeHistoryEntries   ChangeHistory[]
+  ascoeSessionsAuthored  AscoeSession[]     @relation("AscoeSessionAuthor")
+  championsPackagesAuthored ChampionsPackage[] @relation("ChampionsPackageAuthor")
+  contentAssetsUploaded  ContentAsset[]     @relation("ContentAssetUploader")
+  contentAssetDownloads  ContentAssetDownload[] @relation("ContentAssetDownloader")
   roleAssignments        UserRole[]                  @relation("UserRoleSubject")
   grantedRoleAssignments UserRole[]                  @relation("UserRoleGrantor")
 }
@@ -253,6 +257,9 @@ model Company {
   aiRequests            AiRequest[]
   aiAccessRules         AiAccessRule[]
   changeHistoryEntries  ChangeHistory[]
+  ascoeSessionAccess    AscoeSessionCompany[]
+  championsPackageAccess ChampionsPackageCompany[]
+  contentAssetDownloads ContentAssetDownload[]
   roles                 Role[] // company-owned custom roles (none yet; see Role.companyId)
   roleAssignments       UserRole[]
   updatedById           String? // User ID who last updated this company's metadata
@@ -1405,4 +1412,195 @@ model AiAccessRule {
 
   @@unique([companyId, userId, feature])
   @@index([companyId])
+}
+
+// ---------------------------------------------------------------------------
+// Program content distribution — ASCOE sessions and Security Champions
+// packages, plus the materials attached to them. See PROGRAM_CONTENT_PLAN.md.
+//
+// The two programs get separate release models because they genuinely differ:
+// ASCOE is hosted BY the AppSec team (no facilitator to brief), while a
+// Champions package exists to be handed to a member company to run. They share
+// one ContentAsset table so the file-handling machinery exists once.
+//
+// Visibility is governed by `status` alone. `publishedAt` records when a
+// release first went out and is never cleared — it answers "when did this go
+// out", not "is this visible", so unpublishing keeps the original date.
+// ---------------------------------------------------------------------------
+
+/// One AppSec Center of Excellence gathering (quarterly), upcoming or past,
+/// and the materials shared around it.
+model AscoeSession {
+  id          String    @id @default(cuid())
+  slug        String    @unique /// URL key, e.g. "q3-2026"
+  title       String
+  periodLabel String /// "Q3 2026"
+  sessionDate DateTime? /// Drives ordering and the upcoming-vs-past split
+  location    String? /// "Virtual (Teams)", "NYC — 300 W 57th"
+
+  /// Member-facing prose. Plain text rendered as paragraphs (see renderBody in
+  /// the frontend) — deliberately not Markdown.
+  summary String? @db.Text
+  body    String? @db.Text
+
+  /// Marketing blurb shown on the public catalog to anonymous visitors.
+  publicSummary String? @db.Text
+
+  /// Whether this appears on the public catalog. Independent of `audienceScope`:
+  /// the public catalog carries no company identifiers, so a company-targeted
+  /// session can still be advertised.
+  isPubliclyListed Boolean @default(false)
+
+  status      String    @default("draft") /// draft | published
+  publishedAt DateTime? /// Set on first publish, never cleared
+
+  /// "all" = every verified member, ongoing (new companies get the back
+  /// catalog automatically). "companies" = only those in `companies`.
+  /// Defaults to the narrower value so a lost audience list fails closed.
+  audienceScope String @default("companies")
+
+  companies AscoeSessionCompany[]
+  assets    ContentAsset[]
+
+  createdBy String?
+  author    User?    @relation("AscoeSessionAuthor", fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, sessionDate])
+  @@index([status, isPubliclyListed])
+  @@index([createdBy])
+}
+
+/// A monthly ready-to-run Security Champions meeting package.
+model ChampionsPackage {
+  id          String   @id @default(cuid())
+  slug        String   @unique /// URL key, e.g. "2026-09"
+  title       String
+  periodLabel String /// "September 2026"
+  periodStart DateTime /// First of the month; ordering + "current package"
+  theme       String? /// "Phishing & Social Engineering"
+
+  summary String? @db.Text
+  body    String? @db.Text
+
+  /// The "how to run this meeting" narrative for whoever hosts it. Prose, not
+  /// a handout — files belong in the `facilitator` asset section instead.
+  facilitatorNotes String? @db.Text
+
+  publicSummary    String? @db.Text
+  isPubliclyListed Boolean @default(false)
+
+  status      String    @default("draft")
+  publishedAt DateTime?
+
+  audienceScope String @default("companies")
+
+  companies ChampionsPackageCompany[]
+  assets    ContentAsset[]
+
+  createdBy String?
+  author    User?    @relation("ChampionsPackageAuthor", fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, periodStart])
+  @@index([status, isPubliclyListed])
+  @@index([createdBy])
+}
+
+/// Which companies may see a targeted ASCOE session. Only consulted when the
+/// session's audienceScope is "companies".
+model AscoeSessionCompany {
+  sessionId String
+  session   AscoeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, companyId])
+  @@index([companyId])
+}
+
+/// Which companies may see a targeted Champions package.
+model ChampionsPackageCompany {
+  packageId String
+  package   ChampionsPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([packageId, companyId])
+  @@index([companyId])
+}
+
+/// A single piece of material attached to a release: a file, a link, or both.
+/// Exactly one parent FK is set — enforced in the route layer, since Prisma has
+/// no cross-column check constraint.
+model ContentAsset {
+  id String @id @default(cuid())
+
+  ascoeSessionId String?
+  ascoeSession   AscoeSession?     @relation(fields: [ascoeSessionId], references: [id], onDelete: Cascade)
+  packageId      String?
+  package        ChampionsPackage? @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  /// slide_deck | recording | document | article | game | challenge | link.
+  /// Drives the badge/icon only.
+  kind String @default("document")
+
+  /// Display grouping, NOT a permission: agenda | pre_read | facilitator |
+  /// materials | activity | recording. Everyone who can see the release can see
+  /// every section; this only controls which heading it appears under.
+  section String @default("materials")
+
+  title        String
+  description  String? @db.Text
+  displayOrder Int     @default(0) /// Sorts within a section
+
+  /// Link to the material at its source (SharePoint/OneDrive). Independent of
+  /// the uploaded copy below — both may be set, and usually are.
+  externalUrl String? @db.Text
+
+  /// SharePoint/Stream "Embed.aspx" URL for inline playback. Host-allowlisted
+  /// server-side, because it goes straight into an iframe src.
+  embedUrl String? @db.Text
+
+  /// Uploaded copy. Phase 2 populates these; the columns exist now so adding
+  /// uploads needs no migration. `storagePath` is always server-generated —
+  /// never client input — and `fileName` is kept only for Content-Disposition.
+  storagePath    String?
+  fileName       String?
+  mimeType       String?
+  sizeBytes      Int?
+  checksumSha256 String?
+
+  uploadedBy String?
+  uploader   User?    @relation("ContentAssetUploader", fields: [uploadedBy], references: [id], onDelete: SetNull)
+  downloads  ContentAssetDownload[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([ascoeSessionId, section, displayOrder])
+  @@index([packageId, section, displayOrder])
+}
+
+/// One row per download of an uploaded asset — who picked up which content.
+/// Populated in Phase 2 alongside the download route.
+model ContentAssetDownload {
+  id      String       @id @default(cuid())
+  assetId String
+  asset   ContentAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  userId String?
+  user   User?   @relation("ContentAssetDownloader", fields: [userId], references: [id], onDelete: SetNull)
+
+  /// Denormalized so adoption reporting survives the user being reassigned or
+  /// deleted.
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([assetId, createdAt])
+  @@index([companyId, createdAt])
+  @@index([userId])
 }

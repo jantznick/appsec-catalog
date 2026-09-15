@@ -42,6 +42,9 @@ import { Settings } from './pages/Settings.jsx';
 import { SammAssessments } from './pages/SammAssessments.jsx';
 import { Docs } from './pages/Docs.jsx';
 import { ProgramInfoRequests } from './pages/ProgramInfoRequests.jsx';
+import { ProgramContent } from './pages/ProgramContent.jsx';
+import { ProgramReleaseDetail } from './pages/ProgramReleaseDetail.jsx';
+import { ProgramContentAdmin } from './pages/ProgramContentAdmin.jsx';
 
 function CatchAllRedirect() {
   const { isAuthenticated, isVerified, loading } = useAuthStore();
@@ -118,6 +121,27 @@ function App() {
             <Layout>
               <Docs />
             </Layout>
+          }
+        />
+
+        {/* Program content - public hub (marketing catalog when logged out,
+            member delivery when signed in). The detail pages are members-only. */}
+        <Route
+          path="/program-content"
+          element={
+            <Layout>
+              <ProgramContent />
+            </Layout>
+          }
+        />
+        <Route
+          path="/program-content/:program/:slug"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProgramReleaseDetail />
+              </Layout>
+            </ProtectedRoute>
           }
         />
 
@@ -208,6 +232,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <ProductUpdatesAdmin />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/program-content"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProgramContentAdmin />
               </Layout>
             </ProtectedRoute>
           }
