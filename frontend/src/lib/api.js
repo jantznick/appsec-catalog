@@ -161,6 +161,25 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // Roles & permissions (RBAC)
+  getRoles: () => apiRequest('/api/roles'),
+
+  getPermissionCatalog: () => apiRequest('/api/roles/permissions'),
+
+  getUserRoleAssignments: (userId) =>
+    apiRequest(`/api/roles/assignments?userId=${encodeURIComponent(userId)}`),
+
+  grantRole: ({ userId, roleId, companyId = null }) =>
+    apiRequest('/api/roles/assignments', {
+      method: 'POST',
+      body: JSON.stringify({ userId, roleId, companyId }),
+    }),
+
+  revokeRole: (assignmentId) =>
+    apiRequest(`/api/roles/assignments/${assignmentId}`, {
+      method: 'DELETE',
+    }),
+
   // Company management
   getCompanies: (filters = {}) => {
     const params = new URLSearchParams();

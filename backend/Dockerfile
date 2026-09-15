@@ -1,6 +1,17 @@
 # Backend Dockerfile
 FROM node:24-alpine
 
+# Resource tags, baked into the image so Wiz picks them up from the image as
+# well as the running container. Keys deliberately match the cloud resource-tag
+# keys (Product / Application / Environment) so the same Wiz filters and rules
+# work across VMs and containers. Environment is NOT baked in (one image runs in
+# every environment) - docker-compose applies it per container.
+LABEL Product="Orbit" \
+      Application="backend" \
+      org.opencontainers.image.title="Orbit Backend" \
+      org.opencontainers.image.description="Orbit application security catalog API" \
+      org.opencontainers.image.vendor="Hearst"
+
 WORKDIR /app
 
 # Runtime libraries required by bundled Chrome for Puppeteer

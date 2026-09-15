@@ -1,6 +1,7 @@
 import { prisma } from '../prisma/client.js';
 import { extractDomain, findCompanyByDomain } from './domain.js';
 import { getGroupsFromClaims } from '../services/oktaClient.js';
+import { ensureDefaultCompanyRole } from '../rbac/defaults.js';
 
 /**
  * Determine whether the given Okta ID token claims grant app-admin rights.
@@ -94,12 +95,14 @@ export async function provisionOktaUser(claims) {
         data.companyId = company.id;
       }
     }
-    return prisma.user.update({ where: { id: user.id }, data });
+    const updated = await prisma.user.update({ where: { id: user.id }, data });
+    await ensureDefaultCompanyRole(updated.id);
+    return updated;
   }
 
   // 2) Auto-provision a brand-new Okta user.
   const company = await findCompanyByDomain(extractDomain(email));
-  return prisma.user.create({
+  const created = await prisma.user.create({
     data: {
       email,
       password: null, // Okta-only user; password login is unavailable
@@ -109,4 +112,6 @@ export async function provisionOktaUser(claims) {
       companyId: company?.id || null,
     },
   });
+  await ensureDefaultCompanyRole(created.id);
+  return created;
 }

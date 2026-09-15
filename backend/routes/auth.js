@@ -5,6 +5,11 @@ import { createMagicCode, validateMagicCode, cleanupExpiredMagicCodes } from '..
 import { extractDomain, findCompanyByDomain } from '../utils/domain.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getAuthContext } from '../middleware/authContext.js';
+import {
+  getPermissionContext,
+  resetPermissionContext,
+  serializePermissionContext,
+} from '../rbac/context.js';
 import { blockWhenOktaOnly } from '../middleware/oktaOnly.js';
 import {
   isOktaConfigured,
@@ -178,11 +183,15 @@ router.post('/request-magic-code', blockLocalLoginWhenOktaOnly, async (req, res)
     console.log(`\n🔑 Magic Code for ${user.email}: ${code}`);
     console.log(`   Expires at: ${expiresAt.toISOString()}\n`);
 
-    res.json({
-      ...genericResponse,
-      // In production, don't return the code. For development, we can return it.
-      ...(process.env.NODE_ENV !== 'production' && { code }),
-    });
+    // NEVER return the code in the response, in any environment. The console
+    // log above is the only retrieval path by design (which is what the generic
+    // response message tells the user to do). Returning it made
+    // /request-magic-code + /login-magic a complete unauthenticated auth bypass
+    // on any deployment where NODE_ENV was unset or not exactly 'production'
+    // and Okta was not configured: request a code for any known email, read it
+    // out of the response, redeem it, and you hold that user's session with
+    // their isAdmin flag.
+    res.json(genericResponse);
   } catch (error) {
     console.error('Magic code request error:', error);
     res.status(500).json({ 
@@ -302,7 +311,12 @@ router.get('/me', requireAuth, async (req, res) => {
       req.session.verified = user.verifiedAccount;
     }
 
-    res.json({ user });
+    // Resolve permissions after the session sync above so a company change made
+    // by an admin is reflected on the user's next /me rather than a login later.
+    resetPermissionContext(req);
+    const permissions = serializePermissionContext(await getPermissionContext(req));
+
+    res.json({ user, permissions });
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ 

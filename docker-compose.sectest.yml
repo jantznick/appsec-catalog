@@ -30,11 +30,28 @@
 # Tear it down (leaves prod untouched; add -v to also wipe the test volumes):
 #   docker compose -p appsec-sectest -f docker-compose.sectest.yml down
 
+# Resource tags: same Product / Application / Environment label scheme as the
+# prod compose file (see docker-compose.yml for the rationale). Environment
+# comes from NODE_ENV, which this file pins to `production` in the backend
+# service's `environment:` block because the app only enforces SESSION_SECRET
+# and secure cookies on that literal string.
+#
+# So this stack tags as Environment=production, same as prod. That is accurate
+# and deliberate - it IS running production-mode config - but it means the two
+# stacks on this host are NOT separable by the Environment tag alone. Tell them
+# apart in Wiz by container name (appsec-sectest-* vs appsec-catalog-*) or by
+# the com.docker.compose.project label Compose adds automatically:
+#   docker ps --filter "label=com.docker.compose.project=appsec-sectest"
+
 services:
   postgres:
     image: postgres:16-alpine
     # No container_name -> Compose names it appsec-sectest-postgres-1 (no clash
     # with the prod "appsec-catalog-db" container).
+    labels:
+      Product: Orbit
+      Application: database
+      Environment: ${NODE_ENV:-production}
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-sectest}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sectest_password}
@@ -59,6 +76,10 @@ services:
         # published port (8081), same server IP as the frontend.
         # (Dockerfile.sectest enables this ARG; the prod Dockerfile is untouched.)
         - VITE_API_URL=${BACKEND_ORIGIN:-http://localhost:8081}
+    labels:
+      Product: Orbit
+      Application: frontend
+      Environment: ${NODE_ENV:-production}
     ports:
       - "${FRONTEND_HTTP_PORT:-8080}:3000"
     depends_on:
@@ -70,6 +91,10 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    labels:
+      Product: Orbit
+      Application: backend
+      Environment: ${NODE_ENV:-production}
     # The prod entrypoint runs `prisma migrate deploy`, but this repo's migration
     # history is mis-ordered: the `_init` migration that CREATES the tables is
     # dated (20251219) AFTER several ALTER migrations (20241223...), so on a fresh

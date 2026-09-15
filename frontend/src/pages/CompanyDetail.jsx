@@ -23,7 +23,7 @@ import { CompanySecurityCoverageSection } from '../components/company-detail/Com
 export function CompanyDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isAdmin, user } = useAuthStore();
+  const { isAdmin, can, user } = useAuthStore();
   const [company, setCompany] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -166,11 +166,11 @@ export function CompanyDetail() {
     }
   };
 
-  // Helper function to check if user can edit company fields
-  const canEditCompany = () => {
-    return isAdmin() || user?.companyId === id;
-  };
-  const canExportSecurityFindings = () => isAdmin() || user?.companyId === id;
+  // Company profile fields. Name, email domains and division are separately
+  // gated to system admins below — those decide user auto-assignment and
+  // roll-up, so they are not a company's own to change.
+  const canEditCompany = () => can('company.edit', id);
+  const canExportSecurityFindings = () => can('company.read', id);
 
   const handleDownloadTechnicalFormLinks = async () => {
     if (!id) return;
@@ -269,9 +269,8 @@ export function CompanyDetail() {
   };
 
   const handleSave = async () => {
-    // Check if user has access (admin or member of company)
-    if (!isAdmin() && user?.companyId !== id) {
-      toast.error('You can only update your own company');
+    if (!canEditCompany()) {
+      toast.error('You do not have permission to update this company');
       return;
     }
 

@@ -8,6 +8,10 @@ const PendingApprovalsContext = createContext(null);
  * Shared poller for the admin notification badges. Counts are kept separate
  * (they link to different pages and mean different things) but share one
  * interval so we're not running several timers against the same session.
+ *
+ * Both queues are system-admin only: metadata approvals have no delegatable
+ * permission (see backend/rbac/permissions.js) and public information requests
+ * span every company.
  */
 export function PendingApprovalsProvider({ children }) {
   const { user } = useAuthStore();
