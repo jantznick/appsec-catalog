@@ -79,6 +79,34 @@ const DOC_GROUPS = [
         ],
       },
       {
+        // The six lifecycle phases are children of the overview because they're
+        // genuinely sub-pages of one topic, not six peers — the overview holds
+        // what would otherwise be repeated on all six (the work-item/output
+        // model, entry/exit criteria, how risk tiers modulate the work).
+        //
+        // Slugs deliberately carry no phase number: the ordinal lives in the
+        // nav title and each page's H1, so renumbering or inserting a phase
+        // doesn't invalidate every inbound link and control reference.
+        //
+        // A slug registered here without a matching file in docs/platform
+        // returns a 500, so register a phase only once its file exists.
+        title: 'The Lifecycle',
+        pages: [
+          {
+            slug: 'program-lifecycle',
+            title: 'The Lifecycle',
+            children: [
+              { slug: 'phase-plan-design', title: 'Phase 1 — Plan & Design' },
+              { slug: 'phase-build-commit', title: 'Phase 2 — Build & Commit' },
+              { slug: 'phase-ci-gate', title: 'Phase 3 — CI Gate' },
+              { slug: 'phase-release-deploy', title: 'Phase 4 — Release & Deploy' },
+              { slug: 'phase-runtime-operate', title: 'Phase 5 — Runtime & Operate' },
+              { slug: 'phase-improve-govern', title: 'Phase 6 — Improve & Govern' },
+            ],
+          },
+        ],
+      },
+      {
         title: 'Community Programs',
         pages: [
           { slug: 'program-center-of-excellence', title: 'AppSec Center of Excellence' },
