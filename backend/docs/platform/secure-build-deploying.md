@@ -79,7 +79,8 @@ Orbit is the application catalog Hearst's AppSec team works from. Getting yours 
 
 - **It's on the map.** If a serious flaw turns up in a library you use, the people checking can see that you use it.
 - **It's checked against security policy automatically**, and scored, so you can see what's covered and what isn't.
-- **Someone who does this for a living looks at it.** That catches problems that are hard to spot from the inside — like a database that anyone can read.
+- **The AppSec team reviews it.** A second set of eyes catches what's easy to miss from inside your own project — like a database that anyone can read.
+- **It's held to the same standard as everything else.** Your application is checked against the HTS Information Security Policy and covered by the same [six-phase security review](/docs/program-lifecycle) as applications built by full engineering teams — see [You're held to the same standard](/docs/secure-build-prelaunch#youre-held-to-the-same-standard).
 
 **You don't need an Orbit account.** The [onboarding forms](/docs/getting-started) work without a login, on purpose.
 

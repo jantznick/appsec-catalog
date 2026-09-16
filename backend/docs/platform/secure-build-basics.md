@@ -63,4 +63,4 @@ How much of that is really yours depends on how you deploy. Managed hosting take
 
 **Add the rules file to your project.** [Working with Your AI Agent](/docs/secure-build-agent) gives you a file to drop in that makes your assistant apply the four things above by default, whether or not you remember them.
 
-**Register the application in Orbit** once anyone other than you can reach it. That's what gets it checked by someone who does this for a living — see [Deploying Your Application](/docs/secure-build-deploying#5-register-it-in-orbit). You don't need an account.
+**Register the application in Orbit** once anyone other than you can reach it — see [Deploying Your Application](/docs/secure-build-deploying#5-register-it-in-orbit). You don't need an account. That gets it reviewed by the AppSec team, and puts it under the [same security review](/docs/secure-build-prelaunch#youre-held-to-the-same-standard) as every other application the company runs.

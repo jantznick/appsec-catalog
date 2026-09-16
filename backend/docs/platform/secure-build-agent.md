@@ -189,7 +189,7 @@ Being honest about the limits, because the rules file can make things feel more 
 
 **Add your application to Orbit as soon as anyone other than you can reach it.**
 
-Orbit is Hearst's application catalog. Listing yours means the security team knows it exists, it's checked against policy automatically, and someone looks at it for problems that are hard to spot from the inside — like a database that anyone can read.
+Orbit is Hearst's application catalog. Listing yours means the security team knows it exists, it's checked against the HTS Information Security Policy automatically, and the AppSec team reviews it for what's easy to miss from inside your own project — like a database that anyone can read. It also puts your application under the [same security review](/docs/secure-build-prelaunch#youre-held-to-the-same-standard) as everything else the company runs — and your assistant can work through most of that review with you.
 
 **You don't need an Orbit account.** The [onboarding forms](/docs/getting-started) work without a login — a short business form about what the application is, then a technical form you can fill in yourself or hand to someone who knows that side.
 

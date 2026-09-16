@@ -76,9 +76,21 @@ Everything else is worth fixing but not worth panicking over.
 
 ## Then register it
 
-If you haven't already, put the application in Orbit. It takes a couple of minutes, you don't need an account, and it's what gets your application checked by people who do this for a living — see [Deploying Your Application](/docs/secure-build-deploying#5-register-it-in-orbit).
+If you haven't already, put the application in Orbit. It takes a couple of minutes and you don't need an account — see [Deploying Your Application](/docs/secure-build-deploying#5-register-it-in-orbit).
 
 Make sure what you enter about **hosting, whether the internet can reach it, and what data it handles** is accurate. Those three answers determine which security requirements apply to you, so a wrong answer there means you're measured against the wrong bar.
+
+## You're held to the same standard
+
+Once it's in Orbit, your application isn't treated as a lesser thing for having been built quickly by one person. It goes into the same catalog as everything else the company runs — checked against the same **HTS Information Security Policy**, scored the same way, and covered by the same [six-phase security review](/docs/program-lifecycle) as applications built by full engineering teams.
+
+That's meant to be reassuring rather than daunting:
+
+- **You don't have to work out what "secure enough" means.** The [policy baseline](/docs/program-policy-baseline) defines it, and your application's Infosec Policy Compliance view shows where you stand, control by control.
+- **Nobody has to take your word for it.** Your score and compliance come from your catalog record, not from a conversation about how careful you've been.
+- **Your assistant can do most of the work.** Each phase of the review has fill-in templates — a risk tier worksheet, a security requirements template, a threat model. Point your assistant at [Plan & Design](/docs/phase-plan-design) and ask it to work through them with you.
+
+Follow the basics in this section and keep your Orbit record accurate, and you can be confident your application is in line with the standard — rather than hoping it is.
 
 ## If something goes wrong later
 
