@@ -104,23 +104,20 @@ export const APPLICATION_METADATA_FIELDS = Object.freeze(
     { key: 'appFirewallNA', label: 'Application Firewall Not Applicable', group: 'security', type: 'boolean', versioned: true, approvable: true, splittable: true },
 
     // --- Deployment metadata ------------------------------------------------
-    // currentVersion, gitBranch and deploymentEnvironment describe a particular running
-    // copy rather than the application, and are slated to move to a per-environment
-    // entity; deploymentEnvironment is expected to be deleted rather than relocated,
-    // since its only job is recording which environment a row describes. lastDastScanDate
-    // moves with them because DAST runs against a deployed URL. The SAST and SCA scan
-    // dates stay: they describe a commit and a dependency manifest, not a deployment.
-    // When that lands, those four entries come out of this list - which is the point of
-    // having one list.
+    // These four describe a particular running copy rather than the application, and are
+    // written by the deployment paths. They are NOT approvable: no intake form posts
+    // them, so a pending version can only ever carry a stale copy taken at submit time,
+    // and applying it would revert whatever a deploy or an admin set since. They stay
+    // versioned so history still shows when they changed.
     //
-    // They are already `approvable: false`, ahead of that removal, because they are
-    // already derived: both deployment write paths now resolve the submitted
-    // environment and write the deployed version and branch onto an
-    // ApplicationEnvironment, and lastDastScanDate is per-instance in the schema.
-    // Approving a months-old pending version would otherwise write a stale version or
-    // environment back over what a deploy had just set - the same silent regression
-    // that the SAST and SCA dates are protected from below. They stay `versioned: true`
-    // so the history still records what the columns held.
+    // They are slated to move to a per-environment entity (deploymentEnvironment being
+    // deleted rather than relocated, since its only job is recording which environment a
+    // row describes). When that lands these entries leave this list entirely - which is
+    // the point of having one list.
+    //
+    // The SAST and SCA scan dates below stay on the application: they describe a commit
+    // and a dependency manifest, not a deployment. They are also not approvable, because
+    // they are derived from scanner integrations.
     { key: 'currentVersion', label: 'Current Version', group: 'deployment', type: 'string', versioned: true, approvable: false, splittable: true },
     { key: 'deploymentEnvironment', label: 'Deployment Environment', group: 'deployment', type: 'string', versioned: true, approvable: false, splittable: true },
     { key: 'gitBranch', label: 'Git Branch', group: 'deployment', type: 'string', versioned: true, approvable: false, splittable: true },
