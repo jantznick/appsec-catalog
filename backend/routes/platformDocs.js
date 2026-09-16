@@ -133,6 +133,12 @@ const DOC_GROUPS = [
         title: 'Start Here',
         pages: [{ slug: 'secure-build-agent', title: 'Working with Your AI Agent' }],
       },
+      {
+        // Reading order matters more than usual in this group: the later
+        // sections assume the concepts here, so pages land in sequence.
+        title: 'Understanding What You\'re Building',
+        pages: [{ slug: 'secure-build-deploying', title: 'What "Deploying" Actually Means' }],
+      },
     ],
   },
 ];

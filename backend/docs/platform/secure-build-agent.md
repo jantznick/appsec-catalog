@@ -108,6 +108,29 @@ Then check:
 - When you add a package, say in one line why it's needed.
 - Commit the lockfile.
 
+## Registering this in Orbit
+
+Orbit is our company's application catalog. Once this application is
+reachable by anyone other than me, it needs to be in there — that's what
+gets it checked for the kinds of misconfiguration I can't see myself.
+
+- The first time we deploy somewhere other people can reach, tell me to
+  register it, and offer to help me answer the technical questions.
+- Keep a file called ORBIT.md in this project with the answers the
+  onboarding form asks for, and update it whenever they change:
+    - What this application does, in one or two sentences
+    - Who owns it, and a contact for the team
+    - Whether people outside the company can reach it
+    - Where it's hosted
+    - The repository URL
+    - What kind of data it handles, and where that data is stored
+    - Whether it touches payment, health, or personal data
+    - Which other applications it talks to
+    - Which security tools already cover it
+- Tell me when a change makes any of those answers out of date —
+  especially if it becomes reachable from the internet, or starts
+  handling a new kind of personal data.
+
 ## How to work with me
 
 - Before a change that affects who can access what, or how data is
@@ -160,10 +183,14 @@ Being honest about the limits, because the rules file can make things feel more 
 - **Anything outside the code it can see.** A misconfigured setting in your hosting provider's dashboard is invisible to it.
 - **Whether it silently did something it shouldn't.** The rules reduce that a lot; they don't eliminate it. The questions above are how you check.
 
-## When this becomes something real
+## Register it in Orbit
 
-If other people start depending on what you've built — particularly if it holds anyone else's data, or is reachable from the internet — it should be in the application catalog, so somebody other than you knows it exists.
+Do this as soon as anyone other than you can reach your application — not eventually. It's the step that gets your application the security checks you can't run yourself.
 
-You don't need an account to do that. The [onboarding forms](/docs/getting-started) work without a login, on purpose: a business contact describes the application at a high level, and whoever knows the technical side fills in the rest. From there it gets a security score, gets checked against policy, and stops being something only you know about.
+There's a whole category of problem that's invisible from the inside: a database configured so the key your browser holds can read every row, a storage bucket anyone can list, an admin page with no login. Your application works exactly the same either way, which is precisely why these ship. Being in the catalog is what points those checks at you.
 
-That's also the point at which the [AppSec program lifecycle](/docs/program-lifecycle) starts being useful to you rather than being overkill — particularly [Plan & Design](/docs/phase-plan-design), which has a worksheet for working out how much protection your application actually warrants.
+**You don't need an Orbit account.** The [onboarding forms](/docs/getting-started) work without a login, on purpose — a short business form about what the application is, then a technical form you can fill in yourself or hand to someone who knows that side.
+
+The rules file above has your assistant keep an `ORBIT.md` in your project with the answers already written down, so registering is a copy-and-paste rather than an interview. Ask it: *"Fill in ORBIT.md for this project."*
+
+[What "Deploying" Actually Means](/docs/secure-build-deploying) covers what registration involves in more detail. Once your application is in the catalog, the [AppSec program lifecycle](/docs/program-lifecycle) is where it goes next — particularly [Plan & Design](/docs/phase-plan-design), which has a worksheet for working out how much protection it actually needs.
