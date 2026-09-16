@@ -3343,10 +3343,16 @@ router.get('/:id/deployments', requireAuth, async (req, res) => {
       });
     }
 
-    // Get deployments ordered by most recent first
+    // Get deployments ordered by most recent first. The resolved environment comes
+    // along so the client can tell an assigned deployment from one whose submitted
+    // `environment` string matched nothing - those are shown as unassigned, with the
+    // raw string, rather than silently looking like a valid environment.
     const deployments = await prisma.deployment.findMany({
       where: { applicationId: id },
       orderBy: { deployedAt: 'desc' },
+      include: {
+        environmentRef: { select: { id: true, name: true, kind: true, status: true } },
+      },
     });
 
     res.json(deployments);

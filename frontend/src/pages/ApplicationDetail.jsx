@@ -26,6 +26,13 @@ import { useRepoLinkFlow } from '../hooks/useRepoLinkFlow.jsx';
 import { ThreatModelTab } from '../components/threat-model/ThreatModelTab.jsx';
 import { SplitApplicationModal } from '../components/applications/SplitApplicationModal.jsx';
 
+/**
+ * Sentinel for the deployment environment filter. Not a real environment name, and
+ * prefixed so it cannot collide with one - environment names are lower-cased free
+ * text, so a literal like "unassigned" could legitimately exist.
+ */
+const UNASSIGNED_FILTER = '__unassigned__';
+
 export function ApplicationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -292,13 +299,27 @@ export function ApplicationDetail() {
     }
   };
 
-  // Filter deployments by environment
-  const filteredDeployments = deploymentEnvironmentFilter
-    ? allDeployments.filter(d => d.environment === deploymentEnvironmentFilter)
-    : allDeployments;
+  // A deployment is unassigned when the environment string its pipeline sent matched
+  // none of the company's environments. It is still recorded - the raw string is kept -
+  // but it is not attributed to an environment until someone matches it up.
+  const isUnassignedDeployment = (deployment) => !deployment.environmentId;
+  const deploymentEnvironmentName = (deployment) =>
+    deployment.environmentRef?.name || deployment.environment;
 
-  // Get unique environments from all deployments
-  const availableEnvironments = [...new Set(allDeployments.map(d => d.environment))].sort();
+  // Filter deployments by environment. UNASSIGNED_FILTER selects the unmatched ones.
+  const filteredDeployments = !deploymentEnvironmentFilter
+    ? allDeployments
+    : deploymentEnvironmentFilter === UNASSIGNED_FILTER
+      ? allDeployments.filter(isUnassignedDeployment)
+      : allDeployments.filter(
+        d => !isUnassignedDeployment(d) && deploymentEnvironmentName(d) === deploymentEnvironmentFilter,
+      );
+
+  // Environments actually represented in this application's deployment history.
+  const availableEnvironments = [...new Set(
+    allDeployments.filter(d => !isUnassignedDeployment(d)).map(deploymentEnvironmentName),
+  )].sort();
+  const unassignedDeploymentCount = allDeployments.filter(isUnassignedDeployment).length;
 
   // Format environment label for display
   const formatEnvironmentLabel = (env) => {
@@ -2001,7 +2022,7 @@ export function ApplicationDetail() {
                       Add Deployment
                     </Button>
                   )}
-                  {availableEnvironments.length > 0 && (
+                  {(availableEnvironments.length > 0 || unassignedDeploymentCount > 0) && (
                     <select
                       value={deploymentEnvironmentFilter}
                       onChange={(e) => {
@@ -2015,6 +2036,11 @@ export function ApplicationDetail() {
                       {availableEnvironments.map(env => (
                         <option key={env} value={env}>{formatEnvironmentLabel(env)}</option>
                       ))}
+                      {unassignedDeploymentCount > 0 && (
+                        <option value={UNASSIGNED_FILTER}>
+                          Unassigned ({unassignedDeploymentCount})
+                        </option>
+                      )}
                     </select>
                   )}
                 </div>
@@ -2038,9 +2064,21 @@ export function ApplicationDetail() {
                           <span className="font-medium text-gray-900">
                             {new Date(deployment.deployedAt).toLocaleDateString()}
                           </span>
-                          <span className="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">
-                            {deployment.environment}
-                          </span>
+                          {isUnassignedDeployment(deployment) ? (
+                            // Shown in a warning colour with the raw submitted string, so a
+                            // pipeline sending a name nobody defined is visible and fixable
+                            // rather than looking like a valid environment.
+                            <span
+                              className="px-2 py-1 text-xs font-medium rounded bg-amber-100 text-amber-900"
+                              title="This environment name does not match any of the company's environments, so the deployment is not attributed to one."
+                            >
+                              {deployment.environment} · unassigned
+                            </span>
+                          ) : (
+                            <span className="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">
+                              {deploymentEnvironmentName(deployment)}
+                            </span>
+                          )}
                           {deployment.version && (
                             <span className="text-sm text-gray-600">v{deployment.version}</span>
                           )}
