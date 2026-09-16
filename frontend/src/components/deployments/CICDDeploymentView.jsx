@@ -32,6 +32,7 @@ export function CICDDeploymentView({
   const [hasCapturedInitialState, setHasCapturedInitialState] = useState(false); // Track if we've captured initial state
   const [frontendUrl, setFrontendUrl] = useState('');
   const [commandTab, setCommandTab] = useState('curl'); // 'curl' or 'wget'
+  const [environmentNames, setEnvironmentNames] = useState([]);
 
   // The backend already filters by companyId, so all tokens in deploymentTokens are valid
   const hasToken = deploymentTokens && deploymentTokens.length > 0;
@@ -45,6 +46,31 @@ export function CICDDeploymentView({
     // Load all tokens when component mounts
     loadAllTokens();
   }, []); // Only run on mount
+
+  // Load the company's environment names. A CI push's `environment` value has to match
+  // one of these or the deployment is recorded unassigned, so the sample payload below
+  // shows the real names instead of a generic placeholder.
+  useEffect(() => {
+    if (!applicationCompanyId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await api.getEnvironments({
+          companyId: applicationCompanyId,
+          status: 'active',
+        });
+        if (!cancelled) {
+          setEnvironmentNames(Array.isArray(rows) ? rows.map((row) => row.name).filter(Boolean) : []);
+        }
+      } catch {
+        // Non-fatal: the sample command falls back to a generic placeholder.
+        if (!cancelled) setEnvironmentNames([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [applicationCompanyId]);
 
   // Capture initial state the first time deploymentTokens has data (after loading completes)
   useEffect(() => {
@@ -115,6 +141,19 @@ export function CICDDeploymentView({
   // Use plaintextToken if available (from creation), otherwise use token field
   const tokenValue = displayToken?.plaintextToken || displayToken?.token || displayToken?.tokenHash || '';
 
+  // What to show for `environment` in the sample payload. One environment needs no
+  // choice, several are offered as alternatives, and none falls back to the old generic
+  // placeholder rather than showing an empty set. Capped so a company with a long list
+  // does not produce an unreadable command.
+  const MAX_SHOWN_ENVIRONMENTS = 6;
+  const environmentPlaceholder = (() => {
+    if (environmentNames.length === 0) return '{env}';
+    if (environmentNames.length === 1) return environmentNames[0];
+    const shown = environmentNames.slice(0, MAX_SHOWN_ENVIRONMENTS);
+    const suffix = environmentNames.length > MAX_SHOWN_ENVIRONMENTS ? '|...' : '';
+    return `{${shown.join('|')}${suffix}}`;
+  })();
+
   // Generate curl command
   const generateCurlCommand = () => {
     const apiUrl = `${frontendUrl}/api/deployment-tokens`;
@@ -126,7 +165,7 @@ export function CICDDeploymentView({
     "token": "${token}",
     "applicationId": "${applicationId}",
     "deployedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-    "environment": "{env}",
+    "environment": "${environmentPlaceholder}",
     "version": "{version}",
     "gitBranch": "{gitBranch}",
     "deployedBy": "CI/CD Pipeline",
@@ -145,7 +184,7 @@ export function CICDDeploymentView({
     "token": "${token}",
     "applicationId": "${applicationId}",
     "deployedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-    "environment": "{env}",
+    "environment": "${environmentPlaceholder}",
     "version": "{version}",
     "gitBranch": "{gitBranch}",
     "deployedBy": "CI/CD Pipeline",
@@ -322,9 +361,27 @@ export function CICDDeploymentView({
 
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
             <p className="text-sm text-yellow-800">
-              <strong>Note:</strong> Replace the example values (environment, version, gitBranch, etc.) with your actual deployment data. 
+              <strong>Note:</strong> Replace the example values (version, gitBranch, etc.) with your actual deployment data.
               The token is pre-filled and should be kept secure.
             </p>
+            {environmentNames.length > 0 ? (
+              <p className="mt-2">
+                <strong>environment</strong> must be one of{' '}
+                {environmentNames.map((name, index) => (
+                  <span key={name}>
+                    {index > 0 && ', '}
+                    <code className="font-mono">{name}</code>
+                  </span>
+                ))}
+                . Anything else is still recorded, but arrives unassigned until someone
+                matches it to an environment.
+              </p>
+            ) : (
+              <p className="mt-2">
+                This company has no environments defined yet, so deployments will arrive
+                unassigned whatever <strong>environment</strong> is sent.
+              </p>
+            )}
           </div>
         </div>
       )}
