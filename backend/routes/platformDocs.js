@@ -115,6 +115,26 @@ const DOC_GROUPS = [
       },
     ],
   },
+  {
+    // A third audience: people building applications without a platform team,
+    // a pipeline, or an engineering background — increasingly with an AI
+    // coding assistant. Deliberately pitched below the program track: it
+    // starts at what a deployment and a server actually are, because a reader
+    // who doesn't have that model can't act on anything further up.
+    //
+    // Needs a GROUP_ACCENTS entry in frontend/src/pages/Docs.jsx keyed by this
+    // exact title, or it renders in the same blue as the Orbit documentation.
+    //
+    // More pages are planned (see LIFECYCLE_PHASES_PLAN.md); they land in
+    // reading order, since the later sections assume the earlier ones.
+    title: 'Building Securely',
+    sections: [
+      {
+        title: 'Start Here',
+        pages: [{ slug: 'secure-build-agent', title: 'Working with Your AI Agent' }],
+      },
+    ],
+  },
 ];
 
 function flattenPages(groups) {

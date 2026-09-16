@@ -20,6 +20,11 @@ const GROUP_ACCENTS = {
     chip: 'bg-teal-50 text-teal-700',
     eyebrow: 'text-teal-700',
   },
+  'Building Securely': {
+    tabActive: 'border-violet-500 text-violet-600',
+    chip: 'bg-violet-50 text-violet-700',
+    eyebrow: 'text-violet-700',
+  },
 };
 const DEFAULT_ACCENT = GROUP_ACCENTS['Using Orbit'];
 

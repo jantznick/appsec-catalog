@@ -844,32 +844,68 @@ is worse than no docs, because the reader concludes the whole program isn't for 
 mapping back to the six phases should be exactly one light "here's how this grows up" note, not
 phase scaffolding on every page.
 
-### What this audience actually gets wrong
+### Start lower than feels necessary
 
-Worth ordering the content by real-world frequency rather than by framework completeness. In rough
-order of how often it causes an actual incident:
+My first draft of this section aimed at someone already on a modern hosting stack and listed traps
+like "Supabase or Firebase with row-level security never enabled." That was pitched too high. Per
+your note, this audience needs the layer underneath that: **what a deployment actually is, what a
+server is, what it means to expose something to the world versus keep it internal.** Someone who
+doesn't know what a port is cannot act on advice about row-level security, and a page that assumes
+they do teaches them that these docs aren't for them.
+
+So the track starts at concepts, not at traps. The traps matter, but they're the third section, not
+the first.
+
+**Concepts — what is actually happening**
+
+Someone who has only ever run `npm run dev` has no model of any of this, and every security decision
+later depends on having one:
+
+- Your laptop versus a computer somewhere else — what "deploying" means, and what changes when you do
+- What a server is, and what it means for a program to "listen" on a port
+- **Who can reach it**: localhost, your own network, your company's internal network, the public
+  internet — the single most important distinction on this track
+- How a domain name finds your server, and what DNS is doing
+- What HTTPS protects, and what it doesn't
+- Where your data physically lives once it isn't on your laptop
+
+**Decisions — the choices you'll be asked to make**
+
+Each of these is a fork where the secure option and the convenient option differ, and where the
+reader currently has no basis to choose:
+
+- Where to run it: managed hosting, a virtual machine you administer, or your own machine — with the
+  security trade-off of each stated plainly (a VM you rent is a computer *you* are now responsible
+  for patching; managed hosting takes that away from you)
+- **Internal-only or open to the world**, and how to actually enforce the answer
+- Whether it needs logins at all, and using a provider rather than building one
+- Where configuration and secrets live, once "in the code" stops being acceptable
+- What happens to your data: backups, and who can read it
+
+**Traps — the specific ways this goes wrong**
+
+Now the framework-specific material earns its place, ordered by how often it causes a real incident:
 
 1. **Secrets in the wrong place.** A `.env` committed to a public repo. An API key in frontend code
-   that ships to the browser — `NEXT_PUBLIC_`-prefixed variables are the classic version, and the
-   agent will happily add one if asked to "make the API call work."
-2. **Database left open.** Supabase or Firebase with row-level security never enabled, so the
-   anon key reads every row in every table. This is the single most common vibe-coded breach, and
-   the app works perfectly in testing either way — which is exactly why it ships.
-3. **Rolling their own auth.** Hand-written session handling, passwords in a table, a JWT signed
-   with a hardcoded string.
-4. **No authorization checks.** Authentication works; nothing verifies the logged-in user owns the
-   record they just requested by ID.
-5. **Unvalidated input reaching something dangerous** — a query, a shell command, an HTML render,
-   a file path.
-6. **Accidentally public.** A tunnel left running, a preview URL indexed, an admin route with no
-   guard, debug mode on in production.
+   that ships to every visitor's browser — the reader needs to understand that "frontend" means
+   "downloaded by anyone," which is itself a concept from the first section.
+2. **A database anyone can read.** Managed database services are commonly set up with a key that
+   the browser holds and no per-row restrictions, so one request reads every row. The application
+   behaves identically either way, which is exactly why it ships.
+3. **Hand-rolled logins.** Passwords in a table, sessions invented from scratch.
+4. **No ownership checks.** Login works; nothing verifies the logged-in user owns the record they
+   just asked for by changing a number in the URL.
+5. **Unvalidated input reaching something dangerous** — a database query, a shell command, a page
+   render, a file path.
+6. **Accidentally public.** A tunnel left running, a preview URL indexed by Google, an admin page
+   with no login, debug mode left on.
 
 **This is the real "starting from zero" audience.** A company inside the program usually has some
-tooling and needs it configured properly; a vibe-coded app has nothing at all, and its author
-doesn't know the categories exist. So the zero-to-one content — here is Semgrep, here is how to run
-it, here is what it found and what to do about it — belongs on this track, with the program's
+tooling and needs it configured properly. A vibe-coded application has nothing, and its author
+doesn't know the categories exist — or, more fundamentally, doesn't yet know what putting something
+on the internet involves. So the zero-to-one content belongs here, with the program's
 [guided tool setup](#stage-35--guided-tool-setup-and-basic-open-source-checks) as the grown-up
-version of the same thing. Both should exist; they should point at each other rather than repeat.
+version. Both should exist and point at each other rather than repeat.
 
 ### Proposed shape
 
@@ -878,27 +914,41 @@ A **third top-level doc group**, alongside `Using Orbit` and `The AppSec Program
 ```
 Building Securely                        ← new group
 ├── Start Here
-│   ├── secure-build-start         Shipping Something Safely
+│   ├── secure-build-start         Start Here: What You're About to Do
 │   └── secure-build-agent         Working with Your AI Agent
-├── The Six Things That Matter
-│   ├── secure-build-secrets       Keys, Secrets & Config
-│   ├── secure-build-data          Your Database & Who Can Read It
-│   ├── secure-build-auth          Logins & Permissions
-│   ├── secure-build-input         Handling What Users Send You
-│   ├── secure-build-deploy        Putting It Online
-│   └── secure-build-local         Running & Demoing It Safely
+├── Understanding What You're Building
+│   ├── secure-build-deploying     What "Deploying" Actually Means
+│   ├── secure-build-servers       Servers, Ports & Listening
+│   ├── secure-build-who-can-reach Who Can Reach It: Local, Internal, Public
+│   └── secure-build-domains       Domains, DNS & HTTPS
+├── Decisions You'll Have to Make
+│   ├── secure-build-where-to-run  Where to Run It
+│   ├── secure-build-exposure      Internal-Only or Open to the World
+│   ├── secure-build-logins        Logins & Who Can Do What
+│   ├── secure-build-secrets       Keys, Secrets & Configuration
+│   └── secure-build-data          Your Data: Where It Lives, Who Can Read It
 └── Before You Share It
+    ├── secure-build-local         Running & Demoing It Safely
     └── secure-build-prelaunch     Pre-Launch Checklist
 ```
+
+Thirteen pages, but each one is short — this audience is served better by one idea per page than by
+five comprehensive pages they bounce off. Sequence matters more than usual here: the "Decisions"
+section is unreadable without the "Understanding" section, so they should land in order.
+
+**Register.** Second person, short sentences, no unexplained jargon, and every term defined the
+first time it appears. The tone to aim for is a patient colleague, not a specification. Worth
+testing a draft on someone who has genuinely never deployed anything — the failure mode is invisible
+to whoever wrote it.
 
 Two implementation notes for this group:
 
 - `GROUP_ACCENTS` in [Docs.jsx](frontend/src/pages/Docs.jsx) is keyed by group title and falls back
   to the `Using Orbit` blue. A third group needs its own accent entry, or it'll be visually
   indistinguishable from the Orbit documentation.
-- **The platform docs API requires no authentication.** That's a real advantage here: this track can
-  be linked to anyone in any Hearst company without an Orbit account, which matters because the
-  people who most need it are the ones not yet in the program.
+- **The platform docs API requires no authentication.** A real advantage here: this track can be
+  linked to anyone in any Hearst company without an Orbit account, which matters because the people
+  who most need it are the ones not yet in the program.
 
 ### The agent rules file
 
