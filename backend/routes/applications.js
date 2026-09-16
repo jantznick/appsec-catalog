@@ -16,6 +16,7 @@ import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { getApexDomain } from '../utils/domainApex.js';
 import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
 import { createApplicationVersion, createVersionFromData, applyApprovedVersion } from '../utils/applicationVersion.js';
+import { compareVersions } from '../services/applicationFields.js';
 import { syncReciprocalInterfaces, parseInterfaceIds } from '../utils/applicationInterfaces.js';
 import {
   SPLITTABLE_METADATA_FIELDS,
@@ -3737,7 +3738,6 @@ router.get('/:id/versions/compare/:v1/:v2', requireAuth, requireAdmin, async (re
     }
 
     // Import compare function
-    const { compareVersions } = await import('../utils/applicationVersion.js');
     const comparison = compareVersions(version1, version2);
 
     res.json({
@@ -3841,76 +3841,6 @@ router.get('/:id/versions/:versionNumber', requireAuth, requireAdmin, async (req
 });
 
 // Compare two versions
-router.get('/:id/versions/compare/:v1/:v2', requireAuth, requireAdmin, async (req, res) => {
-  try {
-    const { id, v1, v2 } = req.params;
-    const version1Num = parseInt(v1);
-    const version2Num = parseInt(v2);
-
-    if (isNaN(version1Num) || isNaN(version2Num)) {
-      return res.status(400).json({ error: 'Invalid version numbers' });
-    }
-
-    // Verify application exists
-    const application = await prisma.application.findUnique({
-      where: { id },
-      select: { id: true, name: true },
-    });
-
-    if (!application) {
-      return res.status(404).json({ error: 'Application not found' });
-    }
-
-    // Get both versions
-    const [version1, version2] = await Promise.all([
-      prisma.applicationVersion.findFirst({
-        where: {
-          applicationId: id,
-          versionNumber: version1Num,
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-            },
-          },
-        },
-      }),
-      prisma.applicationVersion.findFirst({
-        where: {
-          applicationId: id,
-          versionNumber: version2Num,
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-            },
-          },
-        },
-      }),
-    ]);
-
-    if (!version1 || !version2) {
-      return res.status(404).json({ error: 'One or both versions not found' });
-    }
-
-    // Import compare function
-    const { compareVersions } = await import('../utils/applicationVersion.js');
-    const comparison = compareVersions(version1, version2);
-
-    res.json({
-      version1,
-      version2,
-      comparison,
-    });
-  } catch (error) {
-    console.error('Error comparing application versions:', error);
-    res.status(500).json({ error: 'Failed to compare application versions' });
-  }
-});
 
 // ============================================================================
 // REVIEW HISTORY (Admin only)

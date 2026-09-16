@@ -1,4 +1,15 @@
 import { prisma } from '../prisma/client.js';
+import {
+  APPROVABLE_METADATA_FIELDS,
+  compareVersions,
+  isApprovableMetadataField,
+  pickVersionedMetadata,
+} from '../services/applicationFields.js';
+
+// Re-exported so existing importers keep working. The implementation lives in
+// services/applicationFields.js, which imports no Prisma and is therefore unit
+// testable; this module cannot be.
+export { compareVersions };
 
 /**
  * Create a new version snapshot of an application's metadata
@@ -36,44 +47,9 @@ export async function createApplicationVersion(applicationId, userId = null, cha
         createdBy: userId,
         changeSource,
         approvalStatus: status, // pending, approved, or rejected
-        // Copy all metadata fields
-        name: application.name,
-        description: application.description,
-        owner: application.owner,
-        repoUrl: application.repoUrl,
-        language: application.language,
-        framework: application.framework,
-        serverEnvironment: application.serverEnvironment,
-        facing: application.facing,
-        deploymentType: application.deploymentType,
-        authProfiles: application.authProfiles,
-        dataTypes: application.dataTypes,
-        status: application.status,
-        businessCriticality: application.businessCriticality,
-        criticalAspects: application.criticalAspects,
-        devTeamContact: application.devTeamContact,
-        securityTestingDescription: application.securityTestingDescription,
-        additionalNotes: application.additionalNotes,
-        sastTool: application.sastTool,
-        sastIntegrationLevel: application.sastIntegrationLevel,
-        sastIncludesSca: application.sastIncludesSca,
-        dastTool: application.dastTool,
-        dastIntegrationLevel: application.dastIntegrationLevel,
-        scaTool: application.scaTool,
-        scaIntegrationLevel: application.scaIntegrationLevel,
-        appFirewallTool: application.appFirewallTool,
-        appFirewallIntegrationLevel: application.appFirewallIntegrationLevel,
-        apiSecurityTool: application.apiSecurityTool,
-        apiSecurityIntegrationLevel: application.apiSecurityIntegrationLevel,
-        apiSecurityNA: application.apiSecurityNA,
-        appFirewallNA: application.appFirewallNA,
-        currentVersion: application.currentVersion,
-        deploymentEnvironment: application.deploymentEnvironment,
-        gitBranch: application.gitBranch,
-        lastDastScanDate: application.lastDastScanDate,
-        lastSastScanDate: application.lastSastScanDate,
-        lastScaScanDate: application.lastScaScanDate,
-        interfaces: application.interfaces,
+        // Every metadata field, from the single registry. metadataLastReviewed is
+        // deliberately not part of a snapshot.
+        ...pickVersionedMetadata(application),
       },
     });
 
@@ -83,74 +59,6 @@ export async function createApplicationVersion(applicationId, userId = null, cha
     // Don't throw - versioning is supplementary, don't fail the main operation
     return null;
   }
-}
-
-/**
- * Compare two versions and return the fields that changed
- * @param {Object} version1 - First version object
- * @param {Object} version2 - Second version object
- * @returns {Object} Object with changedFields array and diff object
- */
-export function compareVersions(version1, version2) {
-  const changedFields = [];
-  const diff = {};
-
-  // List of fields to compare (excluding metadata fields like id, createdAt, etc.)
-  const fieldsToCompare = [
-    'name', 'description', 'owner', 'repoUrl', 'language', 'framework',
-    'serverEnvironment', 'facing', 'deploymentType', 'authProfiles', 'dataTypes',
-    'status', 'businessCriticality', 'criticalAspects', 'devTeamContact',
-    'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel', 'sastIncludesSca',
-    'dastTool', 'dastIntegrationLevel', 'scaTool', 'scaIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
-    'apiSecurityTool', 'apiSecurityIntegrationLevel', 'apiSecurityNA',
-    'appFirewallNA',
-    'currentVersion', 'deploymentEnvironment', 'gitBranch',
-    'lastDastScanDate', 'lastSastScanDate', 'lastScaScanDate', 'interfaces',
-  ];
-
-  for (const field of fieldsToCompare) {
-    const val1 = version1[field];
-    const val2 = version2[field];
-
-    // Handle different data types
-    let val1Normalized;
-    let val2Normalized;
-
-    // Handle dates - compare as ISO strings
-    if (field.includes('Date') || field.includes('date')) {
-      val1Normalized = val1 ? new Date(val1).toISOString() : null;
-      val2Normalized = val2 ? new Date(val2).toISOString() : null;
-    }
-    // Handle booleans
-    else if (typeof val1 === 'boolean' || typeof val2 === 'boolean') {
-      val1Normalized = val1 === true ? 'true' : (val1 === false ? 'false' : null);
-      val2Normalized = val2 === true ? 'true' : (val2 === false ? 'false' : null);
-    }
-    // Handle numbers
-    else if (typeof val1 === 'number' || typeof val2 === 'number') {
-      val1Normalized = val1 !== null && val1 !== undefined ? String(val1) : null;
-      val2Normalized = val2 !== null && val2 !== undefined ? String(val2) : null;
-    }
-    // Handle null/undefined for strings
-    else {
-      val1Normalized = val1 === null || val1 === undefined ? null : String(val1).trim();
-      val2Normalized = val2 === null || val2 === undefined ? null : String(val2).trim();
-    }
-
-    // Compare normalized values
-    if (val1Normalized !== val2Normalized) {
-      changedFields.push(field);
-      diff[field] = {
-        from: val1,
-        to: val2,
-      };
-    }
-  }
-
-  return {
-    changedFields,
-    diff,
-  };
 }
 
 /**
@@ -241,19 +149,16 @@ export async function applyApprovedVersion(applicationId, version, approvedField
   try {
     const updateData = {};
 
-    // If approvedFields is null, apply all fields
-    // Otherwise, only apply the specified fields
-    const fieldsToApply = approvedFields || [
-      'name', 'description', 'owner', 'repoUrl', 'language', 'framework',
-      'serverEnvironment', 'facing', 'deploymentType', 'authProfiles', 'dataTypes',
-      'status', 'businessCriticality', 'criticalAspects', 'devTeamContact',
-      'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel', 'sastIncludesSca',
-      'dastTool', 'dastIntegrationLevel', 'scaTool', 'scaIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
-      'apiSecurityTool', 'apiSecurityIntegrationLevel', 'apiSecurityNA',
-      'appFirewallNA',
-      'currentVersion', 'deploymentEnvironment', 'gitBranch',
-      'lastDastScanDate', 'lastSastScanDate', 'lastScaScanDate', 'interfaces',
-    ];
+    // null/undefined means "apply every approvable field"; an explicit list means only
+    // those. An empty array therefore applies nothing, which is deliberate — approving
+    // zero fields must not be read as approving all of them.
+    const requestedFields = approvedFields || APPROVABLE_METADATA_FIELDS;
+
+    // Derived fields are never applied, even if a caller names them explicitly. Their
+    // value in a snapshot is a historical record, not something to write back: applying
+    // an old scan date over the current one would silently regress the freshness
+    // component of the tool score.
+    const fieldsToApply = requestedFields.filter(isApprovableMetadataField);
 
     for (const field of fieldsToApply) {
       if (version[field] !== undefined) {
