@@ -72,11 +72,20 @@ describe('registry matches the lists it replaced', () => {
     );
   });
 
-  it('makes every versioned field approvable except the derived scan dates', () => {
-    // lastSastScanDate and lastScaScanDate are derived from scanner integrations, so a
-    // version records them for history but an approval must never write them back.
+  it('excludes the derived fields from approval', () => {
+    // No intake form posts any of these six, so a pending version can only carry a
+    // stale copy taken at submit time. Applying it would revert whatever a deploy,
+    // a scanner integration or an admin set in the meantime. They stay versioned so
+    // history still records when they changed.
     const notApprovable = VERSIONED_METADATA_FIELDS.filter((k) => !APPROVABLE_METADATA_FIELDS.includes(k));
-    assert.deepEqual(notApprovable.sort(), ['lastSastScanDate', 'lastScaScanDate']);
+    assert.deepEqual(notApprovable.sort(), [
+      'currentVersion',
+      'deploymentEnvironment',
+      'gitBranch',
+      'lastDastScanDate',
+      'lastSastScanDate',
+      'lastScaScanDate',
+    ]);
   });
 
   it('excludes exactly name, status and interfaces from splits', () => {
@@ -126,7 +135,10 @@ describe('isApprovableMetadataField', () => {
     assert.equal(isApprovableMetadataField('sastTool'), true);
     assert.equal(isApprovableMetadataField('lastSastScanDate'), false);
     assert.equal(isApprovableMetadataField('lastScaScanDate'), false);
-    assert.equal(isApprovableMetadataField('lastDastScanDate'), true, 'still a submitter claim today');
+    assert.equal(isApprovableMetadataField('lastDastScanDate'), false, 'written by the deploy path');
+    assert.equal(isApprovableMetadataField('currentVersion'), false);
+    assert.equal(isApprovableMetadataField('deploymentEnvironment'), false);
+    assert.equal(isApprovableMetadataField('gitBranch'), false);
     assert.equal(isApprovableMetadataField('nope'), false);
     assert.equal(isApprovableMetadataField('constructor'), false);
   });
