@@ -127,17 +127,27 @@ const DOC_GROUPS = [
     //
     // More pages are planned (see LIFECYCLE_PHASES_PLAN.md); they land in
     // reading order, since the later sections assume the earlier ones.
+    // Deliberately a short, instructional track rather than a curriculum:
+    // four pages of "do this", with the concepts folded into <details>
+    // glossaries next to the instruction that needs them. A reader here wants
+    // their application online without doing something regrettable — not an
+    // understanding of ports.
     title: 'Building Securely',
     sections: [
       {
         title: 'Start Here',
-        pages: [{ slug: 'secure-build-agent', title: 'Working with Your AI Agent' }],
+        pages: [
+          { slug: 'secure-build-basics', title: 'Application Basics' },
+          { slug: 'secure-build-agent', title: 'Working with Your AI Agent' },
+        ],
       },
       {
-        // Reading order matters more than usual in this group: the later
-        // sections assume the concepts here, so pages land in sequence.
-        title: 'Understanding What You\'re Building',
-        pages: [{ slug: 'secure-build-deploying', title: 'What "Deploying" Actually Means' }],
+        title: 'Getting It Online',
+        pages: [
+          { slug: 'secure-build-deploying', title: 'Deploying Your Application' },
+          { slug: 'secure-build-data', title: 'Logins & Other People\'s Data' },
+          { slug: 'secure-build-prelaunch', title: 'Before You Share It' },
+        ],
       },
     ],
   },

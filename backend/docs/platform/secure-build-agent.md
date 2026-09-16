@@ -2,6 +2,8 @@
 
 If you're building an application with an AI coding assistant — Claude Code, Cursor, Copilot, or anything similar — this page gives you a file to drop into your project that makes the assistant build more safely by default.
 
+New to this? Start with [Application Basics](/docs/secure-build-basics).
+
 You don't need to understand every line of it. Your agent does, and that's the point.
 
 ## Why this exists

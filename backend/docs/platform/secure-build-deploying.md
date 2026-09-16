@@ -1,89 +1,77 @@
-# What "Deploying" Actually Means
+# Deploying Your Application
 
-You've built something and it works on your computer. "Deploying" is the step where it starts running somewhere else, so other people can use it.
+Deploying means your code stops running on your computer and starts running on one that isn't yours, so other people can use it.
 
-This page explains what actually changes when you do that — because almost every security decision you'll make later depends on understanding it.
-
-## Where you are right now
-
-When you run something like `npm run dev` and open `localhost:3000` in your browser, here's what's happening:
-
-- **A program is running on your computer.** It's waiting for requests and answering them.
-- **`localhost` means "this computer."** That address doesn't work from anyone else's machine. Not your colleague's, not your phone.
-- **It stops when you stop it.** Close the terminal, shut your laptop, and it's gone.
-- **Nobody else can reach it.** Not because it's protected, but because there's no path to it from outside your machine.
-
-That last point is worth sitting with. Right now your application is safe mostly by accident. Nothing about it is locked down — it's just unreachable.
-
-## What changes when you deploy
-
-Deploying means putting your code on a computer that isn't yours, that stays on, and that other people can reach. Three things change at once.
-
-**1. Someone else can reach it.** This is the big one. Instead of being unreachable, your application now answers requests from whoever can get to it — which might be just you, might be people inside your company's network, or might be anyone on the internet. **This is a choice you make, and it's easy to make it accidentally.**
-
-**2. Your data lives somewhere else.** Whatever your application stores now sits on a computer in a data centre, probably in a database you didn't set up by hand. You're responsible for it being there, and for who can read it.
-
-**3. It keeps running when you're not looking.** At 3am on a Sunday it's still up, still answering requests, still running whatever version you last pushed. Anything wrong with it is wrong continuously, not just while you're at your desk.
+Three things change when you do that: **who can reach it**, **where your data lives**, and the fact that **it keeps running when you're not looking**. The steps below are about getting those three right.
 
 <details>
-<summary>The words people will use, in plain terms</summary>
+<summary>Words people will use</summary>
 
 | Word | What it means |
 |---|---|
-| **Server** | A computer that stays on and answers requests from other computers. Your laptop acts as one while you're developing. |
-| **Host / hosting** | The company whose computers you're renting to run your application. |
-| **Deploy** | Copy your code onto that computer and start it running. |
-| **`localhost` / `127.0.0.1`** | "This computer." Only reachable from the machine it's running on. |
-| **Port** | A numbered door on a computer. Your app waits at one — `3000` in `localhost:3000`. A door has to be open for anyone to come through. |
-| **Environment** | Which copy you're talking about. `development` is on your laptop, `production` is the real one people use, `staging` is a practice copy. |
-| **Domain** | The name people type, like `example.com`, which points at your server's actual address. |
-| **HTTPS** | The `https://` version of a web address. It scrambles traffic between your visitor and your server so others on the network can't read it. |
+| **Server** | A computer that stays on and answers requests. Your laptop acts as one while you're building. |
+| **Host / hosting** | The company whose computers you rent to run your application. |
+| **Deploy** | Put your code on that computer and start it running. |
+| **`localhost`** | "This computer." Only reachable from the machine it's running on — which is why your app is currently unreachable by anyone else. |
+| **Port** | A numbered door on a computer. Your app waits at one — the `3000` in `localhost:3000`. |
+| **Environment** | Which copy you mean. `development` is on your laptop, `production` is the real one people use. |
+| **Domain** | The name people type, like `example.com`. Your host has a page explaining how to point one at your application. |
+| **HTTPS** | The `https://` version of an address. It stops others on the network reading your visitors' traffic. Your host almost certainly sets this up for you — just check it's on. |
+| **Environment variable** | A setting you give your application from outside the code. Where your passwords and keys belong. |
 
 </details>
 
-## What you become responsible for
-
-This is the part nobody mentions. Once your application is deployed, some things become yours to look after that weren't before:
-
-- **Who can reach it**, and whether that's what you intended
-- **The data it holds** — where it is, who can read it, and whether you could get it back if it were lost
-- **Keeping it patched.** Depending on how you deploy, you may now be responsible for security updates on the computer itself, not just your own code
-- **Knowing when something's wrong.** Nobody will tell you unless something is watching
-
-How much of that is yours depends heavily on *how* you deploy, which is the next choice.
-
-## The three basic ways to do it
-
-A quick orientation. Each has a very different amount of responsibility attached.
+## 1. Pick where to run it
 
 | | What it is | What you look after |
 |---|---|---|
-| **Managed hosting** | You connect your code and the platform runs it — Vercel, Netlify, Render, Heroku, Azure App Service and similar | Your code, your settings, your data. The platform patches the underlying computer. |
-| **A virtual server you rent** | You rent a whole computer in a data centre and install everything yourself — an AWS EC2 instance, a DigitalOcean droplet, an Azure VM | Everything. Your code *and* the operating system, its updates, its firewall, who can log into it. |
-| **Your own machine** | Your laptop or an office computer, made reachable from outside | Everything, plus the security of your own network |
+| **Managed hosting** | You connect your code and the platform runs it — Vercel, Netlify, Render, Azure App Service and similar | Your code, your settings, your data |
+| **A server you rent** | You rent a whole computer and install everything yourself — an AWS EC2 instance, a DigitalOcean droplet | Everything, including keeping the computer itself patched and locked down |
+| **Your own machine** | Your laptop or an office computer, opened up to the outside | Everything, plus your own network |
 
-**If you're not sure, use managed hosting.** It takes the largest category of work — keeping a server patched and locked down — off your plate entirely. Renting a virtual server gives you more control and hands you a computer that is now *your* responsibility to secure, which is a real job and not an obvious one.
+**If you're not sure, use managed hosting.** It takes the biggest job — keeping a server patched — off your plate entirely. Renting a server hands you a computer that's now yours to secure, which is real ongoing work.
 
-Making your own machine reachable from the internet is the option to be most careful with. It means opening a path from outside into your home or office network, and the consequences of getting it wrong reach beyond the application itself.
+Opening up your own machine is the one to avoid. It creates a path from the internet into your home or office network, and the consequences of getting that wrong reach past the application.
 
-## The one question to ask every time
+## 2. Move your secrets off your machine
 
-Before any deploy, and after any change to how it's hosted:
+A secret is anything that grants access: an API key, a database password, a token.
+
+- **Take them out of your code.** If a password is typed into a file, move it to an environment variable.
+- **Put the real values in your hosting platform's settings.** Every managed host has a page for this, usually called Environment Variables or Config.
+- **Make sure `.env` isn't in your repository.** Add `.env` and `.env.*` to `.gitignore`. If you already committed one, the password in it must be changed — deleting the file isn't enough, because it's still in the history.
+- **Never put a secret in frontend code.** Anything your browser downloads, your visitors can read. If a call needs a secret, it has to happen on the server.
+
+Ask your assistant: *"Show me everywhere a key or password is used, and where each one comes from."*
+
+## 3. Decide who can reach it
+
+The question to ask before every deploy:
 
 > **Who can reach this right now?**
 
-There are four meaningfully different answers:
+Four meaningfully different answers:
 
-1. **Only me**, on this machine
-2. **People on my local network** — the same office or home wifi
+1. **Only me**
+2. **People on my local network** — same office or home wifi
 3. **People on the company network**, including over VPN
 4. **Anyone on the internet**
 
-Most people building something for the first time assume they're at 2 or 3 when they're actually at 4. Managed hosting platforms deploy to the public internet by default, because that's what most people want — so unless you did something specific, assume 4 and check.
+**Most managed hosting puts you at 4 by default**, because that's what most people want. People deploying for the first time often assume they're at 2 or 3. Check rather than assume — ask your assistant, or open the address on your phone using mobile data instead of wifi.
 
-If you're using an AI assistant, ask it directly: *"Who can reach this right now — just me, our network, or the whole internet?"* It's the highest-value question on this page.
+If it should be internal only, that's something your host or your IT team configures — it isn't a setting in your code.
 
-## Put it in Orbit at the same time
+Two things that quietly put you at 4 when you didn't mean to: a **preview or staging URL** that search engines can find, and a **tunnel** (ngrok, Cloudflare Tunnel) left running after you finished demoing.
+
+## 4. Turn off the things that helped you build it
+
+Useful while developing, a problem in production:
+
+- **Debug mode and detailed error pages.** They show visitors how your application is put together.
+- **Test and demo accounts.** Delete them, or give them real passwords.
+- **Anything you disabled to make development easier.** If you turned off a login check to work on a page faster, it's still off.
+
+## 5. Register it in Orbit
 
 **Register your application in Orbit when you deploy it — not later.**
 
@@ -100,45 +88,24 @@ Orbit is the application catalog Hearst's AppSec team works from. Getting yours 
 
 It's split in two, so nobody has to answer questions they can't.
 
-**The business part** — what the application is for. Its name, what it does, whether people outside the company can reach it, where it's hosted, and how important it is. If you built the thing, you can answer all of this in a couple of minutes.
+**The business part** — what the application is for: its name, what it does, whether people outside the company can reach it, where it's hosted, how important it is. If you built it, this takes a couple of minutes.
 
-**The technical part** — how it's built. Your repository link, how often you deploy, whether it handles personal or payment data and where that's stored, which other applications it talks to, and any security tools you already use.
+**The technical part** — how it's built: your repository link, how often you deploy, whether it handles personal or payment data and where that's stored, which other applications it talks to, and any security tools you already use.
 
-When you submit the business part you get a link for the technical part, which you can complete yourself or hand to whoever knows that side. Submitting the technical form queues it for review rather than applying immediately.
+Submitting the business part gives you a link for the technical part, which you can finish yourself or hand to whoever knows that side.
 
-If you're working with an AI assistant, ask it to help you answer the technical questions — it knows your repository, your dependencies, and where your data goes better than you might.
+If you're working with an AI assistant, ask it to help with the technical answers — it knows your repository and dependencies better than you might. The [rules file](/docs/secure-build-agent) has it keep those answers in an `ORBIT.md` for you, so this becomes a copy-and-paste.
 
 </details>
 
-Keep the answers somewhere in your project so they're easy to refresh — the [rules file](/docs/secure-build-agent) has your assistant maintain them for you.
+## 6. Check it before you tell anyone
 
-## Before you deploy
-
-Short list. Each item has a fuller explanation elsewhere in this section, but these are the ones that matter on day one.
-
-```markdown
-## Before I deploy
-
-- [ ] I know who will be able to reach this (and it's what I intended)
-- [ ] No passwords, API keys, or tokens are in my code
-      (they come from the hosting platform's settings instead)
-- [ ] My .env file is NOT committed to the repository
-- [ ] Debug mode and detailed error pages are turned off
-- [ ] Any test or demo login I created is removed, or has a real password
-- [ ] Pages that only I should see require a login — not just a hard-to-guess URL
-- [ ] HTTPS is on (the address starts https://)
-- [ ] I know what data this stores and where it lives
-- [ ] If losing that data would hurt, backups exist
-- [ ] The application is registered in Orbit
-```
-
-If you're using an AI assistant, paste that list into your chat and ask it to check each item against your project. It can verify most of them directly.
+Work through **[Before You Share It](/docs/secure-build-prelaunch)** — the full checklist, and how to get your assistant to verify most of it for you.
 
 ## Where to go next
 
-- **Who can reach it** — the four levels above, and how to actually enforce the one you want
-- **Where to run it** — choosing between the three hosting options in detail
-- **Keys, secrets and configuration** — the most common way this goes wrong
-- **[Working with Your AI Agent](/docs/secure-build-agent)** — the rules file, so your assistant applies this by default
+- **[Logins & Other People's Data](/docs/secure-build-data)** — whether you need logins, and what you're taking on by holding someone's data
+- **[Before You Share It](/docs/secure-build-prelaunch)** — the checklist
+- **[Working with Your AI Agent](/docs/secure-build-agent)** — the rules file, so your assistant applies all of this by default
 
-If your application is holding other people's data or is reachable from the internet, the [AppSec program lifecycle](/docs/program-lifecycle) is where this goes next — particularly [Plan & Design](/docs/phase-plan-design), which has a worksheet for working out how much protection your application actually needs.
+If your application holds other people's data or is reachable from the internet, the [AppSec program lifecycle](/docs/program-lifecycle) is where it goes next — particularly [Plan & Design](/docs/phase-plan-design), which has a worksheet for working out how much protection it actually needs.
