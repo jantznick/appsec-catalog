@@ -366,12 +366,14 @@ model Application {
 
   aiRequests AiRequest[]
 
-  // `name` is unique within a company, enforced by the case-insensitive functional
-  // index `Application_companyId_lower_name_key` (see migration). Prisma cannot
-  // express `lower(name)`, so it is deliberately not declared as @@unique here: a
-  // plain @@unique([companyId, name]) would be case-sensitive and would disagree
-  // with the split endpoint and the interface resolver, which both match names
-  // case-insensitively.
+  // `name` is unique within a company, enforced by the functional index
+  // `Application_companyId_lower_name_key` on ("companyId", lower(btrim(name))) - see
+  // migrations 20260916120000 and 20260916130000. Prisma cannot express that, so it is
+  // deliberately not declared as @@unique here: a plain @@unique([companyId, name])
+  // would be case- and whitespace-sensitive, and would disagree with both the split
+  // endpoint (which matches with mode: 'insensitive') and applicationNameKey() in
+  // services/applicationNames.js (which folds with trim().toLowerCase()). That folding
+  // function is the definition of a duplicate name; keep the index in step with it.
   @@index([companyId])
 }
 
