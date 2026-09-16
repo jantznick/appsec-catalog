@@ -17,6 +17,7 @@ import { getApexDomain } from '../utils/domainApex.js';
 import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
 import { createApplicationVersion, createVersionFromData, applyApprovedVersion } from '../utils/applicationVersion.js';
 import { syncReciprocalInterfaces, parseInterfaceIds } from '../utils/applicationInterfaces.js';
+import { attachDeploymentToEnvironment } from '../services/environmentResolver.js';
 import {
   SPLITTABLE_METADATA_FIELDS,
   SPLITTABLE_METADATA_FIELD_SET,
@@ -3381,12 +3382,24 @@ router.post('/:id/deployments', requireAuth, async (req, res) => {
       });
     }
 
+    // Resolve the submitted environment name against the company's environments
+    // before writing the deployment. Same helper as the CI token path so the two
+    // cannot drift; an unrecognised name leaves the deployment unassigned.
+    const envMatch = await attachDeploymentToEnvironment({
+      applicationId: id,
+      companyId: application.companyId,
+      rawEnvironment: environment,
+      version: version?.trim() || null,
+      gitBranch: gitBranch?.trim() || null,
+    });
+
     // Create deployment
     const deployment = await prisma.deployment.create({
       data: {
         applicationId: id,
         deployedAt: deployedAt ? new Date(deployedAt) : new Date(),
         environment: environment.trim(),
+        environmentId: envMatch.environmentId,
         version: version?.trim() || null,
         gitBranch: gitBranch?.trim() || null,
         deployedBy: deployedBy?.trim() || null,
@@ -3394,8 +3407,11 @@ router.post('/:id/deployments', requireAuth, async (req, res) => {
       },
     });
 
-    // Auto-update application's current deployment info from this new deployment
-    // Only update if the fields are currently null/empty (meaning they should be auto-populated)
+    // Auto-update application's current deployment info from this new deployment.
+    //
+    // Superseded by the ApplicationEnvironment write above, which always overwrites
+    // and is per-environment. Kept only because Application is still the read path
+    // for these three fields; it goes away with the columns themselves.
     const currentApp = await prisma.application.findUnique({
       where: { id },
       select: { currentVersion: true, deploymentEnvironment: true, gitBranch: true },
