@@ -295,8 +295,15 @@ export function BulkImportApplicationsModal({ isOpen, onClose, companies, onSucc
 
       // Call bulk import API
       const result = await api.bulkImportApplications(selectedCompanyId, applications);
-      
-      toast.success(`Successfully imported ${result.count} application(s)`);
+
+      // A name that already existed is imported with a numbered suffix rather than
+      // failing. Say so, or the importer finds a "Checkout (1)" later and has no idea why.
+      const renamedCount = result.renamed?.length || 0;
+      toast.success(
+        renamedCount > 0
+          ? `Imported ${result.count} application(s). ${renamedCount} name(s) already existed and were numbered, e.g. "${result.renamed[0].finalName}".`
+          : `Successfully imported ${result.count} application(s)`,
+      );
       onSuccess?.();
       handleClose();
     } catch (error) {
