@@ -17,6 +17,10 @@ import { getApexDomain } from '../utils/domainApex.js';
 import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
 import { createApplicationVersion, createVersionFromData, applyApprovedVersion } from '../utils/applicationVersion.js';
 import { compareVersions } from '../services/applicationFields.js';
+import {
+  BULK_IMPORT_MAX_ROWS,
+  resolveApplicationNames,
+} from '../services/applicationNames.js';
 import { syncReciprocalInterfaces, parseInterfaceIds } from '../utils/applicationInterfaces.js';
 import {
   SPLITTABLE_METADATA_FIELDS,
@@ -155,6 +159,97 @@ function getProvidedFields(data, fieldMapping = {}) {
     }
   }
   return providedFields;
+}
+
+/**
+ * Parse and normalise the hosting-domain cell, which accepts several domains separated
+ * by comma, semicolon or newline. Invalid entries are dropped silently, as before.
+ * @returns {string[]} normalised domain names
+ */
+function parseHostingDomains(app) {
+  const raw = app.hostingDomains || app.domains;
+  if (!raw) return [];
+
+  const domainString = String(raw).trim();
+  if (!domainString) return [];
+
+  const names = [];
+  for (const candidate of domainString.split(/[,;\n]/)) {
+    const cleanDomain = candidate
+      .trim()
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .split('/')[0]
+      .trim();
+
+    if (cleanDomain && isValidDomain(cleanDomain)) {
+      names.push(normalizeDomain(cleanDomain));
+    }
+  }
+  return names;
+}
+
+/**
+ * Build the `Application` row for one CSV entry.
+ * @throws {Error} with statusCode 400 for an out-of-range businessCriticality
+ */
+function buildBulkImportRow(app, companyId) {
+  let criticalAspects = null;
+  if (app.criticalAspects) {
+    criticalAspects = Array.isArray(app.criticalAspects)
+      ? app.criticalAspects.filter((a) => a && a.trim()).join(', ')
+      : app.criticalAspects.trim() || null;
+  }
+
+  // A string value is stored verbatim, so a CSV cell can put non-JSON into a column
+  // every other path treats as a JSON array (APP_DATA_FIXES_PLAN.md C6).
+  let interfacesJson = null;
+  if (app.interfaces) {
+    if (Array.isArray(app.interfaces)) {
+      interfacesJson = JSON.stringify(app.interfaces);
+    } else if (typeof app.interfaces === 'string') {
+      interfacesJson = app.interfaces;
+    }
+  }
+
+  return {
+    name: app.name.trim(),
+    companyId,
+    description: app.description?.trim() || null,
+    owner: app.owner?.trim() || null,
+    repoUrl: app.repoUrl?.trim() || null,
+    language: app.language?.trim() || null,
+    framework: app.framework?.trim() || null,
+    serverEnvironment: app.serverEnvironment?.trim() || null,
+    facing: app.facing?.trim() || null,
+    deploymentType: app.deploymentType?.trim() || null,
+    authProfiles: app.authProfiles?.trim() || null,
+    dataTypes: app.dataTypes?.trim() || null,
+    interfaces: interfacesJson,
+    businessCriticality: parseBusinessCriticality(app.businessCriticality),
+    criticalAspects,
+    devTeamContact: app.devTeamContact?.trim() || null,
+    securityTestingDescription: app.securityTestingDescription?.trim() || null,
+    additionalNotes: app.additionalNotes?.trim() || null,
+    sastTool: app.sastTool?.trim() || null,
+    sastIntegrationLevel: app.sastIntegrationLevel ? parseInt(app.sastIntegrationLevel) : null,
+    sastIncludesSca: app.sastIncludesSca === true || app.sastIncludesSca === 'true',
+    dastTool: app.dastTool?.trim() || null,
+    dastIntegrationLevel: app.dastIntegrationLevel ? parseInt(app.dastIntegrationLevel) : null,
+    scaTool: app.scaTool?.trim() || null,
+    scaIntegrationLevel: app.scaIntegrationLevel ? parseInt(app.scaIntegrationLevel) : null,
+    appFirewallTool: app.appFirewallTool?.trim() || null,
+    appFirewallIntegrationLevel: app.appFirewallIntegrationLevel
+      ? parseInt(app.appFirewallIntegrationLevel)
+      : null,
+    apiSecurityTool: app.apiSecurityTool?.trim() || null,
+    apiSecurityIntegrationLevel: app.apiSecurityIntegrationLevel
+      ? parseInt(app.apiSecurityIntegrationLevel)
+      : null,
+    apiSecurityNA: app.apiSecurityNA || false,
+    appFirewallNA: app.appFirewallNA || false,
+    status: 'onboarded',
+  };
 }
 
 const router = express.Router();
@@ -2904,155 +2999,102 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
       }
     }
 
-    // Create all applications
-    const createdApplications = await Promise.all(
-      applications.map(async (app, index) => {
-        // Process criticalAspects - convert array to comma-separated string if needed
-        let criticalAspects = null;
-        if (app.criticalAspects) {
-          if (Array.isArray(app.criticalAspects)) {
-            criticalAspects = app.criticalAspects.filter(a => a && a.trim()).join(', ');
-          } else {
-            criticalAspects = app.criticalAspects.trim() || null;
-          }
-        }
+    if (applications.length > BULK_IMPORT_MAX_ROWS) {
+      return res.status(400).json({
+        error: 'Too many applications',
+        message: `An import is limited to ${BULK_IMPORT_MAX_ROWS} rows; this file has ${applications.length}. Split it into smaller files.`,
+      });
+    }
 
-        // Process interfaces if provided
-        let interfacesJson = null;
-        if (app.interfaces) {
-          if (Array.isArray(app.interfaces)) {
-            interfacesJson = JSON.stringify(app.interfaces);
-          } else if (typeof app.interfaces === 'string') {
-            interfacesJson = app.interfaces;
-          }
-        }
+    // --- Resolve name collisions --------------------------------------------
+    //
+    // Application names are unique per company, case-insensitively (see
+    // applicationNameKey). Rather than failing, a colliding name gets a numeric suffix,
+    // the way a file manager handles a duplicate download: "Checkout" -> "Checkout (1)".
+    //
+    // Nothing is ever overwritten and no row is ever dropped. Note this does NOT make
+    // the import idempotent: re-running the same file creates "Checkout (1)", then
+    // "Checkout (2)". It makes the import safe under the uniqueness constraint; it does
+    // not decide whether a re-import should update in place.
+    const existingApplications = await prisma.application.findMany({
+      where: { companyId },
+      select: { name: true },
+    });
+    const { names, renamed } = resolveApplicationNames(
+      applications.map((app) => app.name),
+      existingApplications.map((a) => a.name),
+    );
 
-        // Process hosting domains - accept multiple domains (comma, semicolon, or newline separated)
-        const domainNames = [];
-        if (app.hostingDomains || app.domains) {
-          const domainString = String(app.hostingDomains || app.domains).trim();
-          if (domainString) {
-            // Split by comma, semicolon, or newline, then clean up each domain
-            const domains = domainString
-              .split(/[,;\n]/)
-              .map(domain => domain.trim())
-              .filter(domain => domain.length > 0);
-            
-            // Validate and normalize each domain
-            for (const domain of domains) {
-              // Remove http://, https://, and www. if present
-              let cleanDomain = domain
-                .replace(/^https?:\/\//, '')
-                .replace(/^www\./, '')
-                .split('/')[0] // Remove path if present
-                .trim();
-              
-              if (cleanDomain && isValidDomain(cleanDomain)) {
-                const normalized = normalizeDomain(cleanDomain);
-                domainNames.push(normalized);
-              }
-            }
-          }
-        }
-        // Prepare database insert data
-        const dbData = {
-          name: app.name.trim(),
-          companyId: companyId,
-          description: app.description?.trim() || null,
-          owner: app.owner?.trim() || null,
-          repoUrl: app.repoUrl?.trim() || null,
-          language: app.language?.trim() || null,
-          framework: app.framework?.trim() || null,
-          serverEnvironment: app.serverEnvironment?.trim() || null,
-          facing: app.facing?.trim() || null,
-          deploymentType: app.deploymentType?.trim() || null,
-          authProfiles: app.authProfiles?.trim() || null,
-          dataTypes: app.dataTypes?.trim() || null,
-          interfaces: interfacesJson,
-          businessCriticality: parseBusinessCriticality(app.businessCriticality),
-          criticalAspects: criticalAspects,
-          devTeamContact: app.devTeamContact?.trim() || null,
-          securityTestingDescription: app.securityTestingDescription?.trim() || null,
-          additionalNotes: app.additionalNotes?.trim() || null,
-          sastTool: app.sastTool?.trim() || null,
-          sastIntegrationLevel: app.sastIntegrationLevel ? parseInt(app.sastIntegrationLevel) : null,
-          sastIncludesSca: app.sastIncludesSca === true || app.sastIncludesSca === 'true',
-          dastTool: app.dastTool?.trim() || null,
-          dastIntegrationLevel: app.dastIntegrationLevel ? parseInt(app.dastIntegrationLevel) : null,
-          scaTool: app.scaTool?.trim() || null,
-          scaIntegrationLevel: app.scaIntegrationLevel ? parseInt(app.scaIntegrationLevel) : null,
-          appFirewallTool: app.appFirewallTool?.trim() || null,
-          appFirewallIntegrationLevel: app.appFirewallIntegrationLevel ? parseInt(app.appFirewallIntegrationLevel) : null,
-          apiSecurityTool: app.apiSecurityTool?.trim() || null,
-          apiSecurityIntegrationLevel: app.apiSecurityIntegrationLevel ? parseInt(app.apiSecurityIntegrationLevel) : null,
-          apiSecurityNA: app.apiSecurityNA || false,
-          appFirewallNA: app.appFirewallNA || false,
-          status: 'onboarded',
-        };
+    const prepared = applications.map((app, index) => ({
+      row: buildBulkImportRow({ ...app, name: names[index] }, companyId),
+      domainNames: parseHostingDomains(app),
+    }));
 
-        const created = await prisma.application.create({
-          data: dbData,
-        });
+    // --- Write --------------------------------------------------------------
+    //
+    // One transaction: a failure part-way through leaves nothing behind. This was
+    // previously Promise.all over independent creates, so a mid-batch error committed
+    // some applications and still rejected the request, leaving the caller unable to
+    // tell what had landed.
+    const createdApplications = await prisma.$transaction(
+      async (tx) => {
+        const created = [];
 
-        await recordChange({
-          entityType: 'Application',
-          entityId: created.id,
-          action: 'create',
-          userId: getAuthContext(req)?.userId || null,
-          changeSource: 'bulk_import',
-          companyId: created.companyId,
-          after: created,
-        });
+        for (const { row, domainNames } of prepared) {
+          const application = await tx.application.create({ data: row });
+          created.push(application);
 
-        // Associate hosting domains with the application
-        if (domainNames.length > 0) {
           for (const domainName of domainNames) {
-            try {
-              // Find or create domain within the company
-              let domain = await prisma.domain.findFirst({
-                where: {
-                  companyId: companyId,
-                  name: {
-                    equals: domainName,
-                    mode: 'insensitive',
-                  },
+            let domain = await tx.domain.findFirst({
+              where: {
+                companyId,
+                name: { equals: domainName, mode: 'insensitive' },
+              },
+            });
+
+            if (!domain) {
+              domain = await tx.domain.create({
+                data: {
+                  name: domainName,
+                  apexDomain: getApexDomain(domainName),
+                  companyId,
                 },
               });
+            }
 
-              if (!domain) {
-                domain = await prisma.domain.create({
-                  data: {
-                    name: domainName,
-                    apexDomain: getApexDomain(domainName),
-                    companyId: companyId,
-                  },
-                });
-              }
-
-              // Create association if it doesn't exist
-              await prisma.applicationDomain.upsert({
-                where: {
-                  applicationId_domainId: {
-                    applicationId: created.id,
-                    domainId: domain.id,
-                  },
-                },
-                update: {},
-                create: {
-                  applicationId: created.id,
+            await tx.applicationDomain.upsert({
+              where: {
+                applicationId_domainId: {
+                  applicationId: application.id,
                   domainId: domain.id,
                 },
-              });
-            } catch (error) {
-              console.error(`Error associating domain ${domainName} with application ${created.id}:`, error);
-              // Continue with other domains even if one fails
-            }
+              },
+              update: {},
+              create: { applicationId: application.id, domainId: domain.id },
+            });
           }
         }
 
         return created;
-      })
+      },
+      // A large import needs more than Prisma's 5s default.
+      { maxWait: 10_000, timeout: 120_000 },
     );
+
+    // Audit entries are written after the transaction commits, so a rolled-back import
+    // leaves no trace of applications that do not exist.
+    for (const created of createdApplications) {
+      await recordChange({
+        entityType: 'Application',
+        entityId: created.id,
+        action: 'create',
+        userId: getAuthContext(req)?.userId || null,
+        changeSource: 'bulk_import',
+        companyId: created.companyId,
+        after: created,
+      });
+    }
+
 
     // Create automatic note for bulk import
     try {
@@ -3115,15 +3157,36 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
       `Bulk import: created ${createdApplications.length} application(s) for company ${companyId}`,
     );
 
+    const renamedNote =
+      renamed.length > 0
+        ? ` ${renamed.length} name(s) already existed and were given a numbered suffix.`
+        : '';
+
     res.status(201).json({
       count: createdApplications.length,
       applications: createdApplications,
-      message: `Successfully imported ${createdApplications.length} application(s)`,
+      // Which rows were renamed, so the importer can see it rather than discovering a
+      // "Checkout (1)" later and not knowing why.
+      renamed,
+      message: `Successfully imported ${createdApplications.length} application(s).${renamedNote}`,
     });
   } catch (error) {
     if (error.statusCode === 400) {
       return res.status(400).json({ error: 'Invalid application data', message: error.message });
     }
+
+    // The suffix logic resolves collisions against names read at the start of the
+    // request, so a concurrent create can still trip a unique constraint. The
+    // transaction means nothing was written, so this is safe to retry.
+    if (error.code === 'P2002') {
+      return res.status(409).json({
+        error: 'Name collision during import',
+        message:
+          'An application with one of these names was created while the import was running. ' +
+          'Nothing was imported. Try again.',
+      });
+    }
+
     console.error('Bulk import failed:', error);
     res.status(500).json({
       error: 'Failed to import applications',
