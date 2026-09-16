@@ -145,6 +145,22 @@ export const PERMISSIONS = {
     description: 'Delete recorded deployments. Separate from `deployment.manage` so that recording a deployment does not imply erasing one.',
   },
 
+  // ------------------------------------------------------------ environment
+  // Reading environments is covered by `company.read` / `application.read`: the
+  // environment selector is part of viewing an application, so a separate read
+  // permission would only create a way to see an application without the
+  // environments it runs in.
+  //
+  // Hard-deleting an environment is deliberately NOT in this catalog: it would take
+  // deploy history with it, so the route uses `requireAdmin` instead. Retiring one is
+  // the delegatable equivalent and is covered here.
+  'environment.manage': {
+    scope: PermissionScope.COMPANY,
+    label: 'Manage environments',
+    description:
+      'Create, rename and retire the deployment environments a company deploys into, and adopt unassigned deployments into one.',
+  },
+
   // ------------------------------------------------------------ integration
   'integration.manage': {
     scope: PermissionScope.COMPANY,
