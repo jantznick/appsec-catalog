@@ -8,7 +8,8 @@
     "start": "node server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "prisma:push": "prisma db push"
+    "prisma:push": "prisma db push",
+    "test": "node --test services utils"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
