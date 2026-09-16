@@ -3,6 +3,7 @@ import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { getAuthContext, resolveChangeSource } from '../middleware/authContext.js';
 import { recordChange } from '../utils/changeHistory.js';
+import { validatePolicyControlFields } from '../services/policyFields.js';
 
 function summarizeFields(fields) {
   return (fields || []).map((f) => ({ fieldPath: f.fieldPath, operator: f.operator, value: f.value }));
@@ -124,6 +125,17 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Evaluation logic must be AND or OR' });
     }
 
+    // A bad fieldPath or operator fails silently at evaluation time and marks every
+    // application non-compliant for this control, so reject it here instead.
+    const fieldProblems = validatePolicyControlFields(fields);
+    if (fieldProblems.length > 0) {
+      return res.status(400).json({
+        error: 'Invalid field mapping',
+        message: fieldProblems.join('; '),
+        problems: fieldProblems,
+      });
+    }
+
     // Create control with fields in a transaction
     const control = await prisma.$transaction(async (tx) => {
       // Create the control
@@ -231,6 +243,17 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
     // Validate evaluation logic
     if (evaluationLogic && !['AND', 'OR'].includes(evaluationLogic)) {
       return res.status(400).json({ error: 'Evaluation logic must be AND or OR' });
+    }
+
+    // A bad fieldPath or operator fails silently at evaluation time and marks every
+    // application non-compliant for this control, so reject it here instead.
+    const fieldProblems = validatePolicyControlFields(fields);
+    if (fieldProblems.length > 0) {
+      return res.status(400).json({
+        error: 'Invalid field mapping',
+        message: fieldProblems.join('; '),
+        problems: fieldProblems,
+      });
     }
 
     // Update control and fields in a transaction
