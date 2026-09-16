@@ -85,13 +85,13 @@ If you're using an AI assistant, ask it directly: *"Who can reach this right now
 
 ## Put it in Orbit at the same time
 
-**Do this when you deploy, not later.** It's the step that turns your application from something only you know about into something the security team can actually help with.
+**Register your application in Orbit when you deploy it — not later.**
 
-Orbit is the application catalog Hearst's AppSec team uses. Registering your application there does three things for you:
+Orbit is the application catalog Hearst's AppSec team works from. Getting yours listed gets you three things:
 
-- **Somebody other than you knows it exists.** If a serious vulnerability turns up in a library you're using, whoever is checking can see that your application uses it.
-- **It gets checked.** Your application is evaluated against the security policy automatically, and gets a score showing where it's covered and where it isn't.
-- **It gets you the checks you can't run yourself.** This is the real benefit. There's a category of problem that's invisible from the inside — a database configured so that the key in your browser can read every row, a storage bucket that's publicly listable, an admin page with no login. Your application works perfectly either way, which is exactly why these ship. Being in the catalog is what gets those checks pointed at you.
+- **It's on the map.** If a serious flaw turns up in a library you use, the people checking can see that you use it.
+- **It's checked against security policy automatically**, and scored, so you can see what's covered and what isn't.
+- **Someone who does this for a living looks at it.** That catches problems that are hard to spot from the inside — like a database that anyone can read.
 
 **You don't need an Orbit account.** The [onboarding forms](/docs/getting-started) work without a login, on purpose.
 

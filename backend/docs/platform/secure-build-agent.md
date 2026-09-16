@@ -185,11 +185,11 @@ Being honest about the limits, because the rules file can make things feel more 
 
 ## Register it in Orbit
 
-Do this as soon as anyone other than you can reach your application — not eventually. It's the step that gets your application the security checks you can't run yourself.
+**Add your application to Orbit as soon as anyone other than you can reach it.**
 
-There's a whole category of problem that's invisible from the inside: a database configured so the key your browser holds can read every row, a storage bucket anyone can list, an admin page with no login. Your application works exactly the same either way, which is precisely why these ship. Being in the catalog is what points those checks at you.
+Orbit is Hearst's application catalog. Listing yours means the security team knows it exists, it's checked against policy automatically, and someone looks at it for problems that are hard to spot from the inside — like a database that anyone can read.
 
-**You don't need an Orbit account.** The [onboarding forms](/docs/getting-started) work without a login, on purpose — a short business form about what the application is, then a technical form you can fill in yourself or hand to someone who knows that side.
+**You don't need an Orbit account.** The [onboarding forms](/docs/getting-started) work without a login — a short business form about what the application is, then a technical form you can fill in yourself or hand to someone who knows that side.
 
 The rules file above has your assistant keep an `ORBIT.md` in your project with the answers already written down, so registering is a copy-and-paste rather than an interview. Ask it: *"Fill in ORBIT.md for this project."*
 
