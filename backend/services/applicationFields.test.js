@@ -72,11 +72,21 @@ describe('registry matches the lists it replaced', () => {
     );
   });
 
-  it('makes every versioned field approvable except the derived scan dates', () => {
-    // lastSastScanDate and lastScaScanDate are derived from scanner integrations, so a
-    // version records them for history but an approval must never write them back.
+  it('makes every versioned field approvable except the derived ones', () => {
+    // A version records these for history but an approval must never write them back.
+    // The SAST and SCA dates are derived from scanner integrations. The other four are
+    // derived from deployments: both deployment write paths now write the version and
+    // branch onto an ApplicationEnvironment, and lastDastScanDate is per-instance. All
+    // six would otherwise let an old pending version overwrite a freshly derived value.
     const notApprovable = VERSIONED_METADATA_FIELDS.filter((k) => !APPROVABLE_METADATA_FIELDS.includes(k));
-    assert.deepEqual(notApprovable.sort(), ['lastSastScanDate', 'lastScaScanDate']);
+    assert.deepEqual(notApprovable.sort(), [
+      'currentVersion',
+      'deploymentEnvironment',
+      'gitBranch',
+      'lastDastScanDate',
+      'lastSastScanDate',
+      'lastScaScanDate',
+    ]);
   });
 
   it('excludes exactly name, status and interfaces from splits', () => {
@@ -126,7 +136,10 @@ describe('isApprovableMetadataField', () => {
     assert.equal(isApprovableMetadataField('sastTool'), true);
     assert.equal(isApprovableMetadataField('lastSastScanDate'), false);
     assert.equal(isApprovableMetadataField('lastScaScanDate'), false);
-    assert.equal(isApprovableMetadataField('lastDastScanDate'), true, 'still a submitter claim today');
+    assert.equal(isApprovableMetadataField('lastDastScanDate'), false, 'per-environment, derived from deployments');
+    assert.equal(isApprovableMetadataField('currentVersion'), false, 'written by every deploy');
+    assert.equal(isApprovableMetadataField('gitBranch'), false, 'written by every deploy');
+    assert.equal(isApprovableMetadataField('deploymentEnvironment'), false, 'superseded by the environment relation');
     assert.equal(isApprovableMetadataField('nope'), false);
     assert.equal(isApprovableMetadataField('constructor'), false);
   });

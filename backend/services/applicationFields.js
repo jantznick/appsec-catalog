@@ -112,10 +112,19 @@ export const APPLICATION_METADATA_FIELDS = Object.freeze(
     // dates stay: they describe a commit and a dependency manifest, not a deployment.
     // When that lands, those four entries come out of this list - which is the point of
     // having one list.
-    { key: 'currentVersion', label: 'Current Version', group: 'deployment', type: 'string', versioned: true, approvable: true, splittable: true },
-    { key: 'deploymentEnvironment', label: 'Deployment Environment', group: 'deployment', type: 'string', versioned: true, approvable: true, splittable: true },
-    { key: 'gitBranch', label: 'Git Branch', group: 'deployment', type: 'string', versioned: true, approvable: true, splittable: true },
-    { key: 'lastDastScanDate', label: 'Last DAST Scan Date', group: 'deployment', type: 'datetime', versioned: true, approvable: true, splittable: true },
+    //
+    // They are already `approvable: false`, ahead of that removal, because they are
+    // already derived: both deployment write paths now resolve the submitted
+    // environment and write the deployed version and branch onto an
+    // ApplicationEnvironment, and lastDastScanDate is per-instance in the schema.
+    // Approving a months-old pending version would otherwise write a stale version or
+    // environment back over what a deploy had just set - the same silent regression
+    // that the SAST and SCA dates are protected from below. They stay `versioned: true`
+    // so the history still records what the columns held.
+    { key: 'currentVersion', label: 'Current Version', group: 'deployment', type: 'string', versioned: true, approvable: false, splittable: true },
+    { key: 'deploymentEnvironment', label: 'Deployment Environment', group: 'deployment', type: 'string', versioned: true, approvable: false, splittable: true },
+    { key: 'gitBranch', label: 'Git Branch', group: 'deployment', type: 'string', versioned: true, approvable: false, splittable: true },
+    { key: 'lastDastScanDate', label: 'Last DAST Scan Date', group: 'deployment', type: 'datetime', versioned: true, approvable: false, splittable: true },
     { key: 'lastSastScanDate', label: 'Last SAST Scan Date', group: 'deployment', type: 'datetime', versioned: true, approvable: false, splittable: true },
     { key: 'lastScaScanDate', label: 'Last SCA Scan Date', group: 'deployment', type: 'datetime', versioned: true, approvable: false, splittable: true },
 
