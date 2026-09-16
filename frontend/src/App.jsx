@@ -34,6 +34,7 @@ import { IntegrationSettings } from './pages/IntegrationSettings.jsx';
 import { SecurityFindingsExportJobs } from './pages/SecurityFindingsExportJobs.jsx';
 import { SettingsDeploy } from './pages/SettingsDeploy.jsx';
 import { SettingsApiTokens } from './pages/SettingsApiTokens.jsx';
+import { SettingsRoles } from './pages/SettingsRoles.jsx';
 import { ProductUpdatesAdmin } from './pages/ProductUpdatesAdmin.jsx';
 import { WhatsNew } from './pages/WhatsNew.jsx';
 import { ScoringSettings } from './pages/ScoringSettings.jsx';
@@ -212,6 +213,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <SettingsDeploy />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/roles"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <SettingsRoles />
               </Layout>
             </ProtectedRoute>
           }
