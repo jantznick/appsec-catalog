@@ -38,7 +38,7 @@ Cadence, not code:
 | 6.1 | **Complete a SAMM self-assessment** | 15 practices scored 0–3 from real evidence, submitted and locked |
 | 6.2 | **Set target maturity and prioritize the gaps** | A target level per practice, and an improvement plan with an owner and a done-condition per gap |
 | 6.3 | **Review portfolio posture** | A read-out from the dashboards, with decisions recorded |
-| 6.4 | **Review compliance and clean up exceptions** | Overrides re-justified or removed, expired exceptions closed, control mappings corrected |
+| 6.4 | **Review compliance and clean up exceptions** | Overrides re-justified or removed, expired exceptions closed, control mappings corrected. See [Exceptions](/docs/lifecycle-exceptions) |
 | 6.5 | **Tune the tooling** | Ruleset changes and baselines, so the gate stays trusted rather than routinely bypassed |
 | 6.6 | **Report program metrics** | Coverage, compliance, average score, and maturity trend from Orbit; remediation metrics from Wiz |
 | 6.7 | **Run the champions cadence** | A monthly meeting run from the supplied package |
@@ -179,7 +179,7 @@ Two distinct things that both need periodic attention.
 
 **Manual overrides** are Orbit's mechanism for a control that can't be evaluated from catalog data — an administrator marks it compliant or not, with a justifying note. They're useful and they quietly accumulate. An override set eighteen months ago for a reason nobody remembers is a compliance percentage built on trust rather than data.
 
-**Exceptions** are the program-level version: a control deliberately waived, with a compensating control and an expiry. These live with Hearst's AppSec team and must not outlive their expiry date.
+**Exceptions** are the program-level version: a control deliberately waived, with a compensating control and an expiry. These live with Hearst's AppSec team and must not outlive their expiry date. [Exceptions](/docs/lifecycle-exceptions) covers the difference between the two in full — recording an exception as an override would make a real gap look like a pass.
 
 <details>
 <summary>Exception and override review log — run quarterly</summary>

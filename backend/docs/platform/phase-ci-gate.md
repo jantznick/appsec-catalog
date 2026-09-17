@@ -195,43 +195,13 @@ Active exceptions letting a build through above threshold:
 
 </details>
 
-### 3.7 — Triage without teaching people to ignore the gate
+### 3.7 — Triage what the gate finds
 
-Three legitimate outcomes for a finding, and one that isn't.
+Four legitimate outcomes for a finding: fix it, ticket it with an owner and a date, file an [exception](/docs/lifecycle-exceptions), or dismiss it as a false positive with a specific reason.
 
-- **Fix it.** The default, and usually cheapest on a change you're actively working on.
-- **Ticket it.** For anything real but below threshold, or above threshold and genuinely too large for this change. Blocker and high findings get a ticket within a couple of business days and are tracked against an SLA.
-- **Except it.** Business justification, compensating control, named owner, expiry date — the template is in [Phase 1](/docs/phase-plan-design).
+**Not legitimate:** suppressing the rule, adding a blanket ignore path, or lowering the threshold so the build passes. Those silently reduce coverage for everyone after you and leave a passing build that proves nothing. A genuinely noisy rule is a tuning conversation with Hearst's AppSec team, not a local suppression.
 
-**Not legitimate:** suppressing the rule, adding a blanket ignore path, or lowering the threshold to make the build pass. If a rule is genuinely noisy, that's a tuning conversation with Hearst's AppSec team — a real and welcome one — not a local suppression that silently reduces coverage for everyone who comes after you.
-
-The distinction matters because the first three outcomes leave a record and the fourth leaves a passing build that proves nothing.
-
-<details>
-<summary>Finding disposition record — for anything you don't fix immediately</summary>
-
-```markdown
-## Finding Disposition
-
-Finding:        <tool's rule ID and one-line description>
-Where:          <file:line, or endpoint>
-Severity:       <as reported>   Above our threshold: <yes | no>
-Found on:       <commit SHA / PR link>       Date: <YYYY-MM-DD>
-
-Disposition:    <fixed | ticketed | exception | false positive>
-
-If fixed:       <commit SHA>
-If ticketed:    <ticket link>    Target date: <YYYY-MM-DD>
-If exception:   <exception ref>  Expiry: <YYYY-MM-DD>
-If false positive:
-  Why:          <specific reason — "the input is validated at the
-                 middleware layer in src/mw/auth.js:40", not "not exploitable">
-  Reported to AppSec for tuning: <yes | no>
-```
-
-A false positive you can't explain in one specific sentence probably isn't one.
-
-</details>
+**[Remediating Findings](/docs/lifecycle-remediation)** covers the whole of this — triage, ownership, what blocks and what doesn't, verifying closure, and what to do when the same finding keeps coming back.
 
 ## Where the outputs go
 
@@ -247,7 +217,7 @@ Orbit holds the **coverage** picture — which tools cover this application, how
 | Per-build gate result | **Your CI system** |
 | Container and IaC scan results | **Your CI system** |
 | Build SBOM | **Your build artifact store**, alongside the artifact |
-| Finding dispositions | **Your ticket tracker**, or the PR thread for anything fixed in place |
+| Finding dispositions | **Your ticket tracker**, or the PR thread for anything fixed in place — see [Remediating Findings](/docs/lifecycle-remediation) |
 
 Two things worth knowing about how Orbit reads the fields you fill in:
 

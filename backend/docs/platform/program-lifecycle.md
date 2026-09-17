@@ -31,6 +31,15 @@ That last distinction matters. Orbit is a catalog and a scoring system, not a sc
 | 5 | **[Runtime & Operate](/docs/phase-runtime-operate)** | New exposure in code that hasn't changed, and findings that sit unowned. |
 | 6 | **[Improve & Govern](/docs/phase-improve-govern)** | The program itself drifting — gates nobody trusts, controls nobody meets, maturity nobody measures. |
 
+### Two things that aren't phases
+
+| | |
+|---|---|
+| **[Remediating Findings](/docs/lifecycle-remediation)** | What happens after something is found — whoever found it, and whichever phase it turned up in |
+| **[Exceptions](/docs/lifecycle-exceptions)** | What to do when you can't meet a requirement right now |
+
+Both run *alongside* the six rather than after them, and neither gates progression the way a phase does — findings arrive from phases 3, 4 and 5 at once, and most of them travel with the work rather than stopping it. An application is never "in the remediation phase"; it's in Runtime & Operate, with open findings.
+
 Phases 1–5 follow the order code moves through delivery. Phase 6 runs on its own cadence and feeds what it learns back into the other five.
 
 **Phases are not a queue.** An application doesn't leave phase 1 and never return — a new high-impact feature puts that feature back through design work while the application as a whole runs in production. Phases 2 and 3 are continuous for as long as anyone is committing code, and phase 5 is where an application spends most of its life.
@@ -46,7 +55,8 @@ Every template in the lifecycle, and where to find it. Copy them into your desig
 | Threat statement format and starter prompts | [1](/docs/phase-plan-design) | Writing threats that are actionable, with per-component prompts if you're stuck |
 | Design review request | [1](/docs/phase-plan-design) | Asking Hearst's AppSec team for a review, with the right context attached |
 | Tooling plan | [1](/docs/phase-plan-design) | Deciding your SAST / secrets / SCA / DAST / firewall / API-security coverage before you build |
-| Exception request | [1](/docs/phase-plan-design) | Anything you can't meet at launch |
+| Exception request | [Exceptions](/docs/lifecycle-exceptions) | Anything you can't meet at launch |
+| Remediation standard | [Remediating Findings](/docs/lifecycle-remediation) | Your team's fix-by targets, who decides, and escalation |
 | Pull request template | [2](/docs/phase-build-commit) | The four security questions, pre-filled on every PR |
 | Repository hygiene checklist | [2](/docs/phase-build-commit) | Secrets, dependencies, and branch-protection settings, once per repo |
 | Repo security onboarding | [2](/docs/phase-build-commit) | The five-minute handover for a developer joining the codebase |
@@ -126,13 +136,13 @@ Every output has exactly one home. Most are in Orbit, some belong in your reposi
 | Scheduled re-scan | 5 | Orbit records the scan date; the schedule lives in your tooling |
 | DNS and web exposure history | 5 | Orbit — [Domains](/docs/domains) |
 | Cloud posture findings | 5 | Your Wiz/Tenable console, tag-linked to Orbit |
-| Findings and their SLA status | 5 | Your ticket tracker |
+| Findings and their remediation status | 3, 4, 5 | **Wiz** and your ticket tracker — see [Remediating Findings](/docs/lifecycle-remediation) |
 | Incident response runbook | 5 | Not in Orbit yet |
 | Metadata review | 5 | Orbit — review history |
 | Decommission record | 5 | Not in Orbit yet |
 | SAMM assessment | 6 | Orbit — [SAMM Assessments](/docs/policies-and-samm) |
 | Maturity targets and improvement plan | 6 | Not in Orbit yet |
-| Exceptions | 1, 3, 4, 5 | Filed with Hearst's AppSec team |
+| Exceptions | 1, 3, 4, 5 | Filed with Hearst's AppSec team — see [Exceptions](/docs/lifecycle-exceptions) |
 | Program metrics | 6 | Orbit — [Dashboards](/docs/dashboards) |
 | Champions and ASCOE materials | 6 | Orbit — [Program Content](/program-content) |
 

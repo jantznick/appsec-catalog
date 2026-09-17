@@ -36,7 +36,7 @@ Most of this should be automated. The sign-off is the part that stays human on p
 | 4.1 | **Attach security evidence to the release** | The SAST, secrets, SCA, and where applicable DAST results for **the exact build that shipped** |
 | 4.2 | **Report the deployment to Orbit** | A deployment entry: environment, version, git branch, deployed-by, notes |
 | 4.3 | **Sign off on the release** | A named approver confirming the gate passed, evidence is attached, and no exception has expired |
-| 4.4 | **Check that no exception has expired** | Expired exceptions re-approved, remediated, or removed before shipping |
+| 4.4 | **Check that no exception has expired** | Expired exceptions re-approved, remediated, or removed before shipping. See [Exceptions](/docs/lifecycle-exceptions) |
 | 4.5 | **Confirm config and secrets hygiene for the target environment** | Secrets from a managed store, nothing sensitive in plaintext config, a least-privilege deploy identity |
 | 4.6 | **Register any newly created exposure** | New hosting domains, new ingress points, and an updated API schema on file |
 | 4.7 | **Update the record's deployment state** | Current version, environment, and branch reflected in Orbit |
@@ -252,7 +252,7 @@ From [SAMM & Maturity](/docs/program-samm): **Secure Deployment** (Implementatio
 
 - **Whether the build that shipped actually passed its checks.** This is the structural gap in the current model: scan dates live on the *application*, not on a build, so nothing connects "the SAST run" to "version 2.4.0 that shipped on Tuesday." The baseline asks for evidence tied to the specific build that shipped, and the data model can't yet express that sentence. Your release record is the source of truth meanwhile.
 - **Whether anyone signed off.** No approver, no timestamp, no record.
-- **Whether an exception has expired.** Orbit's administrator-set policy-control overrides carry no expiry date, so there's nothing for a release check to test. Exceptions live with Hearst's AppSec team.
+- **Whether an exception has expired.** Orbit's administrator-set policy-control overrides carry no expiry date, so there's nothing for a release check to test. Exceptions live with Hearst's AppSec team — see [Exceptions](/docs/lifecycle-exceptions) for why an expired one blocks a release regardless of tier.
 - **Whether your environment hygiene was confirmed.** Not recorded.
 
 The first of those is the one worth understanding, because it changes how much the green dashboard means. Orbit can currently tell your security team that you own a SAST tool and that it ran recently. It can't tell them it ran on what you shipped. Closing that — a per-build gate result posted from your pipeline, the same way deployments already are — is the highest-value integration on the platform roadmap.

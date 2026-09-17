@@ -107,6 +107,18 @@ const DOC_GROUPS = [
         ],
       },
       {
+        // Not phases, and deliberately not numbered as one. A phase answers
+        // "where is this code on its way to production"; these answer "what do
+        // you do when something is found" and "what if you can't meet a
+        // control" — both run concurrently with phases 3-5 rather than after
+        // them, and neither gates progression the way a phase does.
+        title: 'Across Every Phase',
+        pages: [
+          { slug: 'lifecycle-remediation', title: 'Remediating Findings' },
+          { slug: 'lifecycle-exceptions', title: 'Exceptions' },
+        ],
+      },
+      {
         title: 'Community Programs',
         pages: [
           { slug: 'program-center-of-excellence', title: 'AppSec Center of Excellence' },

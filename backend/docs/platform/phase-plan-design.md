@@ -265,37 +265,11 @@ Mark a category **Not Applicable** where it genuinely doesn't apply (no API, no 
 
 ### 1.10 — File exceptions for anything you can't meet at launch
 
-Filing an exception is better than quietly not meeting a control. File it with Hearst's AppSec team.
+Filing an exception is better than quietly not meeting a control, and it isn't a black mark — it's a decision made deliberately, with the risk written down and a date attached.
 
-<details>
-<summary>Exception request template</summary>
+An acceptable one needs four things: a business justification, a compensating control, a named owner, and an expiry date. "Indefinite" isn't valid, and an expired exception has to be re-approved, remediated, or removed before your next release.
 
-```markdown
-## Exception Request — <application name>
-
-Control:              <the baseline control you can't meet>
-Risk tier:            <High | Medium | Low>
-Requested by:         <name>            Date: <YYYY-MM-DD>
-Owner (a person):     <name>
-Requested expiry:     <YYYY-MM-DD — "indefinite" is not valid>
-
-### Why we can't meet it now
-<Business justification, in terms someone outside the team can evaluate.>
-
-### Risk this accepts
-<What could go wrong, and how bad it would be.>
-
-### Compensating control
-<What reduces the risk meanwhile: extra monitoring, manual review, a network
- restriction, a reduced blast radius. "We'll be careful" is not one.>
-
-### Plan to close it
-<What has to happen to remove the exception, and by when.>
-```
-
-</details>
-
-An expired exception has to be re-approved, remediated, or removed before your next release.
+**[Exceptions](/docs/lifecycle-exceptions)** has the request template and the full rules. File yours with Hearst's AppSec team.
 
 ## Where the outputs go
 
@@ -311,7 +285,7 @@ An expired exception has to be re-approved, remediated, or removed before your n
 | Mitigation tickets | **Your ticket tracker**, referenced from the threat model |
 | Approved patterns used | **Your design doc** |
 | Tooling plan | **Orbit** — the [Security tab](/docs/application-security) |
-| Exceptions | **Filed with Hearst's AppSec team** |
+| Exceptions | **Filed with Hearst's AppSec team** — see [Exceptions](/docs/lifecycle-exceptions) |
 
 On 1.4: ingress points and data flows are the most underused feature in Orbit relative to how much they help a design review. Once a product has two or more applications mapped in, you can record where external traffic enters (with the channel, and whether it needs an API key) and how data moves between the applications behind it (protocol, data classification, direction). That's your attack surface documented in one place instead of scattered across notes. See [Products](/docs/products).
 

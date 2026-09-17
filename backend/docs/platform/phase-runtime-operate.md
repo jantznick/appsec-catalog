@@ -33,7 +33,7 @@ This is the phase with the most shared ownership, which is also why work falls t
 | 5.1 | **Re-scan on a schedule, independently of releases** | A recurring scan on your tier's cadence, and a refreshed scan date in Orbit |
 | 5.2 | **Watch your external exposure** | DNS and web-reachability history, with changes reviewed rather than just recorded |
 | 5.3 | **Watch infrastructure and cloud posture** | Findings from Wiz or Tenable correlated back to the application via its tag |
-| 5.4 | **Triage findings to closure against an SLA** | A ticket within a couple of business days for blocker and high findings; every finding tracked until closed or excepted |
+| 5.4 | **Triage findings to closure** | A ticket within a couple of business days for blocker and high findings; every finding tracked until closed or excepted. See [Remediating Findings](/docs/lifecycle-remediation) |
 | 5.5 | **Watch dependencies and advisories** | Repository re-synced, advisories re-checked, affected packages upgraded |
 | 5.6 | **Keep incident response ready** | A current runbook, current contacts, and an exercise actually run |
 | 5.7 | **Review the record periodically** | A review entry confirming the metadata is still accurate |
@@ -78,6 +78,8 @@ Risk tier: <High | Medium | Low>      Internet-facing: <yes | no>
 Fix-by intervals by severity and risk tier are being defined by Hearst's AppSec team; until they're published, treat the couple-of-business-days ticketing expectation as the firm part and ask AppSec where a specific finding's timeline should land.
 
 The thing to watch for is findings that are technically tracked but functionally abandoned — a ticket in a backlog with no due date, reopened every quarter, never scheduled. Getting a ticket open is the easy half.
+
+**[Remediating Findings](/docs/lifecycle-remediation)** covers the rest: triage, ownership, what blocks and what doesn't, verifying a finding is actually closed, and what to do when the same one keeps coming back.
 
 ### 5.6 — Incident response readiness
 
@@ -246,7 +248,7 @@ Replaced by: <application, or "retired outright">
 | Re-scan schedule record | **Your runbook** — no Orbit field for the cadence yet |
 | DNS and web exposure history | **Orbit** — [Domains](/docs/domains), recorded automatically |
 | Cloud and infrastructure findings | **Your Wiz or Tenable console**, tag-linked to the Orbit record |
-| Findings and their remediation status | **Wiz** (system of record) and **your ticket tracker** — not Orbit, by design |
+| Findings and their remediation status | **Wiz** (system of record) and **your ticket tracker** — not Orbit, by design. See [Remediating Findings](/docs/lifecycle-remediation) |
 | Dependency re-sync | **Orbit** — the [Integrations tab](/docs/integrations) and [Dependencies](/docs/dependencies) |
 | Incident response runbook | **Your repository or wiki** — no Orbit home yet |
 | Incident write-ups | **Orbit** — the App Timeline |
