@@ -189,7 +189,9 @@ export function Docs() {
   }, [navigate]);
 
   return (
-    <div className="max-w-6xl mx-auto">
+    // No max-width here — Layout gives /docs a wider container than the rest of
+    // the app, and a cap at this level would just undo it.
+    <div>
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Documentation</h1>
         <p className="mt-1 text-gray-600">
@@ -272,25 +274,8 @@ export function Docs() {
           </a>
         </aside>
 
-        <main className="flex-1 min-w-0 flex flex-col gap-6 lg:flex-row-reverse">
-          {toc.length > 1 && (
-            <div className="lg:w-56 flex-shrink-0">
-              <div className="lg:sticky lg:top-8 px-4 py-3 rounded-lg border border-gray-200 bg-gray-50">
-                <p className="mb-2 text-xs font-semibold tracking-wider text-gray-500 uppercase">On this page</p>
-                <ul className="space-y-1.5">
-                  {toc.map((item) => (
-                    <li key={item.slug} className={item.level === 3 ? 'ml-3' : ''}>
-                      <a href={`#${item.slug}`} className="text-sm text-blue-600 hover:text-blue-700">
-                        {item.text}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          )}
-
-          <Card padding="lg" className="flex-1 min-w-0">
+        <main className="flex-1 min-w-0">
+          <Card padding="lg" className="min-w-0">
             {loading ? (
               <p className="text-sm text-gray-500">Loading...</p>
             ) : error ? (
@@ -307,6 +292,35 @@ export function Docs() {
                   {located.parent ? located.parent.title : located.section?.title}
                 </p>
                 {title && <h1 className="mb-6 text-3xl font-bold text-gray-900">{title}</h1>}
+
+                {/* Contents sit inline above the prose rather than in a sticky
+                    rail: it frees the full width for the reading column, and on
+                    a page this long a rail that follows you down mostly repeats
+                    what the sidebar already shows. Multi-column so a 30-heading
+                    page doesn't push the actual content off the screen. */}
+                {toc.length > 1 && (
+                  <nav
+                    aria-label="On this page"
+                    className="mb-8 px-4 py-3 rounded-lg border border-gray-200 bg-gray-50"
+                  >
+                    <p className="mb-2 text-xs font-semibold tracking-wider text-gray-500 uppercase">
+                      On this page
+                    </p>
+                    <ul className="gap-x-8 space-y-1.5 sm:columns-2 lg:columns-3">
+                      {toc.map((item) => (
+                        <li
+                          key={item.slug}
+                          className={`break-inside-avoid ${item.level === 3 ? 'ml-3' : ''}`}
+                        >
+                          <a href={`#${item.slug}`} className="text-sm text-blue-600 hover:text-blue-700">
+                            {item.text}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </nav>
+                )}
+
                 <div ref={contentRef} className="prose max-w-none" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
 
                 {/* Only shown to visitors who aren't signed in — anyone already
