@@ -72,7 +72,26 @@ function addHeadingAnchors(html) {
     toc.push({ level: Number(level), text, slug });
     return `<h${level} id="${slug}">${inner}</h${level}>`;
   });
-  return { html: withIds, toc };
+  return { html: withIds, toc: numberToc(toc) };
+}
+
+// Adds a "1", "2", "2.1" style label to each TOC entry. The list is laid out in
+// columns, which flow top-to-bottom before wrapping — so without numbers a
+// reader scanning left-to-right gets the sections out of order.
+function numberToc(headings) {
+  let major = 0;
+  let minor = 0;
+  return headings.map((h) => {
+    if (h.level === 2) {
+      major += 1;
+      minor = 0;
+      return { ...h, label: `${major}` };
+    }
+    minor += 1;
+    // An h3 before any h2 has no parent to hang off; number it on its own
+    // rather than emitting "0.1".
+    return { ...h, label: major === 0 ? `${minor}` : `${major}.${minor}` };
+  });
 }
 
 // Locates the page matching `slug` and the group/section/parent it lives
@@ -306,18 +325,19 @@ export function Docs() {
                     <p className="mb-2 text-xs font-semibold tracking-wider text-gray-500 uppercase">
                       On this page
                     </p>
-                    <ul className="gap-x-8 space-y-1.5 sm:columns-2 lg:columns-3">
+                    <ol className="gap-x-10 space-y-1.5 sm:columns-2">
                       {toc.map((item) => (
                         <li
                           key={item.slug}
-                          className={`break-inside-avoid ${item.level === 3 ? 'ml-3' : ''}`}
+                          className={`break-inside-avoid flex gap-2 ${item.level === 3 ? 'ml-4' : ''}`}
                         >
+                          <span className="shrink-0 text-sm tabular-nums text-gray-500">{item.label}</span>
                           <a href={`#${item.slug}`} className="text-sm text-blue-600 hover:text-blue-700">
                             {item.text}
                           </a>
                         </li>
                       ))}
-                    </ul>
+                    </ol>
                   </nav>
                 )}
 
