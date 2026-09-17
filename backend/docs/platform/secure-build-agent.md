@@ -198,4 +198,8 @@ Orbit is Hearst's application catalog. Listing yours means the security team kno
 
 The rules file above has your assistant keep an `ORBIT.md` in your project with the answers already written down, so registering is a copy-and-paste rather than an interview. Ask it: *"Fill in ORBIT.md for this project."*
 
-[What "Deploying" Actually Means](/docs/secure-build-deploying) covers what registration involves in more detail. Once your application is in the catalog, the [AppSec program lifecycle](/docs/program-lifecycle) is where it goes next — particularly [Plan & Design](/docs/phase-plan-design), which has a worksheet for working out how much protection it actually needs.
+[Deploying Your Application](/docs/secure-build-deploying) covers what registration involves in more detail.
+
+---
+
+**Next: [Deploying Your Application](/docs/secure-build-deploying)** — getting it online without doing something regrettable.

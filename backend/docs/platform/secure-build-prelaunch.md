@@ -99,3 +99,7 @@ Tell Hearst's AppSec team. Not after you've investigated — when you first susp
 That includes: a credential you think may have leaked, data visible to someone who shouldn't see it, or activity you can't explain. If personal data might be involved, there may be legal deadlines already running, which is a reason to raise it early rather than quietly look into it first.
 
 Nobody is annoyed by a false alarm.
+
+---
+
+**That's the end of this section.** Once your application is registered and the checklist passes, the [AppSec program lifecycle](/docs/program-lifecycle) is where it goes next — start with [Plan & Design](/docs/phase-plan-design), which has a worksheet for working out how much protection your application actually needs.

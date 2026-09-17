@@ -409,28 +409,71 @@ button:disabled,
   background: var(--color-surface-2);
 }
 
+/* The summary is the only control on the page that isn't a link, so it has to
+   announce itself: a chevron that tracks the text colour, a hover state, and a
+   visible focus ring (these are keyboard-focusable, and a muted marker with no
+   hover feedback reads as decoration rather than as something to click). The
+   negative margin offsets the padding so the label still lines up with the
+   body text while the hover target stays comfortably large. */
 .prose details summary {
   cursor: pointer;
   font-weight: 600;
   color: var(--color-gray-900);
   list-style: none;
+  padding: 0.2em 0.4em;
+  margin: -0.2em -0.4em;
+  border-radius: 6px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.prose details summary:hover {
+  color: var(--color-blue-700);
+  background: var(--color-gray-100);
+}
+
+.prose details summary:focus-visible {
+  outline: 2px solid var(--color-blue-500);
+  outline-offset: 2px;
 }
 
 .prose details summary::-webkit-details-marker {
   display: none;
 }
 
+/* `color: inherit` so the chevron brightens with the label on hover instead of
+   staying grey — it's the primary signal that this expands. */
 .prose details summary::before {
   content: '▸';
   display: inline-block;
   width: 1em;
   margin-right: 0.3em;
-  color: var(--color-gray-500);
+  color: inherit;
   transition: transform 0.15s ease;
 }
 
 .prose details[open] summary::before {
   transform: rotate(90deg);
+}
+
+/* Trailing hint, so the affordance doesn't rest on a single glyph. Hidden from
+   screen readers, which already announce the expanded/collapsed state. */
+.prose details summary::after {
+  content: 'Show';
+  float: right;
+  margin-left: 1em;
+  font-size: 0.8em;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-gray-500);
+}
+
+.prose details summary:hover::after {
+  color: var(--color-blue-700);
+}
+
+.prose details[open] summary::after {
+  content: 'Hide';
 }
 
 .prose details > :not(summary) {

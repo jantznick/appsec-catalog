@@ -103,10 +103,6 @@ If you're working with an AI assistant, ask it to help with the technical answer
 
 Work through **[Before You Share It](/docs/secure-build-prelaunch)** — the full checklist, and how to get your assistant to verify most of it for you.
 
-## Where to go next
+---
 
-- **[Logins & Other People's Data](/docs/secure-build-data)** — whether you need logins, and what you're taking on by holding someone's data
-- **[Before You Share It](/docs/secure-build-prelaunch)** — the checklist
-- **[Working with Your AI Agent](/docs/secure-build-agent)** — the rules file, so your assistant applies all of this by default
-
-If your application holds other people's data or is reachable from the internet, the [AppSec program lifecycle](/docs/program-lifecycle) is where it goes next — particularly [Plan & Design](/docs/phase-plan-design), which has a worksheet for working out how much protection it actually needs.
+**Next: [Logins & Other People's Data](/docs/secure-build-data)** — whether you need logins, and what you take on by holding someone's data.

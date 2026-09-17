@@ -6,15 +6,19 @@ If you've built something with an AI assistant and you're wondering what you've 
 
 Almost every web application has three parts, whether or not you set them up deliberately.
 
-| Part | Also called | What it does | Who can see it |
+| Part | Also called | What it does | What other people can get at |
 |---|---|---|---|
-| **Front end** | client, UI | The pages and the code that run in your user's browser | Anyone who can use the application |
-| **Back end** | server, API | Takes requests, applies your rules, decides what to send back | Only you and your host |
-| **Database** | data store | Holds what the application keeps between visits | Whoever you've granted access — often more than you think |
+| **Front end** | client, UI | The pages and the code that run in your user's browser | All of it, code included |
+| **Back end** | server, API | Takes requests, applies your rules, decides what to send back | Not the code — but it's listening, and anyone who can use the application can send it requests |
+| **Database** | data store | Holds what the application keeps between visits | Normally nothing directly — only your back end talks to it |
 
 Plus, usually, **services you rent from other companies**: a login provider, file storage, payments, email, an AI API. Each one is another place your data goes and another key you have to look after.
 
-That last column is the one to pay attention to. The split between front end and back end isn't just architecture — it's the line between what your users can see and what they can't.
+**Your back end being private doesn't mean it's out of reach.** Its code stays on your server, but the thing itself sits there answering requests from anyone who can reach the application — including requests your own pages would never make. Someone can call an endpoint directly, in any order, with values your interface wouldn't send.
+
+That's why the real checks have to live there. The back end is the last thing standing between a request and your data, and whatever it doesn't verify, nothing does.
+
+The database is a step further back: normally only your back end can talk to it. Two things break that — leaving it reachable from the internet, or using a hosted database service where the browser holds the key. In that second case the service's own access rules are the only thing between a user and every row in your tables, and they often start switched off.
 
 ## What leaves your server, your users can read
 
@@ -86,3 +90,7 @@ How much of that is really yours depends on how you deploy. Managed hosting take
 **Add the rules file to your project.** [Working with Your AI Agent](/docs/secure-build-agent) gives you a file to drop in that makes your assistant apply the four things above by default, whether or not you remember them.
 
 **Register the application in Orbit** once anyone other than you can reach it — see [Deploying Your Application](/docs/secure-build-deploying#5-register-it-in-orbit). You don't need an account. That gets it reviewed by the AppSec team, and puts it under the [same security review](/docs/secure-build-prelaunch#youre-held-to-the-same-standard) as every other application the company runs.
+
+---
+
+**Next: [Working with Your AI Agent](/docs/secure-build-agent)** — a rules file that makes your assistant apply the four things above by default.

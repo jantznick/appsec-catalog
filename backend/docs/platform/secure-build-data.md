@@ -87,7 +87,6 @@ If you're not sure whether what you're holding counts, ask. It's a short convers
 | "If someone found this URL with no login, what could they do?" | Pages that were never protected |
 | "What would we lose if the database were deleted right now?" | Missing backups |
 
-## Next
+---
 
-- **[Before You Share It](/docs/secure-build-prelaunch)** — the checklist to run before anyone else uses this
-- **[Working with Your AI Agent](/docs/secure-build-agent)** — the rules file, which covers the ownership check and the logging rules automatically
+**Next: [Before You Share It](/docs/secure-build-prelaunch)** — the checklist to run before anyone else uses this.
