@@ -195,9 +195,16 @@
   --color-violet-50: #1e2a46;
   --color-violet-100: #2b2450;
   --color-violet-200: #2b3859;
+  --color-violet-300: #574f95;
+  --color-violet-400: #7b70c2;
   --color-violet-500: #9784d0;
   --color-violet-600: #8b78c9;
+  /* -700 is the accent-text step (links, chips, eyebrows). Without it the
+     utility falls through to stock Tailwind's #6d28d9 — a dark purple that
+     is unreadable on these dark surfaces. Mirrors purple-700 above. */
+  --color-violet-700: #b9adf0;
   --color-violet-800: #d0c6f8;
+  --color-violet-900: #e3ddfc;
 
   --color-pink-50: #1e2a46;
   --color-pink-100: #3a1e2e;

@@ -40,7 +40,7 @@ A secret is anything that grants access: an API key, a database password, a toke
 - **Take them out of your code.** If a password is typed into a file, move it to an environment variable.
 - **Put the real values in your hosting platform's settings.** Every managed host has a page for this, usually called Environment Variables or Config.
 - **Make sure `.env` isn't in your repository.** Add `.env` and `.env.*` to `.gitignore`. If you already committed one, the password in it must be changed — deleting the file isn't enough, because it's still in the history.
-- **Never put a secret in frontend code.** Anything your browser downloads, your visitors can read. If a call needs a secret, it has to happen on the server.
+- **Never send a secret to the browser.** Anything your application sends a user — the front-end code, and every API response behind it — that user can read. If a call needs a secret, the back end makes it and sends back only the result.
 
 Ask your assistant: *"Show me everywhere a key or password is used, and where each one comes from."*
 

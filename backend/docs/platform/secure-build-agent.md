@@ -35,9 +35,12 @@ than quietly doing it anyway.
   placeholder value, never a real one.
 - Never commit a .env file, private key, or credentials file. Make sure
   .gitignore covers .env, .env.*, *.pem, *.key, and *.p12.
-- Never put a secret in code that runs in the browser. Anything in the
-  frontend is downloadable by every visitor. If an API needs a secret,
-  the call belongs on the server.
+- Never send a secret to the browser. That includes front-end code AND
+  anything in an API response — the user can read both. If an API needs
+  a secret, the call belongs on the server.
+- Never return more data than the page uses. If an endpoint returns a
+  whole record and the page shows two fields, strip it down to two
+  fields. Hiding something in the UI does not hide it.
 - Never turn off, skip, or weaken a security check to make something
   work or to make a test pass. Tell me it's blocking and why instead.
 - Never write my own authentication, password hashing, session handling,

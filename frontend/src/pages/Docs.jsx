@@ -20,8 +20,11 @@ const GROUP_ACCENTS = {
     chip: 'bg-teal-50 text-teal-700',
     eyebrow: 'text-teal-700',
   },
+  // Uses the -500 step for the tab rather than -600 like the groups above:
+  // violet-600 lands at 4.13:1 on the surface colour, under the 4.5 AA floor
+  // the teal groups clear at 5.07:1. violet-500 reaches 4.79:1.
   'Building Securely': {
-    tabActive: 'border-violet-500 text-violet-600',
+    tabActive: 'border-violet-500 text-violet-500',
     chip: 'bg-violet-50 text-violet-700',
     eyebrow: 'text-violet-700',
   },

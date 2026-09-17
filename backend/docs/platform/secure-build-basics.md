@@ -6,23 +6,45 @@ If you've built something with an AI assistant and you're wondering what you've 
 
 Almost every web application has three parts, whether or not you set them up deliberately.
 
-| Part | What it does | Where it runs |
-|---|---|---|
-| **The front end** | What people see and click | **In your visitor's browser**, on their own device |
-| **The back end** | Does the work — handles requests, applies your rules | On a server, not on the visitor's machine |
-| **The database** | Remembers things between visits | On a server, or a service you rent |
+| Part | Also called | What it does | Who can see it |
+|---|---|---|---|
+| **Front end** | client, UI | The pages and the code that run in your user's browser | Anyone who can use the application |
+| **Back end** | server, API | Takes requests, applies your rules, decides what to send back | Only you and your host |
+| **Database** | data store | Holds what the application keeps between visits | Whoever you've granted access — often more than you think |
 
-Plus, usually, **things you rent from other companies**: a login service, file storage, a payments provider, an email sender, an AI API. Each one you add is another place your data goes, and another key you have to keep safe.
+Plus, usually, **services you rent from other companies**: a login provider, file storage, payments, email, an AI API. Each one is another place your data goes and another key you have to look after.
 
-## The one technical fact that matters most
+That last column is the one to pay attention to. The split between front end and back end isn't just architecture — it's the line between what your users can see and what they can't.
 
-**Anything in the front end is public.**
+## What leaves your server, your users can read
 
-Your visitor's browser has to download the front end to run it — so anyone who visits can read all of it. Not just the text and images: the code, and anything written into it.
+Everything your application sends to someone's browser, the person using that browser can read. All of it.
 
-This is the source of the most common serious mistake people make: putting an API key or password into front-end code because that's where the call was happening. It works perfectly. It also hands that key to every visitor.
+That's broader than most people expect, and it's worth being precise about what it covers:
 
-If something needs to stay secret, it has to live and be used on the **back end**. That's really the whole reason the back end exists.
+- **The front-end code itself.** The browser has to download it to run it, so anything written into it — including an API key — comes along.
+- **Every request and response between the browser and your back end.** Browsers have a built-in inspector (usually F12, then the Network tab) that shows these in full: the addresses, the data sent, and everything sent back.
+- **Anything your API returns but your page doesn't display.** This one catches people out. If your endpoint returns a whole user record and the page only shows the name, the rest is still sitting in the response, readable by anyone who looks.
+
+So two practical rules follow:
+
+**A secret must never leave your server.** If something needs an API key, your back end makes that call and sends the browser the result — not the key.
+
+**Send only the fields the page actually uses.** Hiding something in the interface doesn't hide it. If the browser shouldn't have it, don't put it in the response.
+
+<details>
+<summary>"Your users" isn't always "the public"</summary>
+
+Who can read all this depends on who can reach your application in the first place.
+
+- **Internet-facing** — anyone, including people who found it by accident.
+- **Internal only** — your colleagues, plus anyone who gets onto the network.
+
+That's a real difference, and it's worth knowing which one you are. But it changes the *size* of the audience, not the rule. Internal applications routinely handle salary data, customer records, and admin access, and "only people on our network" is a much larger and less predictable group than it sounds.
+
+Treat the rules above as applying either way, and treat being internal-only as one layer of protection rather than the protection.
+
+</details>
 
 ## What changes when you deploy
 
@@ -40,7 +62,7 @@ See [Deploying Your Application](/docs/secure-build-deploying) for how to do tha
 
 That's the whole list. Everything else in this section is one of these four in more detail.
 
-**1. Keep your secrets out of your code.** Passwords, API keys, and tokens belong in your hosting platform's settings, not in a file — and never in the front end.
+**1. Keep your secrets out of your code.** Passwords, API keys, and tokens belong in your hosting platform's settings, not in a file — and they must never be sent to the browser.
 
 **2. Know who can reach it.** Only you, your network, your company, or the whole internet. Pick deliberately, then check you got what you picked.
 
