@@ -15,7 +15,11 @@ This page is the requirements themselves. For what meeting them looks like day t
 | **In Wiz** | Deliberately outside Orbit — Wiz is the system of record for vulnerability findings |
 | **Not yet** | No check today, and the reason why |
 
-Two behaviours to know before reading your own results: a control with nothing mapped to it reads as **not meeting** rather than as unknown, and there's no *not applicable* state yet, so a control scoped to something that doesn't describe your application still counts against you.
+Three behaviours to know before reading your own results:
+
+- **A control with nothing mapped to it reads as not meeting**, rather than as unknown or skipped. You can tell these apart: the evidence line reads `No field mappings defined for this control`. A low compliance figure with a lot of those means Orbit can't check those requirements yet — not that you're failing them.
+- **Verification required is not compliance.** It's excluded from the compliance percentage, which stays *meeting ÷ total*, so a requirement sitting in verification never inflates your figure. An administrator's override is what promotes it to meeting, which is where the human judgement gets recorded rather than applied silently.
+- **There's no *not applicable* state yet**, so a requirement scoped to something that doesn't describe your application still counts against you.
 
 ## Application Security (4.6)
 
@@ -24,7 +28,7 @@ Two behaviours to know before reading your own results: a control with nothing m
 | **4.6.1** | Software development shall be managed using software/application development or system development lifecycle processes (SDLC). | **Measured (proxy)** — a linked repository. A repository is not evidence of a process; treat a pass here as weak. |
 | **4.6.2** | There shall be processes and solutions to ensure continuous security testing of source code and secure practices prior to releasing code into production. | **Measured** — a static analysis tool recorded, at integration level 1 or above. |
 | **4.6.3** | Segregation of Duties Principle shall be employed to ensure secure deployment of code into production. | **Measured** — your repository's branch protection, read from your provider: required approving reviews, stale-review dismissal, whether administrators are exempt. Covers the code-review half. The deploy half — that production is reachable only through the pipeline — is **attested** until Orbit models environments. |
-| **4.6.4** | Development, test, and production operational environments shall be separated via logical and/or physical methods, to reduce the risk of unauthorized access (for example: web application firewalls) or changes to the application and its components. | **Attested** — Orbit records a single primary environment per application and does not model the separation between them. |
+| **4.6.4** | Development, test, and production operational environments shall be separated via logical and/or physical methods, to reduce the risk of unauthorized access (for example: web application firewalls) or changes to the application and its components. | **Attested**, for now. Orbit records a single primary environment per application and doesn't model the separation between them. This becomes measured once environments are modelled — that work sits outside the policy-control programme, so it's the one requirement whose verification depends on something on a different track. |
 | **4.6.5** | Best practices shall be adopted to effectively manage software composition to ensure secure use of open-source components and software. | **Measured** — an SCA tool recorded, or static analysis recorded as covering dependency scanning. |
 | **4.6.6** | Application metadata shall be maintained throughout the application's lifecycle, storing the five records below. | **Verification required** — the five are checked unevenly, so this reports as needing confirmation rather than as a pass. |
 | 4.6.6 a | Architecture documentation for the software/application, kept complete and up-to-date. | **Verification required** — Orbit can see that your threat model, product data flows and API schema exist. Whether they are complete and current is a judgement someone makes at review. |
@@ -65,13 +69,19 @@ Two behaviours to know before reading your own results: a control with nothing m
 
 ## What this adds up to
 
-Of the 28 requirements plus their sub-clauses:
+Across the 28 requirements:
 
-- **Measured** — roughly half, and the strongest of those are tool coverage, branch protection, threat model currency, scan recency and transport encryption.
-- **Attested** — most of the Secure Coding Standard. These are properties of your code rather than activities, and no catalog field could ever prove them. They're not weaker requirements, they're differently evidenced — and attested compliance is reported separately from measured for exactly that reason.
-- **Not yet** — three, all in 4.6.6, and all needing the same missing thing: something that ties an artifact to a specific build or release. SBOM per release, scan evidence per release, and exception records with expiry.
+| | Count | |
+|---|---|---|
+| **Measured outright** | 18 | Tool coverage, branch protection, threat model currency, scan recency, transport encryption, secrets detection |
+| **Measured, but only partly** | 2–3 | Reported as *verification required* rather than as a pass: **4.6.6** (two of five metadata records checked), **4.6.14** (coverage recorded, not that the scan passed for the deployed workload), and arguably **4.6.7** (the template exists; completing it isn't checked) |
+| **Attested** | 8 | 4.6.12, 6.43.2, 6.43.5, 6.43.6, 6.43.8, 6.43.9, 6.43.10, and the at-rest half of 6.43.13 |
 
-Two proxies — 4.6.1 / 6.43.1 and 6.43.7 — are flagged in the tables above because a pass on them means materially less than a pass elsewhere. They're recorded as proxies deliberately rather than quietly counted as full coverage.
+Attested isn't a weaker requirement, it's a differently evidenced one — these are properties of your code rather than activities, and no catalog field could demonstrate the absence of a back door. That's why attested compliance is reported separately from measured rather than blended into one number.
+
+Three things stay unmeasured inside **4.6.6**, and they all need the same missing capability — something tying an artifact to a specific build or release: an SBOM per release, scan evidence per release, and exception records carrying an expiry.
+
+And two **proxies** are flagged as such in the tables above rather than quietly counted as full coverage: 4.6.1 / 6.43.1 check that a repository is linked, and 6.43.7 checks that a dynamic testing tool exists. Both will pass or fail honestly, but neither is really measuring its requirement. Branch protection is much better evidence for the first two and they're expected to be re-mapped to it.
 
 ---
 
