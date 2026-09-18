@@ -89,6 +89,11 @@ export function Layout({ children }) {
   // full-bleed and manages its own section widths, so skip the padded container.
   const isLanding = ['/', '/login', '/register'].includes(location.pathname);
 
+  // Documentation is long-form prose with its own nav column, and max-w-7xl
+  // leaves it cramped — a reading column barely wider than the sidebar beside
+  // it. It gets a wider container and manages its own width from there.
+  const isDocs = location.pathname.startsWith('/docs');
+
   const navLinkClass = (path) => {
     const isActive = path === '/'
       ? location.pathname === '/'
@@ -344,7 +349,15 @@ export function Layout({ children }) {
           </div>
         </div>
       </nav>
-      <main className={isLanding ? '' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'}>
+      <main
+        className={
+          isLanding
+            ? ''
+            : isDocs
+              ? 'w-full lg:w-[75vw] max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8'
+              : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'
+        }
+      >
         {children}
       </main>
       <AuthModal

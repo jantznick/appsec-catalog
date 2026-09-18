@@ -73,9 +73,54 @@ const DOC_GROUPS = [
         title: 'Program Foundations',
         pages: [
           { slug: 'program-overview', title: 'Program Overview' },
-          { slug: 'program-policy-baseline', title: 'Policy Baseline' },
+          // The policy itself, then the operational reading of it. Order
+          // matters: the second page is explicitly an interpretation of the
+          // first, and reads as invented if you meet it cold.
+          { slug: 'program-infosec-policy', title: 'Information Security Policy' },
+          { slug: 'program-policy-baseline', title: 'Meeting the Policy' },
           { slug: 'program-samm', title: 'SAMM & Maturity' },
           { slug: 'program-glossary', title: 'Glossary' },
+        ],
+      },
+      {
+        // The six lifecycle phases are children of the overview because they're
+        // genuinely sub-pages of one topic, not six peers — the overview holds
+        // what would otherwise be repeated on all six (the work-item/output
+        // model, entry/exit criteria, how risk tiers modulate the work).
+        //
+        // Slugs deliberately carry no phase number: the ordinal lives in the
+        // nav title and each page's H1, so renumbering or inserting a phase
+        // doesn't invalidate every inbound link and control reference.
+        //
+        // A slug registered here without a matching file in docs/platform
+        // returns a 500, so register a phase only once its file exists.
+        title: 'The Lifecycle',
+        pages: [
+          {
+            slug: 'program-lifecycle',
+            title: 'The Lifecycle',
+            children: [
+              { slug: 'phase-plan-design', title: 'Phase 1 — Plan & Design' },
+              { slug: 'phase-build-commit', title: 'Phase 2 — Build & Commit' },
+              { slug: 'phase-ci-gate', title: 'Phase 3 — CI Gate' },
+              { slug: 'phase-release-deploy', title: 'Phase 4 — Release & Deploy' },
+              { slug: 'phase-runtime-operate', title: 'Phase 5 — Runtime & Operate' },
+              { slug: 'phase-improve-govern', title: 'Phase 6 — Improve & Govern' },
+            ],
+          },
+        ],
+      },
+      {
+        // Not phases, and deliberately not numbered as one. A phase answers
+        // "where is this code on its way to production"; these answer "what do
+        // you do when something is found" and "what if you can't meet a
+        // control" — both run concurrently with phases 3-5 rather than after
+        // them, and neither gates progression the way a phase does.
+        title: 'Across Every Phase',
+        pages: [
+          { slug: 'lifecycle-secure-coding', title: 'Secure Coding Standard' },
+          { slug: 'lifecycle-remediation', title: 'Remediating Findings' },
+          { slug: 'lifecycle-exceptions', title: 'Exceptions' },
         ],
       },
       {
@@ -83,6 +128,42 @@ const DOC_GROUPS = [
         pages: [
           { slug: 'program-center-of-excellence', title: 'AppSec Center of Excellence' },
           { slug: 'program-security-champions', title: 'Security Champions Program' },
+        ],
+      },
+    ],
+  },
+  {
+    // A third audience: people building applications without a platform team,
+    // a pipeline, or an engineering background — increasingly with an AI
+    // coding assistant. Deliberately pitched below the program track: it
+    // starts at what a deployment and a server actually are, because a reader
+    // who doesn't have that model can't act on anything further up.
+    //
+    // Needs a GROUP_ACCENTS entry in frontend/src/pages/Docs.jsx keyed by this
+    // exact title, or it renders in the same blue as the Orbit documentation.
+    //
+    // More pages are planned (see LIFECYCLE_PHASES_PLAN.md); they land in
+    // reading order, since the later sections assume the earlier ones.
+    // Deliberately a short, instructional track rather than a curriculum:
+    // four pages of "do this", with the concepts folded into <details>
+    // glossaries next to the instruction that needs them. A reader here wants
+    // their application online without doing something regrettable — not an
+    // understanding of ports.
+    title: 'Building Securely',
+    sections: [
+      {
+        title: 'Start Here',
+        pages: [
+          { slug: 'secure-build-basics', title: 'Application Basics' },
+          { slug: 'secure-build-agent', title: 'Working with Your AI Agent' },
+        ],
+      },
+      {
+        title: 'Getting It Online',
+        pages: [
+          { slug: 'secure-build-deploying', title: 'Deploying Your Application' },
+          { slug: 'secure-build-data', title: 'Logins & Other People\'s Data' },
+          { slug: 'secure-build-prelaunch', title: 'Before You Share It' },
         ],
       },
     ],
