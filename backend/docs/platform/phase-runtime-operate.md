@@ -309,15 +309,16 @@ It also feeds **Defect Management** under Implementation, through 5.4.
 | Repositories that have gone quiet | The **Program Operations dashboard** lists linked repos not synced in over 30 days |
 | Records that have never been reviewed, or have drifted | The **Program Operations dashboard** — applications never reviewed, and applications below 100% completeness |
 | Whether review is keeping up | Review freshness in the Knowledge Sharing half of the score, decaying over six months |
+| Whether a scan is **overdue**, not just when it last ran | The last scan date measured against the cadence your tier requires |
+| Whether the record has been reviewed inside six months | The last-reviewed date, checked against the policy's six-month floor |
 | Your dependency exposure when a new advisory lands | The [Dependencies](/docs/dependencies) page, across the whole portfolio |
 | Cloud posture, where a tag is linked | Tenable and Wiz tag links, plus CSV export jobs |
 | Whether you're still meeting policy | The Infosec Policy Compliance tab, re-evaluated automatically as data changes |
 
 **Where they're blind, and will have to ask you:**
 
-- **Whether a scan is overdue.** Orbit stores the last scan date but has no expected cadence to compare it against, so it can show a date without knowing whether that date is late. This is blocked on risk tier existing as a field.
 - **Whether you have an IR runbook, or have ever exercised it.** Only contacts are recorded.
-- **Whether the tier is still right.** No field, so no re-confirmation date either.
+- **Whether the tier is still *right*.** Orbit can see when your record was last reviewed, and flag it when that slips past six months. What it can't do is second-guess the tier itself — whether the rating still matches the application is a judgement someone makes at review.
 - **Whether an application is retired.** Orbit's status values are `pending_executive`, `pending_technical`, and `onboarded` — there's no retired state. A decommissioned application either lingers as "onboarded," dragging down every coverage percentage you report, or gets deleted and takes its history with it. Products can be marked Retired; applications can't. Ask AppSec to handle a decommissioned record meanwhile.
 
 **What lives elsewhere by design.** Individual findings and their remediation status stay in **Wiz** and in your ticket tracker — Orbit correlates an application to them by tag but doesn't hold them, so don't expect a findings list, severity counts, or remediation timing here. That's a scope decision, not a gap.

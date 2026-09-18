@@ -255,8 +255,8 @@ Decide this now. The fields are on the application's [Security tab](/docs/applic
 | Secrets detection | <e.g. Gitleaks>      | <0–4> | | |
 | SCA               | <covered by SAST? >  | <0–4> | | |
 | DAST              | <e.g. Tenable WAS>   | <0–4> | | |
-| App firewall      | <e.g. Fastly NGWAF | N/A> | <0–4> | | |
-| API security      | <tool | N/A>          | <0–4> | | |
+| App firewall      | <e.g. Fastly NGWAF, or N/A> | <0–4> | | |
+| API security      | <tool, or N/A>       | <0–4> | | |
 ```
 
 **Integration level** is how much of the tool Orbit can actually see, and it's what the score is built on: 0 none, 1 tool implemented but no data shared, 2 data shared over API, 3 dashboard and config access shared, 4 full-service partner — worth 0%, 25%, 50%, 75%, and 100% of that category's points. See [Scoring Methodology](/docs/scoring-methodology).
