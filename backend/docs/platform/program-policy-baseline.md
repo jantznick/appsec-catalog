@@ -1,6 +1,6 @@
 # Policy Baseline
 
-The Policy Baseline is the minimum set of security practices every application is expected to follow continuously across its lifecycle — from design, through code and CI, to release and production. Controls are **MUST** (required, with an exception process) or **SHOULD** (strongly recommended, not yet mandatory everywhere).
+The Policy Baseline is the minimum set of security practices every application is expected to follow continuously across its lifecycle — from design, through code and CI, to release and production. Every control here is required, with an [exception process](/docs/lifecycle-exceptions) for when you genuinely can't meet one.
 
 ## Risk tiers
 
@@ -20,9 +20,9 @@ At a glance, every application needs:
 
 - **Governance** — metadata registered and kept current, risk tier assigned
 - **Plan & design** — security requirements defined up front, threat modeling for high-risk features
-- **Build & commit** — secure coding standards followed, PRs get a real security review
-- **CI gate** — SAST, secrets detection, SCA, baseline DAST (if internet-facing), and enforced severity thresholds
-- **Release & deploy** — security evidence attached to every release
+- **Build & commit** — secure coding standards followed, PRs get a real security review by someone other than the author
+- **CI gate** — SAST, secrets detection, SCA, baseline DAST (if internet-facing), container/IaC scanning, and enforced severity thresholds
+- **Release & deploy** — security evidence and an SBOM attached to every release
 - **Runtime & operations** — scheduled re-scanning, findings triaged to closure against SLA
 
 <details>
@@ -33,7 +33,7 @@ At a glance, every application needs:
 | Control | What it means for you |
 |---|---|
 | **Application metadata maintained** | Your application needs to be registered (owner, criticality, data classification, exposure, repo, CI pipeline) before its first production release, and kept current — update it within a few business days whenever ownership, repo, exposure, or data classification changes. |
-| **Risk tier assigned** | Your application needs an assigned risk tier and review cadence, re-checked periodically or after major changes. |
+| **Risk tier assigned** | Your application needs an assigned risk tier and review cadence, reviewed **at least every six months** or whenever business need changes — and after any major change. |
 
 ### Plan and design
 
@@ -47,6 +47,7 @@ At a glance, every application needs:
 | Control | What it means for you |
 |---|---|
 | **Secure coding standards** | Follow your language/framework's secure coding guidelines, keep dependency and secret hygiene clean (no secrets in git, intentional dependency bumps), and get trained on common vulnerability classes early after joining a repo. |
+| **Segregation of duties** | No change reaches production without having been reviewed by someone who didn't write it. In practice: the default branch is protected, pull requests require a review, security checks must pass before merge, and production deploys from that protected branch through the pipeline — not from an individual's machine. |
 | **Security review on pull requests** | PRs need to answer a short checklist: does this touch a security-relevant boundary, does it add dependencies, does it change config or secrets, does it need an AppSec consult. Reviewers are expected to actually check the answers, not rubber-stamp them. |
 
 ### CI verification (the automated gate)
@@ -57,8 +58,9 @@ These are the checks your pipeline runs on every PR and on the default branch �
 |---|---|
 | **Static analysis (SAST)** | Static analysis runs on every PR and on the default branch; findings get triaged against the severity thresholds for your tier. |
 | **Secrets detection** | Every PR and default-branch build is scanned for secrets. A verified live secret blocks the build outright — it must be revoked and rotated, not just removed from the diff. |
-| **Dependency scanning (SCA)** | Dependencies are scanned for known vulnerabilities on every PR and default-branch build; vulnerable ones get upgraded or explicitly justified. |
+| **Dependency scanning (SCA)** | Dependencies are scanned for known vulnerabilities **and licence risk** on every PR and default-branch build; vulnerable ones get upgraded or explicitly justified, and a licence that conflicts with how the application is distributed gets raised before release. |
 | **Baseline dynamic testing (DAST)** | If your application is internet-facing, it needs a baseline dynamic scan against a staging/test environment before its first production release, and on a recurring schedule after that. |
+| **Container and IaC scanning** | Container images and infrastructure-as-code are scanned for critical misconfigurations — in CI, at the registry gate, or both — and **before the workload is deployed**, not only on commit. |
 | **Severity thresholds enforced** | Builds fail automatically when findings exceed the severity threshold for your risk tier, unless there's an approved exception on file. |
 
 ### Release and deploy
@@ -66,6 +68,7 @@ These are the checks your pipeline runs on every PR and on the default branch �
 | Control | What it means for you |
 |---|---|
 | **Release security evidence** | Each release needs its latest scan results (SAST, secrets, SCA, and DAST if applicable) attached to the release record, tied to the specific build/version that shipped. |
+| **SBOM per production release** | Every production release needs a software bill of materials (SPDX or CycloneDX), generated at build time and stored with the release artifact — it's what makes incident response and supply-chain review possible after the fact. |
 
 ### Runtime and operations
 
@@ -75,13 +78,6 @@ These are the checks your pipeline runs on every PR and on the default branch �
 | **Findings triaged to closure** | Blocker/high findings get a ticket within a couple of business days, and every finding is tracked against an SLA (by severity and tier) until it's closed or an exception is filed. |
 
 </details>
-
-## Recommended (SHOULD)
-
-Not yet mandatory everywhere, but expected to become required as adoption matures — worth adopting now if you aren't already:
-
-- **Container and IaC scanning** — scan container images and infrastructure-as-code for critical misconfigurations, in CI or at the registry gate.
-- **SBOM for production releases** — generate a software bill of materials (SPDX or CycloneDX) per release and store it with the release artifact, for incident response and supply-chain review.
 
 ## Exceptions
 

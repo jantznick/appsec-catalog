@@ -89,6 +89,10 @@ Adoption here is verifiable rather than self-reported — the template is a file
 
 ### 2.3 — Reviewing the answers
 
+This is also where **segregation of duties** comes from. The policy requires that no change reaches production without having been seen by someone who didn't write it, and the combination that delivers it is ordinary: a protected default branch, pull requests that require a review, security checks that must pass before merge, and no force-push — the four repository settings in the checklist below. Those settings *are* the control; the rest of this section is about the review being real rather than a rubber stamp.
+
+One half of it lives outside this phase, though: production has to deploy *from* that protected branch through the pipeline, or the review is decorative. See [Release & Deploy](/docs/phase-release-deploy).
+
 The checklist fails in a specific way: the author ticks four boxes, the reviewer approves without reading them, and now there's a security process that produces nothing but a false sense of coverage.
 
 What makes a review real:
@@ -130,6 +134,9 @@ The goal is that a secret never reaches the remote at all. [CI Gate](/docs/phase
 - [ ] Force-push to the default branch is disabled
 - [ ] Repository visibility is correct (and you've checked, not assumed)
 - [ ] Who has write and admin access is current — ex-team members removed
+- [ ] Nobody can merge their own pull request without a second approval
+      (this and the four settings above are what segregation of duties
+       actually consists of)
 ```
 
 </details>

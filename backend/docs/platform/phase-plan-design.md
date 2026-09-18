@@ -279,13 +279,15 @@ An acceptable one needs four things: a business justification, a compensating co
 | Risk tier and rationale | **Your design doc** — no Orbit field yet. Tell AppSec your tier. |
 | Security requirements | **Your design doc or ticket**, linked from the Orbit record |
 | Data classification | **Orbit** — the application's data types |
-| Data-flow map | **Orbit** — [product ingress points and data flows](/docs/products) |
+| Data-flow map | **Orbit** — [product ingress points and data flows](/docs/products). With the threat model and API schema, this is the architecture documentation the policy requires |
 | Threat model and components | **Orbit** — the [Threat Model tab](/docs/application-security) |
 | Design review notes and decisions | **Orbit** — App Timeline |
 | Mitigation tickets | **Your ticket tracker**, referenced from the threat model |
 | Approved patterns used | **Your design doc** |
 | Tooling plan | **Orbit** — the [Security tab](/docs/application-security) |
 | Exceptions | **Filed with Hearst's AppSec team** — see [Exceptions](/docs/lifecycle-exceptions) |
+
+**Together, 1.4, 1.5 and 1.6 are your architecture documentation.** The policy requires architecture documentation to be kept complete and current as part of an application's metadata — and the threat model's scope and actors, the product's ingress points and data flows with their protocols and data classifications, the API schema, and the recorded interfaces between applications are exactly that. Because they live in Orbit rather than in a diagram someone exported once, keeping them current is a matter of updating the record rather than remembering a separate document exists.
 
 On 1.4: ingress points and data flows are the most underused feature in Orbit relative to how much they help a design review. Once a product has two or more applications mapped in, you can record where external traffic enters (with the channel, and whether it needs an API key) and how data moves between the applications behind it (protocol, data classification, direction). That's your attack surface documented in one place instead of scattered across notes. See [Products](/docs/products).
 

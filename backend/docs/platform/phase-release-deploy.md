@@ -40,6 +40,8 @@ Most of this should be automated. The sign-off is the part that stays human on p
 | 4.5 | **Confirm config and secrets hygiene for the target environment** | Secrets from a managed store, nothing sensitive in plaintext config, a least-privilege deploy identity |
 | 4.6 | **Register any newly created exposure** | New hosting domains, new ingress points, and an updated API schema on file |
 | 4.7 | **Update the record's deployment state** | Current version, environment, and branch reflected in Orbit |
+| 4.8 | **Deploy through the pipeline, from the protected branch** | Production reachable only via the pipeline — no individual holding credentials to push to it directly |
+| 4.9 | **Keep environments separated** | Development, test and production separated logically or physically, with no shared credentials, data, or network path between them |
 
 ### 4.1 and 4.3 — Evidence and sign-off
 
@@ -69,7 +71,8 @@ Risk tier:      <High | Medium | Low>
 | DAST    | <yes/no/NA> | <pass/fail> | <count> | <scan link> |
 | Container / IaC | <yes/no/NA> | <pass/fail> | <count> | <build link> |
 
-SBOM: <link to the artifact, or "not generated">
+SBOM: <link to the SPDX or CycloneDX artifact — required for every
+       production release>
 
 ### Anything above threshold
 
@@ -102,6 +105,10 @@ I confirm:
 
 - [ ] Every gate check ran **on this commit** and passed, or has an
       approved unexpired exception
+- [ ] Container and IaC scans passed for the workload being deployed
+- [ ] An SBOM exists for this build and is stored with the artifact
+- [ ] This build reached production through the pipeline from the
+      protected branch, and was reviewed by someone who didn't write it
 - [ ] No verified live secret was found
 - [ ] No exception affecting this application has expired
 - [ ] New exposure (domains, endpoints, ingress points) is registered in Orbit
@@ -111,6 +118,9 @@ I confirm:
 Deviations from the above: <none, or list them>
 
 Signed: <name>        Role: <role>        Date: <YYYY-MM-DD>
+
+The signer should not be the sole author of the change. If that's
+unavoidable on a small team, say so here and name who reviewed it.
 ```
 
 For a Low-tier application with a fully automated pipeline, this is a one-line record your CI writes. For High tier it's a person reading the evidence record before clicking deploy. Don't make it a form nobody reads — if it always says "all clear" without anyone checking, delete it and be honest that you don't have a sign-off step.
@@ -133,7 +143,10 @@ The check here isn't about your code, it's about the place you're putting it. Mo
 - [ ] Production credentials are distinct from staging and local
 - [ ] Rotation cadence is defined, with a named owner
 - [ ] Debug mode, verbose errors, and stack traces are OFF
-- [ ] Any seeded test or demo account is removed or disabled
+- [ ] Vendor-supplied default accounts are removed or have their
+      passwords changed — these are the ones people forget
+- [ ] Any seeded test, demo or custom application account is removed
+      or disabled
 
 ### Deploy identity
 - [ ] The deploy credential is scoped to just what it needs
@@ -150,6 +163,37 @@ The check here isn't about your code, it's about the place you're putting it. Mo
 ### Data
 - [ ] Production data is not copied into non-production environments
 - [ ] Backups exist, and a restore has actually been tested
+```
+
+</details>
+
+### 4.8 and 4.9 — Segregation of duties, and keeping environments apart
+
+These two are what make the rest of the phase mean anything, and they're settings rather than activities — done once per environment, then only broken by someone in a hurry.
+
+**Segregation of duties** starts in [Build & Commit](/docs/phase-build-commit), where a protected branch and a required review mean no change reaches the default branch unseen by a second person. It only holds if production deploys *from* that branch through the pipeline. If a developer has credentials that let them push straight to production, the review chain has a bypass and the control is decorative.
+
+So: deploy identities belong to the pipeline, not to people. Where an individual genuinely needs emergency access, it should be time-bound, logged, and announced — an exception, not a standing permission.
+
+**Environment separation** means development, test and production are genuinely distinct — separate infrastructure or separate logical boundaries, separate credentials, separate data. The common failures are a shared database "just for this", a staging environment on the production network, and a developer credential that happens to work in both.
+
+<details>
+<summary>Separation checklist — per application, re-checked when infrastructure changes</summary>
+
+```markdown
+## Environment Separation — <application name>
+
+- [ ] Development, test and production are separate environments —
+      separate infrastructure, or a documented logical boundary
+- [ ] No credential works in more than one environment
+- [ ] No network path from a lower environment into production
+- [ ] Production data is not present in development or test
+- [ ] An application firewall or equivalent sits in front of production
+      where the application is internet-facing
+- [ ] Deploy identity for each environment is scoped to that environment
+- [ ] Nobody holds standing credentials to push code to production
+      outside the pipeline
+- [ ] Emergency access is time-bound, logged, and announced when used
 ```
 
 </details>
@@ -215,6 +259,10 @@ On 4.6: once an API schema is on file, Orbit turns it into a browsable security 
 - Environment config and secrets hygiene confirmed for the target
 - Every new domain, ingress point, and API change is registered
 - The record's current version and environment are up to date
+- Container and IaC scans passed for the deployed workload
+- An SBOM exists for the build and is stored with the artifact
+- The build reached production through the pipeline, reviewed by someone who didn't write it
+- Environments remain separated, with no shared credentials or data
 
 ## How tiers change this
 
@@ -231,7 +279,7 @@ The bottom row is the same across all three on purpose.
 
 ### Baseline controls satisfied here
 
-From [Policy Baseline](/docs/program-policy-baseline): **release security evidence** (4.1, 4.3) is the explicit one — the requirement that each release carries its latest scan results "tied to the specific build/version that shipped." This phase is also where the **exceptions** process is enforced in practice (4.4), since an expired exception has to be resolved before the next release.
+From [Policy Baseline](/docs/program-policy-baseline): **release security evidence** (4.1, 4.3), **SBOM per production release** (4.1, generated in [phase 3](/docs/phase-ci-gate)), **container and IaC scanning** before the workload deploys (4.3), **segregation of duties** (4.8), and **environment separation** (4.9). Release security evidence is the most visible one — the requirement that each release carries its latest scan results "tied to the specific build/version that shipped." This phase is also where the **exceptions** process is enforced in practice (4.4), since an expired exception has to be resolved before the next release.
 
 ### SAMM practices this is evidence for
 

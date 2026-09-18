@@ -32,15 +32,15 @@ Both matter, for different reasons. The pull-request run is fast feedback to the
 |---|---|---|
 | 3.1 | **Stand up static analysis (SAST)** | A job on every PR and default-branch build; tool, integration level, and last scan date recorded in Orbit |
 | 3.2 | **Stand up secrets detection** | A job that fails the build outright on a verified live secret, plus a written exposure runbook |
-| 3.3 | **Stand up dependency scanning (SCA)** | A job on every PR and build; vulnerable dependencies upgraded or justified |
+| 3.3 | **Stand up dependency scanning (SCA)** | A job on every PR and build covering **known vulnerabilities and licence risk**; vulnerable dependencies upgraded or justified |
 | 3.4 | **Stand up baseline dynamic testing (DAST)** | A scan against staging before first production release, then on a schedule |
 | 3.5 | **Configure the severity thresholds for your tier** | Pipeline config that fails the build above your threshold, with the threshold documented |
 | 3.6 | **Report the gate result** | A per-build record: which checks ran, against which commit, counts by severity, pass or fail |
 | 3.7 | **Triage what the gate finds** | A fix, a ticket, or an approved exception — never a silenced check |
-| 3.8 | **Scan containers and infrastructure-as-code** *(recommended)* | A pipeline or registry gate on critical misconfigurations |
-| 3.9 | **Generate an SBOM per build** *(recommended)* | An SPDX or CycloneDX bill of materials stored with the artifact |
+| 3.8 | **Scan containers and infrastructure-as-code** | A pipeline or registry gate on critical misconfigurations, passed before the workload deploys |
+| 3.9 | **Generate an SBOM per production release** | An SPDX or CycloneDX bill of materials, generated at build time and stored with the artifact |
 
-3.8 and 3.9 are **SHOULD** controls rather than MUST — strongly recommended, and expected to become required as adoption matures.
+3.8 and 3.9 are required, not optional. Note where each one bites: container and IaC scanning has to pass **before the workload deploys**, so it's a release gate as well as a CI check, and the SBOM has to be generated **at build time** from what actually went into the artifact.
 
 ### 3.1–3.4 — Wiring up the checks
 
@@ -96,6 +96,8 @@ SCA
 - [ ] Reads our actual lockfile, not just the manifest
 - [ ] Covers transitive dependencies, not just direct ones
 - [ ] Runs on the default branch even when no dependency changed
+- [ ] Licence checking is switched on, not just vulnerability checking
+      (most tools do both, but licence rules often ship disabled)
 
 DAST
 - [ ] Points at a staging environment that resembles production
@@ -243,14 +245,14 @@ Continuous phase, so these are steady-state conditions rather than a finish line
 | **Severity gate** | Strictest | Critical and High block | Critical blocks |
 | **Secrets** | Verified live secret blocks — no tier exemption | Same | Same |
 | **DAST** | Required if internet-facing, most frequent schedule | Required if internet-facing | Required if internet-facing |
-| **Container / IaC** | Expected | Recommended | Recommended |
-| **SBOM** | Expected | Recommended | Recommended |
+| **Container / IaC** | Required — strictest thresholds | Required | Required |
+| **SBOM** | Required per production release | Required | Required |
 
 ## How this maps to policy and maturity
 
 ### Baseline controls satisfied here
 
-All five CI verification required controls from [Policy Baseline](/docs/program-policy-baseline), plus both recommended ones: **static analysis** (3.1), **secrets detection** (3.2), **dependency scanning** (3.3), **baseline dynamic testing** (3.4), **severity thresholds enforced** (3.5), and — as SHOULDs — **container and IaC scanning** (3.8) and **SBOM for production releases** (3.9).
+Every CI verification control from [Policy Baseline](/docs/program-policy-baseline): **static analysis** (3.1), **secrets detection** (3.2), **dependency scanning** (3.3), **baseline dynamic testing** (3.4), **container and IaC scanning** (3.8), and **severity thresholds enforced** (3.5). Work item 3.9 carries the baseline's **SBOM per production release**, which is evidenced at [release](/docs/phase-release-deploy).
 
 ### SAMM practices this is evidence for
 

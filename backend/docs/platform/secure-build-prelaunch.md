@@ -43,6 +43,8 @@ Most of it your AI assistant can check for you. Paste the checklist into your ch
 ### Leftovers from building it
 - [ ] Debug mode and detailed error pages are off
 - [ ] Test and demo accounts are deleted, or have real passwords
+- [ ] Any default account that came with a tool or template is removed
+      or has its password changed
 - [ ] Anything I switched off to make development easier is back on
 - [ ] Commented-out code containing real credentials is gone
 
