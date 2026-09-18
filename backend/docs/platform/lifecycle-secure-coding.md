@@ -167,16 +167,16 @@ Numbered as they appear in the [Information Security Policy](/docs/program-infos
 
 | Policy requirement | Covered by |
 |---|---|
-| [4.6.12, 6.43.2](/docs/program-infosec-policy) | The reference frameworks above |
-| 6.43.7 | OWASP Top 10 as the basis for web application controls |
-| 6.43.1 a | Secure coding techniques throughout |
-| 6.43.1 b | Validation and integrity checking |
-| 6.43.1 c, 6.43.5 | Test data |
-| 6.43.3, 6.43.9 | Credentials and secrets |
-| 6.43.6 | Vendor default and development accounts |
-| 6.43.8 | No back doors |
-| 6.43.10 | What ships to production |
-| 6.43.13 | Cryptography |
+| [4.6.12, 6.4.2](/docs/program-infosec-policy) | The reference frameworks above |
+| 6.4.7 | OWASP Top 10 as the basis for web application controls |
+| 6.4.1 a | Secure coding techniques throughout |
+| 6.4.1 b | Validation and integrity checking |
+| 6.4.1 c, 6.4.5 | Test data |
+| 6.4.3, 6.4.9 | Credentials and secrets |
+| 6.4.6 | Vendor default and development accounts |
+| 6.4.8 | No back doors |
+| 6.4.10 | What ships to production |
+| 6.4.13 | Cryptography |
 
 ---
 
