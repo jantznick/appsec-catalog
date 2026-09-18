@@ -91,10 +91,15 @@ Not every control can be checked the same way, and the difference matters when y
 
 **What's measured today is your catalog record.** Controls are evaluated against fields you maintain in Orbit — whether a SAST tool is recorded, at what integration level, whether an SCA tool covers your dependencies, whether the metadata is complete. That's a real check, and it's the honest description of it: Orbit is confirming what your record says, not reaching into your scanner to confirm a scan ran or reading your repository.
 
-**Two things to know about how the evaluation behaves**, because they shape what you'll see:
+**Three things to know about how the evaluation behaves**, because they shape what you'll see:
+
+- **A control can come back as needing verification, rather than as a pass or a fail.** Some requirements are only partly checkable from catalog data: the fields Orbit can see all pass, but they don't cover the whole control. Those resolve to **verification required**, and a person confirms the rest — an administrator records that judgement, which is what promotes it to meeting. It counts as neither meeting nor not meeting, and it does **not** count toward your compliance percentage.
+
+  The useful way to hold this: **a green check and "verified" aren't the same thing.** A control in this state isn't a problem — it's Orbit being honest that the automated part of the check isn't the whole of it.
 
 - **A control with nothing mapped to it reads as not meeting.** It doesn't come back as unknown or get skipped. So a low compliance figure can mean the control genuinely isn't met, or that Orbit has no way to check it yet — the evidence line on each control tells you which.
-- **The result is pass or fail, with no "not applicable" yet.** A control scoped to something that doesn't describe your application — internet-facing only, say — still counts against you today. Conditional scoping is coming; until it does, that's what an override is for.
+
+- **There's no "not applicable" yet.** A control scoped to something that doesn't describe your application — internet-facing only, say — still counts against you. Conditional scoping is coming; until then, an override is how that gets handled.
 
 **Some controls no field could ever prove.** That there's no back door in your code, that no compiler ships in your production image, that your test data isn't real customer data. These are handled by attestation — the application owner asserting it and standing behind the claim — and the mechanism for recording that is being built. Today an administrator records it against the control instead. See [Secure Coding Standard](/docs/lifecycle-secure-coding) for what backs those claims up.
 

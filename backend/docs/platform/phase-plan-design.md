@@ -291,6 +291,8 @@ An acceptable one needs four things: a business justification, a compensating co
 
 **Together, 1.4, 1.5 and 1.6 are your architecture documentation.** The policy requires architecture documentation to be kept complete and current as part of an application's metadata — and the threat model's scope and actors, the product's ingress points and data flows with their protocols and data classifications, the API schema, and the recorded interfaces between applications are exactly that. Because they live in Orbit rather than in a diagram someone exported once, keeping them current is a matter of updating the record rather than remembering a separate document exists.
 
+Orbit can see that those records exist; it can't judge whether they're complete and current. That's a call a person makes when your application is reviewed, so expect this one to come back as needing verification rather than as an automatic pass.
+
 On 1.4: ingress points and data flows are the most underused feature in Orbit relative to how much they help a design review. Once a product has two or more applications mapped in, you can record where external traffic enters (with the channel, and whether it needs an API key) and how data moves between the applications behind it (protocol, data classification, direction). That's your attack surface documented in one place instead of scattered across notes. See [Products](/docs/products).
 
 ## Done when
