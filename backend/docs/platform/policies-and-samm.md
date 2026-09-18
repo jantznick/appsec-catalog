@@ -6,7 +6,7 @@ A **Policy** is a named set of security requirements — usually a translation o
 
 A Policy is made up of one or more **Controls**, each a specific requirement (for example, "pre-production security scanning required") mapped to metadata Orbit tracks on an Application.
 
-The Policies you'll see are your company's implementation of the wider AppSec program's requirements — see [Policy Baseline](/docs/program-policy-baseline) for what's actually required and why.
+The Policies you'll see are your company's implementation of the wider AppSec program's requirements — see [Meeting the Policy](/docs/program-policy-baseline) for what's actually required and why.
 
 ### Scope
 

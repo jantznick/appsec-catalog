@@ -20,6 +20,14 @@ const GROUP_ACCENTS = {
     chip: 'bg-teal-50 text-teal-700',
     eyebrow: 'text-teal-700',
   },
+  // Uses the -500 step for the tab rather than -600 like the groups above:
+  // violet-600 lands at 4.13:1 on the surface colour, under the 4.5 AA floor
+  // the teal groups clear at 5.07:1. violet-500 reaches 4.79:1.
+  'Building Securely': {
+    tabActive: 'border-violet-500 text-violet-500',
+    chip: 'bg-violet-50 text-violet-700',
+    eyebrow: 'text-violet-700',
+  },
 };
 const DEFAULT_ACCENT = GROUP_ACCENTS['Using Orbit'];
 
@@ -64,7 +72,26 @@ function addHeadingAnchors(html) {
     toc.push({ level: Number(level), text, slug });
     return `<h${level} id="${slug}">${inner}</h${level}>`;
   });
-  return { html: withIds, toc };
+  return { html: withIds, toc: numberToc(toc) };
+}
+
+// Adds a "1", "2", "2.1" style label to each TOC entry. The list is laid out in
+// columns, which flow top-to-bottom before wrapping — so without numbers a
+// reader scanning left-to-right gets the sections out of order.
+function numberToc(headings) {
+  let major = 0;
+  let minor = 0;
+  return headings.map((h) => {
+    if (h.level === 2) {
+      major += 1;
+      minor = 0;
+      return { ...h, label: `${major}` };
+    }
+    minor += 1;
+    // An h3 before any h2 has no parent to hang off; number it on its own
+    // rather than emitting "0.1".
+    return { ...h, label: major === 0 ? `${minor}` : `${major}.${minor}` };
+  });
 }
 
 // Locates the page matching `slug` and the group/section/parent it lives
@@ -181,7 +208,9 @@ export function Docs() {
   }, [navigate]);
 
   return (
-    <div className="max-w-6xl mx-auto">
+    // No max-width here — Layout gives /docs a wider container than the rest of
+    // the app, and a cap at this level would just undo it.
+    <div>
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Documentation</h1>
         <p className="mt-1 text-gray-600">
@@ -264,25 +293,8 @@ export function Docs() {
           </a>
         </aside>
 
-        <main className="flex-1 min-w-0 flex flex-col gap-6 lg:flex-row-reverse">
-          {toc.length > 1 && (
-            <div className="lg:w-56 flex-shrink-0">
-              <div className="lg:sticky lg:top-8 px-4 py-3 rounded-lg border border-gray-200 bg-gray-50">
-                <p className="mb-2 text-xs font-semibold tracking-wider text-gray-500 uppercase">On this page</p>
-                <ul className="space-y-1.5">
-                  {toc.map((item) => (
-                    <li key={item.slug} className={item.level === 3 ? 'ml-3' : ''}>
-                      <a href={`#${item.slug}`} className="text-sm text-blue-600 hover:text-blue-700">
-                        {item.text}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          )}
-
-          <Card padding="lg" className="flex-1 min-w-0">
+        <main className="flex-1 min-w-0">
+          <Card padding="lg" className="min-w-0">
             {loading ? (
               <p className="text-sm text-gray-500">Loading...</p>
             ) : error ? (
@@ -299,6 +311,36 @@ export function Docs() {
                   {located.parent ? located.parent.title : located.section?.title}
                 </p>
                 {title && <h1 className="mb-6 text-3xl font-bold text-gray-900">{title}</h1>}
+
+                {/* Contents sit inline above the prose rather than in a sticky
+                    rail: it frees the full width for the reading column, and on
+                    a page this long a rail that follows you down mostly repeats
+                    what the sidebar already shows. Multi-column so a 30-heading
+                    page doesn't push the actual content off the screen. */}
+                {toc.length > 1 && (
+                  <nav
+                    aria-label="On this page"
+                    className="mb-8 px-4 py-3 rounded-lg border border-gray-200 bg-gray-50"
+                  >
+                    <p className="mb-2 text-xs font-semibold tracking-wider text-gray-500 uppercase">
+                      On this page
+                    </p>
+                    <ol className="gap-x-10 space-y-1.5 sm:columns-2">
+                      {toc.map((item) => (
+                        <li
+                          key={item.slug}
+                          className={`break-inside-avoid flex gap-2 ${item.level === 3 ? 'ml-4' : ''}`}
+                        >
+                          <span className="shrink-0 text-sm tabular-nums text-gray-500">{item.label}</span>
+                          <a href={`#${item.slug}`} className="text-sm text-blue-600 hover:text-blue-700">
+                            {item.text}
+                          </a>
+                        </li>
+                      ))}
+                    </ol>
+                  </nav>
+                )}
+
                 <div ref={contentRef} className="prose max-w-none" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
 
                 {/* Only shown to visitors who aren't signed in — anyone already

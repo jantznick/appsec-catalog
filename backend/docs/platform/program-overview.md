@@ -12,14 +12,16 @@ Security work runs continuously across the software development lifecycle, broke
 
 | # | Phase | What happens here |
 |---|-------|--------------------|
-| 1 | **Plan & Design** | Requirements, threat modeling, and architecture review happen before anything is built. |
-| 2 | **Build & Commit** | Developers write code with fast, in-workflow feedback — secure coding practices plus early checks on pull requests. |
-| 3 | **CI Gate** | Automated scans run in the pipeline, with clear severity thresholds and documented exceptions before code merges or ships. |
-| 4 | **Release & Deploy** | Artifacts, images, and infrastructure are validated before release, with a clear sign-off step. |
-| 5 | **Runtime & Operate** | Running applications are monitored for exposure, rescanned on a schedule, and covered by incident response. |
-| 6 | **Improve & Govern** | Metrics, tuning, training, and periodic review close the loop — and feed changes back into the other five phases. |
+| 1 | **[Plan & Design](/docs/phase-plan-design)** | Requirements, threat modeling, and architecture review happen before anything is built. |
+| 2 | **[Build & Commit](/docs/phase-build-commit)** | Developers write code with fast, in-workflow feedback — secure coding practices plus early checks on pull requests. |
+| 3 | **[CI Gate](/docs/phase-ci-gate)** | Automated scans run in the pipeline, with clear severity thresholds and documented exceptions before code merges or ships. |
+| 4 | **[Release & Deploy](/docs/phase-release-deploy)** | Artifacts, images, and infrastructure are validated before release, with a clear sign-off step. |
+| 5 | **[Runtime & Operate](/docs/phase-runtime-operate)** | Running applications are monitored for exposure, rescanned on a schedule, and covered by incident response. |
+| 6 | **[Improve & Govern](/docs/phase-improve-govern)** | Metrics, tuning, training, and periodic review close the loop — and feed changes back into the other five phases. |
 
-Phases 1–5 follow the order code moves through delivery; phase 6 runs on its own cadence and feeds what's learned back into all five. Each phase will get its own in-depth page over time.
+Phases 1–5 follow the order code moves through delivery; phase 6 runs on its own cadence and feeds what's learned back into all five.
+
+Each phase has its own page covering the work it involves, the templates to do it with, what it produces, and what "done" means. Start with [The Lifecycle](/docs/program-lifecycle) for how they fit together.
 
 ## SAMM & Maturity
 
