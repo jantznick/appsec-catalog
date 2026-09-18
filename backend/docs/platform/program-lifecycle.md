@@ -1,6 +1,6 @@
 # The Lifecycle
 
-The AppSec program runs as **six phases** across the software development lifecycle. [Policy Baseline](/docs/program-policy-baseline) tells you what's *required*; [SAMM & Maturity](/docs/program-samm) measures how *consistently* it happens. These pages are the part in between — the work itself, the templates to do it with, and what it produces.
+The AppSec program runs as **six phases** across the software development lifecycle. [Meeting the Policy](/docs/program-policy-baseline) tells you what's *required*; [SAMM & Maturity](/docs/program-samm) measures how *consistently* it happens. These pages are the part in between — the work itself, the templates to do it with, and what it produces.
 
 ## How this is meant to work
 
@@ -170,7 +170,7 @@ Every application carries a **risk tier** — High, Medium, or Low — from data
 | Severity gate | Strictest | Critical and High block | Critical blocks |
 | Re-assessment | Most frequent | Standard | Lightest |
 
-[Phase 1](/docs/phase-plan-design) has the worksheet for scoring your own tier; [Policy Baseline](/docs/program-policy-baseline#risk-tiers) has what drives it. One rule ignores tiers entirely: **a verified live secret blocks a merge on every application.**
+[Phase 1](/docs/phase-plan-design) has the worksheet for scoring your own tier; [Meeting the Policy](/docs/program-policy-baseline#risk-tiers) has what drives it. One rule ignores tiers entirely: **a verified live secret blocks a merge on every application.**
 
 ## How this connects to the rest of the program
 
@@ -178,11 +178,12 @@ Three layers, each answering a different question about the same work:
 
 | Layer | The question | Where |
 |---|---|---|
-| **Policy Baseline** | What's required? | [Policy Baseline](/docs/program-policy-baseline) |
+| **The policy** | What's required, and how is each requirement checked? | [Information Security Policy](/docs/program-infosec-policy) |
+| **Meeting it** | What does that mean in practice, for an application like mine? | [Meeting the Policy](/docs/program-policy-baseline) |
 | **Lifecycle phases** | How is it done, and what does it produce? | These pages |
 | **SAMM** | How consistently does it happen across the organization? | [SAMM & Maturity](/docs/program-samm) |
 
-A baseline control tells you dependency scanning is required. The phase page tells you it belongs in [CI Gate](/docs/phase-ci-gate), runs on every pull request, is owned by whoever maintains your pipeline, and produces a scan result plus either an upgrade or a written justification. SAMM then asks whether that's true for one repository or for all of them.
+The policy says dependency scanning is required, and names what Orbit checks to confirm it. The phase page tells you it belongs in [CI Gate](/docs/phase-ci-gate), runs on every pull request, is owned by whoever maintains your pipeline, and produces a scan result plus either an upgrade or a written justification. SAMM then asks whether that's true for one repository or for all of them.
 
 ## Orbit's role
 

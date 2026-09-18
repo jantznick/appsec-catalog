@@ -73,7 +73,11 @@ const DOC_GROUPS = [
         title: 'Program Foundations',
         pages: [
           { slug: 'program-overview', title: 'Program Overview' },
-          { slug: 'program-policy-baseline', title: 'Policy Baseline' },
+          // The policy itself, then the operational reading of it. Order
+          // matters: the second page is explicitly an interpretation of the
+          // first, and reads as invented if you meet it cold.
+          { slug: 'program-infosec-policy', title: 'Information Security Policy' },
+          { slug: 'program-policy-baseline', title: 'Meeting the Policy' },
           { slug: 'program-samm', title: 'SAMM & Maturity' },
           { slug: 'program-glossary', title: 'Glossary' },
         ],

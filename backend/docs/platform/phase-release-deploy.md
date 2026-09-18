@@ -279,7 +279,7 @@ The bottom row is the same across all three on purpose.
 
 ### Baseline controls satisfied here
 
-From [Policy Baseline](/docs/program-policy-baseline): **release security evidence** (4.1, 4.3), **SBOM per production release** (4.1, generated in [phase 3](/docs/phase-ci-gate)), **container and IaC scanning** before the workload deploys (4.3), **segregation of duties** (4.8), and **environment separation** (4.9). Release security evidence is the most visible one — the requirement that each release carries its latest scan results "tied to the specific build/version that shipped." This phase is also where the **exceptions** process is enforced in practice (4.4), since an expired exception has to be resolved before the next release.
+From [Meeting the Policy](/docs/program-policy-baseline): **release security evidence** (4.1, 4.3), **SBOM per production release** (4.1, generated in [phase 3](/docs/phase-ci-gate)), **container and IaC scanning** before the workload deploys (4.3), **segregation of duties** (4.8), and **environment separation** (4.9). Release security evidence is the most visible one — the requirement that each release carries its latest scan results "tied to the specific build/version that shipped." This phase is also where the **exceptions** process is enforced in practice (4.4), since an expired exception has to be resolved before the next release.
 
 ### SAMM practices this is evidence for
 

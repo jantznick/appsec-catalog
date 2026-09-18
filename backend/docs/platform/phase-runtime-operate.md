@@ -288,7 +288,7 @@ Continuous phase, so these are steady-state conditions:
 
 ### Baseline controls satisfied here
 
-From [Policy Baseline](/docs/program-policy-baseline): **scheduled re-scanning** (5.1) and **findings triaged to closure** (5.4) are the two required controls. This phase also carries the ongoing half of **application metadata maintained** (5.7) and **risk tier assigned** (5.8) — both of which are continuing obligations rather than one-time setup.
+From [Meeting the Policy](/docs/program-policy-baseline): **scheduled re-scanning** (5.1) and **findings triaged to closure** (5.4) are the two required controls. This phase also carries the ongoing half of **application metadata maintained** (5.7) and **risk tier assigned** (5.8) — both of which are continuing obligations rather than one-time setup.
 
 ### SAMM practices this is evidence for
 

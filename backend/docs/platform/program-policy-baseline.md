@@ -1,6 +1,8 @@
-# Policy Baseline
+# Meeting the Policy
 
-The Policy Baseline is the minimum set of security practices every application is expected to follow continuously across its lifecycle — from design, through code and CI, to release and production. Every control here is required, with an [exception process](/docs/lifecycle-exceptions) for when you genuinely can't meet one.
+What the [Information Security Policy](/docs/program-infosec-policy) asks of you, translated into the minimum set of practices every application follows continuously — from design, through code and CI, to release and production.
+
+The policy itself is the normative document, and [that page](/docs/program-infosec-policy) lists every requirement verbatim alongside exactly how Orbit checks it. This one is the operational version: what the requirements mean in practice, how your risk tier changes them, and what to do when you can't meet one. Every control here is required, with an [exception process](/docs/lifecycle-exceptions) for when you genuinely can't meet one.
 
 ## Risk tiers
 
@@ -25,59 +27,57 @@ At a glance, every application needs:
 - **Release & deploy** — security evidence and an SBOM attached to every release
 - **Runtime & operations** — scheduled re-scanning, findings triaged to closure against SLA
 
-This is the single place that lists every control and how it's checked. Each phase page then covers the work itself — see [The Lifecycle](/docs/program-lifecycle).
-
 <details>
-<summary>Full list of required controls, and how each is checked</summary>
+<summary>Full list of required controls</summary>
 
 ### Governance and inventory
 
-| Control | What it means for you | How Orbit checks it |
-|---|---|---|
-| **Application metadata maintained** | Your application needs to be registered (owner, criticality, data classification, exposure, repo, CI pipeline) before its first production release, and kept current — update it within a few business days whenever ownership, repo, exposure, or data classification changes. | **Measured** — how complete the record is, and when it was last reviewed. Partly verification-required: whether your architecture documentation is complete and current is a human call. |
-| **Risk tier assigned** | Your application needs an assigned risk tier and review cadence, reviewed **at least every six months** or whenever business need changes — and after any major change. | **Measured** — business criticality recorded, and reviewed inside six months. |
+| Control | What it means for you |
+|---|---|
+| **Application metadata maintained** | Your application needs to be registered (owner, criticality, data classification, exposure, repo, CI pipeline) before its first production release, and kept current — update it within a few business days whenever ownership, repo, exposure, or data classification changes. |
+| **Risk tier assigned** | Your application needs an assigned risk tier and review cadence, reviewed **at least every six months** or whenever business need changes — and after any major change. |
 
 ### Plan and design
 
-| Control | What it means for you | How Orbit checks it |
-|---|---|---|
-| **Security requirements defined** | Before building new services or high-impact changes, capture the security requirements up front — auth model, sensitive data flows, trust boundaries — in your design doc or ticket, not as an afterthought. | **Attested** — these live in your design doc, so you assert it. |
-| **Threat modeling for high-risk features** | Internet-facing or high-risk features need a lightweight threat model (even just a data-flow diagram and a few notes on what could go wrong) before you build, revisited when trust boundaries change. | **Measured** — whether a threat model exists, its status, and when it was last reviewed. |
+| Control | What it means for you |
+|---|---|
+| **Security requirements defined** | Before building new services or high-impact changes, capture the security requirements up front — auth model, sensitive data flows, trust boundaries — in your design doc or ticket, not as an afterthought. |
+| **Threat modeling for high-risk features** | Internet-facing or high-risk features need a lightweight threat model (even just a data-flow diagram and a few notes on what could go wrong) before you build, revisited when trust boundaries change. |
 
 ### Build and commit
 
-| Control | What it means for you | How Orbit checks it |
-|---|---|---|
-| **Secure coding standards** | Follow your language/framework's secure coding guidelines, keep dependency and secret hygiene clean (no secrets in git, intentional dependency bumps), and get trained on common vulnerability classes early after joining a repo. | **Attested** — backed by your guidelines (emailed to VTM@hearst.com) and training records. |
-| **Segregation of duties** | No change reaches production without having been reviewed by someone who didn't write it. In practice: the default branch is protected, pull requests require a review, security checks must pass before merge, and production deploys from that protected branch through the pipeline — not from an individual's machine. | **Measured** — your repository's branch protection, read from your provider. The deploy half is attested until Orbit models environments. |
-| **Security review on pull requests** | PRs need to answer a short checklist: does this touch a security-relevant boundary, does it add dependencies, does it change config or secrets, does it need an AppSec consult. Reviewers are expected to actually check the answers, not rubber-stamp them. | **Measured** — the PR template, read from your repository. Verification required: presence isn't completion. |
+| Control | What it means for you |
+|---|---|
+| **Secure coding standards** | Follow your language/framework's secure coding guidelines, keep dependency and secret hygiene clean (no secrets in git, intentional dependency bumps), and get trained on common vulnerability classes early after joining a repo. |
+| **Segregation of duties** | No change reaches production without having been reviewed by someone who didn't write it. In practice: the default branch is protected, pull requests require a review, security checks must pass before merge, and production deploys from that protected branch through the pipeline — not from an individual's machine. |
+| **Security review on pull requests** | PRs need to answer a short checklist: does this touch a security-relevant boundary, does it add dependencies, does it change config or secrets, does it need an AppSec consult. Reviewers are expected to actually check the answers, not rubber-stamp them. |
 
 ### CI verification (the automated gate)
 
 These are the checks your pipeline runs on every PR and on the default branch — they're the baseline's most automatable layer.
 
-| Control | What it means for you | How Orbit checks it |
-|---|---|---|
-| **Static analysis (SAST)** | Static analysis runs on every PR and on the default branch; findings get triaged against the severity thresholds for your tier. | **Measured** — tool and integration level on your record. |
-| **Secrets detection** | Every PR and default-branch build is scanned for secrets. A verified live secret blocks the build outright — it must be revoked and rotated, not just removed from the diff. | **Measured** — tool, integration level and last scan date. For GitHub-linked repositories, secret scanning and push protection are readable through the API. |
-| **Dependency scanning (SCA)** | Dependencies are scanned for known vulnerabilities **and licence risk** on every PR and default-branch build; vulnerable ones get upgraded or explicitly justified, and a licence that conflicts with how the application is distributed gets raised before release. | **Measured** — tool and integration level, or SAST recorded as covering it. |
-| **Baseline dynamic testing (DAST)** | If your application is internet-facing, it needs a baseline dynamic scan against a staging/test environment before its first production release, and on a recurring schedule after that. | **Measured** — tool, integration level and last scan date. |
-| **Container and IaC scanning** | Container images and infrastructure-as-code are scanned for critical misconfigurations — in CI, at the registry gate, or both — and **before the workload is deployed**, not only on commit. | **Measured** — tool and integration level. Verification required: configured isn't the same as passed before this workload deployed. |
-| **Severity thresholds enforced** | Builds fail automatically when findings exceed the severity threshold for your risk tier, unless there's an approved exception on file. | **Attested** — the thresholds themselves live in your pipeline config. |
+| Control | What it means for you |
+|---|---|
+| **Static analysis (SAST)** | Static analysis runs on every PR and on the default branch; findings get triaged against the severity thresholds for your tier. |
+| **Secrets detection** | Every PR and default-branch build is scanned for secrets. A verified live secret blocks the build outright — it must be revoked and rotated, not just removed from the diff. |
+| **Dependency scanning (SCA)** | Dependencies are scanned for known vulnerabilities **and licence risk** on every PR and default-branch build; vulnerable ones get upgraded or explicitly justified, and a licence that conflicts with how the application is distributed gets raised before release. |
+| **Baseline dynamic testing (DAST)** | If your application is internet-facing, it needs a baseline dynamic scan against a staging/test environment before its first production release, and on a recurring schedule after that. |
+| **Container and IaC scanning** | Container images and infrastructure-as-code are scanned for critical misconfigurations — in CI, at the registry gate, or both — and **before the workload is deployed**, not only on commit. |
+| **Severity thresholds enforced** | Builds fail automatically when findings exceed the severity threshold for your risk tier, unless there's an approved exception on file. |
 
 ### Release and deploy
 
-| Control | What it means for you | How Orbit checks it |
-|---|---|---|
-| **Release security evidence** | Each release needs its latest scan results (SAST, secrets, SCA, and DAST if applicable) attached to the release record, tied to the specific build/version that shipped. | **Attested** — scan dates sit on the application rather than on a build, so tying evidence to what shipped isn't measurable yet. |
-| **SBOM per production release** | Every production release needs a software bill of materials (SPDX or CycloneDX), generated at build time and stored with the release artifact — it's what makes incident response and supply-chain review possible after the fact. | **Measured** once dependencies are snapshotted against a deployment. Attested until then. |
+| Control | What it means for you |
+|---|---|
+| **Release security evidence** | Each release needs its latest scan results (SAST, secrets, SCA, and DAST if applicable) attached to the release record, tied to the specific build/version that shipped. |
+| **SBOM per production release** | Every production release needs a software bill of materials (SPDX or CycloneDX), generated at build time and stored with the release artifact — it's what makes incident response and supply-chain review possible after the fact. |
 
 ### Runtime and operations
 
-| Control | What it means for you | How Orbit checks it |
-|---|---|---|
-| **Scheduled re-scanning** | Internet-facing applications get re-scanned on a recurring schedule (independent of your release cadence), not just at release time — because exposure and threats change even when your code doesn't. | **Measured** — last scan date against the cadence for your tier. |
-| **Findings triaged to closure** | Blocker/high findings get a ticket within a couple of business days, and every finding is tracked against an SLA (by severity and tier) until it's closed or an exception is filed. | **In Wiz**, by design. Orbit confirms the checks are configured, not what they found. |
+| Control | What it means for you |
+|---|---|
+| **Scheduled re-scanning** | Internet-facing applications get re-scanned on a recurring schedule (independent of your release cadence), not just at release time — because exposure and threats change even when your code doesn't. |
+| **Findings triaged to closure** | Blocker/high findings get a ticket within a couple of business days, and every finding is tracked against an SLA (by severity and tier) until it's closed or an exception is filed. |
 
 </details>
 
@@ -88,6 +88,8 @@ Can't meet a control right now? File an exception request with Hearst's AppSec t
 ## How Orbit checks this
 
 Both policy sections — **Application Security** and **Software Development Lifecycle** — are loaded into Orbit as policies with their controls, and every application in scope is evaluated against them. Results appear control by control on the application's **Infosec Policy Compliance** tab, showing which field drove each pass or fail.
+
+**[Information Security Policy](/docs/program-infosec-policy) lists every requirement with exactly how it's checked** — measured, attested, verification required, or not yet. What follows here is how those categories work.
 
 Not every control can be checked the same way, and the difference matters when you're reading your own compliance figure.
 

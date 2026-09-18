@@ -252,7 +252,7 @@ Continuous phase, so these are steady-state conditions — true at any moment:
 
 ### Baseline controls satisfied here
 
-From [Policy Baseline](/docs/program-policy-baseline): **secure coding standards** (2.4, 2.5, 2.6 — the standard itself is the [Secure Coding Standard](/docs/lifecycle-secure-coding)), **security review on pull requests** (2.2, 2.3), and **segregation of duties** (2.3, with the deploy half in [phase 4](/docs/phase-release-deploy)). It also carries much of **application metadata maintained** (2.1, 2.7), shared with [Plan & Design](/docs/phase-plan-design).
+From [Meeting the Policy](/docs/program-policy-baseline): **secure coding standards** (2.4, 2.5, 2.6 — the standard itself is the [Secure Coding Standard](/docs/lifecycle-secure-coding)), **security review on pull requests** (2.2, 2.3), and **segregation of duties** (2.3, with the deploy half in [phase 4](/docs/phase-release-deploy)). It also carries much of **application metadata maintained** (2.1, 2.7), shared with [Plan & Design](/docs/phase-plan-design).
 
 ### SAMM practices this is evidence for
 

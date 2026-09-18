@@ -88,7 +88,7 @@ Once it's in Orbit, your application isn't treated as a lesser thing for having 
 
 That's meant to be reassuring rather than daunting:
 
-- **You don't have to work out what "secure enough" means.** The [policy baseline](/docs/program-policy-baseline) defines it, and your application's Infosec Policy Compliance view shows where you stand, control by control.
+- **You don't have to work out what "secure enough" means.** The [policy](/docs/program-infosec-policy) defines it, and your application's Infosec Policy Compliance view shows where you stand, control by control.
 - **Nobody has to take your word for it.** Your score and compliance come from your catalog record, not from a conversation about how careful you've been.
 - **Your assistant can do most of the work.** Each phase of the review has fill-in templates — a risk tier worksheet, a security requirements template, a threat model. Point your assistant at [Plan & Design](/docs/phase-plan-design) and ask it to work through them with you.
 

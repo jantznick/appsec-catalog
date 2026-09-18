@@ -62,7 +62,7 @@ Most findings don't stop anything. The ones that do:
 
 | What | Blocks | Set by |
 |---|---|---|
-| A **verified live secret** | The merge, always — no tier exemption | The [policy baseline](/docs/program-policy-baseline) |
+| A **verified live secret** | The merge, always — no tier exemption | The [policy](/docs/program-infosec-policy) |
 | Findings **above your severity threshold** | The merge | Your [risk tier](/docs/phase-plan-design#12-determine-your-risk-tier) — High strictest, Medium blocks Critical and High, Low blocks Critical |
 | An **expired exception** | The release | The baseline — expired means re-approve, remediate, or remove |
 | Everything else | Nothing. Tracked, owned, scheduled | Your team |

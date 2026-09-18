@@ -12,7 +12,7 @@ The alternative isn't a more secure application — it's the same application wi
 
 ## What makes one acceptable
 
-Four things, and the [policy baseline](/docs/program-policy-baseline) requires all of them:
+Four things, and the [Information Security Policy](/docs/program-infosec-policy) requires all of them:
 
 | | Why |
 |---|---|
@@ -27,7 +27,7 @@ Four things, and the [policy baseline](/docs/program-policy-baseline) requires a
 ```markdown
 ## Exception Request — <application name>
 
-Control:              <the baseline control you can't meet>
+Requirement:          <the policy requirement you can't meet, e.g. 4.6.14>
 Risk tier:            <High | Medium | Low>
 Requested by:         <name>            Date: <YYYY-MM-DD>
 Owner (a person):     <name>
@@ -101,4 +101,4 @@ A growing exception count isn't automatically bad — it can mean the program st
 
 ---
 
-**Related:** [Remediating Findings](/docs/lifecycle-remediation) · [Policy Baseline](/docs/program-policy-baseline) · [Phase 6 — Improve & Govern](/docs/phase-improve-govern) · [The Lifecycle](/docs/program-lifecycle)
+**Related:** [Remediating Findings](/docs/lifecycle-remediation) · [Meeting the Policy](/docs/program-policy-baseline) · [Phase 6 — Improve & Govern](/docs/phase-improve-govern) · [The Lifecycle](/docs/program-lifecycle)

@@ -240,7 +240,7 @@ Both programs are supplied ready to run. [Program Content](/program-content) hol
 | Metrics | **Orbit** — coverage, compliance, scores, maturity, read from the [Dashboards](/docs/dashboards); **Wiz** for anything finding- or remediation-based |
 | Override and exception review log | **Your document**; overrides themselves live in Orbit |
 | Control and policy changes | **Orbit** — [Policies & Compliance](/docs/policies-and-samm) |
-| Baseline revisions | **The [Policy Baseline](/docs/program-policy-baseline) page**, announced through What's New |
+| Baseline revisions | **The [Meeting the Policy](/docs/program-policy-baseline) page**, announced through What's New |
 | Champions and ASCOE materials | **Orbit** — [Program Content](/program-content) |
 
 ## Done when
@@ -260,7 +260,7 @@ Per cycle rather than once:
 
 ### Baseline controls satisfied here
 
-This phase doesn't satisfy individual controls so much as keep the rest of them honest. Most directly it carries the **exceptions** process from [Policy Baseline](/docs/program-policy-baseline) — the requirement that exceptions have an owner and an expiry, and that expired ones are re-approved, remediated, or removed — and it's where recommended controls get promoted to required as adoption matures.
+This phase doesn't satisfy individual controls so much as keep the rest of them honest. Most directly it carries the **exceptions** process from [Meeting the Policy](/docs/program-policy-baseline) — the requirement that exceptions have an owner and an expiry, and that expired ones are re-approved, remediated, or removed — and it's where recommended controls get promoted to required as adoption matures.
 
 ### SAMM practices this is evidence for
 

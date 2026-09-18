@@ -6,7 +6,7 @@ The third phase of [the lifecycle](/docs/program-lifecycle). The automated check
 
 This is the only phase that scales without a human in the loop. Everything else costs somebody's attention per application; a gate configured once runs on every change forever, at three in the morning, on the pull request nobody senior looked at.
 
-It's also where the program's most reliable evidence comes from. A threat model tells you what your team intended. A gate result tells you what actually happened to a specific commit — which is why [Policy Baseline](/docs/program-policy-baseline) calls this "the baseline's most automatable layer" and puts five required controls in it.
+It's also where the program's most reliable evidence comes from. A threat model tells you what your team intended. A gate result tells you what actually happened to a specific commit — which is why [Meeting the Policy](/docs/program-policy-baseline) calls this "the baseline's most automatable layer" and puts five required controls in it.
 
 The failure mode to avoid is a gate everybody routes around. A pipeline that fails on 200 findings nobody has triaged doesn't get fixed, it gets bypassed — and then the gate is worse than no gate, because it produces a passing build that means nothing. Tuning is not optional polish; it's what keeps this phase real.
 
@@ -252,7 +252,7 @@ Continuous phase, so these are steady-state conditions rather than a finish line
 
 ### Baseline controls satisfied here
 
-Every CI verification control from [Policy Baseline](/docs/program-policy-baseline): **static analysis** (3.1), **secrets detection** (3.2), **dependency scanning** (3.3), **baseline dynamic testing** (3.4), **container and IaC scanning** (3.8), and **severity thresholds enforced** (3.5). Work item 3.9 carries the baseline's **SBOM per production release**, which is evidenced at [release](/docs/phase-release-deploy).
+Every CI verification control from [Meeting the Policy](/docs/program-policy-baseline): **static analysis** (3.1), **secrets detection** (3.2), **dependency scanning** (3.3), **baseline dynamic testing** (3.4), **container and IaC scanning** (3.8), and **severity thresholds enforced** (3.5). Work item 3.9 carries the baseline's **SBOM per production release**, which is evidenced at [release](/docs/phase-release-deploy).
 
 ### SAMM practices this is evidence for
 

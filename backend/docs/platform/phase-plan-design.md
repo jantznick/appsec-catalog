@@ -318,7 +318,7 @@ On 1.4: ingress points and data flows are the most underused feature in Orbit re
 
 ### Baseline controls satisfied here
 
-From [Policy Baseline](/docs/program-policy-baseline): **application metadata maintained** (1.1), **risk tier assigned** (1.2), **security requirements defined** (1.3), and **threat modeling for high-risk features** (1.5, 1.6).
+From [Meeting the Policy](/docs/program-policy-baseline): **application metadata maintained** (1.1), **risk tier assigned** (1.2), **security requirements defined** (1.3), and **threat modeling for high-risk features** (1.5, 1.6).
 
 ### SAMM practices this is evidence for
 

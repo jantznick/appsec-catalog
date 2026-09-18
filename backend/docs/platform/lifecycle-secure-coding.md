@@ -161,21 +161,23 @@ What tooling generally won't catch is the *absence* of something — a missing o
 
 </details>
 
-## Where this maps
+## Which policy requirements this covers
 
-| Policy clause | Covered by |
+Numbered as they appear in the [Information Security Policy](/docs/program-infosec-policy).
+
+| Policy requirement | Covered by |
 |---|---|
-| App Sec 12, SDLC 2 | The reference frameworks above |
-| SDLC 7 | OWASP Top 10 as the basis for web application controls |
-| SDLC 1.1 | Secure coding techniques throughout |
-| SDLC 1.2 | Validation and integrity checking |
-| SDLC 1.3, SDLC 5 | Test data |
-| SDLC 3, SDLC 9 | Credentials and secrets |
-| SDLC 6 | Vendor default and development accounts |
-| SDLC 8 | No back doors |
-| SDLC 10 | What ships to production |
-| SDLC 13 | Cryptography |
+| [4.6.12, 6.43.2](/docs/program-infosec-policy) | The reference frameworks above |
+| 6.43.7 | OWASP Top 10 as the basis for web application controls |
+| 6.43.1 a | Secure coding techniques throughout |
+| 6.43.1 b | Validation and integrity checking |
+| 6.43.1 c, 6.43.5 | Test data |
+| 6.43.3, 6.43.9 | Credentials and secrets |
+| 6.43.6 | Vendor default and development accounts |
+| 6.43.8 | No back doors |
+| 6.43.10 | What ships to production |
+| 6.43.13 | Cryptography |
 
 ---
 
-**Related:** [Remediating Findings](/docs/lifecycle-remediation) · [Exceptions](/docs/lifecycle-exceptions) · [Policy Baseline](/docs/program-policy-baseline) · [The Lifecycle](/docs/program-lifecycle)
+**Related:** [Remediating Findings](/docs/lifecycle-remediation) · [Exceptions](/docs/lifecycle-exceptions) · [Meeting the Policy](/docs/program-policy-baseline) · [The Lifecycle](/docs/program-lifecycle)
