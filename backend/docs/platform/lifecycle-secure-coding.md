@@ -79,6 +79,34 @@ How much of this you need scales with what going wrong would cost. A ledger need
 - **Test data is protected and controlled like the environment it lives in.** A test database full of masked customer records is still a database worth attacking, and it usually has weaker controls than production.
 - **Test accounts and fixtures don't travel to production** — see above.
 
+## How this gets verified
+
+Most of this page can't be measured from catalog data, and that shapes how it's checked.
+
+Some of it a scanner does catch — [static analysis](/docs/phase-ci-gate) finds injection, encoding and crypto misuse, and [secrets detection](/docs/phase-ci-gate) finds hardcoded credentials. Encryption **in transit** is externally observable, so HTTPS enforcement, certificate validity and HSTS can be confirmed from outside for anything internet-facing.
+
+The rest — that there's no back door, that no compiler ships in your image, that test data isn't real customer data — has no field that could ever prove it. No amount of catalog metadata demonstrates the absence of something.
+
+So these are handled by **attestation**: the application owner asserts that their application meets the standard, records what backs that up, and re-attests on a schedule so the claim doesn't silently go stale. Attested compliance is reported **separately from measured compliance**, deliberately — "how much of our compliance is self-reported?" is the first question an auditor asks, and it should have a straight answer.
+
+Attesting isn't a formality. You're making a claim you may be asked to defend, so treat it as a real review rather than a checkbox, and use the conformance check below to do it properly.
+
+<details>
+<summary>What backs up an attestation</summary>
+
+| Area | Evidence to have ready |
+|---|---|
+| **Secure coding guidelines** | Your team's own guidelines, and which published framework they follow. Email them to **VTM@hearst.com** — that's what gets this on record |
+| **Developer training** | Completion records. Where your company uses **KnowBe4**, those records are the supporting signal |
+| **Test data** | How your non-production data is generated or masked, and who can reach it |
+| **Default accounts** | How removal is confirmed before a release — ideally a pipeline step rather than someone remembering |
+| **No back doors, no dev utilities in production** | Code review practice, and your production image build — a multi-stage build is itself the evidence for the second one |
+| **Encryption at rest** | Which store, which mechanism, who holds the keys |
+
+Proof gets requested at audit rather than at attestation time. Having it ready is the difference between a short conversation and a long one.
+
+</details>
+
 ## Using this as a checklist
 
 Most of this should be enforced by tooling rather than memory: [static analysis](/docs/phase-ci-gate) catches injection, encoding and crypto misuse; secrets detection catches credentials; the [pull request checklist](/docs/phase-build-commit) catches the judgment calls a scanner can't make.

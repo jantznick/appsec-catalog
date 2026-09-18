@@ -267,13 +267,15 @@ From [SAMM & Maturity](/docs/program-samm): **Education & Guidance** (Governance
 | Your real dependency tree, with advisory flags | The [Dependencies](/docs/dependencies) page, searchable across the whole portfolio by package, application, or ecosystem |
 | Detected languages and frameworks — the actual stack, not the self-reported one | The application record, populated from the repo |
 | That metadata is being maintained rather than set once | Version history, with each change tagged UI or API |
+| **Segregation of duties** — that changes are reviewed by someone who didn't write them | Your repository's branch protection, read from your source-control provider: required approver count, whether stale reviews are dismissed, whether administrators are exempt. Direct evidence rather than an assertion |
+| Whether a PR security template exists in the repository | Read from the repository itself |
 | Whether the threat model is being kept current | Threat model status and last-reviewed date |
 
 **Where they're blind, and will have to ask you:**
 
-- **Whether a PR security checklist exists, and whether anyone reads it.** This is a required control with no platform support at all — no template distributed, no adoption flag, no signal. Worth noting it's the most *verifiable* of the gaps: the template is a file in a repository Orbit is already connected to, so detecting it is a question of reading the repo rather than trusting a checkbox.
+- **Whether a PR security checklist exists, and whether anyone reads it.** The template is a file in a repository Orbit is already connected to, so Orbit reads it directly rather than taking your word for it — checking the standard locations and looking for a security section. Note the limit of that: detecting the file proves the template exists, not that anyone fills it in. Whether reviewers actually answer the questions is still something only your team knows.
 - **Whether developers have been onboarded to the repo's security context.** No training or onboarding records anywhere.
-- **Whether pre-commit hooks and branch protection are in place.** Not recorded, though again knowable from the linked repository.
+- **Whether pre-commit hooks are installed.** These run on a developer's machine, so nothing outside it can confirm they're there. Self-reported, and likely to stay that way.
 - **Whether the threat model is stale relative to the code.** Orbit stores the model's last-reviewed date and your deployment history but doesn't compare them — so a model approved eighteen months and four hundred commits ago looks identical to one reviewed last week. The scoring engine already does exactly this kind of comparison for scan freshness, so the mechanism exists; it just isn't applied here.
 
 ---

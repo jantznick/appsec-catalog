@@ -83,6 +83,20 @@ These are the checks your pipeline runs on every PR and on the default branch �
 
 Can't meet a control right now? File an exception request with Hearst's AppSec team. An exception needs a business justification, a compensating control (extra monitoring, manual review, a time-bound waiver), an owner, and an expiry date — "indefinite" isn't valid. Expired exceptions must be re-approved, remediated, or removed before the next release; pipelines are expected to block on them automatically.
 
+## How Orbit checks this
+
+Both policy sections — **Application Security** and **Software Development Lifecycle** — are loaded into Orbit as policies with their controls, and every application in scope is evaluated against them. Results appear control by control on the application's **Infosec Policy Compliance** tab, showing which field drove each pass or fail.
+
+Not every control can be checked the same way, and the distinction matters when you're reading your own compliance figure:
+
+| | What it means |
+|---|---|
+| **Measured** | Evaluated from catalog data or read from your source-control provider — tool coverage, scan recency, branch protection, a PR template in the repo |
+| **Attested** | No field could ever prove it, so the application owner asserts it, records what backs the claim, and re-attests before it expires. See [Secure Coding Standard](/docs/lifecycle-secure-coding) |
+| **Not applicable** | The control is scoped to something that doesn't describe your application — internet-facing only, or confidential data only |
+
+Measured and attested compliance are reported separately, deliberately. A single blended percentage would hide how much of it is self-reported, which is the first thing anyone auditing the programme wants to know.
+
 ## How this connects to Orbit
 
 Orbit evaluates applications against these controls automatically wherever the catalog already has the data, and supports a manual override where it can't — see [Policies & Compliance](/docs/policies-and-samm) for how that evaluation works. This page defines *what's* required; Orbit tracks *whether you're meeting it*.
