@@ -267,14 +267,15 @@ From [SAMM & Maturity](/docs/program-samm): **Education & Guidance** (Governance
 | Your real dependency tree, with advisory flags | The [Dependencies](/docs/dependencies) page, searchable across the whole portfolio by package, application, or ecosystem |
 | Detected languages and frameworks — the actual stack, not the self-reported one | The application record, populated from the repo |
 | That metadata is being maintained rather than set once | Version history, with each change tagged UI or API |
+| **Segregation of duties** — that changes are reviewed by someone who didn't write them | Your repository's branch protection, read from your source-control provider: required approver count, whether stale reviews are dismissed, whether administrators are exempt. Direct evidence rather than an assertion |
+| That a PR security template exists in the repository | Read from the repository itself — presence only, not whether it gets filled in |
 
 | Whether the threat model is being kept current | Threat model status and last-reviewed date |
 
 **Where they're blind, and will have to ask you:**
 
-- **Whether a PR security checklist exists, and whether anyone reads it.** No platform support today, and it's the most *verifiable* of the gaps — the template is a file in a repository Orbit is already connected to, so reading it directly is a matter of checking the standard locations rather than trusting a checkbox. That's coming. Note the limit of it even then: detecting the file proves the template exists, not that anyone fills it in. Whether reviewers actually answer the questions stays something only your team knows.
+- **Whether a PR security checklist exists, and whether anyone reads it.** Adoption here is verified rather than self-reported: the template is a file in a repository Orbit is already connected to, so Orbit checks the standard locations for it directly. Note the limit of that — detecting the file proves the template exists, not that anyone fills it in. Whether reviewers actually answer the questions stays something only your team knows.
 - **Whether developers have been onboarded to the repo's security context.** No training or onboarding records anywhere.
-- **Whether branch protection is configured, and so whether segregation of duties actually holds.** Not read today. Your provider exposes it — required approver count, whether stale reviews are dismissed, whether administrators are exempt — and reading it turns segregation of duties from something you assert into direct evidence. That's the highest-value thing still missing from this phase.
 - **Whether pre-commit hooks are installed.** These run on a developer's machine, so nothing outside it can confirm they're there. Self-reported, and likely to stay that way.
 - **Whether the threat model is stale relative to the code.** Orbit stores the model's last-reviewed date and your deployment history but doesn't compare them — so a model approved eighteen months and four hundred commits ago looks identical to one reviewed last week. The scoring engine already does exactly this kind of comparison for scan freshness, so the mechanism exists; it just isn't applied here.
 

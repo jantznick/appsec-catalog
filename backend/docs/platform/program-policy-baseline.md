@@ -101,9 +101,9 @@ Not every control can be checked the same way, and the difference matters when y
 
 - **There's no "not applicable" yet.** A control scoped to something that doesn't describe your application — internet-facing only, say — still counts against you. Conditional scoping is coming; until then, an override is how that gets handled.
 
-**Some controls no field could ever prove.** That there's no back door in your code, that no compiler ships in your production image, that your test data isn't real customer data. These are handled by attestation — the application owner asserting it and standing behind the claim — and the mechanism for recording that is being built. Today an administrator records it against the control instead. See [Secure Coding Standard](/docs/lifecycle-secure-coding) for what backs those claims up.
+**Some controls no field could ever prove.** That there's no back door in your code, that no compiler ships in your production image, that your test data isn't real customer data. These are handled by **attestation**: the application owner asserts it, records what backs the claim, and re-attests before it expires so it can't silently go stale. See [Secure Coding Standard](/docs/lifecycle-secure-coding) for what evidence to have ready.
 
-When attestation lands, attested compliance is reported **separately** from measured compliance. A single blended percentage would hide how much of it is self-reported, which is the first thing anyone auditing the programme asks.
+Attested compliance is reported **separately** from measured compliance. A single blended percentage would hide how much of it is self-reported, which is the first thing anyone auditing the programme asks.
 
 ## How this connects to Orbit
 
