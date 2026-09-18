@@ -46,26 +46,26 @@ Three behaviours to know before reading your own results:
 | **4.6.14** | IaC / Container shall be scanned prior to deploying as a workload. | **Measured**, then **verification required** — the tool and integration level are recorded. That the scan *passed before that particular workload deployed* needs the scan tied to a deployment, which Orbit can't do yet, so coverage alone doesn't satisfy this. |
 | **4.6.15** | Any security finding found shall be reviewed to determine the plan of action and tracked to closure to resolve SLA. | **In Wiz** — findings and their remediation status live there by design; Orbit confirms the checks producing them are configured and running. Fix-by intervals by severity and tier are being defined. See [Remediating Findings](/docs/lifecycle-remediation). |
 
-## Software Development Lifecycle (6.4)
+## Software Development Lifecycle (6.3)
 
 | # | Requirement | How Orbit verifies it |
 |---|---|---|
-| **6.4.1** | All software implementations shall follow the SDLC process and shall address the three requirements below. | **Measured (proxy)** — a linked repository. As with 4.6.1, a weak signal. |
-| 6.4.1 a | Secure coding techniques shall be employed for all software development. | **Attested** — see [Secure Coding Standard](/docs/lifecycle-secure-coding). |
-| 6.4.1 b | Validation checks shall be incorporated into applications to detect any corruption of information through processing errors or deliberate acts. | **Attested** — input validation is partly caught by static analysis; integrity checking against processing errors is not externally observable. |
-| 6.4.1 c | Test data shall be selected carefully, protected, and controlled. | **Attested**. |
-| **6.4.2** | Applications shall be developed using secure coding guidelines. | **Attested** — as 4.6.12. |
-| **6.4.3** | Passwords shall not be hard coded into the application. | **Measured** — secrets detection is the control that finds violations; tool, integration level and last scan date. |
-| **6.4.4** | Automated code review tools shall be used to identify common vulnerabilities. | **Measured** — a static analysis tool recorded at integration level 1 or above. |
-| **6.4.5** | Live production data that has Confidential information shall not be used for development testing. | **Attested**. |
-| **6.4.6** | Vendor supplied default accounts, custom application accounts, user IDs, and passwords shall be removed before applications go live into production. | **Attested**. |
-| **6.4.7** | Web application security controls shall be based on best practices and employed as detailed in the OWASP Top 10. | **Measured (proxy)** — a dynamic analysis tool recorded. A DAST tool is not evidence of Top 10 adherence; the substantive check is the attestation under 4.6.12, and a pass here should be read as "testing exists", nothing more. |
-| **6.4.8** | Applications and IT systems shall not be coded to have back doors that circumvent the authorized access control mechanisms. | **Attested** — no field can demonstrate the absence of something. |
-| **6.4.9** | Applications shall not store or send passwords in clear text or in any easily reversible form. | **Attested** — using a hosted identity provider, so you store no passwords at all, is the strongest thing to attest to. |
-| **6.4.10** | Utilities, compilers, assemblers, or other utilities that create object code shall not be installed in production environments. | **Attested** — a multi-stage container build is the practical evidence. |
-| **6.4.11** | Review and comply with vulnerability management requirements. | **In Wiz** — as 4.6.15. |
-| **6.4.12** | Review custom code prior to release to production or end users to identify any potential coding vulnerability. | **Measured** — branch protection read from your provider, same signal as 4.6.3. The two requirements sit in different policy sections but are satisfied by the same evidence. |
-| **6.4.13** | Where and when possible, encryption shall be used to store or to transmit Confidential information on all applications. | **Split.** In transit: **measured** — HTTPS enforcement, certificate validity and HSTS, observed from Orbit's domain monitoring for internet-facing applications. At rest: **attested**, since it isn't externally observable. |
+| **6.3.1** | All software implementations shall follow the SDLC process and shall address the three requirements below. | **Measured (proxy)** — a linked repository. As with 4.6.1, a weak signal. |
+| 6.3.1 a | Secure coding techniques shall be employed for all software development. | **Attested** — see [Secure Coding Standard](/docs/lifecycle-secure-coding). |
+| 6.3.1 b | Validation checks shall be incorporated into applications to detect any corruption of information through processing errors or deliberate acts. | **Attested** — input validation is partly caught by static analysis; integrity checking against processing errors is not externally observable. |
+| 6.3.1 c | Test data shall be selected carefully, protected, and controlled. | **Attested**. |
+| **6.3.2** | Applications shall be developed using secure coding guidelines. | **Attested** — as 4.6.12. |
+| **6.3.3** | Passwords shall not be hard coded into the application. | **Measured** — secrets detection is the control that finds violations; tool, integration level and last scan date. |
+| **6.3.4** | Automated code review tools shall be used to identify common vulnerabilities. | **Measured** — a static analysis tool recorded at integration level 1 or above. |
+| **6.3.5** | Live production data that has Confidential information shall not be used for development testing. | **Attested**. |
+| **6.3.6** | Vendor supplied default accounts, custom application accounts, user IDs, and passwords shall be removed before applications go live into production. | **Attested**. |
+| **6.3.7** | Web application security controls shall be based on best practices and employed as detailed in the OWASP Top 10. | **Measured (proxy)** — a dynamic analysis tool recorded. A DAST tool is not evidence of Top 10 adherence; the substantive check is the attestation under 4.6.12, and a pass here should be read as "testing exists", nothing more. |
+| **6.3.8** | Applications and IT systems shall not be coded to have back doors that circumvent the authorized access control mechanisms. | **Attested** — no field can demonstrate the absence of something. |
+| **6.3.9** | Applications shall not store or send passwords in clear text or in any easily reversible form. | **Attested** — using a hosted identity provider, so you store no passwords at all, is the strongest thing to attest to. |
+| **6.3.10** | Utilities, compilers, assemblers, or other utilities that create object code shall not be installed in production environments. | **Attested** — a multi-stage container build is the practical evidence. |
+| **6.3.11** | Review and comply with vulnerability management requirements. | **In Wiz** — as 4.6.15. |
+| **6.3.12** | Review custom code prior to release to production or end users to identify any potential coding vulnerability. | **Measured** — branch protection read from your provider, same signal as 4.6.3. The two requirements sit in different policy sections but are satisfied by the same evidence. |
+| **6.3.13** | Where and when possible, encryption shall be used to store or to transmit Confidential information on all applications. | **Split.** In transit: **measured** — HTTPS enforcement, certificate validity and HSTS, observed from Orbit's domain monitoring for internet-facing applications. At rest: **attested**, since it isn't externally observable. |
 
 ## What this adds up to
 
@@ -75,13 +75,13 @@ Across the 28 requirements:
 |---|---|---|
 | **Measured outright** | 18 | Tool coverage, branch protection, threat model currency, scan recency, transport encryption, secrets detection |
 | **Measured, but only partly** | 2–3 | Reported as *verification required* rather than as a pass: **4.6.6** (two of five metadata records checked), **4.6.14** (coverage recorded, not that the scan passed for the deployed workload), and arguably **4.6.7** (the template exists; completing it isn't checked) |
-| **Attested** | 8 | 4.6.12, 6.4.2, 6.4.5, 6.4.6, 6.4.8, 6.4.9, 6.4.10, and the at-rest half of 6.4.13 |
+| **Attested** | 8 | 4.6.12, 6.3.2, 6.3.5, 6.3.6, 6.3.8, 6.3.9, 6.3.10, and the at-rest half of 6.3.13 |
 
 Attested isn't a weaker requirement, it's a differently evidenced one — these are properties of your code rather than activities, and no catalog field could demonstrate the absence of a back door. That's why attested compliance is reported separately from measured rather than blended into one number.
 
 Three things stay unmeasured inside **4.6.6**, and they all need the same missing capability — something tying an artifact to a specific build or release: an SBOM per release, scan evidence per release, and exception records carrying an expiry.
 
-And two **proxies** are flagged as such in the tables above rather than quietly counted as full coverage: 4.6.1 / 6.4.1 check that a repository is linked, and 6.4.7 checks that a dynamic testing tool exists. Both will pass or fail honestly, but neither is really measuring its requirement. Branch protection is much better evidence for the first two and they're expected to be re-mapped to it.
+And two **proxies** are flagged as such in the tables above rather than quietly counted as full coverage: 4.6.1 / 6.3.1 check that a repository is linked, and 6.3.7 checks that a dynamic testing tool exists. Both will pass or fail honestly, but neither is really measuring its requirement. Branch protection is much better evidence for the first two and they're expected to be re-mapped to it.
 
 ---
 
