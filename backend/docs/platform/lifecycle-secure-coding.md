@@ -87,9 +87,11 @@ Some of it a scanner does catch — [static analysis](/docs/phase-ci-gate) finds
 
 The rest — that there's no back door, that no compiler ships in your image, that test data isn't real customer data — has no field that could ever prove it. No amount of catalog metadata demonstrates the absence of something.
 
-So these are handled by **attestation**: the application owner asserts that their application meets the standard, records what backs that up, and re-attests on a schedule so the claim doesn't silently go stale. Attested compliance is reported **separately from measured compliance**, deliberately — "how much of our compliance is self-reported?" is the first question an auditor asks, and it should have a straight answer.
+So these are handled by **attestation**: the application owner asserts that their application meets the standard, records what backs that up, and re-attests on a schedule so the claim doesn't silently go stale. Attested compliance will be reported **separately from measured compliance** — "how much of our compliance is self-reported?" is the first question an auditor asks, and it should have a straight answer.
 
-Attesting isn't a formality. You're making a claim you may be asked to defend, so treat it as a real review rather than a checkbox, and use the conformance check below to do it properly.
+Self-service attestation is still being built. Until it lands, these controls are recorded against your application by Hearst's AppSec team rather than by you, so raise them in your periodic review or when you're asked.
+
+Either way, attesting isn't a formality. You're making a claim you may be asked to defend, so treat it as a real review rather than a checkbox, and use the conformance check below to do it properly.
 
 <details>
 <summary>What backs up an attestation</summary>

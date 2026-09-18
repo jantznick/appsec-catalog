@@ -87,15 +87,18 @@ Can't meet a control right now? File an exception request with Hearst's AppSec t
 
 Both policy sections — **Application Security** and **Software Development Lifecycle** — are loaded into Orbit as policies with their controls, and every application in scope is evaluated against them. Results appear control by control on the application's **Infosec Policy Compliance** tab, showing which field drove each pass or fail.
 
-Not every control can be checked the same way, and the distinction matters when you're reading your own compliance figure:
+Not every control can be checked the same way, and the difference matters when you're reading your own compliance figure.
 
-| | What it means |
-|---|---|
-| **Measured** | Evaluated from catalog data or read from your source-control provider — tool coverage, scan recency, branch protection, a PR template in the repo |
-| **Attested** | No field could ever prove it, so the application owner asserts it, records what backs the claim, and re-attests before it expires. See [Secure Coding Standard](/docs/lifecycle-secure-coding) |
-| **Not applicable** | The control is scoped to something that doesn't describe your application — internet-facing only, or confidential data only |
+**What's measured today is your catalog record.** Controls are evaluated against fields you maintain in Orbit — whether a SAST tool is recorded, at what integration level, whether an SCA tool covers your dependencies, whether the metadata is complete. That's a real check, and it's the honest description of it: Orbit is confirming what your record says, not reaching into your scanner to confirm a scan ran or reading your repository.
 
-Measured and attested compliance are reported separately, deliberately. A single blended percentage would hide how much of it is self-reported, which is the first thing anyone auditing the programme wants to know.
+**Two things to know about how the evaluation behaves**, because they shape what you'll see:
+
+- **A control with nothing mapped to it reads as not meeting.** It doesn't come back as unknown or get skipped. So a low compliance figure can mean the control genuinely isn't met, or that Orbit has no way to check it yet — the evidence line on each control tells you which.
+- **The result is pass or fail, with no "not applicable" yet.** A control scoped to something that doesn't describe your application — internet-facing only, say — still counts against you today. Conditional scoping is coming; until it does, that's what an override is for.
+
+**Some controls no field could ever prove.** That there's no back door in your code, that no compiler ships in your production image, that your test data isn't real customer data. These are handled by attestation — the application owner asserting it and standing behind the claim — and the mechanism for recording that is being built. Today an administrator records it against the control instead. See [Secure Coding Standard](/docs/lifecycle-secure-coding) for what backs those claims up.
+
+When attestation lands, attested compliance is reported **separately** from measured compliance. A single blended percentage would hide how much of it is self-reported, which is the first thing anyone auditing the programme asks.
 
 ## How this connects to Orbit
 
