@@ -264,9 +264,21 @@ router.get('/available-fields', requireAuth, async (req, res) => {
           description: 'Minimum integration level required (0-4 scale)'
         }
       },
+      {
+        path: 'apiSecurityIntegrationLevel',
+        label: 'API Security Integration Level',
+        category: 'Security Tools',
+        fieldType: 'number',
+        allowedOperators: ['gte', 'gt'],
+        valueType: 'dropdown',
+        valueOptions: integrationLevelOptions,
+        validationRules: {
+          description: 'Minimum integration level required (0-4 scale)'
+        }
+      },
       // Security Tools - Tool Names
-      { 
-        path: 'sastTool', 
+      {
+        path: 'sastTool',
         label: 'SAST Tool', 
         category: 'Security Tools', 
         fieldType: 'string',
@@ -289,10 +301,18 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists'],
         valueType: 'text'
       },
-      { 
-        path: 'appFirewallTool', 
-        label: 'Application Firewall Tool', 
-        category: 'Security Tools', 
+      {
+        path: 'appFirewallTool',
+        label: 'Application Firewall Tool',
+        category: 'Security Tools',
+        fieldType: 'string',
+        allowedOperators: ['exists', 'not_exists'],
+        valueType: 'text'
+      },
+      {
+        path: 'apiSecurityTool',
+        label: 'API Security Tool',
+        category: 'Security Tools',
         fieldType: 'string',
         allowedOperators: ['exists', 'not_exists'],
         valueType: 'text'
@@ -419,14 +439,91 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         valueType: 'text'
       },
       
+      // Threat Model (relation path — resolved by withEvaluableRelations in services/policy.js)
+      {
+        path: 'threatModel.status',
+        label: 'Threat Model Status',
+        category: 'Threat Model',
+        fieldType: 'string',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [
+          { value: 'draft', label: 'Draft' },
+          { value: 'in_review', label: 'In Review' },
+          { value: 'approved', label: 'Approved' },
+          { value: 'superseded', label: 'Superseded' }
+        ]
+      },
+      {
+        path: 'threatModel.lastReviewedAt',
+        label: 'Threat Model Last Reviewed',
+        category: 'Threat Model',
+        fieldType: 'date',
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt'],
+        valueType: 'date',
+        validationRules: {
+          description: 'Fixed date only until relative-date operators land — see POLICY_CONTROL_COVERAGE_PLAN.md, Phase 2c.'
+        }
+      },
+
+      // Architecture documentation (relations — resolved by withEvaluableRelations).
+      // Together these are what 4.6.6 bullet 1 treats as the application's
+      // architecture documentation; see POLICY_CONTROL_COVERAGE_PLAN.md Phase 3.
+      {
+        path: 'apiSchema',
+        label: 'API Schema Uploaded',
+        category: 'Architecture',
+        fieldType: 'relation',
+        allowedOperators: ['exists', 'not_exists'],
+        valueType: 'none'
+      },
+      {
+        path: 'ingressProducts',
+        label: 'Product Ingress Points',
+        category: 'Architecture',
+        fieldType: 'collection',
+        allowedOperators: ['exists', 'not_exists'],
+        valueType: 'none',
+        validationRules: {
+          description: 'True when the application is recorded as an ingress point for at least one product.'
+        }
+      },
+      {
+        path: 'outgoingProductFlows',
+        label: 'Outgoing Data Flows',
+        category: 'Architecture',
+        fieldType: 'collection',
+        allowedOperators: ['exists', 'not_exists'],
+        valueType: 'none'
+      },
+      {
+        path: 'incomingProductFlows',
+        label: 'Incoming Data Flows',
+        category: 'Architecture',
+        fieldType: 'collection',
+        allowedOperators: ['exists', 'not_exists'],
+        valueType: 'none'
+      },
+
       // Status
-      { 
-        path: 'status', 
-        label: 'Status', 
-        category: 'Status', 
+      {
+        path: 'status',
+        label: 'Status',
+        category: 'Status',
         fieldType: 'string',
         allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
         valueType: 'text'
+      },
+      {
+        path: 'metadataLastReviewed',
+        label: 'Metadata Last Reviewed',
+        category: 'Status',
+        fieldType: 'date',
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt'],
+        valueType: 'date',
+        validationRules: {
+          description: 'Fixed date only. A rolling window (e.g. "reviewed in the last 6 months") needs a relative-date operator — see POLICY_CONTROL_COVERAGE_PLAN.md, Phase 2c.'
+        }
       },
       { 
         path: 'additionalNotes', 

@@ -257,6 +257,7 @@ router.get('/executive', requireAuth, async (req, res) => {
       summary.totalControls += result.summary.total;
       summary.meetingControls += result.summary.meeting;
       summary.notMeetingControls += result.summary.not_meeting;
+      summary.verificationRequiredControls += result.summary.verification_required || 0;
       summary.compliantApplications += result.summary.all_policies_compliant ? 1 : 0;
       summary.policiesEvaluated += result.summary.total_policies;
       summary.compliantPolicies += result.summary.compliant_policies;
@@ -273,6 +274,7 @@ router.get('/executive', requireAuth, async (req, res) => {
       totalControls: 0,
       meetingControls: 0,
       notMeetingControls: 0,
+      verificationRequiredControls: 0,
       compliantApplications: 0,
       policiesEvaluated: 0,
       compliantPolicies: 0,

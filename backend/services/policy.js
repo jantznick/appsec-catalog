@@ -243,13 +243,33 @@ export async function evaluateControl(control, application, override = null) {
     });
   }
   
+  // A control whose automated checks cover only part of its requirement passes to
+  // "verification_required", not "meeting" — a human still has to confirm the rest.
+  // An admin override (handled above) is what promotes it to "meeting".
+  const needsVerification = finalResult && control.verificationRequired === true;
+
+  if (needsVerification) {
+    evidence.push(
+      control.verificationNote?.trim() ||
+        'Automated checks cover only part of this control — manual verification required.'
+    );
+  }
+
+  let status = 'not_meeting';
+  if (needsVerification) {
+    status = 'verification_required';
+  } else if (finalResult) {
+    status = 'meeting';
+  }
+
   return {
-    status: finalResult ? 'meeting' : 'not_meeting',
+    status,
     evidence,
     details: {
       fieldResults,
       evaluationLogic: control.evaluationLogic,
       finalResult,
+      verificationRequired: control.verificationRequired === true,
     },
   };
 }
@@ -475,6 +495,73 @@ async function getApplicablePolicies(application) {
 }
 
 /**
+ * Relations a control field may reach with dot notation (e.g. "threatModel.status").
+ * Callers pass a plain application row, so without this a relation path resolves to
+ * null and the control silently never passes.
+ * Key is the path prefix; value is the Prisma `select` for that relation.
+ */
+const EVALUABLE_RELATIONS = {
+  threatModel: {
+    status: true,
+    version: true,
+    reviewer: true,
+    lastReviewedAt: true,
+  },
+  apiSchema: {
+    id: true,
+    filename: true,
+    format: true,
+    uploadedAt: true,
+  },
+  // Collections — `exists` already treats an empty array as absent
+  // (see isEmpty in evaluateFieldCheck), so selecting ids is enough.
+  ingressProducts: { id: true },
+  outgoingProductFlows: { id: true },
+  incomingProductFlows: { id: true },
+};
+
+/**
+ * Load the relations referenced by these controls' field paths, unless the caller
+ * already supplied them. Returns the application untouched when no active control
+ * uses a relation path, so the common case costs no extra query.
+ * @param {Object} application
+ * @param {Array<Object>} controls - PolicyControls with their fields
+ * @returns {Promise<Object>} application, possibly with relations merged on
+ */
+async function withEvaluableRelations(application, controls) {
+  const needed = new Set();
+
+  for (const control of controls) {
+    for (const field of control.fields || []) {
+      const fieldPath = String(field.fieldPath || '');
+      if (!fieldPath) continue;
+
+      // Covers both "apiSchema" (does the relation exist at all) and
+      // "threatModel.status" (a column on it) — either way the relation
+      // has to be loaded, or the check silently never passes.
+      const prefix = fieldPath.split('.')[0];
+      if (EVALUABLE_RELATIONS[prefix] && application[prefix] === undefined) {
+        needed.add(prefix);
+      }
+    }
+  }
+
+  if (needed.size === 0) return application;
+
+  const select = { id: true };
+  for (const prefix of needed) {
+    select[prefix] = { select: EVALUABLE_RELATIONS[prefix] };
+  }
+
+  const loaded = await prisma.application.findUnique({
+    where: { id: application.id },
+    select,
+  });
+
+  return loaded ? { ...application, ...loaded } : application;
+}
+
+/**
  * Evaluate all applicable policies and their controls for an application
  * @param {Object} application - Application object with company relation
  * @returns {Object} - Evaluation results grouped by policy
@@ -544,11 +631,14 @@ export async function evaluateAllControls(application) {
     overrideMap.set(override.controlId, override);
   });
 
+  // Resolve any relation paths the controls reference (no-op when none do)
+  const evaluableApplication = await withEvaluableRelations(application, controls);
+
   // Evaluate each control
   const controlResults = await Promise.all(
     controls.map(async (control) => {
       const override = overrideMap.get(control.id) || null;
-      const evaluation = await evaluateControl(control, application, override);
+      const evaluation = await evaluateControl(control, evaluableApplication, override);
       return {
         control: {
           id: control.id,
@@ -585,12 +675,15 @@ export async function evaluateAllControls(application) {
         total: 0,
         meeting: 0,
         not_meeting: 0,
+        verification_required: 0,
         compliance_percentage: 0,
       },
     });
   });
 
-  // Group control results by policy
+  // Group control results by policy. "verification_required" is tracked separately
+  // and deliberately counts as neither meeting nor not_meeting — folding it into
+  // either one would hide the partial coverage it exists to surface.
   controlResults.forEach(controlResult => {
     const policyEntry = policiesMap.get(controlResult.policy.id);
     if (policyEntry) {
@@ -598,6 +691,8 @@ export async function evaluateAllControls(application) {
       policyEntry.summary.total++;
       if (controlResult.status === 'meeting') {
         policyEntry.summary.meeting++;
+      } else if (controlResult.status === 'verification_required') {
+        policyEntry.summary.verification_required++;
       } else {
         policyEntry.summary.not_meeting++;
       }
@@ -618,6 +713,7 @@ export async function evaluateAllControls(application) {
   const total = allControls.length;
   const meeting = allControls.filter(cr => cr.status === 'meeting').length;
   const notMeeting = allControls.filter(cr => cr.status === 'not_meeting').length;
+  const verificationRequired = allControls.filter(cr => cr.status === 'verification_required').length;
   const compliancePercentage = total > 0 ? Math.round((meeting / total) * 100) : 100;
 
   // Overall compliance: all policies must be 100% compliant
@@ -629,6 +725,7 @@ export async function evaluateAllControls(application) {
       total,
       meeting,
       not_meeting: notMeeting,
+      verification_required: verificationRequired,
       compliance_percentage: compliancePercentage,
       all_policies_compliant: allPoliciesCompliant,
       total_policies: policies.length,
