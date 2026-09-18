@@ -31,14 +31,15 @@ That last distinction matters. Orbit is a catalog and a scoring system, not a sc
 | 5 | **[Runtime & Operate](/docs/phase-runtime-operate)** | New exposure in code that hasn't changed, and findings that sit unowned. |
 | 6 | **[Improve & Govern](/docs/phase-improve-govern)** | The program itself drifting — gates nobody trusts, controls nobody meets, maturity nobody measures. |
 
-### Two things that aren't phases
+### Three things that aren't phases
 
 | | |
 |---|---|
+| **[Secure Coding Standard](/docs/lifecycle-secure-coding)** | Properties your code has to hold at all times — no back doors, no cleartext passwords, nothing in production that doesn't need to be there |
 | **[Remediating Findings](/docs/lifecycle-remediation)** | What happens after something is found — whoever found it, and whichever phase it turned up in |
 | **[Exceptions](/docs/lifecycle-exceptions)** | What to do when you can't meet a requirement right now |
 
-Both run *alongside* the six rather than after them, and neither gates progression the way a phase does — findings arrive from phases 3, 4 and 5 at once, and most of them travel with the work rather than stopping it. An application is never "in the remediation phase"; it's in Runtime & Operate, with open findings.
+All three run *alongside* the six rather than after them, and none of them gates progression the way a phase does. The standard is continuous — it's true of your code or it isn't. Findings arrive from phases 3, 4 and 5 at once, and most travel with the work rather than stopping it. An application is never "in the remediation phase"; it's in Runtime & Operate, with open findings.
 
 Phases 1–5 follow the order code moves through delivery. Phase 6 runs on its own cadence and feeds what it learns back into the other five.
 
@@ -57,6 +58,7 @@ Every template in the lifecycle, and where to find it. Copy them into your desig
 | Tooling plan | [1](/docs/phase-plan-design) | Deciding your SAST / secrets / SCA / DAST / firewall / API-security coverage before you build |
 | Exception request | [Exceptions](/docs/lifecycle-exceptions) | Anything you can't meet at launch |
 | Remediation standard | [Remediating Findings](/docs/lifecycle-remediation) | Your team's fix-by targets, who decides, and escalation |
+| Secure coding conformance check | [Secure Coding Standard](/docs/lifecycle-secure-coding) | Confirming the properties your code has to hold, once per application |
 | Pull request template | [2](/docs/phase-build-commit) | The four security questions, pre-filled on every PR |
 | Repository hygiene checklist | [2](/docs/phase-build-commit) | Secrets, dependencies, and branch-protection settings, once per repo |
 | Repo security onboarding | [2](/docs/phase-build-commit) | The five-minute handover for a developer joining the codebase |
@@ -69,6 +71,7 @@ Every template in the lifecycle, and where to find it. Copy them into your desig
 | Release sign-off | [4](/docs/phase-release-deploy) | A named person confirming the evidence before promotion |
 | Environment readiness checklist | [4](/docs/phase-release-deploy) | Secrets, deploy identity, network, and data hygiene per environment |
 | New exposure checklist | [4](/docs/phase-release-deploy) | Registering new domains, endpoints, ingress points, and API changes |
+| Environment separation checklist | [4](/docs/phase-release-deploy) | Keeping development, test and production genuinely apart |
 | Re-scan schedule record | [5](/docs/phase-runtime-operate) | What gets re-scanned, how often, by whom |
 | Incident response runbook | [5](/docs/phase-runtime-operate) | Who to call, what to turn off, where the evidence is |
 | Periodic application review | [5](/docs/phase-runtime-operate) | Confirming the record, the tier, and the work are all still true |

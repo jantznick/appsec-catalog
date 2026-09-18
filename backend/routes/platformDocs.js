@@ -114,6 +114,7 @@ const DOC_GROUPS = [
         // them, and neither gates progression the way a phase does.
         title: 'Across Every Phase',
         pages: [
+          { slug: 'lifecycle-secure-coding', title: 'Secure Coding Standard' },
           { slug: 'lifecycle-remediation', title: 'Remediating Findings' },
           { slug: 'lifecycle-exceptions', title: 'Exceptions' },
         ],

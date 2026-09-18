@@ -17,8 +17,14 @@ So each clause is sorted into one of three buckets:
 | 🏷️ **Met, not labelled** | The docs produce the outcome, but never connect it to the clause. Cheap to fix, and worth fixing for evidencing — an auditor shouldn't have to infer the chain |
 | ❌ **Gap** | Following the docs would *not* produce the outcome |
 
-**Revised result: 22 met, 6 met-but-unlabelled, 7 gaps** — of which two are the docs contradicting
-the policy, and three are one-line prohibitions with no natural home.
+**Revised result: 22 met, 6 met-but-unlabelled, 7 gaps** — of which two were the docs contradicting
+the policy, and three were one-line prohibitions with no natural home.
+
+> **Status: all of it is now closed**, across two commits. The contradictions and labelling fixes
+> went in first; the [Secure Coding Standard](/docs/lifecycle-secure-coding) page and the two
+> substantive gaps followed. The only item still open is the **findings SLA** (App Sec 15), which is
+> blocked on the intervals being set rather than on documentation. The tables below are kept as the
+> record of what was assessed and why — see the closing section for what changed.
 
 ---
 
@@ -157,3 +163,42 @@ mirror — several of these are precisely what an AI assistant should be told ne
    evidence and SBOMs have no home in the catalog. Each phase page's "What your security team sees"
    section says which. Closing the documentation gaps above doesn't close this one, and it's the
    one that matters for evidencing compliance rather than claiming it.
+
+---
+
+## What was done
+
+**Commit 1 — contradictions and labelling**
+
+- SBOM per production release and container/IaC scanning promoted from SHOULD to required controls
+  in the baseline; *(recommended)* labels dropped in phase 3. The SHOULD tier is now empty and has
+  been removed — every control in the baseline is required.
+- Container/IaC added to phase 4, since *"prior to deploying as a workload"* makes it a release gate
+  and not only a CI check.
+- Segregation of duties named in phase 2 where the control already lived (protected branch,
+  required review, required checks, no force-push), with the missing deploy-path half added to
+  phase 4 as work item 4.8 plus a sign-off line.
+- Environment separation added as phase 4 work item 4.9, with its own checklist.
+- Licence risk added to the SCA control and the phase 3 gate checklist.
+- Six-month floor stated on the baseline's risk-tier control.
+- Vendor-supplied default accounts named explicitly in two checklists.
+- Phase 1 now states that the threat model, data flows and API schema together constitute the
+  architecture documentation the policy requires.
+
+**Commit 2 — the Secure Coding Standard**
+
+A new page under "Across Every Phase", carrying the product-level requirements that don't belong to
+any phase: no back doors, no cleartext or reversibly-stored passwords, no compilers or build tooling
+in production images, integrity validation distinct from input validation, test data selection and
+protection, and the OWASP Top 10 and NIST SSDF named as the reference frameworks. It ends with a
+clause-to-section map so the policy can be traced through it, and a conformance checklist.
+
+Phase 1's requirements section now points at it — requirements are what's specific to *this*
+application, and the universal properties don't need restating per application.
+
+## Still open
+
+| Item | Blocked on |
+|---|---|
+| **Findings SLA** (App Sec 15) | Fix-by intervals by severity and tier being published. The template in [Remediating Findings](/docs/lifecycle-remediation) is ready for them |
+| **Orbit evidencing** | Unchanged by any of this. Risk tier, secrets coverage, gate results, release evidence, SBOMs and architecture documentation still have no home in the catalog — see each phase page's "What your security team sees" |

@@ -84,6 +84,8 @@ Your tier sets how strict everything downstream gets — which severities block 
 
 ### 1.3 — Write the security requirements
 
+Requirements are what's specific to *this* application. The properties every application has to hold — no back doors, no cleartext passwords, validated input, nothing extra shipped to production — are in the [Secure Coding Standard](/docs/lifecycle-secure-coding) and don't need restating here.
+
 The most common failure here is writing "the application must be secure." A requirement is useful when it's specific enough that someone could build the wrong thing without it.
 
 Weak: *"Handle authentication securely."*

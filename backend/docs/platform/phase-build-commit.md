@@ -164,6 +164,8 @@ Walked through by: <name>          Date: <YYYY-MM-DD>
 - [ ] What our severity thresholds are and what blocks a merge
 - [ ] Who to tell, immediately, if they think they've leaked a credential —
       by name, not "security"
+- [ ] The [Secure Coding Standard](/docs/lifecycle-secure-coding) — what our
+      code has to be true of, regardless of what we're building
 - [ ] The vulnerability classes that matter most in this codebase:
       <e.g. "we're a Rails app handling payments — mass assignment and
       IDOR are our recurring themes">
@@ -250,7 +252,7 @@ Continuous phase, so these are steady-state conditions — true at any moment:
 
 ### Baseline controls satisfied here
 
-From [Policy Baseline](/docs/program-policy-baseline): **secure coding standards** (2.4, 2.5, 2.6) and **security review on pull requests** (2.2, 2.3). It also carries much of **application metadata maintained** (2.1, 2.7), shared with [Plan & Design](/docs/phase-plan-design).
+From [Policy Baseline](/docs/program-policy-baseline): **secure coding standards** (2.4, 2.5, 2.6 — the standard itself is the [Secure Coding Standard](/docs/lifecycle-secure-coding)), **security review on pull requests** (2.2, 2.3), and **segregation of duties** (2.3, with the deploy half in [phase 4](/docs/phase-release-deploy)). It also carries much of **application metadata maintained** (2.1, 2.7), shared with [Plan & Design](/docs/phase-plan-design).
 
 ### SAMM practices this is evidence for
 
