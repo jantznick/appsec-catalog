@@ -3,6 +3,8 @@ import {
   getRiskFactorsConfig,
   getToolQualityConfig,
 } from './scoringConfig.js';
+import { FIELD_SETS, calculateCompleteness } from './completeness.js';
+import { APPLICATION_METADATA_FIELDS } from './applicationFields.js';
 
 /**
  * Prisma `include` covering every relation `calculateApplicationScore` reads.
@@ -39,17 +41,24 @@ function getToolQualityWeight(toolQuality, tool, category) {
   return toolQuality.other ?? 0.8;
 }
 
-/** The eight text metadata fields that contribute to knowledge-sharing completeness. */
-export const KNOWLEDGE_SCORING_FIELDS = [
-  { key: 'description', label: 'Description' },
-  { key: 'devTeamContact', label: 'Development Team Contact' },
-  { key: 'repoUrl', label: 'Repository URL' },
-  { key: 'language', label: 'Language' },
-  { key: 'framework', label: 'Framework' },
-  { key: 'serverEnvironment', label: 'Server Environment' },
-  { key: 'authProfiles', label: 'Authentication Profiles' },
-  { key: 'dataTypes', label: 'Data Types' },
-];
+/** Human label for a metadata field key, falling back to the key itself. */
+function getMetadataFieldLabel(key) {
+  return APPLICATION_METADATA_FIELDS.find((f) => f.key === key)?.label || key;
+}
+
+/**
+ * The metadata fields that contribute to knowledge-sharing completeness.
+ *
+ * Derived from the one completeness set rather than restated. This was a hand-typed
+ * list of eight of the App Data tab's thirteen questions, so the 40-point completeness
+ * component of the 0-100 score disagreed with the completeness percentage shown beside
+ * it: an application could read 100% complete and still be missing five answers the
+ * form had asked for. Exported because the API reports the breakdown.
+ */
+export const KNOWLEDGE_SCORING_FIELDS = FIELD_SETS.metadata.map((key) => ({
+  key,
+  label: getMetadataFieldLabel(key),
+}));
 
 /**
  * If a metadata field is exactly the text "NA" (after trim), it is excluded from scoring for that field.
@@ -63,42 +72,21 @@ export function isMetadataValueNA(value) {
   return value.trim() === 'NA';
 }
 
-/**
- * A knowledge field is counted as "filled" for the 40pt completeness if it has real content; empty and "NA" are not filled.
- * @param {unknown} value
- * @returns {boolean}
- */
-export function isKnowledgeFieldFilledForScore(value) {
-  if (value === null || value === undefined) return false;
-  if (typeof value === 'string') {
-    const t = value.trim();
-    if (t === '' || t === 'NA') return false;
-    return true;
-  }
-  return Boolean(value);
-}
 
 /**
  * @param {Object} app
  * @returns {{ totalScorable: number, fieldsFilled: number, missingFields: string[] }}
  */
 export function getKnowledgeSharingFieldBreakdown(app) {
-  let totalScorable = 0;
-  let fieldsFilled = 0;
-  const missingFields = [];
-  for (const { key, label } of KNOWLEDGE_SCORING_FIELDS) {
-    const v = app[key];
-    if (isMetadataValueNA(v)) {
-      continue;
-    }
-    totalScorable += 1;
-    if (isKnowledgeFieldFilledForScore(v)) {
-      fieldsFilled += 1;
-    } else {
-      missingFields.push(label);
-    }
-  }
-  return { totalScorable, fieldsFilled, missingFields };
+  // One implementation. This was its own loop over its own field list with its own
+  // blank rule, which is how the score and the completeness percentage drifted apart.
+  // `missing` comes back as field keys; the labels are the registry's.
+  const { filled, total, missing } = calculateCompleteness(app);
+  return {
+    totalScorable: total,
+    fieldsFilled: filled,
+    missingFields: missing.map(getMetadataFieldLabel),
+  };
 }
 
 /** Canonical facing values; `facing` is a free String column, so compare case-insensitively. */

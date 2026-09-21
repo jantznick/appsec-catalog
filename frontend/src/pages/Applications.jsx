@@ -12,7 +12,6 @@ import { Modal } from '../components/ui/Modal.jsx';
 import { BulkImportApplicationsModal } from '../components/applications/BulkImportApplicationsModal.jsx';
 import useAuthStore from '../store/authStore.js';
 import useScopeStore from '../store/scopeStore.js';
-import { calculateCompleteness } from '../utils/applicationCompleteness.js';
 import { copyToClipboard, isClipboardAvailable } from '../utils/clipboard.js';
 
 export function Applications() {
@@ -304,7 +303,9 @@ export function Applications() {
       header: 'Status',
       cell: ({ row }) => {
         const app = row.original;
-        const completeness = calculateCompleteness(app);
+        // Served by GET /api/applications. It used to be recomputed here from a copy
+        // of the backend's field list that had to be kept in step by hand.
+        const completeness = app.completeness;
         return (
           <div className="flex items-center gap-2">
             <span className={`px-2 py-1 text-xs font-medium rounded ${
@@ -316,9 +317,14 @@ export function Applications() {
             }`}>
               {app.status || 'onboarded'}
             </span>
-            <span className="text-xs text-gray-500">
-              {completeness.filled}/{completeness.total} ({completeness.percentage}%)
-            </span>
+            {completeness && (
+              <span
+                className="text-xs text-gray-500"
+                title="Application metadata answered, from the App Data tab. Security tooling is not counted."
+              >
+                {completeness.filled}/{completeness.total} ({completeness.percentage}%)
+              </span>
+            )}
           </div>
         );
       },

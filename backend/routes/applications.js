@@ -12,6 +12,7 @@ import {
   resolveCategoryToolInputs,
 } from '../services/scoring.js';
 import { evaluateAllControls } from '../services/policy.js';
+import { calculateCompleteness } from '../services/completeness.js';
 import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { getApexDomain } from '../utils/domainApex.js';
 import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
@@ -486,7 +487,16 @@ router.get('/', requireAuth, async (req, res) => {
       },
     });
 
-    res.json(applications);
+    // Completeness is computed here rather than in the browser. The Applications table
+    // used to call its own copy of calculateCompleteness, which is how the frontend
+    // ended up with a second definition that had to be kept in step by hand. One
+    // implementation, one answer, served with the row.
+    res.json(
+      applications.map((application) => ({
+        ...application,
+        completeness: calculateCompleteness(application),
+      })),
+    );
   } catch (error) {
     console.error('Error fetching applications:', error);
     res.status(500).json({ error: 'Failed to fetch applications' });

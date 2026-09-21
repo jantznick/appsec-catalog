@@ -12,17 +12,21 @@
  * `devTeamContact` in two — a different two. One application therefore had several
  * defensible completeness percentages depending on which screen you looked at.
  *
- * ONE IMPLEMENTATION, SEVERAL NAMED SETS — NOT ONE SET
+ * ONE SET FOR COMPLETENESS, ONE SEPARATE SET FOR SECURITY TOOLING
  *
- * The sets are kept distinct on purpose. They answer genuinely different questions:
- * "is this record filled in" is not "how much has this team told us", and the portfolio
- * CSV deliberately reports metadata and security separately. Collapsing them into a
- * single set would change numbers already on dashboards, which is a product decision
- * rather than a refactor.
+ * The consolidation above unified the implementation but kept four sets, on the grounds
+ * that changing which fields count is a product decision rather than a refactor. That
+ * decision has now been made: completeness is the App Data tab, and nothing else.
  *
- * So: the field sets are declared once, here, and every caller shares the one counting
- * implementation below. Every current number is preserved — see completeness.test.js,
- * which pins them.
+ * `metadata` is exactly what the App Data tab asks for — its Basic Information and
+ * Technical Information cards — and it is the only set `calculateCompleteness` uses.
+ * The same set drives the 40-point completeness component of the 0-100 knowledge score,
+ * the dashboard percentage and the portfolio CSV's metadata column, so an application
+ * has one completeness number wherever it is shown.
+ *
+ * `security` stays a separate set because it is a separate column in the portfolio CSV
+ * answering a separate question ("what tooling is in place"), not a second opinion about
+ * the same one. It is never called completeness.
  *
  * Dependency-free, like services/applicationFields.js. Keep it that way.
  */
@@ -94,7 +98,7 @@ const BLANK_RULES = Object.freeze({
 
 /** @type {Readonly<Record<string, 'exact'|'trimmed'>>} */
 export const SET_BLANK_RULES = Object.freeze({
-  record: 'exact',
+  metadata: 'trimmed',
   security: 'exact',
   portfolioBasic: 'trimmed',
   portfolioTechnical: 'trimmed',
@@ -105,23 +109,47 @@ export const SET_BLANK_RULES = Object.freeze({
  * contain the `@standaloneSca` marker which `resolveFieldSet` expands.
  */
 export const FIELD_SETS = Object.freeze({
-  /** Whole-record completeness, shown per application and on dashboards. */
-  record: Object.freeze([
-    'name',
+  /**
+   * Application metadata: exactly the questions the App Data tab asks.
+   *
+   * This is the only set `calculateCompleteness` uses. Two fields the App Data tab
+   * renders are deliberately absent:
+   *
+   * - `name` is required at create and cannot be blank, so counting it would add the
+   *   same point to every application — an honest-looking percentage built on a
+   *   guaranteed point. Same reasoning as the note on the N/A booleans below.
+   * - `companyId` is an assignment the catalogue makes, not something a team tells us.
+   *
+   * `additionalNotes` is free-text with no expected answer, so an empty one is not a
+   * gap. `owner` is absent because the App Data tab does not ask for it; the question
+   * it used to answer is `devTeamContact`.
+   *
+   * Security tooling is NOT here. It is asked for on the Security tab and reported
+   * separately as `security` below.
+   */
+  metadata: Object.freeze([
+    // Basic Information card
     'description',
-    'owner',
     'repoUrl',
+    'devTeamContact',
+    'criticalAspects',
+    'businessCriticality',
+    // Technical Information card
     'language',
     'framework',
     'serverEnvironment',
+    'currentVersion',
     'facing',
     'deploymentType',
     'authProfiles',
     'dataTypes',
-    ...SECURITY_FIELDS,
   ]),
 
-  /** Basic Information card on the application detail page; portfolio CSV metadata. */
+  /**
+   * Retained only so the differential suite can compare today's numbers against the
+   * pre-consolidation ones. Nothing in the application reads these two; `metadata`
+   * replaced them. Do not add a caller.
+   */
   portfolioBasic: Object.freeze([
     'name',
     'description',
@@ -222,9 +250,13 @@ const NON_NULL_COUNTS_AS_FILLED = new Set([
  *
  * The single implementation every caller shares.
  *
+ * `missing` names the scorable fields that were not filled, so a caller can say which
+ * ones rather than reimplementing the same loop to find out — which is exactly what
+ * scoring.js used to do.
+ *
  * @param {Record<string, unknown>} application
  * @param {keyof FIELD_SETS | string[]} set
- * @returns {{ filled: number, total: number }}
+ * @returns {{ filled: number, total: number, missing: string[] }}
  */
 export function countFieldSet(application, set, blankRule) {
   const fields = resolveFieldSet(set, application);
@@ -238,6 +270,7 @@ export function countFieldSet(application, set, blankRule) {
 
   let filled = 0;
   let total = 0;
+  const missing = [];
 
   for (const field of fields) {
     const value = application?.[field];
@@ -248,43 +281,38 @@ export function countFieldSet(application, set, blankRule) {
 
     total += 1;
 
+    let isFilled;
     if (NON_NULL_COUNTS_AS_FILLED.has(field)) {
-      if (value !== null && value !== undefined) filled += 1;
-      continue;
-    }
-
-    if (field === 'apiSchema') {
+      isFilled = value !== null && value !== undefined;
+    } else if (field === 'apiSchema') {
       // A relation: truthy means a schema is attached.
-      if (value) filled += 1;
-      continue;
-    }
-
-    if (field === 'businessCriticality') {
+      isFilled = Boolean(value);
+    } else if (field === 'businessCriticality') {
       // Numeric: any set value counts, including a hypothetical 0.
-      if (value !== null && value !== undefined) filled += 1;
-      continue;
+      isFilled = value !== null && value !== undefined;
+    } else {
+      isFilled = value !== null && value !== undefined && !isBlank(value);
     }
 
-    if (value !== null && value !== undefined && !isBlank(value)) {
-      filled += 1;
-    }
+    if (isFilled) filled += 1;
+    else missing.push(field);
   }
 
-  return { filled, total };
+  return { filled, total, missing };
 }
 
 /**
- * Whole-record completeness for an application.
+ * How complete is this application's metadata?
  *
- * `apiSchema` is treated as a truthy relation (include it as a boolean or the related
- * row); every other field is read directly off the application.
+ * The single answer. Every screen that shows a completeness number, and the 40-point
+ * completeness component of the 0-100 knowledge score, goes through here.
  *
  * @param {Record<string, unknown>} application
- * @returns {{ filled: number, total: number, percentage: number }}
+ * @returns {{ filled: number, total: number, percentage: number, missing: string[] }}
  */
 export function calculateCompleteness(application) {
-  const { filled, total } = countFieldSet(application, 'record');
-  return { filled, total, percentage: toPercentage(filled, total) };
+  const { filled, total, missing } = countFieldSet(application, 'metadata');
+  return { filled, total, missing, percentage: toPercentage(filled, total) };
 }
 
 /**
