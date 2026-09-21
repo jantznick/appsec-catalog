@@ -9,6 +9,49 @@ import { AdvisoryDetailsModal } from './AdvisoryDetailsModal.jsx';
 import { summarizeOsv } from '../../utils/osv.js';
 import { scmProviderLabel } from '../../lib/integrationLabels.js';
 
+/** Muted "we have not looked" state, distinct from a red "this is absent". */
+function Unknown({ reason }) {
+  return (
+    <span className="text-gray-400" title={reason || undefined}>
+      Not read yet
+    </span>
+  );
+}
+
+const Yes = ({ children }) => <span className="text-green-700">{children}</span>;
+const No = ({ children }) => <span className="text-red-700">{children}</span>;
+
+/**
+ * Branch protection summary. null means the sync has not read it (or could not),
+ * which must not look the same as "this repo has no protection".
+ */
+function describeBranchProtection(bp) {
+  if (!bp || bp.enabled === null || bp.enabled === undefined) {
+    return <Unknown reason={bp?.error} />;
+  }
+  if (bp.enabled === false) return <No>Not protected</No>;
+
+  const reviews = bp.requiredApprovingReviewCount ?? 0;
+  const parts = [reviews === 1 ? '1 review' : `${reviews} reviews`];
+  if (bp.enforcedForAdmins === false) parts.push('admins can bypass');
+  return reviews > 0 && bp.enforcedForAdmins !== false ? (
+    <Yes>{parts.join(' · ')}</Yes>
+  ) : (
+    <No>{parts.join(' · ')}</No>
+  );
+}
+
+/** PR template summary, same unknown-vs-absent rule. */
+function describePrTemplate(t) {
+  if (!t || t.found === null || t.found === undefined) return <Unknown reason={t?.error} />;
+  if (t.found === false) return <No>No template</No>;
+  return t.hasSecuritySection ? (
+    <Yes title={t.securityHeading || undefined}>Present</Yes>
+  ) : (
+    <No>Template, no security section</No>
+  );
+}
+
 /**
  * Per-application source-control repo panel (Integrations tab). Shows the linked repo's detected languages,
  * frameworks, and dependency inventory, with Change / Sync / Unlink. All actions run through the
@@ -118,6 +161,25 @@ export function ApplicationScmBlock({ application, canManage, onRefresh }) {
                     )}
                   </div>
                 )}
+              </div>
+
+              {/* Policy evidence read from the repo during Sync. Unknown is shown
+                  as "Not read yet" rather than as a failure — the two mean
+                  different things to a policy control. */}
+              <div>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Security controls
+                </h4>
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <dt className="text-gray-600">Branch protection</dt>
+                    <dd className="text-right">{describeBranchProtection(repo.branchProtection)}</dd>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <dt className="text-gray-600">PR security checklist</dt>
+                    <dd className="text-right">{describePrTemplate(repo.prTemplate)}</dd>
+                  </div>
+                </dl>
               </div>
 
               {/* Languages */}

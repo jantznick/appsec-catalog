@@ -81,6 +81,28 @@ function serializeRepo(repo) {
     license: repo.license,
     languages: repo.languages || {},
     lastSyncedAt: repo.lastSyncedAt,
+    // Policy evidence read during sync. Nulls are meaningful here — "not read"
+    // is distinct from "absent" — so pass them through rather than defaulting.
+    branchProtection: {
+      protectedBranch: repo.protectedBranch,
+      enabled: repo.branchProtectionEnabled,
+      requiredApprovingReviewCount: repo.requiredApprovingReviewCount,
+      dismissStaleReviews: repo.dismissStaleReviews,
+      requireCodeOwnerReviews: repo.requireCodeOwnerReviews,
+      requiresStatusChecks: repo.requiresStatusChecks,
+      enforcedForAdmins: repo.enforcedForAdmins,
+      allowsForcePushes: repo.allowsForcePushes,
+      syncedAt: repo.branchProtectionSyncedAt,
+      error: repo.branchProtectionError,
+    },
+    prTemplate: {
+      path: repo.prTemplatePath,
+      found: repo.prTemplateFound,
+      hasSecuritySection: repo.prTemplateHasSecuritySection,
+      securityHeading: repo.prTemplateSecurityHeading,
+      syncedAt: repo.prTemplateSyncedAt,
+      error: repo.prTemplateError,
+    },
     dependencies: (repo.dependencies || []).map((d) => ({
       ecosystem: d.ecosystem,
       name: d.name,
