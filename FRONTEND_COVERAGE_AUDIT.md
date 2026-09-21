@@ -1,0 +1,257 @@
+# Frontend Coverage Audit
+
+Backend capability shipped in the three merges of 2026-09-22 (PRs #31, #32, #33) that the
+frontend cannot set, cannot display, or displays wrongly — plus the items deferred along
+the way.
+
+## Why this document exists
+
+I verified the policy-control work by calling the API and reading the response. All 27
+control mappings were created with `fetch`. That made the backend provably correct and
+said nothing about whether the product worked.
+
+Two symptoms Nick found by using the app:
+
+1. The control editor showed operator **Exists** for a control stored as
+   `within_days 183`, with a date picker next to the words "No value needed".
+2. The control list rendered the raw string `within_days` rather than a label.
+
+Both come from the same cause, and when I first hit that gap I wrote a hint into
+`validationRules.description` — *"For 'reviewed at least every six (6) months' use
+within_days with value 183"* — telling the user to do something the UI cannot do.
+Documenting a limitation instead of fixing it.
+
+**Nothing new gets built until this list is closed.**
+
+---
+
+## Findings
+
+Ordered by damage. Every item states how it was verified.
+
+### F1 — The control editor silently corrupts mappings on save
+
+`frontend/src/lib/policyDisplay.js` holds a **fourth** hardcoded operator list
+(`POLICY_OPERATORS`, 11 entries). It is missing `within_days` and `older_than_days`.
+
+`getOperatorsForField` in `frontend/src/pages/PolicyControls.jsx` intersects that list
+with the backend's `allowedOperators`, so the dropdown **cannot offer** either operator.
+A `<Select>` whose stored value is not among its options renders the first option, so the
+editor shows `exists` — and **saving writes `exists`**, destroying the mapping.
+
+Affected controls: **4.6.3, 4.6.6, 4.6.7, 4.6.10, 6.3.12.**
+
+Also wrong on that row: the value input renders as a date picker (from `fieldType: date`)
+while the helper text reads "No value needed" (because the UI believes the operator is
+`exists`). For these operators the value is a **count of days** and should be a number.
+
+- [ ] Add both operators to the frontend list with clear labels
+- [ ] Render a number input for day-count operators
+- [ ] Make an unrecognised stored operator visible rather than silently replaced
+
+> The last point is the durable fix. Four independent operator lists existed; the backend
+> two were unified in #31 by deriving `POLICY_OPERATORS` from the engine's
+> `IMPLEMENTED_OPERATORS`. The frontend copy was missed. A select that silently discards
+> a value it does not recognise will cause this again with the next operator.
+
+### F2 — The editor cannot set seven properties the API accepts
+
+Verified: zero occurrences in `PolicyControls.jsx` of `verificationRequired`,
+`verificationNote`, `appliesWhenLogic`, `allowsAttestation`, `attestationValidDays`,
+field `role`, or `applies_when`.
+
+So everything from Phase 2a and Phase 4 is API-only. Through the UI you cannot:
+
+- scope a control to the applications it applies to (`applies_when` role + logic)
+- mark a control as needing human verification, or write the note explaining why
+- make a control attestable, or set its re-attestation period
+
+- [ ] Field role selector (compliance / applies_when) per field row
+- [ ] Applies-when logic (AND/OR), alongside the existing evaluation logic control
+- [ ] Verification required + note
+- [ ] Allows attestation + validity days
+
+### F3 — Six of seven application forms are missing all eight new fields
+
+The Phase 6a fields (`secretsScanTool`, `secretsScanIntegrationLevel`,
+`sastIncludesSecrets`, `iacContainerScanTool`, `iacContainerScanIntegrationLevel`,
+`iacContainerScanNA`, `lastSecretsScanDate`, `lastIacContainerScanDate`) appear in
+`ApplicationDetail.jsx` and nowhere else.
+
+| Form | Fields present |
+|---|---|
+| `ApplicationDetail.jsx` | 8 of 8 |
+| `OnboardApplication.jsx` | 0 |
+| `ApplicationNew.jsx` | 0 |
+| `BulkImportApplicationsModal.jsx` | 0 |
+| `SplitApplicationModal.jsx` | 0 |
+| `PendingApprovals.jsx` | 0 |
+| `VersionHistory.jsx` | 0 |
+
+Consequences, each distinct:
+
+- A team cannot declare secrets or IaC scanning **at intake**, only by editing afterwards
+- A CSV import cannot carry them, though `buildBulkImportRow` accepts them
+- A split does not show them, though the registry marks them `splittable`
+- Version history does not display them, though they are now `versioned`
+- The approval queue does not show them
+
+> Note the intake gap is also why these are `approvable: false`: the onboarding form does
+> not post them, so a pending version could only ever carry a stale copy. **If they are
+> added to the onboarding form, the `approvable` flags must change with them.**
+
+- [ ] Decide which forms should carry them, then add and flip `approvable` to match
+
+### F4 — The executive dashboard understates compliance
+
+`frontend/src/components/dashboard/ExecutiveDashboard.jsx` renders
+`meetingControls` of `totalControls`, and `PersonaDashboards.jsx` renders
+"N of M controls meeting".
+
+`totalControls` now includes controls that are `not_applicable`, `attested` and
+`verification_required`. A control correctly scoped out of an application, or legitimately
+attested, counts in the denominator and not the numerator — so the figure reads worse than
+reality, on the dashboard most likely to be shown to an executive.
+
+The backend already returns what is needed and nothing consumes it:
+`applicable`, `attested`, `verification_required`, `not_applicable`,
+`measured_compliance_percentage`, `verificationRequiredControls`,
+`notApplicableControls`.
+
+- [ ] Use `applicable` as the denominator
+- [ ] Surface attested separately from measured, per the reporting split #31 introduced
+
+### F5 — The three new statuses are handled in exactly one file
+
+`verification_required`, `not_applicable` and `attested` appear only in
+`PolicyComplianceView.jsx`. Five other files render compliance data
+(`ApplicationMappingsCard.jsx`, `PersonaDashboards.jsx`, `ExecutiveDashboard.jsx`,
+`ProductDetail.jsx`, `ApplicationDetail.jsx`).
+
+- [ ] Audit each for status handling; a shared status-presentation helper would stop the
+      next state needing six edits
+
+### F6 — Attestations cannot be listed
+
+`api.getApplicationAttestations` exists and no screen calls it. You can attest and
+withdraw from a control row, but there is no way to see which attestations exist on an
+application, who made them, what was stated, or when they expire.
+
+Expiry is the whole point of the model. Without a view, nobody can see what is about to
+lapse.
+
+- [ ] Attestations list, with expiry dates and the statement
+
+### F7 — Environments has no UI at all
+
+From PR #33. `api.getEnvironments`, `createEnvironment`, `updateEnvironment`,
+`deleteEnvironment` and `getEnvironmentKinds` all exist; **no page or component calls any
+of them.** The migration backfills environments from deployment history, so after
+migrating they exist in the database and are unmanageable through the app.
+
+Also missing from that PR, per its author: the adopt/triage endpoint for unassigned
+deployments (which the `environment.manage` permission description already promises), the
+per-application environment selector, and the Wiz tag triple the workstream began for.
+
+Owned by the environments workstream, not this one. Listed so it is not lost.
+
+### F8 — Twenty-six API client methods no screen calls
+
+Beyond the environments and attestation entries above:
+
+`assignUserToCompany`, `createApplicationOnboard`, `getAdminSecurityFindingsJob`,
+`getAiAvailability`, `getAiUsageMine`, `getApplicationApiSchema`, `getApplicationVersion`,
+`getCompanySecurityFindingsJob`, `getOktaStatus`, `getPendingUsers`,
+`getPlatformDocsIndex`, `getPolicyControl`, `getProductDataFlows`,
+`getProductIngressPoints`, `getProgramRequestOptions`, `removeUserFromCompany`,
+`reorderContentAssets`, `reviewSammAssessment`, `searchScmDependencies`,
+`updatePolicyControlOrder`, `updatePolicyOrder`.
+
+Most predate the three merges and some may be intentional. Not triaged.
+
+- [ ] Triage: dead code, or missing UI
+
+---
+
+## Deferred items
+
+Recorded because the last plan document became the definition of done and Nick's
+instructions that were not in it fell out. These are not audit findings; they are
+outstanding work.
+
+### D1 — One `calculateCompleteness` driving the 0-100 score — **explicitly requested, not done**
+
+Nick, verbatim: *"there should only be a single calculateCompleteness function, and that
+should drive the 0-100 score, the dashboard % and come from the app data tab form"*, and
+*"completeness should be only app metadata"*.
+
+Current state, verified on main: `services/scoring.js` still has its own hardcoded
+`KNOWLEDGE_SCORING_FIELDS` (eight text fields) and does not import `completeness.js`.
+Two definitions of completeness still coexist.
+
+Required:
+
+- [ ] Add a `kind: 'metadata' | 'tool'` axis to `services/applicationFields.js`. It cannot
+      be a filter over the existing `group` values: `group: 'security'` mixes tool fields
+      with submitter claims (`authProfiles`, `dataTypes`, `securityTestingDescription`),
+      so filtering it would strip three fields that should stay.
+- [ ] Point `calculateKnowledgeSharingScore` at a metadata field set
+- [ ] Update `completeness.differential.test.js` in the same commit with the new
+      expectation stated explicitly
+
+Measured impact across the 91 dev applications: knowledge completeness moves **22/40 →
+11/40**, about 11 points off the 100-point total. It re-ranks rather than uniformly
+lowering — a few applications rise, because they have tool data but not the eight text
+fields.
+
+### D2 — Remove `securityTestingDescription`
+
+Hard to score, low signal by default. Present in **seven** frontend files
+(`BulkImportApplicationsModal`, `SplitApplicationModal`, `VersionHistory`,
+`ApplicationDetail`, `ApplicationNew`, `OnboardApplication`, `PendingApprovals`), plus the
+registry. Not in any completeness field set, so removal is smaller than it first appears.
+
+- [ ] Remove the field and its registry entry
+
+### D3 — Point 4.6.14 at `iacContainerScanNA`
+
+The column now exists (`20260922150000`). Once applied, 4.6.14 should use it as an
+`applies_when` check so an application declaring N/A reports `not_applicable` rather than
+failing. Blocked only on the migration.
+
+### D4 — Regenerate the prod import script
+
+The `orbit-policies.json` and import script produced early in this work predate Phase 2a.
+They would seed the original mappings: 4.6.3 and 4.6.7 empty, 4.6.6 with two fields, no
+secrets or IaC, no attestation flags.
+
+### D5 — Blocked on the environments workstream
+
+- 4.6.4 mapping. Its author confirmed the records evidence only that environments exist,
+  not that they are separated, so it lands as `verification_required`.
+- 4.6.10 remap when `lastDastScanDate` moves to the instance. Nick's ruling: **any**
+  environment, not production-only.
+
+---
+
+## What this audit cannot find
+
+It compares what the backend can express against what the frontend references. It finds
+"never called" and "cannot express a known value". It does **not** find "renders, but
+wrongly" — the date picker beside "No value needed" was found by a person using the app,
+not by any grep here.
+
+So this list is a floor, not a ceiling. Walking the UI will find more.
+
+---
+
+## How the work changes
+
+1. **No backend capability lands without the UI that exercises it.** If the UI is a
+   separate piece of work, the backend waits.
+2. **Verification happens through the browser, not the API.** A 200 response is not
+   evidence that a feature works.
+3. **A limitation never gets documented in place of being fixed.** The `within_days` hint
+   is the example not to repeat.
+4. **A hardcoded list that mirrors another is a defect**, not a maintenance task. Four
+   operator lists existed; two were unified and the frontend pair was missed.
