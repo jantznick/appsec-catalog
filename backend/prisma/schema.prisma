@@ -983,6 +983,16 @@ model ApplicationVersion {
   appFirewallIntegrationLevel Int?
   apiSecurityTool             String?
   apiSecurityIntegrationLevel Int?
+  // Phase 6a secrets and IaC/container fields. These are versioned:true in the
+  // registry, so pickVersionedMetadata writes them into every snapshot — without the
+  // columns the create throws, and createApplicationVersion swallows the error and
+  // returns null, so version history and the pending-approval queue silently stop
+  // working rather than failing loudly.
+  secretsScanTool                  String?
+  secretsScanIntegrationLevel      Int?
+  sastIncludesSecrets              Boolean?
+  iacContainerScanTool             String?
+  iacContainerScanIntegrationLevel Int?
   apiSecurityNA               Boolean?
   appFirewallNA               Boolean?
   currentVersion              String?
@@ -991,6 +1001,8 @@ model ApplicationVersion {
   lastDastScanDate            DateTime?
   lastSastScanDate            DateTime?
   lastScaScanDate             DateTime?
+  lastSecretsScanDate         DateTime?
+  lastIacContainerScanDate    DateTime?
   interfaces                  String? // JSON array
 
   @@index([applicationId])
