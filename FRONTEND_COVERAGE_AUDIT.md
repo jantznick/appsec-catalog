@@ -42,10 +42,10 @@ Branch `claude/policy-gaps-followup`. Run `npm test` in `backend/` (149 cases) a
 | F5 | Statuses handled in one file only | **done** `125d752` — three of the five files I named did not exist |
 | F6 | Attestations cannot be listed | **done** `ad94bf6` |
 | F7 | 25 uncalled client methods, untriaged | **done** — triaged, no code change; none came from today's merges |
-| D1 | One `calculateCompleteness` driving the score | **next** — **explicitly requested** |
-| D2 | Remove `securityTestingDescription` | open |
+| D1 | One `calculateCompleteness` driving the score | **done** `02046e8` |
 | D3 | Point 4.6.14 at `iacContainerScanNA` | open — needs the migration applied |
-| D4 | Regenerate the prod import script | open |
+| D2 | Remove `securityTestingDescription` | **done** `ce66158` |
+| D4 | Regenerate the prod import script | **done** `cf-scripts` |
 | D5 | 4.6.4 / 4.6.10 | blocked on the environments workstream |
 
 ### Migrations awaiting `prisma migrate deploy`
@@ -323,11 +323,29 @@ The column now exists (`20260922150000`). Once applied, 4.6.14 should use it as 
 `applies_when` check so an application declaring N/A reports `not_applicable` rather than
 failing. Blocked only on the migration.
 
-### D4 — Regenerate the prod import script
+### D4 — Regenerate the prod import script — **done** `backend/scripts/`
 
 The `orbit-policies.json` and import script produced early in this work predate Phase 2a.
 They would seed the original mappings: 4.6.3 and 4.6.7 empty, 4.6.6 with two fields, no
 secrets or IaC, no attestation flags.
+
+Regenerating the file by hand would put it back in the same position, so it is replaced
+by a pair that reads the source instance:
+
+```bash
+node backend/scripts/policies-export.js --url http://localhost:3001 --token "$DEV_TOKEN" > orbit-policies.json
+node backend/scripts/policies-import.js --url https://orbit.prod --token "$PROD_TOKEN" --file orbit-policies.json --dry-run
+```
+
+The import creates over the public API, so the target applies the same validation the
+UI does. It never updates or deletes — an existing policy name or controlId is skipped
+and reported — and it refuses a non-global policy, because division and company
+targeting refers to ids that do not exist on the target instance.
+
+Verified against a stub of both endpoints: `within_days` values survive the JSON
+round trip as numbers rather than double-encoded strings, the attestation and
+verification flags carry, no source ids leak into the payload, `--dry-run` sends zero
+writes, a second run skips everything, and a division-scoped policy is refused.
 
 ### D5 — Blocked on the environments workstream
 
