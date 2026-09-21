@@ -1,6 +1,6 @@
 # Testing checklist — `claude/policy-gaps-followup`
 
-Everything on this branch was verified with `node --test` (156 cases) and
+Everything on this branch was verified with `node --test` (162 cases, 4 skipped) and
 `npx vite build`. **None of it was opened in a browser.** That is the same gap that
 produced the findings in `FRONTEND_COVERAGE_AUDIT.md`, so this list exists to be
 clicked through rather than read.
@@ -71,7 +71,7 @@ Settings → a company → copy the onboarding link, open it in a private window
 | # | Do | Expect |
 |---|---|---|
 | a | Applications → Bulk Import, upload a CSV with a `Secrets Scanning Tool` column | The column auto-maps; it is in the target dropdown |
-| b | Open the target dropdown | **36** fields, including IaC / Container Scanning Tool, IaC / Container Not Applicable, SAST includes secrets scanning, and both legacy API Security fields. No "Security Testing Description" |
+| b | Open the target dropdown | **33** fields, including IaC / Container Scanning Tool, IaC / Container Not Applicable and SAST includes secrets scanning. **Not** "Security Testing Description", and **not** either Legacy API Security field |
 | c | Import and open a created application | The secrets/IaC values are stored, not dropped |
 | d | Stop the backend, reopen the modal | The dropdown still populates (the fallback list) rather than being empty |
 
