@@ -49,8 +49,7 @@ const SECURITY_FIELDS = Object.freeze([
   'dastIntegrationLevel',
   '@standaloneSca',
   '@standaloneSecrets',
-  'iacContainerScanTool',
-  'iacContainerScanIntegrationLevel',
+  '@iacContainerScanning',
   'appFirewallTool',
   'appFirewallIntegrationLevel',
   'apiSchema',
@@ -67,6 +66,14 @@ const STANDALONE_SCA_FIELDS = Object.freeze(['scaTool', 'scaIntegrationLevel']);
  * leave the denominator rather than counting as gaps.
  */
 const STANDALONE_SECRETS_FIELDS = Object.freeze(['secretsScanTool', 'secretsScanIntegrationLevel']);
+
+/**
+ * Expanded where the IaC/container marker sits. When a team has declared it not
+ * applicable, the tool and level leave the denominator and only the declaration counts
+ * — the same shape as the SCA and secrets markers, so "we have no IaC" is a complete
+ * answer rather than two permanent gaps.
+ */
+const IAC_CONTAINER_FIELDS = Object.freeze(['iacContainerScanTool', 'iacContainerScanIntegrationLevel']);
 
 /**
  * How a set decides a string is blank.
@@ -163,6 +170,12 @@ export function resolveFieldSet(set, application) {
     if (field === '@standaloneSecrets') {
       return includeStandaloneSecrets ? [...STANDALONE_SECRETS_FIELDS] : [];
     }
+    if (field === '@iacContainerScanning') {
+      // The declaration itself always counts; the tool fields only when it applies.
+      return application?.iacContainerScanNA === true
+        ? ['iacContainerScanNA']
+        : ['iacContainerScanNA', ...IAC_CONTAINER_FIELDS];
+    }
     return [field];
   });
 }
@@ -199,6 +212,9 @@ const NON_NULL_COUNTS_AS_FILLED = new Set([
   'appFirewallIntegrationLevel',
   'apiSecurityNA',
   'appFirewallNA',
+  // false is an answer. Unlike its two siblings this column has no DB default, so
+  // null genuinely means unanswered and correctly counts as unfilled.
+  'iacContainerScanNA',
 ]);
 
 /**

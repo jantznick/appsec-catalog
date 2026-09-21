@@ -317,7 +317,13 @@ describe('consolidated completeness matches the implementations it replaced', ()
       const now = calculateCompleteness(app);
       const before = countAgainst(PRE_PHASE_6A_RECORD, app, SET_BLANK_RULES.record);
       const added = resolveFieldSet('record', app).length - resolveFieldSet(PRE_PHASE_6A_RECORD, app).length;
-      assert.equal(added, app.sastIncludesSecrets ? 2 : 4, JSON.stringify(app));
+      // The IaC not-applicable declaration always counts; each conditional pair counts
+      // only when it applies.
+      const expected =
+        1 +
+        (app.sastIncludesSecrets ? 0 : 2) +
+        (app.iacContainerScanNA ? 0 : 2);
+      assert.equal(added, expected, JSON.stringify(app));
       // Additions can only grow the denominator, never shrink it, and can never
       // reduce the filled count.
       assert.ok(now.total >= before.total, 'the denominator must not shrink');

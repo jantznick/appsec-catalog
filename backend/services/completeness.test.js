@@ -53,6 +53,7 @@ function completeApp(overrides = {}) {
     sastIncludesSecrets: false,
     secretsScanTool: 'GitHub secret scanning',
     secretsScanIntegrationLevel: 4,
+    iacContainerScanNA: false,
     iacContainerScanTool: 'Trivy',
     iacContainerScanIntegrationLevel: 4,
     appFirewallTool: 'Fastly NGWAF',
@@ -144,7 +145,7 @@ describe('calculateCompleteness', () => {
       appFirewallTool: 'NA', appFirewallIntegrationLevel: 'NA', apiSchema: 'NA',
       apiSecurityNA: 'NA', appFirewallNA: 'NA',
       secretsScanTool: 'NA', secretsScanIntegrationLevel: 'NA',
-      iacContainerScanTool: 'NA', iacContainerScanIntegrationLevel: 'NA',
+      iacContainerScanTool: 'NA', iacContainerScanIntegrationLevel: 'NA', iacContainerScanNA: 'NA',
     };
     const result = calculateCompleteness(allNA);
     assert.equal(result.total, 0);
@@ -178,16 +179,16 @@ describe('field sets', () => {
    */
   it('has the sizes the implementations it replaced had, plus the Phase 6a additions', () => {
     const standalone = { sastIncludesSca: false, sastIncludesSecrets: false };
-    assert.equal(resolveFieldSet('record', standalone).length, 26);
-    assert.equal(resolveFieldSet('security', standalone).length, 15);
+    assert.equal(resolveFieldSet('record', standalone).length, 27);
+    assert.equal(resolveFieldSet('security', standalone).length, 16);
     assert.equal(resolveFieldSet('portfolioBasic', standalone).length, 6);
     assert.equal(resolveFieldSet('portfolioTechnical', standalone).length, 8);
   });
 
   it('drops the standalone SCA fields when SAST covers them', () => {
     const covered = { sastIncludesSca: true, sastIncludesSecrets: false };
-    assert.equal(resolveFieldSet('record', covered).length, 24);
-    assert.equal(resolveFieldSet('security', covered).length, 13);
+    assert.equal(resolveFieldSet('record', covered).length, 25);
+    assert.equal(resolveFieldSet('security', covered).length, 14);
     // The metadata sets have no SCA fields, so they are unaffected.
     assert.equal(resolveFieldSet('portfolioBasic', covered).length, 6);
   });
@@ -195,12 +196,24 @@ describe('field sets', () => {
   it('drops the standalone secrets fields when SAST covers them', () => {
     // Same rule as SCA, and the two are independent.
     const secretsCovered = { sastIncludesSca: false, sastIncludesSecrets: true };
-    assert.equal(resolveFieldSet('record', secretsCovered).length, 24);
-    assert.equal(resolveFieldSet('security', secretsCovered).length, 13);
+    assert.equal(resolveFieldSet('record', secretsCovered).length, 25);
+    assert.equal(resolveFieldSet('security', secretsCovered).length, 14);
 
     const bothCovered = { sastIncludesSca: true, sastIncludesSecrets: true };
-    assert.equal(resolveFieldSet('record', bothCovered).length, 22);
-    assert.equal(resolveFieldSet('security', bothCovered).length, 11);
+    assert.equal(resolveFieldSet('record', bothCovered).length, 23);
+    assert.equal(resolveFieldSet('security', bothCovered).length, 12);
+  });
+
+  it('drops the IaC tool fields when the team declares it not applicable', () => {
+    // The declaration itself still counts — "we have no IaC" is a complete answer,
+    // not two permanent gaps. Without this an application with no containers could
+    // never reach 100% and would fail 4.6.14 forever.
+    const applies = { sastIncludesSca: false, sastIncludesSecrets: false, iacContainerScanNA: false };
+    const notApplicable = { ...applies, iacContainerScanNA: true };
+    assert.equal(resolveFieldSet('record', applies).length, 27);
+    assert.equal(resolveFieldSet('record', notApplicable).length, 25);
+    assert.ok(resolveFieldSet('record', notApplicable).includes('iacContainerScanNA'));
+    assert.ok(!resolveFieldSet('record', notApplicable).includes('iacContainerScanTool'));
   });
 
   it('names only real fields, so a typo cannot count as permanently missing', () => {

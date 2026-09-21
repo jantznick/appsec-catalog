@@ -350,6 +350,18 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         }
       },
       {
+        path: 'iacContainerScanNA',
+        label: 'IaC / Container Not Applicable',
+        category: 'Security Tools',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Not applicable' }, { value: false, label: 'Applies' }],
+        validationRules: {
+          description: 'Use as an applies_when check so 4.6.14 reports not_applicable for an application with no IaC or containers, rather than failing it.'
+        }
+      },
+      {
         path: 'lastSecretsScanDate',
         label: 'Last Secrets Scan Date',
         category: 'Security Tools',

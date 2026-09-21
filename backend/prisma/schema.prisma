@@ -355,6 +355,16 @@ model Application {
   iacContainerScanTool            String?
   iacContainerScanIntegrationLevel Int?
 
+  // Not every application has infrastructure-as-code or containers, so 4.6.14 needs a
+  // way to say "does not apply" rather than failing forever.
+  //
+  // Deliberately WITHOUT @default(false), unlike apiSecurityNA and appFirewallNA below.
+  // Their defaults mean they are never null on a real row, so they always count as
+  // filled — two guaranteed points of completeness on every application, recorded as
+  // wart C2 in APP_DATA_FIXES_PLAN.md. Adding a third would extend a known defect.
+  // Null here means "not answered" and counts as unfilled, which is the honest reading.
+  iacContainerScanNA Boolean?
+
   apiSecurityNA  Boolean? @default(false)
   appFirewallNA  Boolean? @default(false)
 
@@ -993,6 +1003,7 @@ model ApplicationVersion {
   sastIncludesSecrets              Boolean?
   iacContainerScanTool             String?
   iacContainerScanIntegrationLevel Int?
+  iacContainerScanNA          Boolean?
   apiSecurityNA               Boolean?
   appFirewallNA               Boolean?
   currentVersion              String?

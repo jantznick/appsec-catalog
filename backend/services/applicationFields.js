@@ -105,6 +105,7 @@ export const APPLICATION_METADATA_FIELDS = Object.freeze(
     // would always be set together.
     { key: 'iacContainerScanTool', label: 'IaC / Container Scanning Tool', group: 'security', type: 'string', versioned: true, approvable: false, splittable: true },
     { key: 'iacContainerScanIntegrationLevel', label: 'IaC / Container Integration Level', group: 'security', type: 'int', versioned: true, approvable: false, splittable: true },
+    { key: 'iacContainerScanNA', label: 'IaC / Container Not Applicable', group: 'security', type: 'boolean', versioned: true, approvable: false, splittable: true },
     { key: 'appFirewallTool', label: 'Application Firewall Tool', group: 'security', type: 'string', versioned: true, approvable: true, splittable: true },
     { key: 'appFirewallIntegrationLevel', label: 'Application Firewall Integration Level', group: 'security', type: 'int', versioned: true, approvable: true, splittable: true },
     // Superseded by the API schema upload; retained for existing data.

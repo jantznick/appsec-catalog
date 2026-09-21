@@ -115,6 +115,7 @@ export function ApplicationDetail() {
     lastSecretsScanDate: '',
     iacContainerScanTool: '',
     iacContainerScanIntegrationLevel: '',
+    iacContainerScanNA: false,
     lastIacContainerScanDate: '',
     apiSecurityNA: false,
     appFirewallNA: false,
@@ -865,6 +866,7 @@ export function ApplicationDetail() {
         lastSecretsScanDate: data.lastSecretsScanDate ? data.lastSecretsScanDate.split('T')[0] : '',
         iacContainerScanTool: data.iacContainerScanTool || '',
         iacContainerScanIntegrationLevel: data.iacContainerScanIntegrationLevel?.toString() || '',
+        iacContainerScanNA: data.iacContainerScanNA || false,
         lastIacContainerScanDate: data.lastIacContainerScanDate ? data.lastIacContainerScanDate.split('T')[0] : '',
         apiSecurityNA: data.apiSecurityNA || false,
         appFirewallNA: data.appFirewallNA || false,
@@ -2349,23 +2351,33 @@ export function ApplicationDetail() {
                       <div className="bg-teal-50 rounded-lg p-4 border border-teal-200">
                         <h5 className="text-sm font-semibold text-teal-900 mb-3">IaC / Container Scanning</h5>
                         <div className="space-y-3">
-                          <Input
-                            label="Tool"
-                            value={formData.iacContainerScanTool}
-                            onChange={(e) => handleFieldChange('iacContainerScanTool', e.target.value)}
+                          <Checkbox
+                            id="iacContainerScanNA"
+                            label="Not Applicable (no infrastructure-as-code or containers)"
+                            checked={formData.iacContainerScanNA}
+                            onChange={(e) => handleFieldChange('iacContainerScanNA', e.target.checked)}
                           />
-                          <Select
-                            label="Integration Level"
-                            value={formData.iacContainerScanIntegrationLevel}
-                            onChange={(e) => handleFieldChange('iacContainerScanIntegrationLevel', e.target.value)}
-                            options={[{ value: '', label: 'Select level' }, ...integrationLevels]}
-                          />
-                          <Input
-                            label="Last Scan Date"
-                            type="date"
-                            value={formData.lastIacContainerScanDate}
-                            onChange={(e) => handleFieldChange('lastIacContainerScanDate', e.target.value)}
-                          />
+                          {!formData.iacContainerScanNA && (
+                            <>
+                              <Input
+                                label="Tool"
+                                value={formData.iacContainerScanTool}
+                                onChange={(e) => handleFieldChange('iacContainerScanTool', e.target.value)}
+                              />
+                              <Select
+                                label="Integration Level"
+                                value={formData.iacContainerScanIntegrationLevel}
+                                onChange={(e) => handleFieldChange('iacContainerScanIntegrationLevel', e.target.value)}
+                                options={[{ value: '', label: 'Select level' }, ...integrationLevels]}
+                              />
+                              <Input
+                                label="Last Scan Date"
+                                type="date"
+                                value={formData.lastIacContainerScanDate}
+                                onChange={(e) => handleFieldChange('lastIacContainerScanDate', e.target.value)}
+                              />
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -2603,6 +2615,9 @@ export function ApplicationDetail() {
                       {/* IaC / Container Scanning (read-only) */}
                       <div className="bg-teal-50 rounded-lg p-4 border border-teal-200">
                         <h5 className="text-sm font-semibold text-teal-900 mb-3">IaC / Container Scanning</h5>
+                        {formData.iacContainerScanNA ? (
+                          <p className="text-sm text-gray-900">Not applicable</p>
+                        ) : (
                         <div className="space-y-2">
                           <div>
                             <span className="text-xs font-medium text-gray-600">Tool:</span>
@@ -2619,6 +2634,7 @@ export function ApplicationDetail() {
                             </p>
                           </div>
                         </div>
+                        )}
                       </div>
 
                       {/* App Firewall Section */}

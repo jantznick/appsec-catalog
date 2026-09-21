@@ -72,7 +72,7 @@ const GOLDEN_SPLITTABLE_FIELDS = [
  */
 const ADDED_SINCE_REGISTRY = [
   'secretsScanTool', 'secretsScanIntegrationLevel', 'sastIncludesSecrets',
-  'iacContainerScanTool', 'iacContainerScanIntegrationLevel',
+  'iacContainerScanTool', 'iacContainerScanIntegrationLevel', 'iacContainerScanNA',
   'lastSecretsScanDate', 'lastIacContainerScanDate',
 ];
 

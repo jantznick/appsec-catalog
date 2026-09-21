@@ -39,8 +39,9 @@ export function calculateCompleteness(application) {
     'dastIntegrationLevel',
     ...(includeStandaloneSca ? ['scaTool', 'scaIntegrationLevel'] : []),
     ...(includeStandaloneSecrets ? ['secretsScanTool', 'secretsScanIntegrationLevel'] : []),
-    'iacContainerScanTool',
-    'iacContainerScanIntegrationLevel',
+    // The declaration always counts; the tool fields only when IaC/containers apply.
+    'iacContainerScanNA',
+    ...(application.iacContainerScanNA ? [] : ['iacContainerScanTool', 'iacContainerScanIntegrationLevel']),
     'appFirewallTool',
     'appFirewallIntegrationLevel',
     'apiSchema',
