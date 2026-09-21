@@ -66,6 +66,11 @@ export const PERMISSIONS = {
     label: 'View the change history',
     description: 'Read the audit trail of who changed what inside the company. Separate from company.read because the trail exposes every past value of every tracked field, including ones a reader can no longer see.',
   },
+  'company.author_roles': {
+    scope: PermissionScope.COMPANY,
+    label: 'Create company roles',
+    description: 'Create, edit and delete custom roles belonging to the company. Separate from company.manage_roles because defining a role is a broader power than handing out one that already exists.',
+  },
   'company.manage_roles': {
     scope: PermissionScope.COMPANY,
     label: 'Manage company roles',
@@ -178,7 +183,7 @@ export const PERMISSIONS = {
   'role.manage': {
     scope: PermissionScope.SYSTEM,
     label: 'Manage all roles',
-    description: 'Grant and revoke any role, for any user, in any company.',
+    description: 'Grant and revoke any role for any user in any company, and author roles for a specific company or for every company at once.',
   },
   'policy.manage': {
     scope: PermissionScope.SYSTEM,
