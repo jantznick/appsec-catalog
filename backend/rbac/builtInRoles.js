@@ -30,6 +30,7 @@ const EDIT_PERMISSIONS = [
   'product.edit',
   'domain.edit',
   'deployment.manage',
+  'environment.manage',
   'integration.manage',
   'note.write',
 ];

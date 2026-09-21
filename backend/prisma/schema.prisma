@@ -236,6 +236,7 @@ model Company {
   users                 User[]
   apiTokens             ApiToken[]
   applications          Application[]
+  environments          Environment[] // Deployment environment vocabulary for this company (see Environment)
   invitations           Invitation[]
   domainList            Domain[] // Application hosting domains - domains where this company's applications are hosted (see Domain model)
   deploymentTokens      DeploymentToken[] // Deployment tokens for CI/CD integration
@@ -299,6 +300,7 @@ model Application {
   scores                 Score[]
   applicationDomains     ApplicationDomain[]
   deployments            Deployment[]
+  environments           ApplicationEnvironment[] // Running instances of this application (see ApplicationEnvironment)
   deploymentTokens       ApplicationDeploymentToken[]
   notes                  Note[] // Notes associated with this application
   versions               ApplicationVersion[] // Version history of metadata changes
@@ -381,6 +383,16 @@ model Application {
   additionalNotes            String? // Any other information about the application
 
   aiRequests AiRequest[]
+
+  // `name` is unique within a company, enforced by the functional index
+  // `Application_companyId_lower_name_key` on ("companyId", lower(btrim(name))) - see
+  // migrations 20260922120000 and 20260922130000. Prisma cannot express that, so it is
+  // deliberately not declared as @@unique here: a plain @@unique([companyId, name])
+  // would be case- and whitespace-sensitive, and would disagree with both the split
+  // endpoint (which matches with mode: 'insensitive') and applicationNameKey() in
+  // services/applicationNames.js (which folds with trim().toLowerCase()). That folding
+  // function is the definition of a duplicate name; keep the index in step with it.
+  @@index([companyId])
 }
 
 model ApplicationApiSchema {
@@ -757,11 +769,80 @@ model ApplicationDomain {
   application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   domainId      String
   domain        Domain      @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  // Which running instance of the application serves this domain. Nullable so rows
+  // can exist before they are attributed to an environment. `applicationId` is kept
+  // alongside it deliberately: the existing domain -> application queries in
+  // routes/domains.js read through it. The write path must check that the
+  // environment belongs to the same application.
+  applicationEnvironmentId String?
+  applicationEnvironment   ApplicationEnvironment? @relation(fields: [applicationEnvironmentId], references: [id], onDelete: Cascade)
   createdAt     DateTime    @default(now())
 
+  // Note: one domain still maps to one application at most once, so a single domain
+  // cannot currently serve two environments of the same application.
   @@unique([applicationId, domainId]) // Prevent duplicate associations
   @@index([applicationId])
   @@index([domainId])
+  @@index([applicationEnvironmentId])
+}
+
+/// A company's deployment environment vocabulary: what *this* company calls its
+/// environments. `name` is theirs ("prod", "uat"); `kind` is the canonical bucket
+/// so cross-company reporting can ask for production without matching on spelling.
+///
+/// This is the vocabulary, not the running instance - see ApplicationEnvironment
+/// for a particular application deployed into one of these.
+model Environment {
+  id           String                   @id @default(cuid())
+  companyId    String
+  company      Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name         String // what the company calls it: "prod", "uat", "staging"
+  kind         String // PRODUCTION | STAGING | DEVELOPMENT | QA | OTHER
+  description  String?
+  status       String                   @default("active") // active | retired
+  displayOrder Int                      @default(0)
+  sourceLabel  String? // original free-text value this row was seeded/adopted from
+  applications ApplicationEnvironment[]
+  deployments  Deployment[]
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@index([companyId, kind])
+  @@index([status])
+}
+
+/// One running instance of an application: "Orbit Backend in production".
+///
+/// Holds the facts that are true of a particular deployed copy rather than of the
+/// application as a whole - its current version, its branch, its DAST scan date,
+/// its domains, and its Wiz tag. SAST and SCA scan dates stay on Application
+/// because they describe a commit and a dependency manifest, not a deployment.
+model ApplicationEnvironment {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  environmentId String
+  // Restrict, not Cascade: deleting a vocabulary row that instances still reference
+  // should fail loudly rather than silently take deploy history with it.
+  environment   Environment @relation(fields: [environmentId], references: [id], onDelete: Restrict)
+  status        String      @default("active") // active | retired
+
+  // Facts about this running copy (moved off Application)
+  currentVersion   String? // Version currently deployed here (e.g., "1.2.3")
+  gitBranch        String? // Branch or tag currently deployed here
+  lastDastScanDate DateTime? // DAST runs against a deployed URL, so it is per-instance
+
+  domains   ApplicationDomain[]
+  toolLinks ApplicationToolLink[]
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  @@unique([applicationId, environmentId])
+  @@index([applicationId])
+  @@index([environmentId])
+  @@index([status])
 }
 
 // Deployment history - tracks all deployments for an application
@@ -770,7 +851,15 @@ model Deployment {
   applicationId String
   application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   deployedAt    DateTime    @default(now())
+  // The raw environment string exactly as submitted by CI or the UI. Kept even after
+  // resolution: when a pipeline sends "Prod " against an environment named "prod", or
+  // an environment is renamed later, this is the only record of what was actually sent.
   environment   String // dev, staging, qa, prod, etc.
+  // The Environment this deployment resolved to. Null means the submitted string
+  // matched no environment for the company - these surface as "Unassigned" rather
+  // than silently creating a new environment from a typo.
+  environmentId  String?
+  environmentRef Environment? @relation(fields: [environmentId], references: [id], onDelete: SetNull)
   version       String? // Version that was deployed (e.g., "1.2.3", "v2.1.0")
   gitBranch     String? // Git branch or tag that was deployed (e.g., "main", "v1.2.3")
   deployedBy    String? // Who deployed it (user email or name)
@@ -780,6 +869,7 @@ model Deployment {
   @@index([applicationId])
   @@index([deployedAt])
   @@index([environment])
+  @@index([environmentId])
 }
 
 // Deployment tokens for CI/CD pipeline integration
@@ -1253,6 +1343,14 @@ model ApplicationToolLink {
   id            String      @id @default(cuid())
   applicationId String
   application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  // Which running instance this link points at. Null means the link applies to the
+  // application as a whole, which is what every row created before environments
+  // existed is. The unique constraint below is still application-wide, so only one
+  // link per provider exists today; making links per-environment is a follow-on
+  // change that has to move the `applicationId_provider` upsert in routes at the
+  // same time.
+  applicationEnvironmentId String?
+  applicationEnvironment   ApplicationEnvironment? @relation(fields: [applicationEnvironmentId], references: [id], onDelete: Cascade)
   provider      String
   filter        Json
   createdAt     DateTime    @default(now())
@@ -1260,6 +1358,7 @@ model ApplicationToolLink {
 
   @@unique([applicationId, provider])
   @@index([provider])
+  @@index([applicationEnvironmentId])
 }
 
 // Per-user source-control connection (GitHub, Bitbucket Cloud, and Azure DevOps today; GitLab in future).

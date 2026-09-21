@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { verifyDeploymentToken } from '../utils/deploymentToken.js';
 import { createApplicationVersion } from '../utils/applicationVersion.js';
 import { getAuthContext } from '../middleware/authContext.js';
+import { attachDeploymentToEnvironment } from '../services/environmentResolver.js';
 
 const router = express.Router();
 
@@ -327,12 +328,25 @@ router.post('/', async (req, res) => {
       });
     }
 
+    // Resolve the submitted environment name against the company's environments
+    // before writing the deployment, so the row records what it matched. An
+    // unrecognised name matches nothing and the deployment stays unassigned rather
+    // than inventing an environment from a typo in a pipeline definition.
+    const envMatch = await attachDeploymentToEnvironment({
+      applicationId,
+      companyId: application.companyId,
+      rawEnvironment: environment,
+      version: version?.trim() || null,
+      gitBranch: gitBranch?.trim() || null,
+    });
+
     // Create deployment
     const deployment = await prisma.deployment.create({
       data: {
         applicationId,
         deployedAt: deployedAt ? new Date(deployedAt) : new Date(),
         environment: environment.trim(),
+        environmentId: envMatch.environmentId,
         version: version?.trim() || null,
         gitBranch: gitBranch?.trim() || null,
         deployedBy: deployedBy?.trim() || null,
@@ -346,7 +360,14 @@ router.post('/', async (req, res) => {
       data: { lastUsedAt: new Date() },
     });
 
-    // Auto-update application's current deployment info from this new deployment
+    // Auto-update application's current deployment info from this new deployment.
+    //
+    // Superseded by the ApplicationEnvironment write above, which always overwrites
+    // and is per-environment. This only-when-null backfill is kept for now because
+    // Application is still the read path for these three fields; it goes away with
+    // the columns themselves once the metadata field registry stops referencing
+    // them. Do not "fix" it here - that would change what the UI shows before the
+    // environment read path exists.
     const currentApp = await prisma.application.findUnique({
       where: { id: applicationId },
       select: { currentVersion: true, deploymentEnvironment: true, gitBranch: true },

@@ -22,6 +22,7 @@ import {
   resolveApplicationNames,
 } from '../services/applicationNames.js';
 import { syncReciprocalInterfaces, parseInterfaceIds } from '../utils/applicationInterfaces.js';
+import { attachDeploymentToEnvironment } from '../services/environmentResolver.js';
 import {
   SPLITTABLE_METADATA_FIELDS,
   SPLITTABLE_METADATA_FIELD_SET,
@@ -3604,10 +3605,16 @@ router.get('/:id/deployments', requireAuth, async (req, res) => {
       });
     }
 
-    // Get deployments ordered by most recent first
+    // Get deployments ordered by most recent first. The resolved environment comes
+    // along so the client can tell an assigned deployment from one whose submitted
+    // `environment` string matched nothing - those are shown as unassigned, with the
+    // raw string, rather than silently looking like a valid environment.
     const deployments = await prisma.deployment.findMany({
       where: { applicationId: id },
       orderBy: { deployedAt: 'desc' },
+      include: {
+        environmentRef: { select: { id: true, name: true, kind: true, status: true } },
+      },
     });
 
     res.json(deployments);
@@ -3644,12 +3651,24 @@ router.post('/:id/deployments', requireAuth, async (req, res) => {
       });
     }
 
+    // Resolve the submitted environment name against the company's environments
+    // before writing the deployment. Same helper as the CI token path so the two
+    // cannot drift; an unrecognised name leaves the deployment unassigned.
+    const envMatch = await attachDeploymentToEnvironment({
+      applicationId: id,
+      companyId: application.companyId,
+      rawEnvironment: environment,
+      version: version?.trim() || null,
+      gitBranch: gitBranch?.trim() || null,
+    });
+
     // Create deployment
     const deployment = await prisma.deployment.create({
       data: {
         applicationId: id,
         deployedAt: deployedAt ? new Date(deployedAt) : new Date(),
         environment: environment.trim(),
+        environmentId: envMatch.environmentId,
         version: version?.trim() || null,
         gitBranch: gitBranch?.trim() || null,
         deployedBy: deployedBy?.trim() || null,
@@ -3657,8 +3676,11 @@ router.post('/:id/deployments', requireAuth, async (req, res) => {
       },
     });
 
-    // Auto-update application's current deployment info from this new deployment
-    // Only update if the fields are currently null/empty (meaning they should be auto-populated)
+    // Auto-update application's current deployment info from this new deployment.
+    //
+    // Superseded by the ApplicationEnvironment write above, which always overwrites
+    // and is per-environment. Kept only because Application is still the read path
+    // for these three fields; it goes away with the columns themselves.
     const currentApp = await prisma.application.findUnique({
       where: { id },
       select: { currentVersion: true, deploymentEnvironment: true, gitBranch: true },

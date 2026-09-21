@@ -710,6 +710,36 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // Environment vocabulary. These names are what a CI push's `environment` string
+  // is matched against, so they are what a pipeline must be told to send.
+  getEnvironments: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.companyId) params.append('companyId', filters.companyId);
+    if (filters.divisionId) params.append('divisionId', filters.divisionId);
+    if (filters.status) params.append('status', filters.status);
+    const queryString = params.toString();
+    return apiRequest(`/api/environments${queryString ? `?${queryString}` : ''}`);
+  },
+
+  getEnvironmentKinds: () => apiRequest('/api/environments/kinds'),
+
+  createEnvironment: (data) =>
+    apiRequest('/api/environments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateEnvironment: (id, data) =>
+    apiRequest(`/api/environments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteEnvironment: (id) =>
+    apiRequest(`/api/environments/${id}`, {
+      method: 'DELETE',
+    }),
+
   // Deployment token management
   createDeploymentToken: (applicationId, name) =>
     apiRequest(`/api/applications/${applicationId}/deployment-tokens`, {
