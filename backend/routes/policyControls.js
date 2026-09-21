@@ -170,6 +170,8 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       verificationRequired,
       verificationNote,
       appliesWhenLogic,
+      allowsAttestation,
+      attestationValidDays,
     } = req.body;
 
     // Validate required fields
@@ -204,6 +206,13 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Applies-when logic must be AND or OR' });
     }
 
+    if (attestationValidDays !== undefined && attestationValidDays !== null) {
+      const days = Number(attestationValidDays);
+      if (!Number.isInteger(days) || days < 1 || days > 3650) {
+        return res.status(400).json({ error: 'Attestation validity must be a whole number of days between 1 and 3650' });
+      }
+    }
+
     const fieldError = validateFields(fields);
     if (fieldError) {
       return res.status(400).json({ error: fieldError });
@@ -225,6 +234,10 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
           verificationRequired: verificationRequired === true,
           verificationNote: verificationNote?.trim() || null,
           appliesWhenLogic: appliesWhenLogic || 'AND',
+          allowsAttestation: allowsAttestation === true,
+          ...(attestationValidDays !== undefined && attestationValidDays !== null
+            ? { attestationValidDays: Number(attestationValidDays) }
+            : {}),
         },
       });
 
@@ -291,6 +304,8 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       verificationRequired,
       verificationNote,
       appliesWhenLogic,
+      allowsAttestation,
+      attestationValidDays,
     } = req.body;
 
     // Validate required fields
@@ -329,6 +344,13 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Applies-when logic must be AND or OR' });
     }
 
+    if (attestationValidDays !== undefined && attestationValidDays !== null) {
+      const days = Number(attestationValidDays);
+      if (!Number.isInteger(days) || days < 1 || days > 3650) {
+        return res.status(400).json({ error: 'Attestation validity must be a whole number of days between 1 and 3650' });
+      }
+    }
+
     const fieldError = validateFields(fields);
     if (fieldError) {
       return res.status(400).json({ error: fieldError });
@@ -361,6 +383,9 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       if (verificationRequired !== undefined) updateData.verificationRequired = verificationRequired === true;
       if (verificationNote !== undefined) updateData.verificationNote = verificationNote?.trim() || null;
       if (appliesWhenLogic !== undefined) updateData.appliesWhenLogic = appliesWhenLogic || 'AND';
+      if (allowsAttestation !== undefined) updateData.allowsAttestation = allowsAttestation === true;
+      if (attestationValidDays !== undefined && attestationValidDays !== null)
+        updateData.attestationValidDays = Number(attestationValidDays);
 
       await tx.policyControl.update({
         where: { id },

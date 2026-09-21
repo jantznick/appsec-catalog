@@ -255,7 +255,7 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
             <div className="text-center p-4 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-gray-800">{summary?.total || 0}</div>
               <div className="text-sm text-gray-600 mt-1">Total Controls</div>
@@ -268,6 +268,10 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
               <div className="text-2xl font-bold text-red-700">{summary?.not_meeting || 0}</div>
               <div className="text-sm text-red-600 mt-1">Not Meeting</div>
             </div>
+            <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <div className="text-2xl font-bold text-blue-700">{summary?.attested || 0}</div>
+              <div className="text-sm text-blue-600 mt-1">Attested</div>
+            </div>
             <div className="text-center p-4 bg-amber-50 rounded-lg">
               <div className="text-2xl font-bold text-amber-700">{summary?.verification_required || 0}</div>
               <div className="text-sm text-amber-600 mt-1">Verification Required</div>
@@ -276,9 +280,17 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
               <div className="text-2xl font-bold text-gray-700">{summary?.not_applicable || 0}</div>
               <div className="text-sm text-gray-600 mt-1">Not Applicable</div>
             </div>
-            <div className="text-center p-4 bg-blue-50 rounded-lg">
-              <div className="text-2xl font-bold text-blue-700">{summary?.compliance_percentage || 0}%</div>
-              <div className="text-sm text-blue-600 mt-1">Compliance Rate</div>
+            {/* Compliance counts attested controls; the measured figure below it
+                counts only what Orbit verified, so self-reporting stays visible. */}
+            <div className="text-center p-4 bg-indigo-50 rounded-lg">
+              <div className="text-2xl font-bold text-indigo-700">{summary?.compliance_percentage || 0}%</div>
+              <div className="text-sm text-indigo-600 mt-1">Compliance Rate</div>
+              {summary?.measured_compliance_percentage !== undefined &&
+                summary.measured_compliance_percentage !== summary.compliance_percentage && (
+                  <div className="text-xs text-indigo-500 mt-1">
+                    {summary.measured_compliance_percentage}% measured
+                  </div>
+                )}
             </div>
           </div>
           {summary?.total_policies && (
@@ -353,28 +365,37 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
                       const needsVerification = status === 'verification_required';
                       // Out of scope for this application — not a pass and not a failure.
                       const notApplicable = status === 'not_applicable';
+                      // Owner-asserted rather than measured. Styled distinctly from
+                      // "Meeting" so nobody reads a self-report as verified.
+                      const attested = status === 'attested';
 
                       const borderClass = isMeeting
                         ? 'border-green-200'
-                        : needsVerification
-                          ? 'border-amber-200'
-                          : notApplicable
-                            ? 'border-gray-300'
-                            : 'border-red-200';
+                        : attested
+                          ? 'border-blue-200'
+                          : needsVerification
+                            ? 'border-amber-200'
+                            : notApplicable
+                              ? 'border-gray-300'
+                              : 'border-red-200';
                       const badgeClass = isMeeting
                         ? 'bg-green-100 text-green-800'
-                        : needsVerification
-                          ? 'bg-amber-100 text-amber-800'
-                          : notApplicable
-                            ? 'bg-gray-100 text-gray-600'
-                            : 'bg-red-100 text-red-800';
+                        : attested
+                          ? 'bg-blue-100 text-blue-800'
+                          : needsVerification
+                            ? 'bg-amber-100 text-amber-800'
+                            : notApplicable
+                              ? 'bg-gray-100 text-gray-600'
+                              : 'bg-red-100 text-red-800';
                       const badgeLabel = isMeeting
                         ? 'Meeting'
-                        : needsVerification
-                          ? 'Verification Required'
-                          : notApplicable
-                            ? 'Not Applicable'
-                            : 'Not Meeting';
+                        : attested
+                          ? 'Attested'
+                          : needsVerification
+                            ? 'Verification Required'
+                            : notApplicable
+                              ? 'Not Applicable'
+                              : 'Not Meeting';
 
                       return (
                         <Card key={control.id} className={`bg-gray-50 ${borderClass}`}>

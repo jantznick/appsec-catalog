@@ -216,13 +216,64 @@ export function evaluateFieldCheck(fieldCheck, fieldValue) {
 }
 
 /**
+ * Decide whether an attestation currently counts.
+ *
+ * Expired and withdrawn attestations stop counting — that is the whole point of
+ * an expiry — but the reason travels into evidence so a reviewer sees that
+ * someone once attested and when it lapsed, rather than a bare failure.
+ *
+ * @param {Object} control
+ * @param {Object|null} attestation
+ * @returns {{valid: boolean, reason: string|null}}
+ */
+function attestationState(control, attestation) {
+  if (!control?.allowsAttestation || !attestation) return { valid: false, reason: null };
+
+  if (attestation.revokedAt) {
+    return { valid: false, reason: `Attestation was withdrawn on ${formatDate(attestation.revokedAt)}` };
+  }
+
+  const expires = toTime(attestation.expiresAt);
+  if (expires !== null && expires < Date.now()) {
+    return { valid: false, reason: `Attestation expired on ${formatDate(attestation.expiresAt)}` };
+  }
+
+  return { valid: true, reason: null };
+}
+
+/** Evidence lines for a counted attestation. Always says it is self-reported. */
+function attestationEvidence(attestation) {
+  const who = attestation.user?.email || 'an authorised user';
+  const lines = [
+    `Attested by ${who} on ${formatDate(attestation.attestedAt)} — self-reported, not measured`,
+    `Expires ${formatDate(attestation.expiresAt)}; evidence may be requested at audit`,
+  ];
+  if (attestation.statement?.trim()) lines.push(`Statement: ${attestation.statement.trim()}`);
+  return lines;
+}
+
+/** Shape of the attestation block returned in details, for the UI and audit trail. */
+function attestationDetails(attestation, valid) {
+  return {
+    valid,
+    statement: attestation.statement,
+    attestedBy: attestation.attestedBy,
+    user: attestation.user ? { id: attestation.user.id, email: attestation.user.email } : null,
+    attestedAt: attestation.attestedAt,
+    expiresAt: attestation.expiresAt,
+    revokedAt: attestation.revokedAt || null,
+  };
+}
+
+/**
  * Evaluate a single policy control against an application
  * @param {Object} control - PolicyControl with fields
  * @param {Object} application - Application object
  * @param {Object} override - Optional PolicyControlOverride object
+ * @param {Object} attestation - Optional ControlAttestation object
  * @returns {Object} - Evaluation result
  */
-export async function evaluateControl(control, application, override = null) {
+export async function evaluateControl(control, application, override = null, attestation = null) {
   // An explicit admin override outranks every other outcome — applicability,
   // partial-coverage verification, and the field checks themselves. It is a
   // recorded human decision, so it wins.
@@ -259,17 +310,37 @@ export async function evaluateControl(control, application, override = null) {
         },
       };
     }
+    // Nothing measurable, but the owner may have attested to it — that is exactly
+    // what the attestable controls are: process and product properties no field
+    // could evidence.
+    const att = attestationState(control, attestation);
+    if (att.valid) {
+      return {
+        status: 'attested',
+        evidence: attestationEvidence(attestation),
+        details: {
+          fieldResults: [],
+          evaluationLogic: control.evaluationLogic,
+          finalResult: null,
+          attestation: attestationDetails(attestation, true),
+        },
+      };
+    }
+
     return {
       status: 'not_meeting',
-      evidence: ['No field mappings defined for this control'],
+      evidence: att.reason
+        ? [att.reason, 'No field mappings defined for this control']
+        : ['No field mappings defined for this control'],
       details: {
         fieldResults: [],
         evaluationLogic: control.evaluationLogic,
         finalResult: false,
+        attestation: attestation ? attestationDetails(attestation, false) : null,
       },
     };
   }
-  
+
   // Partition the checks. "applies_when" decides whether this control is in
   // scope for the application at all; "compliance" decides whether it is met.
   // Controls with no applies_when checks apply to everything, as before.
@@ -419,6 +490,25 @@ export async function evaluateControl(control, application, override = null) {
     status = 'meeting';
   }
 
+  // An attestation can rescue a failure but never downgrades a pass: measured
+  // evidence always outranks a self-report, so a control whose checks pass stays
+  // "meeting" even if someone also attested to it.
+  const att = attestationState(control, attestation);
+  if (status === 'not_meeting' && att.valid) {
+    return {
+      status: 'attested',
+      evidence: [...attestationEvidence(attestation), ...evidence],
+      details: {
+        fieldResults,
+        evaluationLogic: control.evaluationLogic,
+        finalResult,
+        verificationRequired: control.verificationRequired === true,
+        attestation: attestationDetails(attestation, true),
+      },
+    };
+  }
+  if (att.reason) evidence.push(att.reason);
+
   return {
     status,
     evidence,
@@ -427,6 +517,7 @@ export async function evaluateControl(control, application, override = null) {
       evaluationLogic: control.evaluationLogic,
       finalResult,
       verificationRequired: control.verificationRequired === true,
+      attestation: attestation ? attestationDetails(attestation, false) : null,
     },
   };
 }
@@ -814,6 +905,18 @@ export async function evaluateAllControls(application) {
     overrideMap.set(override.controlId, override);
   });
 
+  // Attestations for the attestable controls among these. Expired and withdrawn
+  // rows are loaded too, so evidence can say an attestation lapsed rather than
+  // silently reporting the control as unmet.
+  const attestableIds = controls.filter(c => c.allowsAttestation).map(c => c.id);
+  const attestations = attestableIds.length
+    ? await prisma.controlAttestation.findMany({
+        where: { applicationId: application.id, controlId: { in: attestableIds } },
+        include: { user: { select: { id: true, email: true } } },
+      })
+    : [];
+  const attestationMap = new Map(attestations.map(a => [a.controlId, a]));
+
   // Resolve any relation paths the controls reference (no-op when none do)
   const evaluableApplication = await withEvaluableRelations(application, controls);
 
@@ -821,7 +924,8 @@ export async function evaluateAllControls(application) {
   const controlResults = await Promise.all(
     controls.map(async (control) => {
       const override = overrideMap.get(control.id) || null;
-      const evaluation = await evaluateControl(control, evaluableApplication, override);
+      const attestation = attestationMap.get(control.id) || null;
+      const evaluation = await evaluateControl(control, evaluableApplication, override, attestation);
       return {
         control: {
           id: control.id,
@@ -860,6 +964,7 @@ export async function evaluateAllControls(application) {
         not_meeting: 0,
         verification_required: 0,
         not_applicable: 0,
+        attested: 0,
         compliance_percentage: 0,
       },
     });
@@ -879,6 +984,8 @@ export async function evaluateAllControls(application) {
         policyEntry.summary.verification_required++;
       } else if (controlResult.status === 'not_applicable') {
         policyEntry.summary.not_applicable++;
+      } else if (controlResult.status === 'attested') {
+        policyEntry.summary.attested++;
       } else {
         policyEntry.summary.not_meeting++;
       }
@@ -889,11 +996,17 @@ export async function evaluateAllControls(application) {
   // not_applicable leaves the denominator entirely, otherwise scoping a control
   // out would still drag the figure down. verification_required stays in the
   // denominator but is not counted as meeting — it is not compliance yet.
+  // An attestation is a claim of compliance, so it counts toward
+  // compliance_percentage — but measured_compliance_percentage counts only what
+  // Orbit actually verified, so "how much of this is self-reported?" stays
+  // answerable. That is the first question an auditor asks.
   policiesMap.forEach(policyEntry => {
-    const { total, meeting, not_applicable } = policyEntry.summary;
+    const { total, meeting, attested, not_applicable } = policyEntry.summary;
     const applicable = total - not_applicable;
     policyEntry.summary.applicable = applicable;
     policyEntry.summary.compliance_percentage =
+      applicable > 0 ? Math.round(((meeting + attested) / applicable) * 100) : 100;
+    policyEntry.summary.measured_compliance_percentage =
       applicable > 0 ? Math.round((meeting / applicable) * 100) : 100;
   });
 
@@ -907,8 +1020,12 @@ export async function evaluateAllControls(application) {
   const notMeeting = allControls.filter(cr => cr.status === 'not_meeting').length;
   const verificationRequired = allControls.filter(cr => cr.status === 'verification_required').length;
   const notApplicable = allControls.filter(cr => cr.status === 'not_applicable').length;
+  const attested = allControls.filter(cr => cr.status === 'attested').length;
   const applicable = total - notApplicable;
-  const compliancePercentage = applicable > 0 ? Math.round((meeting / applicable) * 100) : 100;
+  const compliancePercentage =
+    applicable > 0 ? Math.round(((meeting + attested) / applicable) * 100) : 100;
+  const measuredCompliancePercentage =
+    applicable > 0 ? Math.round((meeting / applicable) * 100) : 100;
 
   // Overall compliance: all policies must be 100% compliant
   const allPoliciesCompliant = policies.every(p => p.summary.compliance_percentage === 100);
@@ -922,7 +1039,9 @@ export async function evaluateAllControls(application) {
       not_meeting: notMeeting,
       verification_required: verificationRequired,
       not_applicable: notApplicable,
+      attested,
       compliance_percentage: compliancePercentage,
+      measured_compliance_percentage: measuredCompliancePercentage,
       all_policies_compliant: allPoliciesCompliant,
       total_policies: policies.length,
       compliant_policies: policies.filter(p => p.summary.compliance_percentage === 100).length,

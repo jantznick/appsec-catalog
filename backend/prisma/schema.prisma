@@ -26,6 +26,7 @@ model User {
   approvedVersions       ApplicationVersion[]        @relation("VersionApprover") // Versions approved by this user
   applicationReviews     ApplicationMetadataReview[] // Reviews performed by this user
   policyControlOverrides PolicyControlOverride[] // Policy control overrides set by this user
+  controlAttestations    ControlAttestation[] // Control attestations made by this user
   integrationCredentialUpdates IntegrationCredential[] @relation("IntegrationCredentialUpdates")
   securityFindingsJobs      SecurityFindingsJob[]
   productUpdates         ProductUpdate[]
@@ -304,6 +305,7 @@ model Application {
   reviews                ApplicationMetadataReview[] // History of metadata reviews
   apiSchema              ApplicationApiSchema?
   policyControlOverrides PolicyControlOverride[] // Manual overrides for policy controls
+  controlAttestations    ControlAttestation[] // Owner attestations for policy controls
   threatModel            ThreatModel?
   productApplications    ProductApplication[]
   applicationToolLinks  ApplicationToolLink[]
@@ -1002,12 +1004,20 @@ model PolicyControl {
   // How to combine the "applies_when" field checks (see PolicyControlField.role).
   // Controls with no applies_when checks apply to every application, as before.
   appliesWhenLogic     String             @default("AND") // "AND" or "OR"
+
+  // Attestation: for controls no field could ever evidence (process and product
+  // properties — "no back doors", "secure coding guidelines are followed"). The
+  // application owner asserts compliance and accepts the audit risk.
+  // Off by default: a control is only attestable when someone decides it is.
+  allowsAttestation    Boolean            @default(false)
+  attestationValidDays Int                @default(365) // re-attestation period
   policyId        String // Required - all controls must belong to a policy
   policy          Policy                  @relation(fields: [policyId], references: [id], onDelete: Cascade)
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
   fields          PolicyControlField[] // Field mappings for this control
   overrides       PolicyControlOverride[] // Manual overrides for this control
+  attestations    ControlAttestation[] // Owner attestations for this control
   updatedById     String? // User ID who last updated this control
 
   @@index([controlId])
@@ -1040,6 +1050,38 @@ model PolicyControlField {
 
 // Policy control overrides - manual compliance overrides for controls without field mappings
 // Admin-only feature to mark controls as compliant when they can't be automatically evaluated
+// Owner attestation that a control is met, for controls no field could evidence
+// (process and product properties). Deliberately NOT PolicyControlOverride:
+//   - override   = an admin saying "trust me, this is fine"
+//   - attestation = an application owner asserting something they must defend at audit
+// Merging them would make "how much of our compliance is self-reported?" unanswerable,
+// which is the first question an auditor asks.
+model ControlAttestation {
+  id            String        @id @default(cuid())
+  applicationId String
+  application   Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  controlId     String
+  control       PolicyControl @relation(fields: [controlId], references: [id], onDelete: Cascade)
+
+  statement   String    @db.Text // required: what is being asserted, and on what basis
+  attestedBy  String
+  user        User      @relation(fields: [attestedBy], references: [id])
+  attestedAt  DateTime  @default(now())
+  expiresAt   DateTime // attestedAt + PolicyControl.attestationValidDays
+  revokedAt   DateTime? // withdrawn before expiry; kept for the audit trail
+  revokedBy   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // One live attestation per application/control. Re-attesting updates this row,
+  // and change history carries the previous statement.
+  @@unique([applicationId, controlId])
+  @@index([applicationId])
+  @@index([controlId])
+  @@index([expiresAt])
+}
+
 model PolicyControlOverride {
   id            String        @id @default(cuid())
   applicationId String

@@ -26,6 +26,7 @@ export const TRACKED_FIELDS = {
   PolicyControl: ['controlId', 'name', 'description', 'category', 'evaluationLogic', 'isActive', 'displayOrder', 'policyId', 'fields'],
   SammAssessment: ['status', 'ownerName', 'notes', 'reviewerId', 'submittedAt', 'reviewedAt', 'nextDueAt'],
   Note: ['content'],
+  ControlAttestation: ['statement', 'attestedBy', 'attestedAt', 'expiresAt', 'revokedAt', 'revokedBy'],
 };
 
 function normalize(field, value) {

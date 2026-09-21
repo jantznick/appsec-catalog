@@ -287,6 +287,37 @@ attestation is an application owner making a claim they must defend in an audit.
 *"how much of our compliance is self-reported?"* unanswerable, which is the first question an
 auditor asks. Use a separate `ControlAttestation` model.
 
+**Status: built.** `ControlAttestation`, plus `allowsAttestation` and `attestationValidDays` on
+`PolicyControl`. Controls are **not** attestable by default — a control only accepts attestation
+when someone decides it should, so a measurable control cannot be waved through by assertion.
+
+**Permission:** a new COMPANY-scoped `attestation.write`, deliberately separate from
+`application.edit`. Attesting is a formal claim the attester must defend at audit, not routine
+metadata maintenance, so you choose per role who can make one.
+
+**Precedence**, verified by test: admin override > `not_applicable` > attestation > field checks.
+An attestation can **rescue** a failing control but never downgrades a passing one — measured
+evidence always outranks a self-report, so a control whose checks pass stays `meeting` even if
+someone also attested. `verification_required` is likewise not downgraded.
+
+**Expiry and withdrawal** both stop an attestation counting, and both say so in evidence
+("Attestation expired on …", "Attestation was withdrawn on …") rather than reporting a bare
+failure. Withdrawal sets `revokedAt` instead of deleting, so the trail still shows that someone
+attested and later took it back. Change history tracks the entity, scoped to the application's
+company so the owning team can read it without system admin.
+
+**Reporting:** `compliance_percentage` counts attested controls — an attestation *is* a claim of
+compliance — while `measured_compliance_percentage` counts only what Orbit verified. Both are
+returned, and the UI shows the measured figure beneath the headline whenever they differ, so
+*"how much of this is self-reported?"* stays answerable.
+
+**API:** `GET /api/applications/:id/attestations`,
+`PUT /api/applications/:id/attestations/:controlId` (create or renew, statement required),
+`DELETE …` (withdraw).
+
+**Not yet done:** no control has `allowsAttestation` set, and there is no UI for making an
+attestation — the compliance view renders the state but cannot yet create one.
+
 ### Model sketch
 
 - self-service for the application owner (not `requireAdmin`)
