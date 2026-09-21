@@ -339,6 +339,20 @@ model Application {
   apiSecurityTool             String?
   apiSecurityIntegrationLevel Int?
 
+  // Secrets scanning — evidence for 4.6.9 ("secrets scan shall be employed for
+  // pull requests") and 6.3.3 ("passwords shall not be hard coded"): 6.3.3 is the
+  // requirement, secrets scanning is the control that detects violations.
+  // sastIncludesSecrets mirrors sastIncludesSca for SAST tools that cover both.
+  secretsScanTool                 String?
+  secretsScanIntegrationLevel     Int?
+  sastIncludesSecrets             Boolean? @default(false)
+
+  // IaC and container scanning — evidence for 4.6.14. One field rather than two:
+  // most tools in this space (Snyk, Trivy, Wiz) cover both, so separate columns
+  // would always be set together.
+  iacContainerScanTool            String?
+  iacContainerScanIntegrationLevel Int?
+
   apiSecurityNA  Boolean? @default(false)
   appFirewallNA  Boolean? @default(false)
 
@@ -351,6 +365,8 @@ model Application {
   lastDastScanDate      DateTime? // Date/time of last DAST (Dynamic Application Security Testing) scan
   lastSastScanDate      DateTime? // Date/time of last SAST (Static Application Security Testing) scan
   lastScaScanDate       DateTime? // SCA (dependency) scan; ignored for scoring when sastIncludesSca (uses lastSastScanDate)
+  lastSecretsScanDate      DateTime? // Secrets scan; ignored when sastIncludesSecrets (uses lastSastScanDate)
+  lastIacContainerScanDate DateTime? // IaC / container image scan
 
   // Interfaces with other applications (stored as JSON array of application IDs/names)
   interfaces String? // JSON array of application names/IDs

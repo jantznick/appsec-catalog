@@ -13,6 +13,8 @@ export const TRACKED_FIELDS = {
     'dastTool', 'dastIntegrationLevel',
     'scaTool', 'scaIntegrationLevel',
     'appFirewallTool', 'appFirewallIntegrationLevel', 'appFirewallNA',
+    'secretsScanTool', 'secretsScanIntegrationLevel', 'sastIncludesSecrets', 'lastSecretsScanDate',
+    'iacContainerScanTool', 'iacContainerScanIntegrationLevel', 'lastIacContainerScanDate',
     'apiSecurityTool', 'apiSecurityIntegrationLevel', 'apiSecurityNA',
     'currentVersion', 'deploymentEnvironment', 'gitBranch',
     'lastSastScanDate', 'lastDastScanDate', 'lastScaScanDate',

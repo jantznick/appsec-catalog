@@ -317,6 +317,80 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists'],
         valueType: 'text'
       },
+      {
+        path: 'secretsScanTool',
+        label: 'Secrets Scanning Tool',
+        category: 'Security Tools',
+        fieldType: 'string',
+        allowedOperators: ['exists', 'not_exists'],
+        valueType: 'text'
+      },
+      {
+        path: 'secretsScanIntegrationLevel',
+        label: 'Secrets Scanning Integration Level',
+        category: 'Security Tools',
+        fieldType: 'number',
+        allowedOperators: ['gte', 'gt'],
+        valueType: 'dropdown',
+        valueOptions: integrationLevelOptions,
+        validationRules: {
+          description: 'Minimum integration level required (0-4 scale)'
+        }
+      },
+      {
+        path: 'sastIncludesSecrets',
+        label: 'SAST includes secrets scanning',
+        category: 'Security Tools',
+        fieldType: 'boolean',
+        allowedOperators: ['equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }],
+        validationRules: {
+          description: 'For SAST tools that also detect secrets, so a separate tool is not required.'
+        }
+      },
+      {
+        path: 'iacContainerScanTool',
+        label: 'IaC / Container Scanning Tool',
+        category: 'Security Tools',
+        fieldType: 'string',
+        allowedOperators: ['exists', 'not_exists'],
+        valueType: 'text'
+      },
+      {
+        path: 'iacContainerScanIntegrationLevel',
+        label: 'IaC / Container Integration Level',
+        category: 'Security Tools',
+        fieldType: 'number',
+        allowedOperators: ['gte', 'gt'],
+        valueType: 'dropdown',
+        valueOptions: integrationLevelOptions,
+        validationRules: {
+          description: 'Minimum integration level required (0-4 scale)'
+        }
+      },
+      {
+        path: 'lastSecretsScanDate',
+        label: 'Last Secrets Scan Date',
+        category: 'Security Tools',
+        fieldType: 'date',
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
+        valueType: 'date',
+        validationRules: {
+          description: 'Use within_days for a rolling recency window (value = number of days).'
+        }
+      },
+      {
+        path: 'lastIacContainerScanDate',
+        label: 'Last IaC / Container Scan Date',
+        category: 'Security Tools',
+        fieldType: 'date',
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
+        valueType: 'date',
+        validationRules: {
+          description: 'Use within_days for a rolling recency window (value = number of days).'
+        }
+      },
       // Security Tools - Dates (may need cross-field comparisons later)
       { 
         path: 'lastSastScanDate', 

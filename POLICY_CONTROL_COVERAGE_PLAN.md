@@ -10,9 +10,9 @@ evaluates to `not_meeting` ([services/policy.js](./backend/services/policy.js) `
 so activating them before mapping would fail every application against every unmapped control.
 **Keep both inactive until the phases below land.**
 
-## Current state (2026-09-18)
+## Current state (2026-09-21)
 
-28 controls: **14 mapped**, **14 unmapped**.
+28 controls: **17 mapped**, **8 attestable**, **3 uncovered**.
 
 SCM-derived controls (4.6.3, 4.6.7, 6.3.12) each pair their signal with a
 `within_days 30` freshness check on the corresponding `*SyncedAt` column. Sync is manual —
@@ -32,6 +32,9 @@ happened to press Sync. The freshness check turns silent staleness into a visibl
 | 4.6.11 Threat modeling | internet-facing **or** `businessCriticality gte 4` | `threatModel.status equals approved` | direct |
 | 4.6.13 SCA | all | `scaIntegrationLevel gte 1` / `sastIncludesSca = true` (OR) | direct |
 | 6.3.4 Automated code review | all | `sastTool exists` + `sastIntegrationLevel gte 1` | direct |
+| 4.6.9 Secrets scanning | all | `secretsScanIntegrationLevel gte 1` / `sastIncludesSecrets = true` (OR) | direct |
+| 6.3.3 No hard-coded passwords | all | same fields as 4.6.9 (OR) | direct |
+| 4.6.14 IaC / container scanning | all | `iacContainerScanIntegrationLevel gte 1` | **`verificationRequired`** |
 | 4.6.6 Application metadata | all | `businessCriticality exists` + `metadataLastReviewed within_days 183` + `description exists` | **`verificationRequired`** |
 | 6.3.7 OWASP Top 10 controls | all | `dastTool exists` | proxy |
 | 4.6.1 SDLC-managed development | all | `repoUrl exists` | proxy |
@@ -482,15 +485,24 @@ handling confidential data.
 
 ## Coverage
 
-**Now: 22 of 28 covered — 14 mapped, 8 attestable.**
+**Now: 25 of 28 covered — 17 mapped, 8 attestable.**
+
+> **Completeness deliberately untouched.** The new secrets and IaC fields are *not* added to
+> `services/completeness.js` or `frontend/src/utils/applicationCompleteness.js`. Adding them grows
+> the denominator, so every application's completeness fraction would drop overnight without
+> anything changing about the application. That is a portfolio-wide user-visible number and a
+> decision to take deliberately, not a side effect of adding a control. Once teams have had a
+> chance to fill the fields in, adding them is a two-line change in **both** files — they are
+> manual ports of each other.
 
 | Stage | Mapped | Attestable | Uncovered | |
 |---|---|---|---|---|
 | Start | 9 | 0 | 19 | |
 | After Phases 1–2 | 11 | 0 | 17 | done |
 | After Phase 5 | 14 | 0 | 14 | done |
-| After Phase 4 | 14 | 8 | 6 | **← here** |
-| After Phase 6 | 19 | 8 | 1 | |
+| After Phase 4 | 14 | 8 | 6 | done |
+| After Phase 6a | 17 | 8 | 3 | **← here** |
+| After findings exposure | 19 | 8 | 1 | |
 | After Phase 3 | 20 | 8 | 0 | |
 
 Attestable: 4.6.12, 6.3.2, 6.3.5, 6.3.6, 6.3.8, 6.3.9, 6.3.10, 6.3.13 — all at the 365-day
@@ -501,9 +513,6 @@ The six still uncovered, and what each needs:
 
 | Control | Needs |
 |---|---|
-| 4.6.9 Secrets scanning | `secretsScanTool` columns (Phase 6a) |
-| 6.3.3 No hard-coded passwords | same fields as 4.6.9 |
-| 4.6.14 IaC / container scanning | `iacContainerScanTool` columns (Phase 6a) |
 | 4.6.15 Finding review and SLA | expose findings data as policy fields |
 | 6.3.11 Vulnerability management | same findings data as 4.6.15 |
 | 4.6.4 Environment separation | the environments workstream (outside this plan) |

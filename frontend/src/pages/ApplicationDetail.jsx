@@ -102,6 +102,13 @@ export function ApplicationDetail() {
     appFirewallIntegrationLevel: '',
     apiSecurityTool: '',
     apiSecurityIntegrationLevel: '',
+    secretsScanTool: '',
+    secretsScanIntegrationLevel: '',
+    sastIncludesSecrets: false,
+    lastSecretsScanDate: '',
+    iacContainerScanTool: '',
+    iacContainerScanIntegrationLevel: '',
+    lastIacContainerScanDate: '',
     apiSecurityNA: false,
     appFirewallNA: false,
     status: 'onboarded',
@@ -831,6 +838,13 @@ export function ApplicationDetail() {
         appFirewallIntegrationLevel: data.appFirewallIntegrationLevel?.toString() || '',
         apiSecurityTool: data.apiSecurityTool || '',
         apiSecurityIntegrationLevel: data.apiSecurityIntegrationLevel?.toString() || '',
+        secretsScanTool: data.secretsScanTool || '',
+        secretsScanIntegrationLevel: data.secretsScanIntegrationLevel?.toString() || '',
+        sastIncludesSecrets: data.sastIncludesSecrets || false,
+        lastSecretsScanDate: data.lastSecretsScanDate ? data.lastSecretsScanDate.split('T')[0] : '',
+        iacContainerScanTool: data.iacContainerScanTool || '',
+        iacContainerScanIntegrationLevel: data.iacContainerScanIntegrationLevel?.toString() || '',
+        lastIacContainerScanDate: data.lastIacContainerScanDate ? data.lastIacContainerScanDate.split('T')[0] : '',
         apiSecurityNA: data.apiSecurityNA || false,
         appFirewallNA: data.appFirewallNA || false,
         status: data.status || 'onboarded',
@@ -2259,6 +2273,64 @@ export function ApplicationDetail() {
                         )}
                       </div>
 
+                      {/* Secrets Scanning — evidence for 4.6.9 and 6.3.3 */}
+                      <div className="bg-rose-50 rounded-lg p-4 border border-rose-200">
+                        <h5 className="text-sm font-semibold text-rose-900 mb-3">Secrets Scanning</h5>
+                        <div className="space-y-3">
+                          <Checkbox
+                            id="sastIncludesSecrets"
+                            label="Our SAST tool also scans for secrets"
+                            checked={formData.sastIncludesSecrets}
+                            onChange={(e) => handleFieldChange('sastIncludesSecrets', e.target.checked)}
+                          />
+                          {!formData.sastIncludesSecrets && (
+                            <>
+                              <Input
+                                label="Tool"
+                                value={formData.secretsScanTool}
+                                onChange={(e) => handleFieldChange('secretsScanTool', e.target.value)}
+                              />
+                              <Select
+                                label="Integration Level"
+                                value={formData.secretsScanIntegrationLevel}
+                                onChange={(e) => handleFieldChange('secretsScanIntegrationLevel', e.target.value)}
+                                options={[{ value: '', label: 'Select level' }, ...integrationLevels]}
+                              />
+                              <Input
+                                label="Last Scan Date"
+                                type="date"
+                                value={formData.lastSecretsScanDate}
+                                onChange={(e) => handleFieldChange('lastSecretsScanDate', e.target.value)}
+                              />
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* IaC / Container Scanning — evidence for 4.6.14 */}
+                      <div className="bg-teal-50 rounded-lg p-4 border border-teal-200">
+                        <h5 className="text-sm font-semibold text-teal-900 mb-3">IaC / Container Scanning</h5>
+                        <div className="space-y-3">
+                          <Input
+                            label="Tool"
+                            value={formData.iacContainerScanTool}
+                            onChange={(e) => handleFieldChange('iacContainerScanTool', e.target.value)}
+                          />
+                          <Select
+                            label="Integration Level"
+                            value={formData.iacContainerScanIntegrationLevel}
+                            onChange={(e) => handleFieldChange('iacContainerScanIntegrationLevel', e.target.value)}
+                            options={[{ value: '', label: 'Select level' }, ...integrationLevels]}
+                          />
+                          <Input
+                            label="Last Scan Date"
+                            type="date"
+                            value={formData.lastIacContainerScanDate}
+                            onChange={(e) => handleFieldChange('lastIacContainerScanDate', e.target.value)}
+                          />
+                        </div>
+                      </div>
+
                       {/* App Firewall Section */}
                       <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
                         <h5 className="text-sm font-semibold text-purple-900 mb-3">Application Firewall</h5>
@@ -2461,6 +2533,54 @@ export function ApplicationDetail() {
                             </div>
                           </div>
                         )}
+                      </div>
+
+                      {/* Secrets Scanning (read-only) */}
+                      <div className="bg-rose-50 rounded-lg p-4 border border-rose-200">
+                        <h5 className="text-sm font-semibold text-rose-900 mb-3">Secrets Scanning</h5>
+                        <div className="space-y-2">
+                          {formData.sastIncludesSecrets ? (
+                            <p className="text-sm text-gray-900">Covered by the SAST tool</p>
+                          ) : (
+                            <>
+                              <div>
+                                <span className="text-xs font-medium text-gray-600">Tool:</span>
+                                <p className="text-sm text-gray-900 mt-0.5">{formData.secretsScanTool || <span className="text-gray-400 italic">Not set</span>}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs font-medium text-gray-600">Integration Level:</span>
+                                <p className="text-sm text-gray-900 mt-0.5">{formData.secretsScanIntegrationLevel || <span className="text-gray-400 italic">Not set</span>}</p>
+                              </div>
+                              <div>
+                                <span className="text-xs font-medium text-gray-600">Last Scan Date:</span>
+                                <p className="text-sm text-gray-900 mt-0.5">
+                                  {formData.lastSecretsScanDate ? new Date(formData.lastSecretsScanDate).toLocaleDateString() : <span className="text-gray-400 italic">Not set</span>}
+                                </p>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* IaC / Container Scanning (read-only) */}
+                      <div className="bg-teal-50 rounded-lg p-4 border border-teal-200">
+                        <h5 className="text-sm font-semibold text-teal-900 mb-3">IaC / Container Scanning</h5>
+                        <div className="space-y-2">
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Tool:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">{formData.iacContainerScanTool || <span className="text-gray-400 italic">Not set</span>}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Integration Level:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">{formData.iacContainerScanIntegrationLevel || <span className="text-gray-400 italic">Not set</span>}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Last Scan Date:</span>
+                            <p className="text-sm text-gray-900 mt-0.5">
+                              {formData.lastIacContainerScanDate ? new Date(formData.lastIacContainerScanDate).toLocaleDateString() : <span className="text-gray-400 italic">Not set</span>}
+                            </p>
+                          </div>
+                        </div>
                       </div>
 
                       {/* App Firewall Section */}
