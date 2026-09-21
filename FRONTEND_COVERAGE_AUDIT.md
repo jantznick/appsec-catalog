@@ -38,11 +38,11 @@ Branch `claude/policy-gaps-followup`. Run `npm test` in `backend/` (149 cases) a
 | F2 | Editor cannot set scope / verification / attestation | **done** `c0e4d30` |
 | F4 | Dashboards understate compliance | **done** `891d30c` |
 | F3 | Field registry served; VersionHistory, PendingApprovals, SplitApplicationModal | **done** `feddfcc` |
-| F3 | OnboardApplication, ApplicationNew, BulkImportApplicationsModal | **next** |
-| F5 | Statuses handled in one file only | open |
-| F6 | Attestations cannot be listed | open |
-| F7 | 21 uncalled client methods, untriaged | open |
-| D1 | One `calculateCompleteness` driving the score | open — **explicitly requested** |
+| F3 | OnboardApplication, ApplicationNew, BulkImportApplicationsModal | **done** `d6ff567` `fb58203` |
+| F5 | Statuses handled in one file only | **done** `125d752` — three of the five files I named did not exist |
+| F6 | Attestations cannot be listed | **done** `ad94bf6` |
+| F7 | 25 uncalled client methods, untriaged | **done** — triaged, no code change; none came from today's merges |
+| D1 | One `calculateCompleteness` driving the score | **next** — **explicitly requested** |
 | D2 | Remove `securityTestingDescription` | open |
 | D3 | Point 4.6.14 at `iacContainerScanNA` | open — needs the migration applied |
 | D4 | Regenerate the prod import script | open |
@@ -246,9 +246,34 @@ exist ahead of the screens by design.
 `reorderContentAssets`, `reviewSammAssessment`, `searchScmDependencies`,
 `updatePolicyControlOrder`, `updatePolicyOrder`.
 
-Most predate the three merges and some may be intentional. Not triaged.
+**Triaged by asking when each was introduced** (`git log -L` on its line in `api.js`),
+which is the question the audit was actually about: did today's merges ship server-side
+capability with no screen?
 
-- [ ] Triage: dead code, or missing UI
+They did not. Every uncalled method predates the three branches:
+
+| Introduced | Methods |
+|---|---|
+| 2026-05-11 (`init`) | `assignUserToCompany`, `createApplicationOnboard`, `getAdminSecurityFindingsJob`, `getApplicationVersion`, `getCompanySecurityFindingsJob`, `getPendingUsers`, `getPolicyControl`, `getProductDataFlows`, `getProductIngressPoints`, `removeUserFromCompany`, `updatePolicyControlOrder`, `updatePolicyOrder` |
+| 2026-07-14 | `getApplicationApiSchema` |
+| 2026-07-17 | `getOktaStatus` |
+| 2026-08-04 | `searchScmDependencies` |
+| 2026-08-11 | `reviewSammAssessment` |
+| 2026-08-18 | `getAiAvailability`, `getAiUsageMine` |
+| 2026-08-31 | `getPlatformDocsIndex`, `getProgramRequestOptions` |
+| 2026-09-14 | `reorderContentAssets` |
+| 2026-09-16 | `createEnvironment`, `updateEnvironment`, `deleteEnvironment`, `getEnvironmentKinds` — the environments workstream, UI planned for later by design |
+
+The newest non-environments entry is nine days older than the oldest of the three
+merges. So F7 is a standing backlog item about the rest of the application, not a
+consequence of this work, and building twenty-five screens is not in this scope.
+
+Two of them are worth raising separately because they are capability with no way in:
+`updatePolicyOrder` and `updatePolicyControlOrder` mean policies and controls carry a
+display order the server can change and no screen can set, so the compliance view's
+ordering is whatever the seed data happened to be.
+
+- [x] Triaged: none from today's merges; the rest is pre-existing backlog
 
 ---
 
