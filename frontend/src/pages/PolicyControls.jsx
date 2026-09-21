@@ -72,6 +72,11 @@ export function PolicyControls() {
     description: '',
     category: '',
     evaluationLogic: 'AND',
+    appliesWhenLogic: 'AND',
+    verificationRequired: false,
+    verificationNote: '',
+    allowsAttestation: false,
+    attestationValidDays: 365,
     isActive: true,
     displayOrder: 0,
     policyId: '',
@@ -392,6 +397,11 @@ export function PolicyControls() {
       description: '',
       category: '',
       evaluationLogic: 'AND',
+      appliesWhenLogic: 'AND',
+      verificationRequired: false,
+      verificationNote: '',
+      allowsAttestation: false,
+      attestationValidDays: 365,
       isActive: true,
       displayOrder: controls.length,
       policyId: policies.length > 0 ? policies[0].id : '',
@@ -408,6 +418,11 @@ export function PolicyControls() {
       description: control.description,
       category: control.category || '',
       evaluationLogic: control.evaluationLogic,
+      appliesWhenLogic: control.appliesWhenLogic || 'AND',
+      verificationRequired: control.verificationRequired === true,
+      verificationNote: control.verificationNote || '',
+      allowsAttestation: control.allowsAttestation === true,
+      attestationValidDays: control.attestationValidDays ?? 365,
       isActive: control.isActive,
       displayOrder: control.displayOrder,
       policyId: control.policyId || (policies.length > 0 ? policies[0].id : ''),
@@ -434,6 +449,7 @@ export function PolicyControls() {
         
         return {
           fieldPath: f.fieldPath,
+          role: f.role === 'applies_when' ? 'applies_when' : 'compliance',
           // Preserved verbatim. This previously fell back to the first available
           // operator when the UI did not recognise the stored one, which rewrote the
           // mapping on load and saved the replacement.
@@ -475,6 +491,7 @@ export function PolicyControls() {
           fieldPath: '',
           operator: 'exists',
           value: null,
+          role: 'compliance',
           displayOrder: formData.fields.length,
         },
       ],
@@ -565,6 +582,15 @@ export function PolicyControls() {
       setSaving(true);
       const payload = {
         ...formData,
+        // Only send a validity period when attestation is on, and never send an empty
+        // string — the API requires a whole number of days between 1 and 3650, so a
+        // cleared input would be rejected rather than treated as "use the default".
+        ...(formData.allowsAttestation && Number(formData.attestationValidDays) >= 1
+          ? { attestationValidDays: Number(formData.attestationValidDays) }
+          : { attestationValidDays: undefined }),
+        verificationNote: formData.verificationRequired
+          ? formData.verificationNote?.trim() || null
+          : null,
         fields: formData.fields.map(f => {
           // Convert comma-separated strings to arrays for in/not_in operators before saving
           let value = f.value;
@@ -593,6 +619,11 @@ export function PolicyControls() {
         description: '',
         category: '',
         evaluationLogic: 'AND',
+        appliesWhenLogic: 'AND',
+        verificationRequired: false,
+        verificationNote: '',
+        allowsAttestation: false,
+        attestationValidDays: 365,
         isActive: true,
         displayOrder: 0,
         fields: [],
@@ -858,6 +889,11 @@ export function PolicyControls() {
               description: '',
               category: '',
               evaluationLogic: 'AND',
+              appliesWhenLogic: 'AND',
+              verificationRequired: false,
+              verificationNote: '',
+              allowsAttestation: false,
+              attestationValidDays: 365,
               isActive: true,
               displayOrder: 0,
               policyId: policies.length > 0 ? policies[0].id : '',
@@ -942,6 +978,72 @@ export function PolicyControls() {
                 helperText="Only active controls are evaluated"
               />
 
+              {/* Scope, verification and attestation. These were API-only until now:
+                  every control using them had to be configured with a direct request. */}
+              <div className="border-t pt-4 space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800">Scope and evidence</h3>
+                  <p className="text-sm text-gray-600">
+                    How this control is scoped, and what counts as meeting it
+                  </p>
+                </div>
+
+                <Select
+                  label="Applies-When Logic"
+                  value={formData.appliesWhenLogic}
+                  onChange={(e) => setFormData({ ...formData, appliesWhenLogic: e.target.value })}
+                  options={[
+                    { value: 'AND', label: 'AND (every scope check must match)' },
+                    { value: 'OR', label: 'OR (any scope check may match)' },
+                  ]}
+                  helperText="How to combine fields marked as scope checks below. A control with no scope checks applies to every application."
+                />
+
+                <Checkbox
+                  id="verificationRequired"
+                  label="Requires human verification"
+                  checked={formData.verificationRequired}
+                  onChange={(e) => setFormData({ ...formData, verificationRequired: e.target.checked })}
+                  helperText="Passing the field checks reports Verification Required rather than Meeting, because the checks cover only part of the requirement. An admin override resolves it."
+                />
+
+                {formData.verificationRequired && (
+                  <Textarea
+                    label="What a reviewer still needs to confirm"
+                    rows={3}
+                    value={formData.verificationNote}
+                    onChange={(e) => setFormData({ ...formData, verificationNote: e.target.value })}
+                    placeholder="Name the parts of the requirement the automated checks do not cover."
+                    helperText="Shown as evidence on every application, so be specific."
+                  />
+                )}
+
+                <Checkbox
+                  id="allowsAttestation"
+                  label="Can be attested"
+                  checked={formData.allowsAttestation}
+                  onChange={(e) => setFormData({ ...formData, allowsAttestation: e.target.checked })}
+                  helperText="For controls no field could evidence. An owner asserts compliance and accepts that evidence may be requested at audit. Reported separately from measured compliance."
+                />
+
+                {formData.allowsAttestation && (
+                  <Input
+                    label="Attestation valid for (days)"
+                    type="number"
+                    min="1"
+                    max="3650"
+                    value={formData.attestationValidDays}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        attestationValidDays: e.target.value === '' ? '' : Number(e.target.value),
+                      })
+                    }
+                    helperText="After this it expires and the control reverts to not meeting. 365 is annual; shorter suits anything that changes continuously, such as remediation SLAs."
+                  />
+                )}
+              </div>
+
               {/* Fields Section */}
               <div className="border-t pt-4">
                 <div className="flex justify-between items-center mb-4">
@@ -1013,6 +1115,20 @@ export function PolicyControls() {
                                 ...fields.map(f => ({ value: f.path, label: f.label })),
                               ])}
                               placeholder="Select field"
+                            />
+                            <Select
+                              label="Check type"
+                              value={field.role || 'compliance'}
+                              onChange={(e) => handleFieldChange(index, 'role', e.target.value)}
+                              options={[
+                                { value: 'compliance', label: 'Compliance — decides if the control is met' },
+                                { value: 'applies_when', label: 'Scope — decides if the control applies' },
+                              ]}
+                              helperText={
+                                field.role === 'applies_when'
+                                  ? 'When scope checks do not match, the control reports Not Applicable and its compliance checks never run.'
+                                  : undefined
+                              }
                             />
                             <Select
                               label="Operator"
@@ -1247,6 +1363,11 @@ export function PolicyControls() {
                     description: '',
                     category: '',
                     evaluationLogic: 'AND',
+                    appliesWhenLogic: 'AND',
+                    verificationRequired: false,
+                    verificationNote: '',
+                    allowsAttestation: false,
+                    attestationValidDays: 365,
                     isActive: true,
                     displayOrder: 0,
                     policyId: policies.length > 0 ? policies[0].id : '',

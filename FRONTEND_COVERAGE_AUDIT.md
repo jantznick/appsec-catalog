@@ -85,10 +85,23 @@ So everything from Phase 2a and Phase 4 is API-only. Through the UI you cannot:
 - mark a control as needing human verification, or write the note explaining why
 - make a control attestable, or set its re-attestation period
 
-- [ ] Field role selector (compliance / applies_when) per field row
-- [ ] Applies-when logic (AND/OR), alongside the existing evaluation logic control
-- [ ] Verification required + note
-- [ ] Allows attestation + validity days
+- [x] Field role selector (compliance / applies_when) per field row
+- [x] Applies-when logic (AND/OR), alongside the existing evaluation logic control
+- [x] Verification required + note
+- [x] Allows attestation + validity days
+
+**Fixed.** A "Scope and evidence" section on the control form, plus a per-field
+**Check type** selector (Compliance / Scope). The note and validity inputs appear only
+when their checkbox is on, and the payload omits `attestationValidDays` unless
+attestation is enabled, since the API rejects an empty value rather than defaulting.
+
+One trap worth recording: the form is reset in **five** places with different
+indentation, and an early attempt matched a four-space pattern as a substring of the
+six-space lines, duplicating keys. The fix captures whatever indentation is present and
+skips objects already carrying the properties.
+
+Verified by sending the exact payload the form now builds to the running API: 200, with
+roles, `within_days 90` and `appliesWhenLogic: OR` all round-tripping.
 
 ### F3 — Six of seven application forms are missing all eight new fields
 
