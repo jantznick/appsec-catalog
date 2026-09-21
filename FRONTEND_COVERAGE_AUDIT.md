@@ -43,10 +43,19 @@ Branch `claude/policy-gaps-followup`. Run `npm test` in `backend/` (149 cases) a
 | F6 | Attestations cannot be listed | **done** `ad94bf6` |
 | F7 | 25 uncalled client methods, untriaged | **done** — triaged, no code change; none came from today's merges |
 | D1 | One `calculateCompleteness` driving the score | **done** `02046e8` |
-| D3 | Point 4.6.14 at `iacContainerScanNA` | open — needs the migration applied |
 | D2 | Remove `securityTestingDescription` | **done** `ce66158` |
-| D4 | Regenerate the prod import script | **done** `cf-scripts` |
+| D3 | Point 4.6.14 at `iacContainerScanNA` | code **done**; needs a data change after the migration |
+| D4 | Regenerate the prod import script | **done** `292a586` |
 | D5 | 4.6.4 / 4.6.10 | blocked on the environments workstream |
+
+Everything on this list is worked through except D3's data change, which cannot be made
+from here — it is an edit to a row in the running instance — and D5, which waits on
+another workstream.
+
+**Not verified in a browser.** Every change here was checked with `node --test` (156
+cases) and `npx vite build`, and the export/import pair was exercised against a stub of
+its endpoints. None of it was opened in the UI, which is the exact habit that produced
+F1–F7. See TESTING_CHECKLIST.md for what to click.
 
 ### Migrations awaiting `prisma migrate deploy`
 
@@ -317,11 +326,23 @@ registry. Not in any completeness field set, so removal is smaller than it first
 
 - [ ] Remove the field and its registry entry
 
-### D3 — Point 4.6.14 at `iacContainerScanNA`
+### D3 — Point 4.6.14 at `iacContainerScanNA` — code ready, **needs a data change**
 
-The column now exists (`20260922150000`). Once applied, 4.6.14 should use it as an
-`applies_when` check so an application declaring N/A reports `not_applicable` rather than
-failing. Blocked only on the migration.
+Everything in the codebase is in place. `/available-fields` offers the field with the
+operators a scope check needs and a `validationRules.description` saying what it is for;
+the control editor can now set `role: applies_when` per field (F2); the evaluator returns
+`not_applicable` and the dashboards exclude it from the denominator (F4).
+
+What is left is not code. Control 4.6.14 in the running instance has no scope check, and
+adding one is an edit to a row:
+
+1. Apply the two pending migrations (below).
+2. Settings → Policy Controls → 4.6.14 → add a field mapping:
+   `iacContainerScanNA` / Check type **Applies when** / operator `not_equals` / value
+   `Not applicable`.
+
+An application that has declared N/A then reports `not_applicable` instead of failing.
+Until then it fails 4.6.14 permanently, which is the bug the column was added to fix.
 
 ### D4 — Regenerate the prod import script — **done** `backend/scripts/`
 
