@@ -9,6 +9,7 @@ import { Textarea } from '../components/ui/Textarea.jsx';
 import { Select } from '../components/ui/Select.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
+import { Drawer } from '../components/ui/Drawer.jsx';
 import useAuthStore from '../store/authStore.js';
 import {
   POLICY_OPERATORS as OPERATORS,
@@ -111,6 +112,9 @@ export function PolicyControls() {
     conditionalConditions: [],
   });
   const [saving, setSaving] = useState(false);
+  // Index of the field check currently being dragged, and the row it is over.
+  const [dragIndex, setDragIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deletingPolicy, setDeletingPolicy] = useState(false);
@@ -407,22 +411,7 @@ export function PolicyControls() {
 
   const handleCreate = () => {
     setEditingControl(null);
-    setFormData({
-      controlId: '',
-      name: '',
-      description: '',
-      category: '',
-      evaluationLogic: 'AND',
-      appliesWhenLogic: 'AND',
-      verificationRequired: false,
-      verificationNote: '',
-      allowsAttestation: false,
-      attestationValidDays: 365,
-      isActive: true,
-      displayOrder: controls.length,
-      policyId: policies.length > 0 ? policies[0].id : '',
-      fields: [],
-    });
+    setFormData(emptyControlForm());
     setShowModal(true);
   };
 
@@ -498,6 +487,33 @@ export function PolicyControls() {
     }
   };
 
+  /**
+   * Blank form state, written out in full at three call sites before this.
+   */
+  const emptyControlForm = () => ({
+    controlId: '',
+    name: '',
+    description: '',
+    category: '',
+    evaluationLogic: 'AND',
+    appliesWhenLogic: 'AND',
+    verificationRequired: false,
+    verificationNote: '',
+    allowsAttestation: false,
+    attestationValidDays: 365,
+    isActive: true,
+    displayOrder: 0,
+    policyId: policies.length > 0 ? policies[0].id : '',
+    fields: [],
+  });
+
+  /** Close the editor drawer and discard whatever was being edited. */
+  const closeEditor = () => {
+    setShowModal(false);
+    setFormData(emptyControlForm());
+    setEditingControl(null);
+  };
+
   const handleAddField = () => {
     setFormData({
       ...formData,
@@ -554,6 +570,23 @@ export function PolicyControls() {
       ...formData,
       fields: newFields,
     });
+  };
+
+  /**
+   * Reorder by dragging.
+   *
+   * Native HTML5 drag and drop rather than a library: the list is short, the only
+   * operation is "move this row to that position", and a dependency for that is not
+   * worth the bundle. The arrow buttons stay for keyboard users, since a drag handle
+   * alone is not reachable without a mouse.
+   */
+  const handleDropField = (from, to) => {
+    if (from === to || from === null || to === null) return;
+    const next = [...formData.fields];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    next.forEach((f, i) => { f.displayOrder = i; });
+    setFormData({ ...formData, fields: next });
   };
 
   const handleMoveField = (index, direction) => {
@@ -629,21 +662,7 @@ export function PolicyControls() {
         toast.success('Policy control created successfully');
       }
       setShowModal(false);
-      setFormData({
-        controlId: '',
-        name: '',
-        description: '',
-        category: '',
-        evaluationLogic: 'AND',
-        appliesWhenLogic: 'AND',
-        verificationRequired: false,
-        verificationNote: '',
-        allowsAttestation: false,
-        attestationValidDays: 365,
-        isActive: true,
-        displayOrder: 0,
-        fields: [],
-      });
+      setFormData(emptyControlForm());
       setEditingControl(null);
       await loadControls();
     } catch (error) {
@@ -893,61 +912,71 @@ export function PolicyControls() {
         </div>
       )}
 
-      {/* Create/Edit Modal */}
+      {/* Create/Edit. A right-hand drawer rather than a centred modal: the form is
+          long and has repeating field-check rows, which a modal capped at 80vh either
+          cramps or forces into a second modal on top of the first. A drawer is full
+          height, so the header and the Cancel/Update footer pin while only the body
+          scrolls, and it is wide enough to keep each check on one line. */}
       {showModal && (
-        <Modal
+        <Drawer
           isOpen={showModal}
-          onClose={() => {
-            setShowModal(false);
-            setFormData({
-              controlId: '',
-              name: '',
-              description: '',
-              category: '',
-              evaluationLogic: 'AND',
-              appliesWhenLogic: 'AND',
-              verificationRequired: false,
-              verificationNote: '',
-              allowsAttestation: false,
-              attestationValidDays: 365,
-              isActive: true,
-              displayOrder: 0,
-              policyId: policies.length > 0 ? policies[0].id : '',
-              fields: [],
-            });
-            setEditingControl(null);
-          }}
+          onClose={closeEditor}
           title={editingControl ? 'Edit Policy Control' : 'Create Policy Control'}
+          description={
+            editingControl
+              ? `${editingControl.controlId} — changes re-evaluate every application immediately.`
+              : 'A control is a requirement plus the field checks that decide whether an application meets it.'
+          }
           size="xl"
+          footer={
+            <>
+              <Button type="button" variant="secondary" onClick={closeEditor}>
+                Cancel
+              </Button>
+              {/* Lives outside the <form>, so it submits by id. */}
+              <Button type="submit" form="policy-control-form" variant="primary" loading={saving}>
+                {editingControl ? 'Update' : 'Create'}
+              </Button>
+            </>
+          }
         >
-          <form onSubmit={handleSubmit}>
-            <div className="space-y-6 max-h-[80vh] overflow-y-auto pr-2">
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Control ID"
-                  value={formData.controlId}
-                  onChange={(e) => setFormData({ ...formData, controlId: e.target.value })}
-                  required
-                  placeholder="e.g., 3.4.2"
-                  helperText="Unique identifier for this control"
-                />
-                <Input
-                  label="Display Order"
-                  type="number"
-                  value={formData.displayOrder}
-                  onChange={(e) => setFormData({ ...formData, displayOrder: parseInt(e.target.value) || 0 })}
-                  helperText="Order for display (lower numbers appear first)"
-                />
+          {/* The form owns the whole drawer body so the submit button in the footer
+              still submits it; `h-full flex flex-col` lets the field list scroll
+              rather than the page. */}
+          <form onSubmit={handleSubmit} id="policy-control-form">
+            <div className="space-y-5">
+              {/* Identity. Three short fields shared one row each before, so the top of
+                  the form was three rows of mostly empty space before the control's own
+                  name appeared. Helper text is dropped where the label already says it. */}
+              <div className="grid grid-cols-12 gap-3">
+                <div className="col-span-3">
+                  <Input
+                    label="Control ID"
+                    value={formData.controlId}
+                    onChange={(e) => setFormData({ ...formData, controlId: e.target.value })}
+                    required
+                    placeholder="4.6.3"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Input
+                    label="Order"
+                    type="number"
+                    value={formData.displayOrder}
+                    onChange={(e) => setFormData({ ...formData, displayOrder: parseInt(e.target.value) || 0 })}
+                    title="Lower numbers appear first"
+                  />
+                </div>
+                <div className="col-span-7">
+                  <Select
+                    label="Policy"
+                    value={formData.policyId}
+                    onChange={(e) => setFormData({ ...formData, policyId: e.target.value })}
+                    required
+                    options={policies.map(p => ({ value: p.id, label: p.name }))}
+                  />
+                </div>
               </div>
-
-              <Select
-                label="Policy"
-                value={formData.policyId}
-                onChange={(e) => setFormData({ ...formData, policyId: e.target.value })}
-                required
-                options={policies.map(p => ({ value: p.id, label: p.name }))}
-                helperText="Select the policy this control belongs to"
-              />
 
               <Input
                 label="Control Name"
@@ -962,27 +991,31 @@ export function PolicyControls() {
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 required
-                rows={3}
+                rows={2}
                 placeholder="Full description of the control requirement"
               />
 
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Category"
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  placeholder="e.g., Security Testing"
-                  helperText="Optional category for grouping"
-                />
+              {/* Category and Active share a row: a lone checkbox on its own full-width
+                  row was the emptiest line in the form. */}
+              <div className="grid grid-cols-12 gap-3 items-end">
+                <div className="col-span-8">
+                  <Input
+                    label="Category"
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    placeholder="e.g., Security Testing"
+                  />
+                </div>
+                <div className="col-span-4 pb-2">
+                  <Checkbox
+                    id="isActive"
+                    label="Active"
+                    checked={formData.isActive}
+                    onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Only active controls are evaluated.</p>
+                </div>
               </div>
-
-              <Checkbox
-                id="isActive"
-                label="Active"
-                checked={formData.isActive}
-                onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                helperText="Only active controls are evaluated"
-              />
 
               {/* Verification and attestation. These were API-only until now: every
                   control using them had to be configured with a direct request.
@@ -1049,17 +1082,19 @@ export function PolicyControls() {
                   <div>
                     <h3 className="text-lg font-semibold text-gray-800">Field checks</h3>
                     <p className="text-sm text-gray-600">
-                      Which application data decides this control. Each check is either
-                      Compliance (is it met) or Applies when (does it apply).
+                      Which application data decides this control. Drag to reorder.
                     </p>
                   </div>
+                  {/* shrink-0 and a nowrap label: squeezed beside the description the
+                      button wrapped onto two lines. */}
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={handleAddField}
+                    className="shrink-0 whitespace-nowrap"
                   >
-                    Add Field
+                    Add check
                   </Button>
                 </div>
 
@@ -1067,7 +1102,7 @@ export function PolicyControls() {
                     and they are not interchangeable, so showing them together — and only
                     when each is relevant — is the only way the difference reads. */}
                 {formData.fields.length > 0 && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                     <Select
                       label="Combine compliance checks with"
                       value={formData.evaluationLogic}
@@ -1100,13 +1135,24 @@ export function PolicyControls() {
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-2">
                     {formData.fields.map((field, index) => (
-                      <Card key={index} className="bg-gray-50">
-                        <CardContent className="pt-4">
-                          <div className="flex justify-between items-start mb-4">
-                            <h4 className="text-sm font-semibold text-gray-700">Field {index + 1}</h4>
-                            <div className="flex gap-2">
+                      <Card
+                        key={index}
+                        className={`bg-gray-50 ${dragOverIndex === index && dragIndex !== index ? 'ring-2 ring-blue-400' : ''} ${dragIndex === index ? 'opacity-50' : ''}`}
+                        draggable
+                        onDragStart={() => setDragIndex(index)}
+                        onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
+                        onDragOver={(e) => { e.preventDefault(); setDragOverIndex(index); }}
+                        onDrop={(e) => { e.preventDefault(); handleDropField(dragIndex, index); setDragIndex(null); setDragOverIndex(null); }}
+                      >
+                        <CardContent className="py-3">
+                          <div className="flex justify-between items-center mb-2">
+                            <h4 className="text-xs font-semibold text-gray-500 flex items-center gap-2">
+                              <span className="cursor-grab select-none text-gray-400" title="Drag to reorder">⠿</span>
+                              Check {index + 1}
+                            </h4>
+                            <div className="flex gap-1">
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -1138,7 +1184,12 @@ export function PolicyControls() {
                               </Button>
                             </div>
                           </div>
-                          <div className="grid grid-cols-3 gap-4">
+                          {/* 12-col so the Field select gets the width it needs: at a
+                              third of the modal every option was truncated mid-word
+                              ("Protection Enforced for Ad"). Value sits on the same
+                              line rather than being pushed below by helper text. */}
+                          <div className="grid grid-cols-12 gap-3 items-start">
+                            <div className="col-span-4">
                             <Select
                               label="Field"
                               value={field.fieldPath}
@@ -1150,11 +1201,12 @@ export function PolicyControls() {
                               ])}
                               placeholder="Select field"
                             />
-                            {/* Short option labels: the full sentence was truncated by
-                                the select's width, so the reader saw "Compliance — decides
-                                if th". The explanation lives underneath instead, and is
-                                shown for BOTH values — this setting is new, so the common
-                                case needs explaining as much as the rare one. */}
+                            </div>
+                            {/* The explanation is a tooltip, not three lines of body
+                                text. Printed inline it doubled the row's height and
+                                pushed Value onto a line of its own; the one-line summary
+                                for the whole row lives under the grid instead. */}
+                            <div className="col-span-3">
                             <Select
                               label="Check type"
                               value={field.role || 'compliance'}
@@ -1163,24 +1215,27 @@ export function PolicyControls() {
                                 { value: 'compliance', label: 'Compliance' },
                                 { value: 'applies_when', label: 'Applies when' },
                               ]}
-                              helperText={
+                              title={
                                 field.role === 'applies_when'
                                   ? 'Decides whether this control applies. If this does not match, the control reports Not Applicable and is left out of the score entirely.'
                                   : 'Decides whether the control is met. Failing this marks the application Not Meeting.'
                               }
                             />
+                            </div>
                             {/* The field's own guidance used to print here AND again under
                                 Value — the same sentence twice in one row. It now appears
                                 once, below the row. This slot carries an operator-specific
                                 warning, and only when there is one. */}
+                            <div className="col-span-2">
                             <Select
                               label="Operator"
                               value={field.operator}
                               onChange={(e) => handleFieldChange(index, 'operator', e.target.value)}
                               required
                               options={getOperatorsForField(field.fieldPath, availableFields, field.operator)}
-                              helperText={staleDateWarning(field, getFieldType(field.fieldPath))}
                             />
+                            </div>
+                            <div className="col-span-3">
                             {(() => {
                               const fieldMetadata = getFieldMetadata(field.fieldPath);
                               // A rolling-window operator takes a COUNT OF DAYS, so the
@@ -1367,13 +1422,21 @@ export function PolicyControls() {
                                 />
                               );
                             })()}
+                            </div>
                           </div>
-                          {/* The field's guidance, once per row, under everything it
-                              applies to — rather than repeated under two of the three
-                              controls above it. */}
-                          {getFieldMetadata(field.fieldPath)?.validationRules?.description && (
-                            <p className="mt-3 text-xs text-gray-500">
-                              {getFieldMetadata(field.fieldPath).validationRules.description}
+                          {/* One muted line per row carrying everything that used to be
+                              three separate helperText blocks: the operator warning
+                              first, because it is the actionable one, then the field's
+                              own guidance. Both are optional, so most rows stay quiet. */}
+                          {(staleDateWarning(field, getFieldType(field.fieldPath)) ||
+                            getFieldMetadata(field.fieldPath)?.validationRules?.description) && (
+                            <p className="mt-2 text-xs text-gray-500">
+                              {staleDateWarning(field, getFieldType(field.fieldPath)) && (
+                                <span className="text-amber-600">
+                                  {staleDateWarning(field, getFieldType(field.fieldPath))}{' '}
+                                </span>
+                              )}
+                              {getFieldMetadata(field.fieldPath)?.validationRules?.description}
                             </p>
                           )}
                         </CardContent>
@@ -1384,39 +1447,8 @@ export function PolicyControls() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-6 mt-6">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setShowModal(false);
-                  setFormData({
-                    controlId: '',
-                    name: '',
-                    description: '',
-                    category: '',
-                    evaluationLogic: 'AND',
-                    appliesWhenLogic: 'AND',
-                    verificationRequired: false,
-                    verificationNote: '',
-                    allowsAttestation: false,
-                    attestationValidDays: 365,
-                    isActive: true,
-                    displayOrder: 0,
-                    policyId: policies.length > 0 ? policies[0].id : '',
-                    fields: [],
-                  });
-                  setEditingControl(null);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" loading={saving}>
-                {editingControl ? 'Update' : 'Create'}
-              </Button>
-            </div>
           </form>
-        </Modal>
+        </Drawer>
       )}
 
       {/* Delete Confirmation Modal */}
