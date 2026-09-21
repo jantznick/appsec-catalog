@@ -11,7 +11,8 @@ Authorization is permission-based. A route asks "does this caller hold
 | Built-in roles | `backend/rbac/builtInRoles.js` | Named bundles of permissions, re-synced into the DB on boot. |
 | Resolver | `backend/rbac/context.js` | Turns a session or API key into an effective permission set; answers `can()`. |
 | Middleware | `backend/middleware/rbac.js` | `requirePermission`, `companyFrom`, `assertPermission`. |
-| Role management API | `backend/routes/roles.js` | List roles, grant and revoke assignments. |
+| Role management API | `backend/routes/roles.js` | List and author roles, grant and revoke assignments. |
+| Authoring rules | `backend/rbac/authoring.js` | Who may create which roles, and the no-escalation cap. |
 | Frontend mirror | `frontend/src/lib/permissions.js` | Same check, for hiding controls the user can't use. |
 
 ## Scopes
@@ -81,6 +82,45 @@ A `UserRole` row is (user, role, companyId?).
 Users have a single company today (`User.companyId`), so the two forms behave
 the same. The distinction is what makes "company admin of Acme only" work once
 users can belong to several companies; the resolver already handles both.
+
+## Custom roles
+
+Alongside the built-in roles, roles can be authored at runtime. A custom role is
+always COMPANY-scoped and lives in `Role`, with `companyId` deciding its reach:
+
+- `companyId` set → belongs to that company, grantable only there.
+- `companyId` null → global, grantable in any company.
+
+Who may author what:
+
+- System admins and holders of `role.manage` — any role, for a specific company
+  or for every company at once.
+- Holders of `company.author_roles` (which Company Admin has) — roles owned by
+  their own company only. Never a global one, since that reaches companies they
+  have no authority over.
+
+Both are capped identically: **a role may not carry a permission its author does
+not already hold in the company the role belongs to.** Without that, authoring
+would be a one-step escalation — invent a role with everything, grant it to
+yourself.
+
+System-scoped permissions are not authorable at all. Bundling `role.manage` or
+`user.manage` into a role is a way to hand out global power, and `isAdmin` plus
+the built-in set already covers the cases we have.
+
+`isSystem` roles cannot be edited or deleted through the API — they are defined
+in `builtInRoles.js` and re-synced on boot, so an edit would be reverted anyway.
+
+Deleting a role is refused (409, with the count) while anyone still holds it.
+The `UserRole` FK would cascade those assignments away silently, which is a
+quiet way to strip access from people who are not on screen. Editing a role's
+permissions *does* take effect immediately for everyone holding it, and their
+cached permission sets are invalidated on save.
+
+Ownership is immutable after creation: moving a role between companies would
+silently change who its existing assignments apply to.
+
+Managed at **Settings → Roles**.
 
 ## Who can grant roles
 
@@ -160,8 +200,8 @@ Routes not yet migrated still work: `requireAuth`, `requireVerified` and
 
 ## Not done yet
 
-- Custom, company-authored roles. `Role.companyId` and `RoleScope.SYSTEM` are in
-  the schema for this; there is no API to create them.
+- `RoleScope.SYSTEM` exists in the schema, but no system-scoped role can be
+  authored; see "Custom roles" for why.
 - Multi-company membership. The assignment model supports it; `User.companyId`
   is still one company.
 - Most routes outside companies / applications / users still gate on

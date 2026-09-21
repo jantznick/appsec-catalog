@@ -23,6 +23,14 @@ const settingsSections = [
         to: '/users',
         adminOnly: true,
       },
+      {
+        label: 'Roles',
+        description: 'Create and manage the permission bundles you can grant to users.',
+        to: '/settings/roles',
+        // Company admins author roles for their own company, so this is not
+        // gated on the system-admin flag.
+        permission: 'company.author_roles',
+      },
     ],
   },
   {
@@ -136,14 +144,19 @@ const settingsSections = [
 ];
 
 export function Settings() {
-  const { isAdmin } = useAuthStore();
+  const { isAdmin, canAnywhere } = useAuthStore();
   const canAdmin = isAdmin();
+
+  // An item may be gated on the admin flag, on holding a permission in at
+  // least one company, or on neither.
+  const canSee = (item) =>
+    (!item.adminOnly || canAdmin) && (!item.permission || canAnywhere(item.permission));
 
   const visibleSections = settingsSections
     .filter((section) => !section.adminOnly || canAdmin)
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => !item.adminOnly || canAdmin),
+      items: section.items.filter(canSee),
     }))
     .filter((section) => section.items.length > 0);
 

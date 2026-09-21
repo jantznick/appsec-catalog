@@ -180,6 +180,25 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // Custom role authoring. `companyId` null means the role applies in every
+  // company and is reserved for system admins.
+  createRole: ({ name, description, permissions, companyId = null }) =>
+    apiRequest('/api/roles', {
+      method: 'POST',
+      body: JSON.stringify({ name, description, permissions, companyId }),
+    }),
+
+  updateRole: (roleId, { name, description, permissions }) =>
+    apiRequest(`/api/roles/${roleId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name, description, permissions }),
+    }),
+
+  deleteRole: (roleId) =>
+    apiRequest(`/api/roles/${roleId}`, {
+      method: 'DELETE',
+    }),
+
   // Company management
   getCompanies: (filters = {}) => {
     const params = new URLSearchParams();
