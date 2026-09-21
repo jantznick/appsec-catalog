@@ -12,29 +12,52 @@ so activating them before mapping would fail every application against every unm
 
 ## Current state (2026-09-18)
 
-28 controls: **10 mapped**, **18 unmapped**.
+28 controls: **11 mapped**, **17 unmapped**.
 
-| Control | Logic | Field checks | Confidence |
+| Control | Scope (`applies_when`) | Compliance checks | Confidence |
 |---|---|---|---|
-| 4.6.2 Continuous security testing | AND | `sastTool exists` + `sastIntegrationLevel gte 1` | direct |
-| 4.6.5 Software composition mgmt | OR | `scaTool exists` / `sastIncludesSca = true` | direct |
-| 4.6.8 DAST and SAST coverage | OR | `sastIntegrationLevel gte 1` / `dastIntegrationLevel gte 1` | direct |
-| 4.6.11 Threat modeling | AND | `threatModel.status equals approved` | direct, **over-applies — see below** |
-| 4.6.13 SCA | OR | `scaIntegrationLevel gte 1` / `sastIncludesSca = true` | direct |
-| 6.3.4 Automated code review | AND | `sastTool exists` + `sastIntegrationLevel gte 1` | direct |
-| 4.6.6 Application metadata | AND | `businessCriticality exists` + `description exists` | **`verificationRequired`** — 2 of 5 bullets |
-| 6.3.7 OWASP Top 10 controls | AND | `dastTool exists` | proxy |
-| 4.6.1 SDLC-managed development | AND | `repoUrl exists` | proxy |
-| 6.3.1 SDLC process requirements | AND | `repoUrl exists` | proxy |
+| 4.6.2 Continuous security testing | all | `sastTool exists` + `sastIntegrationLevel gte 1` | direct |
+| 4.6.5 Software composition mgmt | all | `scaTool exists` / `sastIncludesSca = true` (OR) | direct |
+| 4.6.8 DAST and SAST coverage | all | `sastIntegrationLevel gte 1` / `dastIntegrationLevel gte 1` (OR) | direct |
+| 4.6.10 Scheduled re-scans | internet-facing | `lastDastScanDate within_days 90` | direct |
+| 4.6.11 Threat modeling | internet-facing **or** `businessCriticality gte 4` | `threatModel.status equals approved` | direct |
+| 4.6.13 SCA | all | `scaIntegrationLevel gte 1` / `sastIncludesSca = true` (OR) | direct |
+| 6.3.4 Automated code review | all | `sastTool exists` + `sastIntegrationLevel gte 1` | direct |
+| 4.6.6 Application metadata | all | `businessCriticality exists` + `metadataLastReviewed within_days 183` + `description exists` | **`verificationRequired`** |
+| 6.3.7 OWASP Top 10 controls | all | `dastTool exists` | proxy |
+| 4.6.1 SDLC-managed development | all | `repoUrl exists` | proxy |
+| 6.3.1 SDLC process requirements | all | `repoUrl exists` | proxy |
 
-**4.6.11 passes 0 of 91 today** — no `ThreatModel` row exists for any application. Unlike the
-`gitBranch` case this is a true finding rather than a dead check: the threat model feature exists
-and a compliant team would populate it, so 0% reflects the portfolio, not the mapping.
+### Scoping "internet-facing"
 
-**4.6.11 also over-applies.** The control text scopes it to *"internet facing and high risk
-application features"*, but with no per-control applicability it is evaluated against every
-application. An internal, low-criticality application fails a control that does not apply to it.
-Needs `appliesWhen` (Phase 2a) — same defect as 4.6.10, which is why 4.6.10 is still unmapped.
+`facing` is `External` on 35 applications, `Internal` on 9, and **empty on 47**. Scoping to
+`facing equals external` alone would mark those 47 `not_applicable` — treating *unknown* as
+*internal* and handing a free pass to any application with incomplete metadata.
+
+So internet-facing scope is `facing equals external` **OR** `facing not_exists`
+(`appliesWhenLogic: OR`), which keeps unknowns in scope and excludes only the 9 explicitly
+internal applications. Note `not_equals Internal` does **not** work for this: `not_equals`
+returns false on a null value, so unknowns would drop out of scope again.
+
+As `facing` gets filled in, scope shrinks toward the true internet-facing set. The current
+breadth is a metadata-quality finding, not a policy decision.
+
+### Projected results (91 applications)
+
+| Control | not_applicable | meeting | not_meeting |
+|---|---|---|---|
+| 4.6.10 (90-day window) | 9 | 0 | 82 |
+| 4.6.11 | 5 | 0 | 86 |
+| 4.6.6 | 0 | 18 *(verification_required)* | 73 |
+
+**The 4.6.10 window is a policy decision, not an engineering one.** The control says "scheduled
+security re-scans" without naming a period. Only 6 of 91 applications have a DAST scan date at
+all: 0 within 90 days, 4 within 183, 6 within 365. Currently set to **90** as the common standard
+for internet-facing re-scans; it is a one-number change.
+
+**4.6.11 passes 0 of 91** — no `ThreatModel` row exists for any application. Unlike the
+`gitBranch` case this is a true finding rather than a dead check: the feature exists and a
+compliant team would populate it, so 0% reflects the portfolio, not the mapping.
 
 Portfolio pass rates across all 91 applications at time of writing: 4.6.8 → 43%, 4.6.6 → 41%,
 6.3.7 → 40%, 4.6.2 / 6.3.4 → 31%, 4.6.5 / 4.6.13 → 27%, 4.6.1 / 6.3.1 → 16%.
