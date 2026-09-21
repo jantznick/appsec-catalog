@@ -124,7 +124,12 @@ export function ApplicationMappingsCard({
               <TableRow>
                 <TableHead>Application</TableHead>
                 <TableHead className="text-right whitespace-nowrap">Security score</TableHead>
-                <TableHead className="text-right whitespace-nowrap">Policy Compliance</TableHead>
+                <TableHead
+                  className="text-right whitespace-nowrap"
+                  title="Share of applicable controls met. Controls scoped out of this application are excluded from the denominator; attested controls count as met."
+                >
+                  Policy Compliance
+                </TableHead>
                 <TableHead>Component Type</TableHead>
                 <TableHead></TableHead>
               </TableRow>

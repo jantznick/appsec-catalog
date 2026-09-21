@@ -287,6 +287,11 @@ export function PolicyComplianceView({ applicationId, companyId, compliance, loa
             <div className="text-center p-4 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-gray-800">{summary?.total || 0}</div>
               <div className="text-sm text-gray-600 mt-1">Total Controls</div>
+              {/* The Compliance Rate divides by applicable, not total. Say so where the
+                  two differ, so the rate is not read against the number next to it. */}
+              {summary?.applicable !== undefined && summary.applicable !== summary.total && (
+                <div className="text-xs text-gray-500 mt-1">{summary.applicable} applicable</div>
+              )}
             </div>
             <div className="text-center p-4 bg-green-50 rounded-lg">
               <div className="text-2xl font-bold text-green-700">{summary?.meeting || 0}</div>
@@ -358,8 +363,22 @@ export function PolicyComplianceView({ applicationId, companyId, compliance, loa
                           <div className="text-sm text-gray-500 mt-1">
                             {policyEntry.reason || `Scope: ${policyEntry.policy.scope}`}
                           </div>
+                          {/* Numerator and denominator have to match the percentage
+                              beside them. This read `meeting of total`, so a policy
+                              with one attested and one scoped-out control showed
+                              "3 of 5 controls meeting (100%)" — two numbers that
+                              disagree with the third. The percentage is
+                              (meeting + attested) / (total - not_applicable). */}
                           <div className="text-xs text-gray-400 mt-1">
-                            {policyEntry.summary.meeting} of {policyEntry.summary.total} controls meeting ({policyEntry.summary.compliance_percentage}%)
+                            {policyEntry.summary.meeting + (policyEntry.summary.attested || 0)} of{' '}
+                            {policyEntry.summary.applicable ?? policyEntry.summary.total} applicable
+                            controls met ({policyEntry.summary.compliance_percentage}%)
+                            {policyEntry.summary.attested
+                              ? `, ${policyEntry.summary.attested} by attestation`
+                              : ''}
+                            {policyEntry.summary.not_applicable
+                              ? `; ${policyEntry.summary.not_applicable} not applicable`
+                              : ''}
                           </div>
                         </div>
                       </button>
