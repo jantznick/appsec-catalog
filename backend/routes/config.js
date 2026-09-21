@@ -590,6 +590,35 @@ router.get('/available-fields', requireAuth, async (req, res) => {
           description: 'Use within_days to require the evidence itself be recent.'
         }
       },
+      {
+        path: 'scmRepoLink.repo.prTemplateHasSecuritySection',
+        label: 'PR Template Has Security Section',
+        category: 'Source Control',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }],
+        validationRules: {
+          description: 'The repo has a pull request template containing a security heading or checklist item. Evidence that reviewers are prompted — NOT that any pull request was completed.'
+        }
+      },
+      {
+        path: 'scmRepoLink.repo.prTemplateFound',
+        label: 'PR Template Present',
+        category: 'Source Control',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }]
+      },
+      {
+        path: 'scmRepoLink.repo.prTemplateSyncedAt',
+        label: 'PR Template Last Read',
+        category: 'Source Control',
+        fieldType: 'date',
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
+        valueType: 'date'
+      },
 
       // Status
       {

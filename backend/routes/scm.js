@@ -13,6 +13,7 @@ import {
   listConfiguredProviders,
   fetchRepoIntel,
   fetchBranchProtection,
+  fetchPullRequestTemplate,
   listReposForConnection,
   saveRepoDependencies,
   topLanguagesString,
@@ -507,12 +508,12 @@ async function upsertRepoWithIntel(connection, userId, ownerName, repoName, appl
   // fetchBranchProtection never throws: an unreadable result comes back as nulls
   // plus a reason, so a permissions problem cannot fail the whole repo sync, and
   // it is never mistaken for "this repo has no protection".
-  const protection = await fetchBranchProtection(
-    connection,
-    ownerName,
-    repoName,
-    metadata.defaultBranch || null
-  );
+  // Both reads are best-effort and never throw: an unreadable result is recorded
+  // as nulls plus a reason rather than failing the sync or looking like absence.
+  const [protection, prTemplate] = await Promise.all([
+    fetchBranchProtection(connection, ownerName, repoName, metadata.defaultBranch || null),
+    fetchPullRequestTemplate(connection, ownerName, repoName),
+  ]);
 
   const now = new Date();
   const fields = {
@@ -538,6 +539,12 @@ async function upsertRepoWithIntel(connection, userId, ownerName, repoName, appl
     allowsForcePushes: protection.allowsForcePushes,
     branchProtectionSyncedAt: now,
     branchProtectionError: protection.branchProtectionError,
+    prTemplatePath: prTemplate.prTemplatePath,
+    prTemplateFound: prTemplate.prTemplateFound,
+    prTemplateHasSecuritySection: prTemplate.prTemplateHasSecuritySection,
+    prTemplateSecurityHeading: prTemplate.prTemplateSecurityHeading,
+    prTemplateSyncedAt: now,
+    prTemplateError: prTemplate.prTemplateError,
   };
   const repo = await prisma.scmRepo.upsert({
     where: {

@@ -346,15 +346,39 @@ depends on the environments work (Phase 6).
 **GitHub App permission:** reading branch protection needs `Administration: read` on the
 installation. Without it the read returns unknown with that message rather than failing.
 
-### 5b. PR template → 4.6.7
+### 5b. PR template → 4.6.7 — **built, not yet mapped**
 
-`fetchFileText(octokit, owner, repo, path)` already exists in
-[services/scm/githubProvider.js](./backend/services/scm/githubProvider.js). Check
-`.github/PULL_REQUEST_TEMPLATE.md`, the lowercase variant, and `.github/PULL_REQUEST_TEMPLATE/`,
-then match a security heading.
+`fetchPullRequestTemplate` joins the provider contract with the same rules as 5a: never throws,
+and a provider without an implementation reports *unknown* rather than *no template*.
 
-**This proves the template exists, not that anyone completes it.** Acceptable as v1; reading merged
-PR bodies for completed checklists is a separate, later control. Do not treat one as the other.
+The judgement lives in [services/scm/prTemplate.js](./backend/services/scm/prTemplate.js) as pure
+functions over paths and text, so it is testable without a network. The GitHub adapter supplies
+fetching (reusing the existing `fetchFileText`, plus a directory lister for multi-template repos)
+and this supplies the verdict.
+
+Checks the eight single-file locations GitHub honours, in its resolution order, then
+`.github/PULL_REQUEST_TEMPLATE/` where a security section in *any* template counts, since the
+author picks one per pull request.
+
+**A security prompt means an ATX or setext heading, or a task-list item, whose text matches a
+narrow term list** (`security`, `secure`, `threat model`, `vulnerability`, `appsec`, `owasp`).
+Deliberately narrow: `impact` or `review` alone match most of an ordinary template, and a false
+positive reports 4.6.7 as met when nobody is being asked about security. Fenced code blocks are
+skipped — a template's own sample output is not a prompt to its author.
+
+**This evidences that the template exists and asks about security. It does not evidence that
+anyone completed it.** Reading merged PR bodies is a separate, heavier control. Do not conflate
+them.
+
+**Not yet mapped**, for the same reason as 5a: nothing has been synced since this landed, so
+every value is null. The mapping once there is data:
+`scmRepoLink.repo.prTemplateHasSecuritySection equals true`.
+
+> **Storage needs a migration.** I initially said 5b would not — that was wrong. Reusing
+> `fetchFileText` avoids new *provider* plumbing, but the result has to be persisted, which means
+> columns. Evaluating at request time would mean a provider API call per application per
+> evaluation, and the dashboard evaluates the whole portfolio. **Any phase producing persisted
+> evidence needs a migration** — Phase 4 and Phase 6a included.
 
 ---
 

@@ -13,6 +13,7 @@ import { App, Octokit } from 'octokit';
 import { integrationLog } from '../../integrations/log.js';
 import { PROVIDER_GITHUB } from '../../integrations/constants.js';
 import { detectDependencies } from './parsers.js';
+import { resolvePrTemplate } from './prTemplate.js';
 
 const HOST = 'github.com';
 let cachedApp = null;
@@ -135,6 +136,34 @@ async function fetchFileText(octokit, owner, repo, path) {
     if (e.status === 404) return null;
     throw e;
   }
+}
+
+/** List file paths directly inside a repo directory (404-tolerant, non-recursive). */
+async function listDirFiles(octokit, owner, repo, path) {
+  try {
+    const { data } = await octokit.rest.repos.getContent({ owner, repo, path });
+    if (!Array.isArray(data)) return [];
+    return data.filter((e) => e.type === 'file').map((e) => e.path);
+  } catch (e) {
+    if (e.status === 404) return [];
+    throw e;
+  }
+}
+
+/**
+ * Find the repo's pull-request template and judge whether it prompts for security.
+ *
+ * Establishes that a template exists and asks about security — not that anyone
+ * completed it. See services/scm/prTemplate.js.
+ *
+ * @returns {Promise<import('./prTemplate.js').PullRequestTemplate>}
+ */
+async function fetchPullRequestTemplate(connection, owner, name) {
+  const octokit = await getInstallationOctokit(connection.installationId);
+  return resolvePrTemplate(
+    (path) => fetchFileText(octokit, owner, name, path),
+    (dir) => listDirFiles(octokit, owner, name, dir)
+  );
 }
 
 /**
@@ -290,4 +319,5 @@ export const githubProvider = {
   listRepos,
   fetchRepoIntel,
   fetchBranchProtection,
+  fetchPullRequestTemplate,
 };

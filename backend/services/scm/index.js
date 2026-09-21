@@ -36,6 +36,7 @@ import { githubProvider } from './githubProvider.js';
 import { bitbucketProvider } from './bitbucketProvider.js';
 import { azureDevopsProvider } from './azureDevopsProvider.js';
 import { PROVIDER_GITHUB, PROVIDER_BITBUCKET, PROVIDER_AZURE_DEVOPS } from '../../integrations/constants.js';
+import { unknownPrTemplate } from './prTemplate.js';
 
 /** @type {Record<string, ScmProvider>} */
 const PROVIDERS = {
@@ -96,6 +97,27 @@ export function unknownBranchProtection(reason, branch = null) {
  * @param {string|null} branch default branch; null lets the provider resolve it
  * @returns {Promise<BranchProtection>}
  */
+/**
+ * Find the repo's pull-request template and whether it prompts for security.
+ *
+ * Same contract as fetchBranchProtection: never throws, and a provider without
+ * an implementation yields "unknown" rather than "no template" — absence of an
+ * adapter is not evidence about the repo.
+ *
+ * @returns {Promise<import('./prTemplate.js').PullRequestTemplate>}
+ */
+export async function fetchPullRequestTemplate(connection, owner, name) {
+  try {
+    const provider = getScmProvider(connection?.provider);
+    if (typeof provider.fetchPullRequestTemplate !== 'function') {
+      return unknownPrTemplate(`Pull request template detection is not supported for ${provider.id} yet`);
+    }
+    return await provider.fetchPullRequestTemplate(connection, owner, name);
+  } catch (e) {
+    return unknownPrTemplate(e?.message || 'Failed to read pull request template');
+  }
+}
+
 export async function fetchBranchProtection(connection, owner, name, branch = null) {
   // getScmProvider throws on an unregistered provider id, so it belongs inside
   // the try: this function is called during repo sync and must never be the

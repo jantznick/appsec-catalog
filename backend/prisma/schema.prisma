@@ -1269,6 +1269,16 @@ model ScmRepo {
   branchProtectionSyncedAt     DateTime?
   branchProtectionError        String? // why the read failed (permissions, unsupported provider)
 
+  // Pull-request template, read during repo sync. Evidence for 4.6.7.
+  // Establishes that a template exists and asks about security — NOT that anyone
+  // completed it. Same tri-state rule: null means "not read".
+  prTemplatePath               String? // e.g. ".github/PULL_REQUEST_TEMPLATE.md"
+  prTemplateFound              Boolean?
+  prTemplateHasSecuritySection Boolean?
+  prTemplateSecurityHeading    String? // the matched heading or checklist line, for evidence
+  prTemplateSyncedAt           DateTime?
+  prTemplateError              String?
+
   dependencies   RepoDependency[]
   applications   ApplicationScmRepo[]
   createdAt      DateTime             @default(now())
