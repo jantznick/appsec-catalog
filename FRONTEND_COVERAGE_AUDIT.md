@@ -137,8 +137,18 @@ The backend already returns what is needed and nothing consumes it:
 `measured_compliance_percentage`, `verificationRequiredControls`,
 `notApplicableControls`.
 
-- [ ] Use `applicable` as the denominator
-- [ ] Surface attested separately from measured, per the reporting split #31 introduced
+- [x] Use `applicable` as the denominator
+- [x] Surface attested separately from measured, per the reporting split #31 introduced
+
+**Fixed.** Both dashboard rollups in `routes/dashboard.js` divided by `totalControls`, and
+neither counted `attested` at all — that counter did not exist. Both now expose
+`attestedControls`, `applicableControls` (`total − not_applicable`),
+`compliancePercentage` as `(meeting + attested) / applicable`, and
+`measuredCompliancePercentage` as `meeting / applicable`.
+
+The executive tile reads `N of M applicable controls` with a detail line naming the split
+— measured, attested, awaiting verification, not applicable — so a self-reported figure is
+never mistaken for a measured one.
 
 ### F5 — The three new statuses are handled in exactly one file
 
