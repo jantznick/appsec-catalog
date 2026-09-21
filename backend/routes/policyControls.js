@@ -3,82 +3,19 @@ import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { getAuthContext, resolveChangeSource } from '../middleware/authContext.js';
 import { recordChange } from '../utils/changeHistory.js';
-
-const FIELD_ROLES = ['compliance', 'applies_when'];
-
-// Must stay in step with the switch in evaluateFieldCheck (services/policy.js).
-// An unrecognised operator there only logs a warning and returns false, so a
-// typo would produce a control that can never pass — reject it on the way in.
-const FIELD_OPERATORS = [
-  'exists', 'not_exists',
-  'equals', 'not_equals',
-  'gte', 'gt', 'lte', 'lt',
-  'contains',
-  'in', 'not_in',
-  'within_days', 'older_than_days',
-];
-
-function summarizeFields(fields) {
-  return (fields || []).map((f) => ({
-    fieldPath: f.fieldPath,
-    operator: f.operator,
-    value: f.value,
-    role: f.role,
-  }));
-}
+import { validatePolicyControlFields, isPolicyFieldRole } from '../services/policyFields.js';
 
 /**
- * Normalise a field's role. "applies_when" fields decide whether the control is
- * in scope for an application; anything else is a compliance check.
+ * Normalise a field's role. The vocabulary lives in services/policyFields.js, which also
+ * rejects a supplied-but-invalid value — this only handles the omitted case.
  */
 function normalizeFieldRole(role) {
   const v = typeof role === 'string' ? role.trim() : '';
-  return FIELD_ROLES.includes(v) ? v : 'compliance';
+  return isPolicyFieldRole(v) ? v : 'compliance';
 }
 
-/**
- * Reject a field whose role was supplied but is not a recognised value, so a
- * typo like "appliesWhen" cannot silently become a compliance check — which
- * would invert the control's meaning rather than just scoping it wrongly.
- * @returns {string|null} error message, or null when valid
- */
-function validateFieldRoles(fields) {
-  if (!Array.isArray(fields)) return null;
-  for (const field of fields) {
-    if (field?.role === undefined || field?.role === null) continue;
-    if (typeof field.role !== 'string' || !FIELD_ROLES.includes(field.role.trim())) {
-      return `Field role must be one of: ${FIELD_ROLES.join(', ')}`;
-    }
-  }
-  return null;
-}
-
-/**
- * Reject unknown operators and missing field paths, so a control cannot be saved
- * in a state where it silently never passes.
- * @returns {string|null} error message, or null when valid
- */
-function validateFields(fields) {
-  if (!Array.isArray(fields)) return null;
-  for (const [i, field] of fields.entries()) {
-    const path = typeof field?.fieldPath === 'string' ? field.fieldPath.trim() : '';
-    if (!path) return `Field ${i + 1}: fieldPath is required`;
-
-    const op = typeof field?.operator === 'string' ? field.operator.trim() : '';
-    if (!op) return `Field ${i + 1} (${path}): operator is required`;
-    if (!FIELD_OPERATORS.includes(op)) {
-      return `Field ${i + 1} (${path}): unknown operator "${op}". Must be one of: ${FIELD_OPERATORS.join(', ')}`;
-    }
-
-    // A rolling window is a number of days; anything else can never match.
-    if (op === 'within_days' || op === 'older_than_days') {
-      const days = Number(field.value);
-      if (field.value === null || field.value === undefined || Number.isNaN(days) || days <= 0) {
-        return `Field ${i + 1} (${path}): ${op} needs a positive number of days`;
-      }
-    }
-  }
-  return validateFieldRoles(fields);
+function summarizeFields(fields) {
+  return (fields || []).map((f) => ({ fieldPath: f.fieldPath, operator: f.operator, value: f.value }));
 }
 
 const router = express.Router();
@@ -202,6 +139,8 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Evaluation logic must be AND or OR' });
     }
 
+    // A bad fieldPath or operator fails silently at evaluation time and marks every
+    // application non-compliant for this control, so reject it here instead.
     if (appliesWhenLogic && !['AND', 'OR'].includes(appliesWhenLogic)) {
       return res.status(400).json({ error: 'Applies-when logic must be AND or OR' });
     }
@@ -213,9 +152,13 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       }
     }
 
-    const fieldError = validateFields(fields);
-    if (fieldError) {
-      return res.status(400).json({ error: fieldError });
+    const fieldProblems = validatePolicyControlFields(fields);
+    if (fieldProblems.length > 0) {
+      return res.status(400).json({
+        error: 'Invalid field mapping',
+        message: fieldProblems.join('; '),
+        problems: fieldProblems,
+      });
     }
 
     // Create control with fields in a transaction
@@ -247,10 +190,10 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
           data: fields.map((field, index) => ({
             controlId: newControl.id,
             fieldPath: field.fieldPath?.trim(),
+            role: normalizeFieldRole(field.role),
             operator: field.operator?.trim(),
             value: field.value !== null && field.value !== undefined ? JSON.stringify(field.value) : null,
             displayOrder: field.displayOrder !== undefined ? field.displayOrder : index,
-            role: normalizeFieldRole(field.role),
           })),
         });
       }
@@ -340,6 +283,8 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Evaluation logic must be AND or OR' });
     }
 
+    // A bad fieldPath or operator fails silently at evaluation time and marks every
+    // application non-compliant for this control, so reject it here instead.
     if (appliesWhenLogic && !['AND', 'OR'].includes(appliesWhenLogic)) {
       return res.status(400).json({ error: 'Applies-when logic must be AND or OR' });
     }
@@ -351,9 +296,13 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       }
     }
 
-    const fieldError = validateFields(fields);
-    if (fieldError) {
-      return res.status(400).json({ error: fieldError });
+    const fieldProblems = validatePolicyControlFields(fields);
+    if (fieldProblems.length > 0) {
+      return res.status(400).json({
+        error: 'Invalid field mapping',
+        message: fieldProblems.join('; '),
+        problems: fieldProblems,
+      });
     }
 
     // Update control and fields in a transaction
@@ -405,10 +354,10 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
             data: fields.map((field, index) => ({
               controlId: id,
               fieldPath: field.fieldPath?.trim(),
+              role: normalizeFieldRole(field.role),
               operator: field.operator?.trim(),
               value: field.value !== null && field.value !== undefined ? JSON.stringify(field.value) : null,
               displayOrder: field.displayOrder !== undefined ? field.displayOrder : index,
-              role: normalizeFieldRole(field.role),
             })),
           });
         }

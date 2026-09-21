@@ -1,140 +1,39 @@
 /**
- * Portfolio CSV completeness — aligned with:
- * - Basic / Technical Information on Application detail (App Data tab)
- * - Security tool completeness in frontend/src/utils/applicationCompleteness.js
+ * Completeness percentages for the company portfolio CSV export.
+ *
+ * The field sets and the counting implementation both live in
+ * services/completeness.js — see the note there on why the sets stay distinct rather
+ * than collapsing into one. This module only aggregates across applications.
  */
 
-function isStringNA(value) {
-  if (value === null || value === undefined) return false;
-  if (typeof value !== 'string') return false;
-  return value.trim() === 'NA';
-}
-
-/** Basic Information card (ApplicationDetail). */
-const BASIC_INFO_FIELDS = [
-  'name',
-  'description',
-  'repoUrl',
-  'devTeamContact',
-  'criticalAspects',
-];
+import { countFieldSet, toPercentage } from '../services/completeness.js';
 
 /**
- * Technical Information card (scalar fields only; hosting domains omitted).
+ * Basic + Technical Information cards on the application detail page.
+ * @param {Record<string, unknown>} app
+ * @returns {{ filled: number, total: number }}
  */
-const TECHNICAL_INFO_FIELDS = [
-  'language',
-  'framework',
-  'serverEnvironment',
-  'currentVersion',
-  'facing',
-  'deploymentType',
-  'authProfiles',
-  'dataTypes',
-];
-
 function countBasicTechnicalMetadata(app) {
-  let filled = 0;
-  let total = 0;
-
-  for (const field of BASIC_INFO_FIELDS) {
-    const value = app[field];
-    if (isStringNA(value)) continue;
-    total += 1;
-    if (value !== null && value !== undefined && String(value).trim() !== '') {
-      filled += 1;
-    }
-  }
-
-  {
-    const v = app.businessCriticality;
-    if (!isStringNA(v)) {
-      total += 1;
-      if (v !== null && v !== undefined) {
-        filled += 1;
-      }
-    }
-  }
-
-  for (const field of TECHNICAL_INFO_FIELDS) {
-    const value = app[field];
-    if (isStringNA(value)) continue;
-    total += 1;
-    if (value !== null && value !== undefined && String(value).trim() !== '') {
-      filled += 1;
-    }
-  }
-
-  return { filled, total };
+  const basic = countFieldSet(app, 'portfolioBasic');
+  const technical = countFieldSet(app, 'portfolioTechnical');
+  return {
+    filled: basic.filled + technical.filled,
+    total: basic.total + technical.total,
+  };
 }
 
 /**
  * Security tool fields only (no application-to-application interfaces).
- * Matches frontend `calculateCompleteness` security portion.
  * @param {Record<string, unknown>} application
  * @returns {{ filled: number, total: number }}
  */
 export function countSecurityCompletenessFields(application) {
-  const includeStandaloneSca = !application.sastIncludesSca;
-  const fields = [
-    'sastTool',
-    'sastIntegrationLevel',
-    'dastTool',
-    'dastIntegrationLevel',
-    ...(includeStandaloneSca ? ['scaTool', 'scaIntegrationLevel'] : []),
-    'appFirewallTool',
-    'appFirewallIntegrationLevel',
-    'apiSchema',
-    'apiSecurityNA',
-    'appFirewallNA',
-  ];
-
-  let filled = 0;
-  let total = 0;
-
-  for (const field of fields) {
-    const value = application[field];
-
-    if (field === 'apiSecurityNA' || field === 'appFirewallNA') {
-      if (isStringNA(value)) continue;
-      total += 1;
-      if (value !== null && value !== undefined) {
-        filled += 1;
-      }
-      continue;
-    }
-
-    if (
-      field === 'sastIntegrationLevel' ||
-      field === 'dastIntegrationLevel' ||
-      field === 'scaIntegrationLevel' ||
-      field === 'appFirewallIntegrationLevel'
-    ) {
-      if (isStringNA(value)) continue;
-      total += 1;
-      if (value !== null && value !== undefined) {
-        filled += 1;
-      }
-      continue;
-    }
-
-    if (isStringNA(value)) {
-      continue;
-    }
-
-    total += 1;
-
-    if (field === 'apiSchema' ? Boolean(value) : value !== null && value !== undefined && value !== '') {
-      filled += 1;
-    }
-  }
-
-  return { filled, total };
+  return countFieldSet(application, 'security');
 }
 
 /**
- * @param {Array<Record<string, unknown>>} applications
- * @returns {{ metadataCompleteness: string, securityCompleteness: string }}
+ * @param {number[]} pcts
+ * @returns {string} e.g. "27%", or "" for an empty portfolio
  */
 function formatAvgPct(pcts) {
   if (!pcts.length) return '';
@@ -142,6 +41,10 @@ function formatAvgPct(pcts) {
   return `${avg}%`;
 }
 
+/**
+ * @param {Array<Record<string, unknown>>} applications
+ * @returns {{ metadataCompleteness: string, securityCompleteness: string }}
+ */
 export function aggregateCompletenessForCompany(applications) {
   if (!applications.length) {
     return { metadataCompleteness: '', securityCompleteness: '' };
@@ -152,18 +55,10 @@ export function aggregateCompletenessForCompany(applications) {
 
   for (const app of applications) {
     const meta = countBasicTechnicalMetadata(app);
-    if (meta.total > 0) {
-      metaPcts.push(Math.round((meta.filled / meta.total) * 100));
-    } else {
-      metaPcts.push(0);
-    }
+    metaPcts.push(toPercentage(meta.filled, meta.total));
 
     const sec = countSecurityCompletenessFields(app);
-    if (sec.total > 0) {
-      secPcts.push(Math.round((sec.filled / sec.total) * 100));
-    } else {
-      secPcts.push(0);
-    }
+    secPcts.push(toPercentage(sec.filled, sec.total));
   }
 
   return {
