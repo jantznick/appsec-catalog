@@ -16,6 +16,22 @@ import {
   isDayCountOperator,
 } from '../lib/policyDisplay.js';
 
+/** Operators that compare a date against one fixed calendar date. */
+const FIXED_DATE_OPERATORS = new Set(['gte', 'gt', 'lte', 'lt']);
+
+/**
+ * Warn when a date check is pinned to a calendar date.
+ *
+ * These evaluate correctly, so nothing is broken — but "last reviewed >= 2026-01-01"
+ * passes forever once an application crosses that date, and silently stops measuring
+ * anything. The rolling-window operators are almost always what a date requirement
+ * means. Returns undefined when there is nothing to say, so the row stays quiet.
+ */
+function staleDateWarning(field, fieldType) {
+  if (fieldType !== 'date' || !FIXED_DATE_OPERATORS.has(field.operator)) return undefined;
+  return 'Compares against one fixed date, so this keeps passing once an application crosses it. For "recently enough", use Within the last N days.';
+}
+
 /**
  * Operators offered for a field.
  *
@@ -958,16 +974,6 @@ export function PolicyControls() {
                   placeholder="e.g., Security Testing"
                   helperText="Optional category for grouping"
                 />
-                <Select
-                  label="Evaluation Logic"
-                  value={formData.evaluationLogic}
-                  onChange={(e) => setFormData({ ...formData, evaluationLogic: e.target.value })}
-                  options={[
-                    { value: 'AND', label: 'AND (all fields must pass)' },
-                    { value: 'OR', label: 'OR (at least one field must pass)' },
-                  ]}
-                  helperText="How to combine field checks"
-                />
               </div>
 
               <Checkbox
@@ -978,33 +984,26 @@ export function PolicyControls() {
                 helperText="Only active controls are evaluated"
               />
 
-              {/* Scope, verification and attestation. These were API-only until now:
-                  every control using them had to be configured with a direct request. */}
+              {/* Verification and attestation. These were API-only until now: every
+                  control using them had to be configured with a direct request.
+
+                  The applies-when logic selector used to live here too, above the field
+                  checks it combines and visible whether or not any existed. It now sits
+                  with those checks, and only appears once there is one. */}
               <div className="border-t pt-4 space-y-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800">Scope and evidence</h3>
+                  <h3 className="text-lg font-semibold text-gray-800">How this control can be met</h3>
                   <p className="text-sm text-gray-600">
-                    How this control is scoped, and what counts as meeting it
+                    Both are optional. Leave them off and the field checks below decide on their own.
                   </p>
                 </div>
-
-                <Select
-                  label="Applies-When Logic"
-                  value={formData.appliesWhenLogic}
-                  onChange={(e) => setFormData({ ...formData, appliesWhenLogic: e.target.value })}
-                  options={[
-                    { value: 'AND', label: 'AND (every scope check must match)' },
-                    { value: 'OR', label: 'OR (any scope check may match)' },
-                  ]}
-                  helperText="How to combine fields marked as scope checks below. A control with no scope checks applies to every application."
-                />
 
                 <Checkbox
                   id="verificationRequired"
                   label="Requires human verification"
                   checked={formData.verificationRequired}
                   onChange={(e) => setFormData({ ...formData, verificationRequired: e.target.checked })}
-                  helperText="Passing the field checks reports Verification Required rather than Meeting, because the checks cover only part of the requirement. An admin override resolves it."
+                  helperText="For a control the field checks only partly cover. Passing them reports Verification Required instead of Meeting, so it is not counted as met until someone confirms the rest."
                 />
 
                 {formData.verificationRequired && (
@@ -1023,7 +1022,7 @@ export function PolicyControls() {
                   label="Can be attested"
                   checked={formData.allowsAttestation}
                   onChange={(e) => setFormData({ ...formData, allowsAttestation: e.target.checked })}
-                  helperText="For controls no field could evidence. An owner asserts compliance and accepts that evidence may be requested at audit. Reported separately from measured compliance."
+                  helperText="For a control no field could evidence. An owner asserts compliance in writing; it counts as met but is reported as self-reported, never as measured."
                 />
 
                 {formData.allowsAttestation && (
@@ -1048,8 +1047,11 @@ export function PolicyControls() {
               <div className="border-t pt-4">
                 <div className="flex justify-between items-center mb-4">
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-800">Field Mappings</h3>
-                    <p className="text-sm text-gray-600">Define which application fields are checked for this control</p>
+                    <h3 className="text-lg font-semibold text-gray-800">Field checks</h3>
+                    <p className="text-sm text-gray-600">
+                      Which application data decides this control. Each check is either
+                      Compliance (is it met) or Applies when (does it apply).
+                    </p>
                   </div>
                   <Button
                     type="button"
@@ -1061,9 +1063,41 @@ export function PolicyControls() {
                   </Button>
                 </div>
 
+                {/* How the checks combine, next to the checks. There are two of these
+                    and they are not interchangeable, so showing them together — and only
+                    when each is relevant — is the only way the difference reads. */}
+                {formData.fields.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <Select
+                      label="Combine compliance checks with"
+                      value={formData.evaluationLogic}
+                      onChange={(e) => setFormData({ ...formData, evaluationLogic: e.target.value })}
+                      options={[
+                        { value: 'AND', label: 'AND — every check must pass' },
+                        { value: 'OR', label: 'OR — any one check may pass' },
+                      ]}
+                    />
+                    {formData.fields.some((f) => f.role === 'applies_when') && (
+                      <Select
+                        label="Combine applies-when checks with"
+                        value={formData.appliesWhenLogic}
+                        onChange={(e) => setFormData({ ...formData, appliesWhenLogic: e.target.value })}
+                        options={[
+                          { value: 'AND', label: 'AND — every check must match' },
+                          { value: 'OR', label: 'OR — any one check may match' },
+                        ]}
+                      />
+                    )}
+                  </div>
+                )}
+
                 {formData.fields.length === 0 ? (
                   <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
-                    <p className="text-sm text-gray-500">No field mappings. Click "Add Field" to add one.</p>
+                    <p className="text-sm text-gray-500 mb-1">No field mappings yet.</p>
+                    <p className="text-xs text-gray-500">
+                      A control with no compliance checks reports Not Meeting for every application
+                      until an admin overrides it.
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -1116,43 +1150,36 @@ export function PolicyControls() {
                               ])}
                               placeholder="Select field"
                             />
+                            {/* Short option labels: the full sentence was truncated by
+                                the select's width, so the reader saw "Compliance — decides
+                                if th". The explanation lives underneath instead, and is
+                                shown for BOTH values — this setting is new, so the common
+                                case needs explaining as much as the rare one. */}
                             <Select
                               label="Check type"
                               value={field.role || 'compliance'}
                               onChange={(e) => handleFieldChange(index, 'role', e.target.value)}
                               options={[
-                                { value: 'compliance', label: 'Compliance — decides if the control is met' },
-                                { value: 'applies_when', label: 'Scope — decides if the control applies' },
+                                { value: 'compliance', label: 'Compliance' },
+                                { value: 'applies_when', label: 'Applies when' },
                               ]}
                               helperText={
                                 field.role === 'applies_when'
-                                  ? 'When scope checks do not match, the control reports Not Applicable and its compliance checks never run.'
-                                  : undefined
+                                  ? 'Decides whether this control applies. If this does not match, the control reports Not Applicable and is left out of the score entirely.'
+                                  : 'Decides whether the control is met. Failing this marks the application Not Meeting.'
                               }
                             />
+                            {/* The field's own guidance used to print here AND again under
+                                Value — the same sentence twice in one row. It now appears
+                                once, below the row. This slot carries an operator-specific
+                                warning, and only when there is one. */}
                             <Select
                               label="Operator"
                               value={field.operator}
                               onChange={(e) => handleFieldChange(index, 'operator', e.target.value)}
                               required
                               options={getOperatorsForField(field.fieldPath, availableFields, field.operator)}
-                              helperText={
-                                (() => {
-                                  const fieldMetadata = getFieldMetadata(field.fieldPath);
-                                  if (fieldMetadata?.validationRules?.description) {
-                                    return fieldMetadata.validationRules.description;
-                                  }
-                                  const fieldType = getFieldType(field.fieldPath);
-                                  if (fieldType === 'number') {
-                                    return 'Use comparison operators (≥, >, ≤, <) for numeric values';
-                                  } else if (fieldType === 'boolean') {
-                                    return 'Use equals/not equals for boolean values';
-                                  } else if (fieldType === 'date') {
-                                    return 'Use comparison operators for date values';
-                                  }
-                                  return '';
-                                })()
-                              }
+                              helperText={staleDateWarning(field, getFieldType(field.fieldPath))}
                             />
                             {(() => {
                               const fieldMetadata = getFieldMetadata(field.fieldPath);
@@ -1212,7 +1239,7 @@ export function PolicyControls() {
                                       { value: '', label: 'Select value' },
                                       ...fieldMetadata.valueOptions
                                     ]}
-                                    helperText={fieldMetadata?.validationRules?.description || 'Select a value from the dropdown'}
+                                    helperText="Select a value from the dropdown"
                                   />
                                 );
                               }
@@ -1237,7 +1264,7 @@ export function PolicyControls() {
                                       { value: '', label: 'Select value' },
                                       ...fieldMetadata.valueOptions
                                     ]}
-                                    helperText={fieldMetadata?.validationRules?.description || 'Select true or false'}
+                                    helperText="Select true or false"
                                   />
                                 );
                               }
@@ -1329,8 +1356,6 @@ export function PolicyControls() {
                                   helperText={
                                     !needsValue
                                       ? 'No value needed'
-                                      : fieldMetadata?.validationRules?.description
-                                      ? fieldMetadata.validationRules.description
                                       : valueType === 'number'
                                       ? `Enter a numeric value${fieldMetadata?.validationRules?.min !== undefined || fieldMetadata?.validationRules?.max !== undefined ? ` between ${fieldMetadata?.validationRules?.min || 'any'} and ${fieldMetadata?.validationRules?.max || 'any'}` : ''}`
                                       : valueType === 'boolean'
@@ -1343,6 +1368,14 @@ export function PolicyControls() {
                               );
                             })()}
                           </div>
+                          {/* The field's guidance, once per row, under everything it
+                              applies to — rather than repeated under two of the three
+                              controls above it. */}
+                          {getFieldMetadata(field.fieldPath)?.validationRules?.description && (
+                            <p className="mt-3 text-xs text-gray-500">
+                              {getFieldMetadata(field.fieldPath).validationRules.description}
+                            </p>
+                          )}
                         </CardContent>
                       </Card>
                     ))}

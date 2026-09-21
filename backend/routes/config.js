@@ -407,7 +407,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Use within_days for a rolling recency window (value = number of days).'
+          description: 'Use "Within the last N days" for a rolling window (value = a number of days, e.g. 30). The ≥ / > / ≤ / < operators compare against one fixed calendar date, so a control that passes today keeps passing forever.'
         }
       },
       {
@@ -418,7 +418,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Use within_days for a rolling recency window (value = number of days).'
+          description: 'Use "Within the last N days" for a rolling window (value = a number of days, e.g. 30). The ≥ / > / ≤ / < operators compare against one fixed calendar date, so a control that passes today keeps passing forever.'
         }
       },
       // Security Tools - Dates (may need cross-field comparisons later)
@@ -430,7 +430,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Use within_days for a rolling recency window (value = number of days, e.g. 30). gte/lte compare against a fixed date, which goes stale.'
+          description: 'Use "Within the last N days" for a rolling window (value = a number of days, e.g. 30). The ≥ / > / ≤ / < operators compare against one fixed calendar date, so a control that passes today keeps passing forever.'
         }
       },
       { 
@@ -441,7 +441,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Use within_days for a rolling recency window (value = number of days, e.g. 30). gte/lte compare against a fixed date, which goes stale.'
+          description: 'Use "Within the last N days" for a rolling window (value = a number of days, e.g. 30). The ≥ / > / ≤ / < operators compare against one fixed calendar date, so a control that passes today keeps passing forever.'
         }
       },
       { 
@@ -452,7 +452,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Use within_days for a rolling recency window (value = number of days, e.g. 30). gte/lte compare against a fixed date, which goes stale.'
+          description: 'Use "Within the last N days" for a rolling window (value = a number of days, e.g. 30). The ≥ / > / ≤ / < operators compare against one fixed calendar date, so a control that passes today keeps passing forever.'
         }
       },
       
@@ -566,7 +566,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Use within_days for a rolling review window (value = number of days).'
+          description: 'Use "Within the last N days" for a rolling window (value = a number of days, e.g. 30). The ≥ / > / ≤ / < operators compare against one fixed calendar date, so a control that passes today keeps passing forever.'
         }
       },
 
@@ -691,7 +691,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Use within_days to require the evidence itself be recent.'
+          description: 'Use "Within the last N days" to require the evidence itself be recent — this records when Orbit last read the setting, not when anyone changed it. The ≥ / > / ≤ / < operators compare against one fixed calendar date and go stale.'
         }
       },
       {
