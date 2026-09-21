@@ -46,6 +46,69 @@ function parseValue(valueStr) {
   }
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * True for a Date, or a string that starts with an ISO-8601 date. Used to decide
+ * whether a comparison should be made on timestamps rather than numbers: a date
+ * string coerces to NaN through Number(), which silently made every gte/gt/lte/lt
+ * check on a date field return false.
+ * @param {any} v
+ * @returns {boolean}
+ */
+function isDateLike(v) {
+  return v instanceof Date || (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v));
+}
+
+/**
+ * Parse a date-ish value to epoch milliseconds.
+ *
+ * Deliberately refuses bare numbers. `new Date(3)` is a valid instant three
+ * milliseconds after the epoch, so accepting numbers made a nonsensical check
+ * like `lastSastScanDate gte 3` compare a real timestamp against ~1970 and
+ * pass for every application.
+ *
+ * @param {any} v
+ * @returns {number|null} null when it is not a usable date
+ */
+function toTime(v) {
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v.getTime();
+  if (typeof v === 'string' && v.trim()) {
+    const t = new Date(v).getTime();
+    return Number.isNaN(t) ? null : t;
+  }
+  return null;
+}
+
+/**
+ * Render a date for an evidence line. Falls back to the raw value so evidence
+ * never reads "Invalid Date".
+ * @param {any} v
+ * @returns {string}
+ */
+function formatDate(v) {
+  const t = toTime(v);
+  return t === null ? String(v) : new Date(t).toISOString().slice(0, 10);
+}
+
+/**
+ * Coerce both sides of an ordering comparison to the same comparable scale.
+ * Dates win when the application's value looks like a date, so an integration
+ * level (a number) and a scan date (a timestamp) are never compared to one
+ * another by accident.
+ * @returns {[number, number]|null} null when the pair cannot be compared
+ */
+function comparablePair(fieldValue, expectedValue) {
+  if (isDateLike(fieldValue)) {
+    const a = toTime(fieldValue);
+    const b = toTime(expectedValue);
+    return a === null || b === null ? null : [a, b];
+  }
+  const a = Number(fieldValue);
+  const b = Number(expectedValue);
+  return Number.isNaN(a) || Number.isNaN(b) ? null : [a, b];
+}
+
 /**
  * Evaluate a single field check against an application
  * @param {Object} fieldCheck - PolicyControlField object
@@ -82,34 +145,52 @@ export function evaluateFieldCheck(fieldCheck, fieldValue) {
       }
       return fieldValue !== expectedValue;
     
-    case 'gte':
+    // Ordering comparisons work on numbers (integration levels, criticality) and
+    // on dates (scan and review dates) — see comparablePair.
+    case 'gte': {
       if (isNullish) return false;
-      const numValue = Number(fieldValue);
-      const numExpected = Number(expectedValue);
-      if (isNaN(numValue) || isNaN(numExpected)) return false;
-      return numValue >= numExpected;
-    
-    case 'gt':
+      const pair = comparablePair(fieldValue, expectedValue);
+      return pair ? pair[0] >= pair[1] : false;
+    }
+
+    case 'gt': {
       if (isNullish) return false;
-      const numValueGt = Number(fieldValue);
-      const numExpectedGt = Number(expectedValue);
-      if (isNaN(numValueGt) || isNaN(numExpectedGt)) return false;
-      return numValueGt > numExpectedGt;
-    
-    case 'lte':
+      const pair = comparablePair(fieldValue, expectedValue);
+      return pair ? pair[0] > pair[1] : false;
+    }
+
+    case 'lte': {
       if (isNullish) return false;
-      const numValueLte = Number(fieldValue);
-      const numExpectedLte = Number(expectedValue);
-      if (isNaN(numValueLte) || isNaN(numExpectedLte)) return false;
-      return numValueLte <= numExpectedLte;
-    
-    case 'lt':
+      const pair = comparablePair(fieldValue, expectedValue);
+      return pair ? pair[0] <= pair[1] : false;
+    }
+
+    case 'lt': {
       if (isNullish) return false;
-      const numValueLt = Number(fieldValue);
-      const numExpectedLt = Number(expectedValue);
-      if (isNaN(numValueLt) || isNaN(numExpectedLt)) return false;
-      return numValueLt < numExpectedLt;
-    
+      const pair = comparablePair(fieldValue, expectedValue);
+      return pair ? pair[0] < pair[1] : false;
+    }
+
+    // Rolling windows, relative to evaluation time. A fixed date in `value` is
+    // correct on the day it is authored and wrong every day after, so recency
+    // requirements ("scanned in the last 30 days", "reviewed every 6 months")
+    // need these rather than gte/lte against a literal date.
+    case 'within_days': {
+      if (isNullish) return false;
+      const days = Number(expectedValue);
+      const t = toTime(fieldValue);
+      if (t === null || Number.isNaN(days)) return false;
+      return t >= Date.now() - days * DAY_MS;
+    }
+
+    case 'older_than_days': {
+      if (isNullish) return false;
+      const days = Number(expectedValue);
+      const t = toTime(fieldValue);
+      if (t === null || Number.isNaN(days)) return false;
+      return t < Date.now() - days * DAY_MS;
+    }
+
     case 'contains':
       if (isNullish) return false;
       const fieldStr = String(fieldValue).toLowerCase();
@@ -287,6 +368,10 @@ export async function evaluateControl(control, application, override = null) {
         evidence.push(`${fr.fieldPath} equals "${fr.fieldValue}"`);
       } else if (fr.operator === 'gte') {
         evidence.push(`${fr.fieldPath} is ${fr.fieldValue} (>= ${parseValue(fr.value)})`);
+      } else if (fr.operator === 'within_days') {
+        evidence.push(`${fr.fieldPath} is within the last ${parseValue(fr.value)} days (${formatDate(fr.fieldValue)})`);
+      } else if (fr.operator === 'older_than_days') {
+        evidence.push(`${fr.fieldPath} is older than ${parseValue(fr.value)} days (${formatDate(fr.fieldValue)})`);
       } else {
         evidence.push(`${fr.fieldPath} meets requirement`);
       }
@@ -301,6 +386,14 @@ export async function evaluateControl(control, application, override = null) {
         evidence.push(`${fr.fieldPath} is "${fr.fieldValue || 'not set'}" (expected "${parseValue(fr.value)}")`);
       } else if (fr.operator === 'gte') {
         evidence.push(`${fr.fieldPath} is ${fr.fieldValue || 'not set'} (requires >= ${parseValue(fr.value)})`);
+      } else if (fr.operator === 'within_days') {
+        evidence.push(
+          fr.fieldValue
+            ? `${fr.fieldPath} is ${formatDate(fr.fieldValue)}, older than the required ${parseValue(fr.value)} days`
+            : `${fr.fieldPath} is not set (requires a date within the last ${parseValue(fr.value)} days)`
+        );
+      } else if (fr.operator === 'older_than_days') {
+        evidence.push(`${fr.fieldPath} is ${fr.fieldValue ? formatDate(fr.fieldValue) : 'not set'} (requires older than ${parseValue(fr.value)} days)`);
       } else {
         evidence.push(`${fr.fieldPath} does not meet requirement`);
       }

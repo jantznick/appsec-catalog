@@ -6,6 +6,18 @@ import { recordChange } from '../utils/changeHistory.js';
 
 const FIELD_ROLES = ['compliance', 'applies_when'];
 
+// Must stay in step with the switch in evaluateFieldCheck (services/policy.js).
+// An unrecognised operator there only logs a warning and returns false, so a
+// typo would produce a control that can never pass — reject it on the way in.
+const FIELD_OPERATORS = [
+  'exists', 'not_exists',
+  'equals', 'not_equals',
+  'gte', 'gt', 'lte', 'lt',
+  'contains',
+  'in', 'not_in',
+  'within_days', 'older_than_days',
+];
+
 function summarizeFields(fields) {
   return (fields || []).map((f) => ({
     fieldPath: f.fieldPath,
@@ -39,6 +51,34 @@ function validateFieldRoles(fields) {
     }
   }
   return null;
+}
+
+/**
+ * Reject unknown operators and missing field paths, so a control cannot be saved
+ * in a state where it silently never passes.
+ * @returns {string|null} error message, or null when valid
+ */
+function validateFields(fields) {
+  if (!Array.isArray(fields)) return null;
+  for (const [i, field] of fields.entries()) {
+    const path = typeof field?.fieldPath === 'string' ? field.fieldPath.trim() : '';
+    if (!path) return `Field ${i + 1}: fieldPath is required`;
+
+    const op = typeof field?.operator === 'string' ? field.operator.trim() : '';
+    if (!op) return `Field ${i + 1} (${path}): operator is required`;
+    if (!FIELD_OPERATORS.includes(op)) {
+      return `Field ${i + 1} (${path}): unknown operator "${op}". Must be one of: ${FIELD_OPERATORS.join(', ')}`;
+    }
+
+    // A rolling window is a number of days; anything else can never match.
+    if (op === 'within_days' || op === 'older_than_days') {
+      const days = Number(field.value);
+      if (field.value === null || field.value === undefined || Number.isNaN(days) || days <= 0) {
+        return `Field ${i + 1} (${path}): ${op} needs a positive number of days`;
+      }
+    }
+  }
+  return validateFieldRoles(fields);
 }
 
 const router = express.Router();
@@ -164,9 +204,9 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Applies-when logic must be AND or OR' });
     }
 
-    const roleError = validateFieldRoles(fields);
-    if (roleError) {
-      return res.status(400).json({ error: roleError });
+    const fieldError = validateFields(fields);
+    if (fieldError) {
+      return res.status(400).json({ error: fieldError });
     }
 
     // Create control with fields in a transaction
@@ -289,9 +329,9 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Applies-when logic must be AND or OR' });
     }
 
-    const roleError = validateFieldRoles(fields);
-    if (roleError) {
-      return res.status(400).json({ error: roleError });
+    const fieldError = validateFields(fields);
+    if (fieldError) {
+      return res.status(400).json({ error: fieldError });
     }
 
     // Update control and fields in a transaction

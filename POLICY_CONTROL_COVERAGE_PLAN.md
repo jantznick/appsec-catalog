@@ -134,12 +134,41 @@ Reporting treats these distinctly, and the distinction is in the denominator:
 - `verification_required` **stays in the denominator** but does not count as `meeting`. It is not
   compliance yet.
 
-### 2c. Relative date operators
-`PolicyControlField.value` holds static JSON, so a date threshold is correct on the day it is set
-and wrong every day after. Add `within_days` (and/or `older_than_days`).
+### 2c. Relative date operators — **done**
+`PolicyControlField.value` holds static JSON, so a fixed date threshold is correct on the day it
+is authored and wrong every day after. Two operators now express a rolling window relative to
+evaluation time:
 
-Blocks: **4.6.6** ("every six (6) months"), **4.6.10** ("scheduled re-scans"), and any future
-scan-recency control.
+- **`within_days`** — the date is no older than N days. `metadataLastReviewed within_days 183`
+  is "reviewed at least every six (6) months".
+- **`older_than_days`** — the inverse, for staleness checks.
+
+Both take a positive number of days, validated at the API. Unblocks **4.6.6** and **4.6.10**.
+
+### 2c-bis. Date comparison was broken — **fixed**
+`gte` / `gt` / `lte` / `lt` ran both sides through `Number()`. `Number('2026-01-01')` is `NaN`,
+and the operators returned `false` on NaN, so **every ordering comparison on a date field always
+evaluated to false** while `available-fields` advertised all four operators on five date fields
+(`lastSastScanDate`, `lastDastScanDate`, `lastScaScanDate`, `metadataLastReviewed`,
+`threatModel.lastReviewedAt`).
+
+Any control an admin authored against a scan date was therefore permanently unsatisfiable — the
+`gitBranch` failure mode, but in the operator layer where it would affect every such control.
+Ordering comparisons now detect a date-shaped value and compare timestamps, falling back to
+numeric comparison for integration levels and criticality.
+
+`toTime` deliberately refuses bare numbers: `new Date(3)` is a valid instant just after the
+epoch, so accepting them made a nonsensical `lastSastScanDate gte 3` pass for every application.
+
+### 2c-ter. Operator validation — **added**
+`evaluateFieldCheck` logs a warning and returns `false` for an unrecognised operator, so a typo
+produced a control that could never pass. `POST`/`PUT /api/policy-controls` now reject unknown
+operators, empty field paths, and a `within_days` / `older_than_days` value that is not a
+positive number.
+
+**`FIELD_OPERATORS` in [routes/policyControls.js](./backend/routes/policyControls.js) must stay in
+step with the switch in `evaluateFieldCheck`.** A future operator added to one and not the other
+either cannot be saved or is silently dead.
 
 ### 2d. Relation loading — **done**
 `withEvaluableRelations` in [services/policy.js](./backend/services/policy.js) loads the relations

@@ -323,10 +323,10 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         label: 'Last SAST Scan Date', 
         category: 'Security Tools', 
         fieldType: 'date',
-        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt'],
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Compare against deployment date or relative time (e.g., "1 day ago")'
+          description: 'Use within_days for a rolling recency window (value = number of days, e.g. 30). gte/lte compare against a fixed date, which goes stale.'
         }
       },
       { 
@@ -334,10 +334,10 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         label: 'Last DAST Scan Date', 
         category: 'Security Tools', 
         fieldType: 'date',
-        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt'],
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Compare against deployment date or relative time (e.g., "1 day ago")'
+          description: 'Use within_days for a rolling recency window (value = number of days, e.g. 30). gte/lte compare against a fixed date, which goes stale.'
         }
       },
       { 
@@ -345,10 +345,10 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         label: 'Last SCA Scan Date', 
         category: 'Security Tools', 
         fieldType: 'date',
-        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt'],
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Compare against deployment date or relative time (e.g., "1 day ago")'
+          description: 'Use within_days for a rolling recency window (value = number of days, e.g. 30). gte/lte compare against a fixed date, which goes stale.'
         }
       },
       
@@ -459,10 +459,10 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         label: 'Threat Model Last Reviewed',
         category: 'Threat Model',
         fieldType: 'date',
-        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt'],
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Fixed date only until relative-date operators land — see POLICY_CONTROL_COVERAGE_PLAN.md, Phase 2c.'
+          description: 'Use within_days for a rolling review window (value = number of days).'
         }
       },
 
@@ -519,10 +519,10 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         label: 'Metadata Last Reviewed',
         category: 'Status',
         fieldType: 'date',
-        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt'],
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Fixed date only. A rolling window (e.g. "reviewed in the last 6 months") needs a relative-date operator — see POLICY_CONTROL_COVERAGE_PLAN.md, Phase 2c.'
+          description: 'For "reviewed at least every six (6) months" use within_days with value 183.'
         }
       },
       { 
