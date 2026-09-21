@@ -48,6 +48,9 @@ const SECURITY_FIELDS = Object.freeze([
   'dastTool',
   'dastIntegrationLevel',
   '@standaloneSca',
+  '@standaloneSecrets',
+  'iacContainerScanTool',
+  'iacContainerScanIntegrationLevel',
   'appFirewallTool',
   'appFirewallIntegrationLevel',
   'apiSchema',
@@ -57,6 +60,13 @@ const SECURITY_FIELDS = Object.freeze([
 
 /** Expanded where the conditional SCA marker sits. */
 const STANDALONE_SCA_FIELDS = Object.freeze(['scaTool', 'scaIntegrationLevel']);
+
+/**
+ * Expanded where the conditional secrets marker sits. Same rule as SCA: when the SAST
+ * tool already detects secrets the team was correctly told to leave these blank, so they
+ * leave the denominator rather than counting as gaps.
+ */
+const STANDALONE_SECRETS_FIELDS = Object.freeze(['secretsScanTool', 'secretsScanIntegrationLevel']);
 
 /**
  * How a set decides a string is blank.
@@ -144,9 +154,17 @@ export function resolveFieldSet(set, application) {
 
   // When SAST output includes SCA, the standalone SCA fields are not applicable.
   const includeStandaloneSca = !application?.sastIncludesSca;
-  return fields.flatMap((field) =>
-    field === '@standaloneSca' ? (includeStandaloneSca ? [...STANDALONE_SCA_FIELDS] : []) : [field],
-  );
+  // Likewise for secrets scanning.
+  const includeStandaloneSecrets = !application?.sastIncludesSecrets;
+  return fields.flatMap((field) => {
+    if (field === '@standaloneSca') {
+      return includeStandaloneSca ? [...STANDALONE_SCA_FIELDS] : [];
+    }
+    if (field === '@standaloneSecrets') {
+      return includeStandaloneSecrets ? [...STANDALONE_SECRETS_FIELDS] : [];
+    }
+    return [field];
+  });
 }
 
 /**
@@ -176,6 +194,8 @@ const NON_NULL_COUNTS_AS_FILLED = new Set([
   'sastIntegrationLevel',
   'dastIntegrationLevel',
   'scaIntegrationLevel',
+  'secretsScanIntegrationLevel',
+  'iacContainerScanIntegrationLevel',
   'appFirewallIntegrationLevel',
   'apiSecurityNA',
   'appFirewallNA',
@@ -190,9 +210,15 @@ const NON_NULL_COUNTS_AS_FILLED = new Set([
  * @param {keyof FIELD_SETS | string[]} set
  * @returns {{ filled: number, total: number }}
  */
-export function countFieldSet(application, set) {
+export function countFieldSet(application, set, blankRule) {
   const fields = resolveFieldSet(set, application);
-  const isBlank = BLANK_RULES[(typeof set === 'string' && SET_BLANK_RULES[set]) || 'trimmed'];
+  // The rule normally comes from the set name. An explicit field list has no name, so
+  // it would silently fall back to `trimmed` — which is the wrong rule for the record
+  // and security sets. `blankRule` lets a caller state it, which is what comparing
+  // against a historical field list requires.
+  const ruleName = blankRule || (typeof set === 'string' && SET_BLANK_RULES[set]) || 'trimmed';
+  const isBlank = BLANK_RULES[ruleName];
+  if (!isBlank) throw new Error(`Unknown blank rule: ${String(ruleName)}`);
 
   let filled = 0;
   let total = 0;

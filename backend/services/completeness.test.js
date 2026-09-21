@@ -24,7 +24,10 @@ import {
   toPercentage,
 } from './completeness.js';
 
-/** Every field this module scores, filled. */
+/**
+ * Every field this module scores, filled. When a field joins a set, it joins here in
+ * the same commit — otherwise "fully populated" quietly stops meaning 100%.
+ */
 function completeApp(overrides = {}) {
   return {
     name: 'Checkout',
@@ -45,6 +48,13 @@ function completeApp(overrides = {}) {
     dastIntegrationLevel: 4,
     scaTool: 'Snyk',
     scaIntegrationLevel: 4,
+    // Phase 6a: secrets and IaC/container scanning joined the security tooling a
+    // record declares. sastIncludesSecrets:false so the standalone pair counts.
+    sastIncludesSecrets: false,
+    secretsScanTool: 'GitHub secret scanning',
+    secretsScanIntegrationLevel: 4,
+    iacContainerScanTool: 'Trivy',
+    iacContainerScanIntegrationLevel: 4,
     appFirewallTool: 'Fastly NGWAF',
     appFirewallIntegrationLevel: 4,
     apiSchema: { id: 'schema_1' },
@@ -133,6 +143,8 @@ describe('calculateCompleteness', () => {
       dastTool: 'NA', dastIntegrationLevel: 'NA', scaTool: 'NA', scaIntegrationLevel: 'NA',
       appFirewallTool: 'NA', appFirewallIntegrationLevel: 'NA', apiSchema: 'NA',
       apiSecurityNA: 'NA', appFirewallNA: 'NA',
+      secretsScanTool: 'NA', secretsScanIntegrationLevel: 'NA',
+      iacContainerScanTool: 'NA', iacContainerScanIntegrationLevel: 'NA',
     };
     const result = calculateCompleteness(allNA);
     assert.equal(result.total, 0);
@@ -149,24 +161,46 @@ describe('calculateCompleteness', () => {
 
 describe('field sets', () => {
   /**
-   * Golden sizes, measured against the four hand-maintained implementations on
-   * main @ cb149b1. An 18,000-case differential run against those implementations
-   * showed zero divergence; these sizes are the cheap regression guard.
+   * Golden sizes. The original values were measured against the four hand-maintained
+   * implementations on main @ cb149b1, which an 18,000-case differential run showed
+   * zero divergence from.
+   *
+   * RE-BASELINED for POLICY_CONTROL_COVERAGE_PLAN.md Phase 6a. Secrets scanning and
+   * IaC/container scanning are now part of the security tooling a record is expected
+   * to declare, so four fields joined the record and security sets:
+   *
+   *   record    22 -> 26      security  11 -> 15
+   *
+   * The metadata sets are untouched, which is why portfolioBasic and portfolioTechnical
+   * still read 6 and 8. Measured across the 91 dev applications, average record
+   * completeness moved 35% -> 30% — purely the denominator growing, since no
+   * application had any of the new fields set yet.
    */
-  it('has the sizes the implementations it replaced had', () => {
-    const standalone = { sastIncludesSca: false };
-    assert.equal(resolveFieldSet('record', standalone).length, 22);
-    assert.equal(resolveFieldSet('security', standalone).length, 11);
+  it('has the sizes the implementations it replaced had, plus the Phase 6a additions', () => {
+    const standalone = { sastIncludesSca: false, sastIncludesSecrets: false };
+    assert.equal(resolveFieldSet('record', standalone).length, 26);
+    assert.equal(resolveFieldSet('security', standalone).length, 15);
     assert.equal(resolveFieldSet('portfolioBasic', standalone).length, 6);
     assert.equal(resolveFieldSet('portfolioTechnical', standalone).length, 8);
   });
 
   it('drops the standalone SCA fields when SAST covers them', () => {
-    const covered = { sastIncludesSca: true };
-    assert.equal(resolveFieldSet('record', covered).length, 20);
-    assert.equal(resolveFieldSet('security', covered).length, 9);
+    const covered = { sastIncludesSca: true, sastIncludesSecrets: false };
+    assert.equal(resolveFieldSet('record', covered).length, 24);
+    assert.equal(resolveFieldSet('security', covered).length, 13);
     // The metadata sets have no SCA fields, so they are unaffected.
     assert.equal(resolveFieldSet('portfolioBasic', covered).length, 6);
+  });
+
+  it('drops the standalone secrets fields when SAST covers them', () => {
+    // Same rule as SCA, and the two are independent.
+    const secretsCovered = { sastIncludesSca: false, sastIncludesSecrets: true };
+    assert.equal(resolveFieldSet('record', secretsCovered).length, 24);
+    assert.equal(resolveFieldSet('security', secretsCovered).length, 13);
+
+    const bothCovered = { sastIncludesSca: true, sastIncludesSecrets: true };
+    assert.equal(resolveFieldSet('record', bothCovered).length, 22);
+    assert.equal(resolveFieldSet('security', bothCovered).length, 11);
   });
 
   it('names only real fields, so a typo cannot count as permanently missing', () => {

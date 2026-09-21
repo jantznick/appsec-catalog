@@ -17,6 +17,10 @@ function isStringNA(value) {
  */
 export function calculateCompleteness(application) {
   const includeStandaloneSca = !application.sastIncludesSca;
+  // Same rule as SCA: when the SAST tool already covers secrets, the team was
+  // correctly told to leave these blank, so counting them would penalise a
+  // complete record.
+  const includeStandaloneSecrets = !application.sastIncludesSecrets;
   const fields = [
     'name',
     'description',
@@ -34,6 +38,9 @@ export function calculateCompleteness(application) {
     'dastTool',
     'dastIntegrationLevel',
     ...(includeStandaloneSca ? ['scaTool', 'scaIntegrationLevel'] : []),
+    ...(includeStandaloneSecrets ? ['secretsScanTool', 'secretsScanIntegrationLevel'] : []),
+    'iacContainerScanTool',
+    'iacContainerScanIntegrationLevel',
     'appFirewallTool',
     'appFirewallIntegrationLevel',
     'apiSchema',

@@ -20,6 +20,7 @@
  */
 
 import { METADATA_FIELD_KEYS, isMetadataField } from './applicationFields.js';
+import { IMPLEMENTED_OPERATORS, DAY_COUNT_OPERATORS } from './policyEvaluation.js';
 
 /**
  * Operators `evaluateFieldCheck` in services/policy.js implements.
@@ -28,19 +29,55 @@ import { METADATA_FIELD_KEYS, isMetadataField } from './applicationFields.js';
  * list is non-empty and self-consistent, but the engine is not importable here because
  * it imports Prisma. If you add an operator there, add it here.
  */
-export const POLICY_OPERATORS = Object.freeze([
-  'exists',
-  'not_exists',
-  'equals',
-  'not_equals',
-  'gte',
-  'gt',
-  'lte',
-  'lt',
-  'contains',
-  'in',
-  'not_in',
+/**
+ * The operators a control may use.
+ *
+ * Derived from the engine rather than restated. This was a hand-maintained seam —
+ * services/policy.js imported Prisma, so its operator switch could not be imported
+ * into a dependency-free test — and it had already drifted: within_days and
+ * older_than_days existed in the engine and not here, which would have rejected a
+ * control the engine could evaluate perfectly well.
+ *
+ * The primitives now live in services/policyEvaluation.js, which imports nothing, so
+ * the vocabulary comes from the implementation and the two cannot disagree.
+ */
+export const POLICY_OPERATORS = IMPLEMENTED_OPERATORS;
+
+export { DAY_COUNT_OPERATORS };
+
+/**
+ * Field roles. `compliance` (the default) decides whether a control is met;
+ * `applies_when` decides whether it applies to the application at all.
+ * A typo here would silently turn a scope check into a compliance check, which
+ * inverts the control's meaning rather than merely mis-scoping it.
+ */
+export const POLICY_FIELD_ROLES = Object.freeze(['compliance', 'applies_when']);
+
+/**
+ * Relation roots a control may target directly, which are not columns on `Application`
+ * and so are not in the field registry.
+ *
+ * `getFieldValue` in the policy engine reads these off the application object, and
+ * `withEvaluableRelations` loads them on demand. `exists` on a collection is meaningful
+ * because the engine treats an empty array as absent, so "this application has at least
+ * one recorded data flow" is a real check.
+ *
+ * Kept as an explicit allowlist rather than accepting any bare word: the whole point of
+ * this validation is that an unrecognised path silently never matches.
+ */
+export const POLICY_RELATION_ROOTS = Object.freeze([
+  'apiSchema',
+  'ingressProducts',
+  'outgoingProductFlows',
+  'incomingProductFlows',
+  'scmRepoLink',
+  'threatModel',
 ]);
+
+/** @param {string} role @returns {boolean} */
+export function isPolicyFieldRole(role) {
+  return POLICY_FIELD_ROLES.includes(role);
+}
 
 /** Operators that compare against a value, so a value is required. */
 export const VALUE_REQUIRED_OPERATORS = Object.freeze(
@@ -95,7 +132,7 @@ export function validatePolicyControlFields(fields) {
             'Use a column name, or dot notation through a relation (e.g. "company.divisionId").',
         );
       }
-    } else if (!isMetadataField(fieldPath)) {
+    } else if (!isMetadataField(fieldPath) && !POLICY_RELATION_ROOTS.includes(fieldPath)) {
       problems.push(
         `${position}: "${fieldPath}" is not an application field. ` +
           `${suggestField(fieldPath)}`,
@@ -108,6 +145,30 @@ export function validatePolicyControlFields(fields) {
       problems.push(
         `${position}: "${operator}" is not a supported operator. Supported: ${POLICY_OPERATORS.join(', ')}`,
       );
+    } else if (DAY_COUNT_OPERATORS.includes(operator)) {
+      // The value is a number of days. Anything else can never match, so it would
+      // be another control that silently never passes.
+      const days = Number(field.value);
+      if (
+        field.value === null ||
+        field.value === undefined ||
+        field.value === '' ||
+        Number.isNaN(days) ||
+        days <= 0
+      ) {
+        problems.push(`${position}: ${operator} needs a positive number of days`);
+      }
+    }
+
+    // Roles are optional and default to `compliance`; only a supplied-but-wrong value
+    // is rejected, so existing callers that omit it are unaffected.
+    if (field.role !== undefined && field.role !== null) {
+      const role = typeof field.role === 'string' ? field.role.trim() : '';
+      if (!isPolicyFieldRole(role)) {
+        problems.push(
+          `${position}: "${field.role}" is not a valid field role. Supported: ${POLICY_FIELD_ROLES.join(', ')}`,
+        );
+      }
     }
   });
 

@@ -10,21 +10,66 @@ evaluates to `not_meeting` ([services/policy.js](./backend/services/policy.js) `
 so activating them before mapping would fail every application against every unmapped control.
 **Keep both inactive until the phases below land.**
 
-## Current state (2026-09-18)
+## Current state (2026-09-21)
 
-28 controls: **9 mapped**, **19 unmapped**.
+28 controls: **17 mapped**, **10 attestable**, **1 uncovered**.
 
-| Control | Logic | Field checks | Confidence |
+SCM-derived controls (4.6.3, 4.6.7, 6.3.12) each pair their signal with a
+`within_days 30` freshness check on the corresponding `*SyncedAt` column. Sync is manual —
+there is no scheduler or webhook — so without it Orbit would keep asserting compliance from
+evidence of unbounded age. Removing branch protection would go unnoticed until someone
+happened to press Sync. The freshness check turns silent staleness into a visible failure.
+
+| Control | Scope (`applies_when`) | Compliance checks | Confidence |
 |---|---|---|---|
-| 4.6.2 Continuous security testing | AND | `sastTool exists` + `sastIntegrationLevel gte 1` | direct |
-| 4.6.5 Software composition mgmt | OR | `scaTool exists` / `sastIncludesSca = true` | direct |
-| 4.6.8 DAST and SAST coverage | OR | `sastIntegrationLevel gte 1` / `dastIntegrationLevel gte 1` | direct |
-| 4.6.13 SCA | OR | `scaIntegrationLevel gte 1` / `sastIncludesSca = true` | direct |
-| 6.3.4 Automated code review | AND | `sastTool exists` + `sastIntegrationLevel gte 1` | direct |
-| 4.6.6 Application metadata | AND | `businessCriticality exists` + `description exists` | **partial — see Phase 3** |
-| 6.3.7 OWASP Top 10 controls | AND | `dastTool exists` | proxy |
-| 4.6.1 SDLC-managed development | AND | `repoUrl exists` | proxy |
-| 6.3.1 SDLC process requirements | AND | `repoUrl exists` | proxy |
+| 4.6.2 Continuous security testing | all | `sastTool exists` + `sastIntegrationLevel gte 1` | direct |
+| 4.6.3 Segregation of duties | all | `…requiredApprovingReviewCount gte 1` + `…enforcedForAdmins equals true` + `…branchProtectionSyncedAt within_days 30` | direct |
+| 4.6.7 PR security review | all | `…prTemplateHasSecuritySection equals true` + `…prTemplateSyncedAt within_days 30` | **`verificationRequired`** |
+| 6.3.12 Pre-release code review | all | `…requiredApprovingReviewCount gte 1` + `…branchProtectionSyncedAt within_days 30` | direct |
+| 4.6.5 Software composition mgmt | all | `scaTool exists` / `sastIncludesSca = true` (OR) | direct |
+| 4.6.8 DAST and SAST coverage | all | `sastIntegrationLevel gte 1` / `dastIntegrationLevel gte 1` (OR) | direct |
+| 4.6.10 Scheduled re-scans | internet-facing | `lastDastScanDate within_days 90` | direct |
+| 4.6.11 Threat modeling | internet-facing **or** `businessCriticality gte 4` | `threatModel.status equals approved` | direct |
+| 4.6.13 SCA | all | `scaIntegrationLevel gte 1` / `sastIncludesSca = true` (OR) | direct |
+| 6.3.4 Automated code review | all | `sastTool exists` + `sastIntegrationLevel gte 1` | direct |
+| 4.6.9 Secrets scanning | all | `secretsScanIntegrationLevel gte 1` / `sastIncludesSecrets = true` (OR) | direct |
+| 6.3.3 No hard-coded passwords | all | same fields as 4.6.9 (OR) | direct |
+| 4.6.14 IaC / container scanning | all | `iacContainerScanIntegrationLevel gte 1` | **`verificationRequired`** |
+| 4.6.6 Application metadata | all | `businessCriticality exists` + `metadataLastReviewed within_days 183` + `description exists` | **`verificationRequired`** |
+| 6.3.7 OWASP Top 10 controls | all | `dastTool exists` | proxy |
+| 4.6.1 SDLC-managed development | all | `repoUrl exists` | proxy |
+| 6.3.1 SDLC process requirements | all | `repoUrl exists` | proxy |
+
+### Scoping "internet-facing"
+
+`facing` is `External` on 35 applications, `Internal` on 9, and **empty on 47**. Scoping to
+`facing equals external` alone would mark those 47 `not_applicable` — treating *unknown* as
+*internal* and handing a free pass to any application with incomplete metadata.
+
+So internet-facing scope is `facing equals external` **OR** `facing not_exists`
+(`appliesWhenLogic: OR`), which keeps unknowns in scope and excludes only the 9 explicitly
+internal applications. Note `not_equals Internal` does **not** work for this: `not_equals`
+returns false on a null value, so unknowns would drop out of scope again.
+
+As `facing` gets filled in, scope shrinks toward the true internet-facing set. The current
+breadth is a metadata-quality finding, not a policy decision.
+
+### Projected results (91 applications)
+
+| Control | not_applicable | meeting | not_meeting |
+|---|---|---|---|
+| 4.6.10 (90-day window) | 9 | 0 | 82 |
+| 4.6.11 | 5 | 0 | 86 |
+| 4.6.6 | 0 | 18 *(verification_required)* | 73 |
+
+**The 4.6.10 window is a policy decision, not an engineering one.** The control says "scheduled
+security re-scans" without naming a period. Only 6 of 91 applications have a DAST scan date at
+all: 0 within 90 days, 4 within 183, 6 within 365. Currently set to **90** as the common standard
+for internet-facing re-scans; it is a one-number change.
+
+**4.6.11 passes 0 of 91** — no `ThreatModel` row exists for any application. Unlike the
+`gitBranch` case this is a true finding rather than a dead check: the feature exists and a
+compliant team would populate it, so 0% reflects the portfolio, not the mapping.
 
 Portfolio pass rates across all 91 applications at time of writing: 4.6.8 → 43%, 4.6.6 → 41%,
 6.3.7 → 40%, 4.6.2 / 6.3.4 → 31%, 4.6.5 / 4.6.13 → 27%, 4.6.1 / 6.3.1 → 16%.
@@ -68,7 +113,7 @@ Relations, resolved on demand by `withEvaluableRelations` (see 2d):
 | `threatModel.status`, `threatModel.lastReviewedAt` | 4.6.11 Threat modeling | exposed |
 | `apiSchema` | 4.6.6 bullet 1 | exposed, deliberately unmapped |
 | `ingressProducts`, `outgoingProductFlows`, `incomingProductFlows` | 4.6.6 bullet 1 | exposed, deliberately unmapped |
-| findings / SLA data | 4.6.15, 6.3.11 | **not yet exposed** |
+| ~~findings / SLA data~~ | 4.6.15, 6.3.11 | **never — see below** |
 
 **Status: done.** 43 mappable fields, up from 34. Any relation added to `EVALUABLE_RELATIONS`
 must also be listed here, or a mapping against it resolves to `null` forever — the same failure
@@ -81,17 +126,31 @@ mode as the `gitBranch` note above.
 These are prerequisites, not parallel work. Scope is **`services/policy.js` (control evaluation)
 only** — `services/scoring.js` (the 0–100 application score) is explicitly out of scope for now.
 
-### 2a. Conditional applicability per control
-Add an `appliesWhen` set of field checks, evaluated separately from the compliance checks. Without
-it there is no way to express "N/A", so any conditionally-scoped control fails closed on every
-application it does not apply to.
+### 2a. Conditional applicability per control — **done**
+`PolicyControlField.role` splits a control's checks in two: `compliance` (the default — decides
+meeting/not_meeting, as before) and `applies_when` (decides whether the control is in scope at
+all). `PolicyControl.appliesWhenLogic` combines the applies_when checks with AND or OR.
 
-Blocks: **4.6.10** (internet-facing only), **6.3.13** (confidential data only).
+When the applies_when checks do not match, the control returns `not_applicable` and **its
+compliance checks never run**, so a control that does not apply cannot count against an
+application.
 
-`Policy` already has a `conditional` scope; `PolicyControl` has no equivalent.
+Backward compatible: existing fields default to `compliance` and existing controls to `AND` with
+no applies_when checks, so every current control keeps applying to every application.
 
-### 2b. Additional result states
-Evaluation is currently binary (`meeting` / `not_meeting`). Three more states are needed:
+Unblocks: **4.6.10** (internet-facing only), **6.3.13** (confidential data only), and fixes
+**4.6.11**, which currently over-applies.
+
+### 2a-bis. Override precedence — **fixed**
+`evaluateControl` only consulted the admin override inside its "no field mappings" branch, so an
+override on a *mapped* control was accepted by the API and then silently ignored. That made
+`verification_required` unresolvable, since 4.6.6 has field mappings.
+
+An override now outranks every other outcome — applicability, verification, and the field checks
+themselves. It is a recorded human decision, so it wins.
+
+### 2b. Additional result states — `verification_required` and `not_applicable` **done**
+Evaluation was binary (`meeting` / `not_meeting`). Three more states are needed:
 
 - **`verification_required`** — the control's automated checks pass, but they do not cover the
   whole requirement, so a human must confirm the rest. Driven by a new
@@ -99,19 +158,52 @@ Evaluation is currently binary (`meeting` / `not_meeting`). Three more states ar
   `verification_required` instead of `meeting`. Failing checks still yield `not_meeting`.
   An admin `PolicyControlOverride` promotes it to `meeting`, which is what records the human
   judgement. First consumer is 4.6.6 (Phase 3).
-- **`not_applicable`** — the control does not apply to this application. Required for conditional
-  scoping (2a) to be meaningful; without it a scoped-out control still counts as failing.
-- **`attested`** — owner-asserted rather than measured (Phase 4).
+- **`not_applicable`** — the control does not apply to this application. **Done** alongside 2a.
+- **`attested`** — owner-asserted rather than measured (Phase 4). **Not built.**
 
-Reporting should treat these distinctly. `verification_required` is *not* compliance, and rolling
-it into `meeting` would defeat the point.
+Reporting treats these distinctly, and the distinction is in the denominator:
 
-### 2c. Relative date operators
-`PolicyControlField.value` holds static JSON, so a date threshold is correct on the day it is set
-and wrong every day after. Add `within_days` (and/or `older_than_days`).
+- `not_applicable` **leaves the denominator** — `compliance_percentage` is now
+  `meeting / (total - not_applicable)`, with a new `applicable` count alongside it. Otherwise
+  scoping a control out would still drag the figure down, defeating the point of 2a.
+- `verification_required` **stays in the denominator** but does not count as `meeting`. It is not
+  compliance yet.
 
-Blocks: **4.6.6** ("every six (6) months"), **4.6.10** ("scheduled re-scans"), and any future
-scan-recency control.
+### 2c. Relative date operators — **done**
+`PolicyControlField.value` holds static JSON, so a fixed date threshold is correct on the day it
+is authored and wrong every day after. Two operators now express a rolling window relative to
+evaluation time:
+
+- **`within_days`** — the date is no older than N days. `metadataLastReviewed within_days 183`
+  is "reviewed at least every six (6) months".
+- **`older_than_days`** — the inverse, for staleness checks.
+
+Both take a positive number of days, validated at the API. Unblocks **4.6.6** and **4.6.10**.
+
+### 2c-bis. Date comparison was broken — **fixed**
+`gte` / `gt` / `lte` / `lt` ran both sides through `Number()`. `Number('2026-01-01')` is `NaN`,
+and the operators returned `false` on NaN, so **every ordering comparison on a date field always
+evaluated to false** while `available-fields` advertised all four operators on five date fields
+(`lastSastScanDate`, `lastDastScanDate`, `lastScaScanDate`, `metadataLastReviewed`,
+`threatModel.lastReviewedAt`).
+
+Any control an admin authored against a scan date was therefore permanently unsatisfiable — the
+`gitBranch` failure mode, but in the operator layer where it would affect every such control.
+Ordering comparisons now detect a date-shaped value and compare timestamps, falling back to
+numeric comparison for integration levels and criticality.
+
+`toTime` deliberately refuses bare numbers: `new Date(3)` is a valid instant just after the
+epoch, so accepting them made a nonsensical `lastSastScanDate gte 3` pass for every application.
+
+### 2c-ter. Operator validation — **added**
+`evaluateFieldCheck` logs a warning and returns `false` for an unrecognised operator, so a typo
+produced a control that could never pass. `POST`/`PUT /api/policy-controls` now reject unknown
+operators, empty field paths, and a `within_days` / `older_than_days` value that is not a
+positive number.
+
+**`FIELD_OPERATORS` in [routes/policyControls.js](./backend/routes/policyControls.js) must stay in
+step with the switch in `evaluateFieldCheck`.** A future operator added to one and not the other
+either cannot be saved or is silently dead.
 
 ### 2d. Relation loading — **done**
 `withEvaluableRelations` in [services/policy.js](./backend/services/policy.js) loads the relations
@@ -183,10 +275,11 @@ same as documentation being complete and current, which is exactly the judgement
 For controls where no field could ever provide evidence. The owner asserts compliance, accepts
 audit risk, and re-attests on a schedule.
 
-Applies to: **4.6.12**, **6.3.2** (secure coding guidelines), **6.3.5** (no confidential prod
-data in testing), **6.3.6** (default account removal), **6.3.8** (no back doors), **6.3.9**
-(no clear-text passwords), **6.3.10** (no dev utilities in prod), and the at-rest half of
-**6.3.13**.
+Applies to ten controls: **4.6.12**, **6.3.2** (secure coding guidelines), **6.3.5** (no
+confidential prod data in testing), **6.3.6** (default account removal), **6.3.8** (no back
+doors), **6.3.9** (no clear-text passwords), **6.3.10** (no dev utilities in prod), the at-rest
+half of **6.3.13**, plus **4.6.15** (finding review and SLA) and **6.3.11** (vulnerability
+management) — the last two because findings live in Wiz, not Orbit (see below).
 
 ### Why not reuse `PolicyControlOverride`
 
@@ -197,6 +290,37 @@ The semantics genuinely differ: an override is an admin saying "trust me, this i
 attestation is an application owner making a claim they must defend in an audit. Merging them makes
 *"how much of our compliance is self-reported?"* unanswerable, which is the first question an
 auditor asks. Use a separate `ControlAttestation` model.
+
+**Status: built.** `ControlAttestation`, plus `allowsAttestation` and `attestationValidDays` on
+`PolicyControl`. Controls are **not** attestable by default — a control only accepts attestation
+when someone decides it should, so a measurable control cannot be waved through by assertion.
+
+**Permission:** a new COMPANY-scoped `attestation.write`, deliberately separate from
+`application.edit`. Attesting is a formal claim the attester must defend at audit, not routine
+metadata maintenance, so you choose per role who can make one.
+
+**Precedence**, verified by test: admin override > `not_applicable` > attestation > field checks.
+An attestation can **rescue** a failing control but never downgrades a passing one — measured
+evidence always outranks a self-report, so a control whose checks pass stays `meeting` even if
+someone also attested. `verification_required` is likewise not downgraded.
+
+**Expiry and withdrawal** both stop an attestation counting, and both say so in evidence
+("Attestation expired on …", "Attestation was withdrawn on …") rather than reporting a bare
+failure. Withdrawal sets `revokedAt` instead of deleting, so the trail still shows that someone
+attested and later took it back. Change history tracks the entity, scoped to the application's
+company so the owning team can read it without system admin.
+
+**Reporting:** `compliance_percentage` counts attested controls — an attestation *is* a claim of
+compliance — while `measured_compliance_percentage` counts only what Orbit verified. Both are
+returned, and the UI shows the measured figure beneath the headline whenever they differ, so
+*"how much of this is self-reported?"* stays answerable.
+
+**API:** `GET /api/applications/:id/attestations`,
+`PUT /api/applications/:id/attestations/:controlId` (create or renew, statement required),
+`DELETE …` (withdraw).
+
+**Not yet done:** no control has `allowsAttestation` set, and there is no UI for making an
+attestation — the compliance view renders the state but cannot yet create one.
 
 ### Model sketch
 
@@ -227,27 +351,78 @@ the extension point. Each of the three providers (`githubProvider`, `bitbucketPr
 `azureDevopsProvider`) exposes a uniform object; the results need normalizing into one shape since
 the upstream APIs differ.
 
-### 5a. Branch protection → 4.6.3 and 6.3.12
+### 5a. Branch protection → 4.6.3 and 6.3.12 — **built, not yet mapped**
 
-`repos.getBranchProtection` / rulesets give `required_approving_review_count`, dismiss-stale-reviews,
-and whether admins are exempt. `>= 1 required approver` is direct, auditable evidence.
+`fetchBranchProtection` is now part of the provider contract, dispatched off `connection.provider`
+like the rest. Implemented for GitHub via `repos.getBranchProtection`; read during repo sync and
+stored on `ScmRepo`, reachable from a control as `scmRepoLink.repo.*`.
 
-4.6.3 (App Sec, segregation of duties) and 6.3.12 (SDLC, pre-release code review) map to the same
-signal. They live in **different policies**, so this is not double-weighting within one policy — the
-source documents overlap. Both should map to it.
+Stored, normalised across providers: `requiredApprovingReviewCount`, `branchProtectionEnabled`,
+`dismissStaleReviews`, `requireCodeOwnerReviews`, `requiresStatusChecks`, `enforcedForAdmins`,
+`allowsForcePushes`, plus `protectedBranch`, `branchProtectionSyncedAt` and
+`branchProtectionError`.
+
+**Three outcomes, kept distinct.** Protected returns the real settings; not protected returns
+`enabled: false` with `0` required reviewers (a definite answer); unreadable returns all nulls
+plus a reason. The third case must never look like the second — reporting a repo as having no
+required reviewers when we were denied permission, or when the provider is unimplemented, would
+fail applications for evidence we never fetched. Bitbucket and Azure DevOps have no
+implementation yet and therefore report *unknown*, not *unprotected*.
+
+`fetchBranchProtection` never throws. It runs inside repo sync, so a permissions error or an
+unregistered provider must not fail the sync.
+
+**Not yet mapped to 4.6.3 / 6.3.12**: no repo in the dev portfolio has been synced since this
+landed, so every value is null. Mapping now would fail all 91 applications on missing evidence.
+Map it once a sync has populated real values.
+
+The suggested mapping, once there is data:
+`scmRepoLink.repo.requiredApprovingReviewCount gte 1` **AND**
+`scmRepoLink.repo.enforcedForAdmins equals true` — a required reviewer that admins can bypass is
+not segregation of duties.
+
+4.6.3 (App Sec) and 6.3.12 (SDLC) map to the same signal. They live in **different policies**, so
+this is not double-weighting within one policy — the source documents overlap.
 
 Note this covers **code review** segregation, not **deploy** segregation. Deploy-time separation
 depends on the environments work (Phase 6).
 
-### 5b. PR template → 4.6.7
+**GitHub App permission:** reading branch protection needs `Administration: read` on the
+installation. Without it the read returns unknown with that message rather than failing.
 
-`fetchFileText(octokit, owner, repo, path)` already exists in
-[services/scm/githubProvider.js](./backend/services/scm/githubProvider.js). Check
-`.github/PULL_REQUEST_TEMPLATE.md`, the lowercase variant, and `.github/PULL_REQUEST_TEMPLATE/`,
-then match a security heading.
+### 5b. PR template → 4.6.7 — **built, not yet mapped**
 
-**This proves the template exists, not that anyone completes it.** Acceptable as v1; reading merged
-PR bodies for completed checklists is a separate, later control. Do not treat one as the other.
+`fetchPullRequestTemplate` joins the provider contract with the same rules as 5a: never throws,
+and a provider without an implementation reports *unknown* rather than *no template*.
+
+The judgement lives in [services/scm/prTemplate.js](./backend/services/scm/prTemplate.js) as pure
+functions over paths and text, so it is testable without a network. The GitHub adapter supplies
+fetching (reusing the existing `fetchFileText`, plus a directory lister for multi-template repos)
+and this supplies the verdict.
+
+Checks the eight single-file locations GitHub honours, in its resolution order, then
+`.github/PULL_REQUEST_TEMPLATE/` where a security section in *any* template counts, since the
+author picks one per pull request.
+
+**A security prompt means an ATX or setext heading, or a task-list item, whose text matches a
+narrow term list** (`security`, `secure`, `threat model`, `vulnerability`, `appsec`, `owasp`).
+Deliberately narrow: `impact` or `review` alone match most of an ordinary template, and a false
+positive reports 4.6.7 as met when nobody is being asked about security. Fenced code blocks are
+skipped — a template's own sample output is not a prompt to its author.
+
+**This evidences that the template exists and asks about security. It does not evidence that
+anyone completed it.** Reading merged PR bodies is a separate, heavier control. Do not conflate
+them.
+
+**Not yet mapped**, for the same reason as 5a: nothing has been synced since this landed, so
+every value is null. The mapping once there is data:
+`scmRepoLink.repo.prTemplateHasSecuritySection equals true`.
+
+> **Storage needs a migration.** I initially said 5b would not — that was wrong. Reusing
+> `fetchFileText` avoids new *provider* plumbing, but the result has to be persisted, which means
+> columns. Evaluating at request time would mean a provider API call per application per
+> evaluation, and the dashboard evaluates the whole portfolio. **Any phase producing persisted
+> evidence needs a migration** — Phase 4 and Phase 6a included.
 
 ---
 
@@ -309,18 +484,61 @@ handling confidential data.
 5. **Phase 6** — new tool columns, environments, encryption split
 6. **Phase 3** — per-release SBOM, then finish 4.6.6
 
-## Projected coverage
+## Coverage
 
-| Stage | Mapped | Attested | Unmapped |
-|---|---|---|---|
-| Today | 9 | 0 | 19 |
-| After Phases 1–2 | 11 | 0 | 17 |
-| After Phase 5 | 14 | 0 | 14 |
-| After Phase 4 | 14 | 8 | 6 |
-| After Phase 6 | 19 | 8 | 1 |
-| After Phase 3 | 20 | 8 | 0 |
+**Now: 27 of 28 covered — 17 mapped, 10 attestable.** Only 4.6.4 remains.
 
-Measured coverage ends at 20 of 28 with 8 honestly labelled as self-reported — rather than 28
+> **Completeness deliberately untouched.** The new secrets and IaC fields are *not* added to
+> `services/completeness.js` or `frontend/src/utils/applicationCompleteness.js`. Adding them grows
+> the denominator, so every application's completeness fraction would drop overnight without
+> anything changing about the application. That is a portfolio-wide user-visible number and a
+> decision to take deliberately, not a side effect of adding a control. Once teams have had a
+> chance to fill the fields in, adding them is a two-line change in **both** files — they are
+> manual ports of each other.
+
+| Stage | Mapped | Attestable | Uncovered | |
+|---|---|---|---|---|
+| Start | 9 | 0 | 19 | |
+| After Phases 1–2 | 11 | 0 | 17 | done |
+| After Phase 5 | 14 | 0 | 14 | done |
+| After Phase 4 | 14 | 8 | 6 | done |
+| After Phase 6a | 17 | 8 | 3 | done |
+| After 4.6.15 / 6.3.11 as attestable | 17 | 10 | 1 | **← here** |
+| After the environments workstream | 18 | 10 | 0 | |
+
+Attestable: 4.6.12, 6.3.2, 6.3.5, 6.3.6, 6.3.8, 6.3.9, 6.3.10, 6.3.13 — all at the 365-day
+default. `attestationValidDays` is per-control, so the riskier ones (no back doors, no clear-text
+passwords) can be tightened without changing the rest.
+
+The six still uncovered, and what each needs:
+
+| Control | Needs |
+|---|---|
+| 4.6.4 Environment separation | the environments workstream (outside this plan) |
+
+### Why 4.6.15 and 6.3.11 are attestable, not measurable
+
+An earlier draft of this plan listed them as a vocabulary gap — "expose findings data as policy
+fields." **That was wrong, and the reasoning matters.**
+
+Orbit does not hold findings and is not going to. `SecurityFindingsJob` is an *export*: it
+fetches live from Wiz via [integrations/wiz.js](./backend/integrations/wiz.js), renders a CSV into
+`resultCsv`, and keeps nothing. There is no findings model, no severities, no remediation state,
+and no SLA field anywhere in the schema. **Wiz is the source of truth for findings.**
+
+So the review-and-closure activity these controls describe happens in a system Orbit cannot
+observe. No field could ever evidence them, which is the definition of the attestation category —
+the same bucket as "no back doors" and "secure coding guidelines are followed". They are not a
+collection gap to be filled later; persisting findings into Orbit would mean two systems
+disagreeing about the same data.
+
+> **Both are at the 365-day default, and are the strongest candidates for tightening.** Attesting
+> once a year that you are meeting remediation SLAs is a weak claim, because SLA compliance
+> changes continuously — unlike "we do not ship back doors", which is a stable property.
+> 90 days would be more defensible. `attestationValidDays` is per-control, so it is a one-value
+> change.
+
+Measured coverage ends at 20 of 28, with 8 honestly labelled self-reported — rather than 28
 controls silently failing closed.
 
 ## Activation checklist

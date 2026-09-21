@@ -18,11 +18,17 @@ import {
   isPolicyOperator,
   validatePolicyControlFields,
 } from './policyFields.js';
+import { evaluateFieldCheck, DAY_COUNT_OPERATORS } from './policyEvaluation.js';
 
 describe('POLICY_OPERATORS', () => {
   it('covers the operators the engine implements', () => {
-    // Mirrors the switch in services/policy.js evaluateFieldCheck. That module imports
-    // Prisma so it cannot be imported here; this is the hand-maintained seam.
+    // The seam this used to describe is closed: the primitives moved to
+    // services/policyEvaluation.js, which imports nothing, so POLICY_OPERATORS is
+    // derived from IMPLEMENTED_OPERATORS rather than mirroring it by hand.
+    //
+    // The golden list stays so that adding an operator is still a visible act — it
+    // now proves the engine implements what is listed, instead of proving two
+    // hand-maintained arrays happen to agree.
     assert.deepEqual([...POLICY_OPERATORS].sort(), [
       'contains',
       'equals',
@@ -35,7 +41,20 @@ describe('POLICY_OPERATORS', () => {
       'not_equals',
       'not_exists',
       'not_in',
+      'older_than_days',
+      'within_days',
     ]);
+  });
+
+  it('every operator it accepts is one the engine can actually evaluate', () => {
+    // What the old mirrored list was really trying to assert, now checkable directly.
+    for (const operator of POLICY_OPERATORS) {
+      const value = DAY_COUNT_OPERATORS.includes(operator) ? 30 : 'x';
+      assert.doesNotThrow(
+        () => evaluateFieldCheck({ operator, value: JSON.stringify(value) }, 'probe'),
+        `${operator} is in the vocabulary but the engine cannot evaluate it`,
+      );
+    }
   });
 
   it('marks only the existence operators as not needing a value', () => {
@@ -74,11 +93,12 @@ describe('validatePolicyControlFields', () => {
   it('accepts every registry field paired with every operator', () => {
     for (const fieldPath of METADATA_FIELD_KEYS) {
       for (const operator of POLICY_OPERATORS) {
-        assert.deepEqual(
-          validatePolicyControlFields([{ fieldPath, operator }]),
-          [],
-          `${fieldPath} / ${operator}`,
-        );
+        // The rolling-window operators take a count of days, and a missing or
+        // non-positive count is rejected — a control with one could never match.
+        const field = DAY_COUNT_OPERATORS.includes(operator)
+          ? { fieldPath, operator, value: 30 }
+          : { fieldPath, operator };
+        assert.deepEqual(validatePolicyControlFields([field]), [], `${fieldPath} / ${operator}`);
       }
     }
   });

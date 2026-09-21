@@ -13,6 +13,8 @@ export const TRACKED_FIELDS = {
     'dastTool', 'dastIntegrationLevel',
     'scaTool', 'scaIntegrationLevel',
     'appFirewallTool', 'appFirewallIntegrationLevel', 'appFirewallNA',
+    'secretsScanTool', 'secretsScanIntegrationLevel', 'sastIncludesSecrets', 'lastSecretsScanDate',
+    'iacContainerScanTool', 'iacContainerScanIntegrationLevel', 'lastIacContainerScanDate',
     'apiSecurityTool', 'apiSecurityIntegrationLevel', 'apiSecurityNA',
     'currentVersion', 'deploymentEnvironment', 'gitBranch',
     'lastSastScanDate', 'lastDastScanDate', 'lastScaScanDate',
@@ -26,6 +28,7 @@ export const TRACKED_FIELDS = {
   PolicyControl: ['controlId', 'name', 'description', 'category', 'evaluationLogic', 'isActive', 'displayOrder', 'policyId', 'fields'],
   SammAssessment: ['status', 'ownerName', 'notes', 'reviewerId', 'submittedAt', 'reviewedAt', 'nextDueAt'],
   Note: ['content'],
+  ControlAttestation: ['statement', 'attestedBy', 'attestedAt', 'expiresAt', 'revokedAt', 'revokedBy'],
 };
 
 function normalize(field, value) {

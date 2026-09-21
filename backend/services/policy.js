@@ -1,137 +1,63 @@
 import { prisma } from '../prisma/client.js';
+import {
+  getFieldValue,
+  evaluateFieldCheck,
+  parseValue,
+  formatDate,
+  toTime,
+} from './policyEvaluation.js';
+
+// Re-exported so existing callers and tests keep importing them from here.
+export { getFieldValue, evaluateFieldCheck } from './policyEvaluation.js';
 
 /**
- * Get field value from application object
- * Supports direct field access (e.g., "sastTool")
- * Future: Could support nested paths (e.g., "company.divisionId")
- * @param {Object} application - Application object
- * @param {string} fieldPath - Field path (e.g., "sastTool", "sastIntegrationLevel")
- * @returns {any} - Field value or null
+ * Decide whether an attestation currently counts.
+ *
+ * Expired and withdrawn attestations stop counting — that is the whole point of
+ * an expiry — but the reason travels into evidence so a reviewer sees that
+ * someone once attested and when it lapsed, rather than a bare failure.
+ *
+ * @param {Object} control
+ * @param {Object|null} attestation
+ * @returns {{valid: boolean, reason: string|null}}
  */
-export function getFieldValue(application, fieldPath) {
-  // For now, support only direct field access
-  // Future: Could parse dot notation for nested fields
-  if (fieldPath.includes('.')) {
-    // Nested path support (future enhancement)
-    const parts = fieldPath.split('.');
-    let value = application;
-    for (const part of parts) {
-      if (value === null || value === undefined) {
-        return null;
-      }
-      value = value[part];
-    }
-    return value;
+function attestationState(control, attestation) {
+  if (!control?.allowsAttestation || !attestation) return { valid: false, reason: null };
+
+  if (attestation.revokedAt) {
+    return { valid: false, reason: `Attestation was withdrawn on ${formatDate(attestation.revokedAt)}` };
   }
-  
-  return application[fieldPath] ?? null;
+
+  const expires = toTime(attestation.expiresAt);
+  if (expires !== null && expires < Date.now()) {
+    return { valid: false, reason: `Attestation expired on ${formatDate(attestation.expiresAt)}` };
+  }
+
+  return { valid: true, reason: null };
 }
 
-/**
- * Parse value from JSON string
- * Supports string, number, boolean, array, null
- * @param {string|null} valueStr - JSON string or null
- * @returns {any} - Parsed value
- */
-function parseValue(valueStr) {
-  if (valueStr === null || valueStr === undefined || valueStr === '') {
-    return null;
-  }
-  
-  try {
-    return JSON.parse(valueStr);
-  } catch (e) {
-    // If not valid JSON, treat as string
-    return valueStr;
-  }
+/** Evidence lines for a counted attestation. Always says it is self-reported. */
+function attestationEvidence(attestation) {
+  const who = attestation.user?.email || 'an authorised user';
+  const lines = [
+    `Attested by ${who} on ${formatDate(attestation.attestedAt)} — self-reported, not measured`,
+    `Expires ${formatDate(attestation.expiresAt)}; evidence may be requested at audit`,
+  ];
+  if (attestation.statement?.trim()) lines.push(`Statement: ${attestation.statement.trim()}`);
+  return lines;
 }
 
-/**
- * Evaluate a single field check against an application
- * @param {Object} fieldCheck - PolicyControlField object
- * @param {any} fieldValue - Value from application field
- * @returns {boolean} - True if check passes
- */
-export function evaluateFieldCheck(fieldCheck, fieldValue) {
-  const { operator, value: valueStr } = fieldCheck;
-  const expectedValue = parseValue(valueStr);
-  
-  // Handle null/undefined field values
-  const isNullish = fieldValue === null || fieldValue === undefined;
-  const isEmpty = fieldValue === '' || (Array.isArray(fieldValue) && fieldValue.length === 0);
-  
-  switch (operator) {
-    case 'exists':
-      return !isNullish && !isEmpty;
-    
-    case 'not_exists':
-      return isNullish || isEmpty;
-    
-    case 'equals':
-      if (isNullish) return false;
-      // Handle string comparison (case-insensitive for strings)
-      if (typeof fieldValue === 'string' && typeof expectedValue === 'string') {
-        return fieldValue.toLowerCase() === expectedValue.toLowerCase();
-      }
-      return fieldValue === expectedValue;
-    
-    case 'not_equals':
-      if (isNullish) return false;
-      if (typeof fieldValue === 'string' && typeof expectedValue === 'string') {
-        return fieldValue.toLowerCase() !== expectedValue.toLowerCase();
-      }
-      return fieldValue !== expectedValue;
-    
-    case 'gte':
-      if (isNullish) return false;
-      const numValue = Number(fieldValue);
-      const numExpected = Number(expectedValue);
-      if (isNaN(numValue) || isNaN(numExpected)) return false;
-      return numValue >= numExpected;
-    
-    case 'gt':
-      if (isNullish) return false;
-      const numValueGt = Number(fieldValue);
-      const numExpectedGt = Number(expectedValue);
-      if (isNaN(numValueGt) || isNaN(numExpectedGt)) return false;
-      return numValueGt > numExpectedGt;
-    
-    case 'lte':
-      if (isNullish) return false;
-      const numValueLte = Number(fieldValue);
-      const numExpectedLte = Number(expectedValue);
-      if (isNaN(numValueLte) || isNaN(numExpectedLte)) return false;
-      return numValueLte <= numExpectedLte;
-    
-    case 'lt':
-      if (isNullish) return false;
-      const numValueLt = Number(fieldValue);
-      const numExpectedLt = Number(expectedValue);
-      if (isNaN(numValueLt) || isNaN(numExpectedLt)) return false;
-      return numValueLt < numExpectedLt;
-    
-    case 'contains':
-      if (isNullish) return false;
-      const fieldStr = String(fieldValue).toLowerCase();
-      const searchStr = String(expectedValue).toLowerCase();
-      return fieldStr.includes(searchStr);
-    
-    case 'in':
-      if (isNullish) return false;
-      // Normalize to array: if it's a string, treat as single-item array
-      const inArray = Array.isArray(expectedValue) ? expectedValue : [expectedValue];
-      return inArray.includes(fieldValue);
-    
-    case 'not_in':
-      if (isNullish) return false;
-      // Normalize to array: if it's a string, treat as single-item array
-      const notInArray = Array.isArray(expectedValue) ? expectedValue : [expectedValue];
-      return !notInArray.includes(fieldValue);
-    
-    default:
-      console.warn(`Unknown operator: ${operator}`);
-      return false;
-  }
+/** Shape of the attestation block returned in details, for the UI and audit trail. */
+function attestationDetails(attestation, valid) {
+  return {
+    valid,
+    statement: attestation.statement,
+    attestedBy: attestation.attestedBy,
+    user: attestation.user ? { id: attestation.user.id, email: attestation.user.email } : null,
+    attestedAt: attestation.attestedAt,
+    expiresAt: attestation.expiresAt,
+    revokedAt: attestation.revokedAt || null,
+  };
 }
 
 /**
@@ -139,11 +65,18 @@ export function evaluateFieldCheck(fieldCheck, fieldValue) {
  * @param {Object} control - PolicyControl with fields
  * @param {Object} application - Application object
  * @param {Object} override - Optional PolicyControlOverride object
+ * @param {Object} attestation - Optional ControlAttestation object
  * @returns {Object} - Evaluation result
  */
-export async function evaluateControl(control, application, override = null) {
-  // If control has no field mappings, check for manual override
-  if (!control.fields || control.fields.length === 0) {
+export async function evaluateControl(control, application, override = null, attestation = null) {
+  // An explicit admin override outranks every other outcome — applicability,
+  // partial-coverage verification, and the field checks themselves. It is a
+  // recorded human decision, so it wins.
+  //
+  // This was previously only consulted when a control had no field mappings,
+  // which meant an override on a mapped control was accepted by the API and
+  // then silently ignored at evaluation time.
+  if (override || !control.fields || control.fields.length === 0) {
     if (override) {
       return {
         status: override.isCompliant ? 'meeting' : 'not_meeting',
@@ -172,6 +105,85 @@ export async function evaluateControl(control, application, override = null) {
         },
       };
     }
+    // Nothing measurable, but the owner may have attested to it — that is exactly
+    // what the attestable controls are: process and product properties no field
+    // could evidence.
+    const att = attestationState(control, attestation);
+    if (att.valid) {
+      return {
+        status: 'attested',
+        evidence: attestationEvidence(attestation),
+        details: {
+          fieldResults: [],
+          evaluationLogic: control.evaluationLogic,
+          finalResult: null,
+          attestation: attestationDetails(attestation, true),
+        },
+      };
+    }
+
+    return {
+      status: 'not_meeting',
+      evidence: att.reason
+        ? [att.reason, 'No field mappings defined for this control']
+        : ['No field mappings defined for this control'],
+      details: {
+        fieldResults: [],
+        evaluationLogic: control.evaluationLogic,
+        finalResult: false,
+        attestation: attestation ? attestationDetails(attestation, false) : null,
+      },
+    };
+  }
+
+  // Partition the checks. "applies_when" decides whether this control is in
+  // scope for the application at all; "compliance" decides whether it is met.
+  // Controls with no applies_when checks apply to everything, as before.
+  const allFields = [...control.fields].sort((a, b) => a.displayOrder - b.displayOrder);
+  const scopeFields = allFields.filter(f => f.role === 'applies_when');
+  const complianceFields = allFields.filter(f => f.role !== 'applies_when');
+
+  if (scopeFields.length > 0) {
+    const scopeResults = scopeFields.map(fieldCheck => {
+      const fieldValue = getFieldValue(application, fieldCheck.fieldPath);
+      return {
+        fieldPath: fieldCheck.fieldPath,
+        operator: fieldCheck.operator,
+        value: fieldCheck.value,
+        fieldValue,
+        result: evaluateFieldCheck(fieldCheck, fieldValue),
+      };
+    });
+
+    const appliesWhenLogic = control.appliesWhenLogic === 'OR' ? 'OR' : 'AND';
+    const inScope = appliesWhenLogic === 'OR'
+      ? scopeResults.some(r => r.result)
+      : scopeResults.every(r => r.result);
+
+    // Out of scope: report not_applicable and never run the compliance checks,
+    // so a control that does not apply cannot count against the application.
+    if (!inScope) {
+      return {
+        status: 'not_applicable',
+        evidence: [
+          'This control does not apply to this application.',
+          ...scopeResults
+            .filter(r => !r.result)
+            .map(r => `${r.fieldPath} is "${r.fieldValue ?? 'not set'}"`),
+        ],
+        details: {
+          fieldResults: [],
+          evaluationLogic: control.evaluationLogic,
+          finalResult: null,
+          notApplicable: true,
+          appliesWhen: { logic: appliesWhenLogic, fieldResults: scopeResults },
+        },
+      };
+    }
+  }
+
+  // In scope, but nothing to measure it with — fail closed, as before.
+  if (complianceFields.length === 0) {
     return {
       status: 'not_meeting',
       evidence: ['No field mappings defined for this control'],
@@ -182,9 +194,8 @@ export async function evaluateControl(control, application, override = null) {
       },
     };
   }
-  
-  // Sort fields by displayOrder
-  const sortedFields = [...control.fields].sort((a, b) => a.displayOrder - b.displayOrder);
+
+  const sortedFields = complianceFields;
   
   // Evaluate each field check
   const fieldResults = sortedFields.map(fieldCheck => {
@@ -223,6 +234,10 @@ export async function evaluateControl(control, application, override = null) {
         evidence.push(`${fr.fieldPath} equals "${fr.fieldValue}"`);
       } else if (fr.operator === 'gte') {
         evidence.push(`${fr.fieldPath} is ${fr.fieldValue} (>= ${parseValue(fr.value)})`);
+      } else if (fr.operator === 'within_days') {
+        evidence.push(`${fr.fieldPath} is within the last ${parseValue(fr.value)} days (${formatDate(fr.fieldValue)})`);
+      } else if (fr.operator === 'older_than_days') {
+        evidence.push(`${fr.fieldPath} is older than ${parseValue(fr.value)} days (${formatDate(fr.fieldValue)})`);
       } else {
         evidence.push(`${fr.fieldPath} meets requirement`);
       }
@@ -237,6 +252,14 @@ export async function evaluateControl(control, application, override = null) {
         evidence.push(`${fr.fieldPath} is "${fr.fieldValue || 'not set'}" (expected "${parseValue(fr.value)}")`);
       } else if (fr.operator === 'gte') {
         evidence.push(`${fr.fieldPath} is ${fr.fieldValue || 'not set'} (requires >= ${parseValue(fr.value)})`);
+      } else if (fr.operator === 'within_days') {
+        evidence.push(
+          fr.fieldValue
+            ? `${fr.fieldPath} is ${formatDate(fr.fieldValue)}, older than the required ${parseValue(fr.value)} days`
+            : `${fr.fieldPath} is not set (requires a date within the last ${parseValue(fr.value)} days)`
+        );
+      } else if (fr.operator === 'older_than_days') {
+        evidence.push(`${fr.fieldPath} is ${fr.fieldValue ? formatDate(fr.fieldValue) : 'not set'} (requires older than ${parseValue(fr.value)} days)`);
       } else {
         evidence.push(`${fr.fieldPath} does not meet requirement`);
       }
@@ -245,7 +268,7 @@ export async function evaluateControl(control, application, override = null) {
   
   // A control whose automated checks cover only part of its requirement passes to
   // "verification_required", not "meeting" — a human still has to confirm the rest.
-  // An admin override (handled above) is what promotes it to "meeting".
+  // An admin override resolves it to "meeting" (handled at the top of this function).
   const needsVerification = finalResult && control.verificationRequired === true;
 
   if (needsVerification) {
@@ -262,6 +285,25 @@ export async function evaluateControl(control, application, override = null) {
     status = 'meeting';
   }
 
+  // An attestation can rescue a failure but never downgrades a pass: measured
+  // evidence always outranks a self-report, so a control whose checks pass stays
+  // "meeting" even if someone also attested to it.
+  const att = attestationState(control, attestation);
+  if (status === 'not_meeting' && att.valid) {
+    return {
+      status: 'attested',
+      evidence: [...attestationEvidence(attestation), ...evidence],
+      details: {
+        fieldResults,
+        evaluationLogic: control.evaluationLogic,
+        finalResult,
+        verificationRequired: control.verificationRequired === true,
+        attestation: attestationDetails(attestation, true),
+      },
+    };
+  }
+  if (att.reason) evidence.push(att.reason);
+
   return {
     status,
     evidence,
@@ -270,6 +312,7 @@ export async function evaluateControl(control, application, override = null) {
       evaluationLogic: control.evaluationLogic,
       finalResult,
       verificationRequired: control.verificationRequired === true,
+      attestation: attestation ? attestationDetails(attestation, false) : null,
     },
   };
 }
@@ -518,6 +561,32 @@ const EVALUABLE_RELATIONS = {
   ingressProducts: { id: true },
   outgoingProductFlows: { id: true },
   incomingProductFlows: { id: true },
+  // Branch protection lives on the shared repo, one hop further out:
+  // scmRepoLink.repo.requiredApprovingReviewCount and friends.
+  scmRepoLink: {
+    id: true,
+    repo: {
+      select: {
+        fullName: true,
+        protectedBranch: true,
+        branchProtectionEnabled: true,
+        requiredApprovingReviewCount: true,
+        dismissStaleReviews: true,
+        requireCodeOwnerReviews: true,
+        requiresStatusChecks: true,
+        enforcedForAdmins: true,
+        allowsForcePushes: true,
+        branchProtectionSyncedAt: true,
+        branchProtectionError: true,
+        prTemplatePath: true,
+        prTemplateFound: true,
+        prTemplateHasSecuritySection: true,
+        prTemplateSecurityHeading: true,
+        prTemplateSyncedAt: true,
+        prTemplateError: true,
+      },
+    },
+  },
 };
 
 /**
@@ -631,6 +700,18 @@ export async function evaluateAllControls(application) {
     overrideMap.set(override.controlId, override);
   });
 
+  // Attestations for the attestable controls among these. Expired and withdrawn
+  // rows are loaded too, so evidence can say an attestation lapsed rather than
+  // silently reporting the control as unmet.
+  const attestableIds = controls.filter(c => c.allowsAttestation).map(c => c.id);
+  const attestations = attestableIds.length
+    ? await prisma.controlAttestation.findMany({
+        where: { applicationId: application.id, controlId: { in: attestableIds } },
+        include: { user: { select: { id: true, email: true } } },
+      })
+    : [];
+  const attestationMap = new Map(attestations.map(a => [a.controlId, a]));
+
   // Resolve any relation paths the controls reference (no-op when none do)
   const evaluableApplication = await withEvaluableRelations(application, controls);
 
@@ -638,7 +719,8 @@ export async function evaluateAllControls(application) {
   const controlResults = await Promise.all(
     controls.map(async (control) => {
       const override = overrideMap.get(control.id) || null;
-      const evaluation = await evaluateControl(control, evaluableApplication, override);
+      const attestation = attestationMap.get(control.id) || null;
+      const evaluation = await evaluateControl(control, evaluableApplication, override, attestation);
       return {
         control: {
           id: control.id,
@@ -647,6 +729,11 @@ export async function evaluateAllControls(application) {
           description: control.description,
           category: control.category,
           evaluationLogic: control.evaluationLogic,
+          // The UI needs these to know whether to offer an Attest action and
+          // what re-attestation period to warn about.
+          allowsAttestation: control.allowsAttestation === true,
+          attestationValidDays: control.attestationValidDays,
+          verificationRequired: control.verificationRequired === true,
         },
         policy: control.policy,
         status: evaluation.status,
@@ -676,6 +763,8 @@ export async function evaluateAllControls(application) {
         meeting: 0,
         not_meeting: 0,
         verification_required: 0,
+        not_applicable: 0,
+        attested: 0,
         compliance_percentage: 0,
       },
     });
@@ -693,16 +782,32 @@ export async function evaluateAllControls(application) {
         policyEntry.summary.meeting++;
       } else if (controlResult.status === 'verification_required') {
         policyEntry.summary.verification_required++;
+      } else if (controlResult.status === 'not_applicable') {
+        policyEntry.summary.not_applicable++;
+      } else if (controlResult.status === 'attested') {
+        policyEntry.summary.attested++;
       } else {
         policyEntry.summary.not_meeting++;
       }
     }
   });
 
-  // Calculate compliance percentages for each policy
+  // Compliance percentage is measured against the controls that actually apply:
+  // not_applicable leaves the denominator entirely, otherwise scoping a control
+  // out would still drag the figure down. verification_required stays in the
+  // denominator but is not counted as meeting — it is not compliance yet.
+  // An attestation is a claim of compliance, so it counts toward
+  // compliance_percentage — but measured_compliance_percentage counts only what
+  // Orbit actually verified, so "how much of this is self-reported?" stays
+  // answerable. That is the first question an auditor asks.
   policiesMap.forEach(policyEntry => {
-    const { total, meeting } = policyEntry.summary;
-    policyEntry.summary.compliance_percentage = total > 0 ? Math.round((meeting / total) * 100) : 100;
+    const { total, meeting, attested, not_applicable } = policyEntry.summary;
+    const applicable = total - not_applicable;
+    policyEntry.summary.applicable = applicable;
+    policyEntry.summary.compliance_percentage =
+      applicable > 0 ? Math.round(((meeting + attested) / applicable) * 100) : 100;
+    policyEntry.summary.measured_compliance_percentage =
+      applicable > 0 ? Math.round((meeting / applicable) * 100) : 100;
   });
 
   // Convert to array
@@ -714,7 +819,13 @@ export async function evaluateAllControls(application) {
   const meeting = allControls.filter(cr => cr.status === 'meeting').length;
   const notMeeting = allControls.filter(cr => cr.status === 'not_meeting').length;
   const verificationRequired = allControls.filter(cr => cr.status === 'verification_required').length;
-  const compliancePercentage = total > 0 ? Math.round((meeting / total) * 100) : 100;
+  const notApplicable = allControls.filter(cr => cr.status === 'not_applicable').length;
+  const attested = allControls.filter(cr => cr.status === 'attested').length;
+  const applicable = total - notApplicable;
+  const compliancePercentage =
+    applicable > 0 ? Math.round(((meeting + attested) / applicable) * 100) : 100;
+  const measuredCompliancePercentage =
+    applicable > 0 ? Math.round((meeting / applicable) * 100) : 100;
 
   // Overall compliance: all policies must be 100% compliant
   const allPoliciesCompliant = policies.every(p => p.summary.compliance_percentage === 100);
@@ -723,10 +834,14 @@ export async function evaluateAllControls(application) {
     policies,
     summary: {
       total,
+      applicable,
       meeting,
       not_meeting: notMeeting,
       verification_required: verificationRequired,
+      not_applicable: notApplicable,
+      attested,
       compliance_percentage: compliancePercentage,
+      measured_compliance_percentage: measuredCompliancePercentage,
       all_policies_compliant: allPoliciesCompliant,
       total_policies: policies.length,
       compliant_policies: policies.filter(p => p.summary.compliance_percentage === 100).length,

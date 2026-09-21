@@ -264,18 +264,6 @@ router.get('/available-fields', requireAuth, async (req, res) => {
           description: 'Minimum integration level required (0-4 scale)'
         }
       },
-      {
-        path: 'apiSecurityIntegrationLevel',
-        label: 'API Security Integration Level',
-        category: 'Security Tools',
-        fieldType: 'number',
-        allowedOperators: ['gte', 'gt'],
-        valueType: 'dropdown',
-        valueOptions: integrationLevelOptions,
-        validationRules: {
-          description: 'Minimum integration level required (0-4 scale)'
-        }
-      },
       // Security Tools - Tool Names
       {
         path: 'sastTool',
@@ -310,12 +298,78 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         valueType: 'text'
       },
       {
-        path: 'apiSecurityTool',
-        label: 'API Security Tool',
+        path: 'secretsScanTool',
+        label: 'Secrets Scanning Tool',
         category: 'Security Tools',
         fieldType: 'string',
         allowedOperators: ['exists', 'not_exists'],
         valueType: 'text'
+      },
+      {
+        path: 'secretsScanIntegrationLevel',
+        label: 'Secrets Scanning Integration Level',
+        category: 'Security Tools',
+        fieldType: 'number',
+        allowedOperators: ['gte', 'gt'],
+        valueType: 'dropdown',
+        valueOptions: integrationLevelOptions,
+        validationRules: {
+          description: 'Minimum integration level required (0-4 scale)'
+        }
+      },
+      {
+        path: 'sastIncludesSecrets',
+        label: 'SAST includes secrets scanning',
+        category: 'Security Tools',
+        fieldType: 'boolean',
+        allowedOperators: ['equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }],
+        validationRules: {
+          description: 'For SAST tools that also detect secrets, so a separate tool is not required.'
+        }
+      },
+      {
+        path: 'iacContainerScanTool',
+        label: 'IaC / Container Scanning Tool',
+        category: 'Security Tools',
+        fieldType: 'string',
+        allowedOperators: ['exists', 'not_exists'],
+        valueType: 'text'
+      },
+      {
+        path: 'iacContainerScanIntegrationLevel',
+        label: 'IaC / Container Integration Level',
+        category: 'Security Tools',
+        fieldType: 'number',
+        allowedOperators: ['gte', 'gt'],
+        valueType: 'dropdown',
+        valueOptions: integrationLevelOptions,
+        validationRules: {
+          description: 'Minimum integration level required (0-4 scale)'
+        }
+      },
+      {
+        path: 'lastSecretsScanDate',
+        label: 'Last Secrets Scan Date',
+        category: 'Security Tools',
+        fieldType: 'date',
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
+        valueType: 'date',
+        validationRules: {
+          description: 'Use within_days for a rolling recency window (value = number of days).'
+        }
+      },
+      {
+        path: 'lastIacContainerScanDate',
+        label: 'Last IaC / Container Scan Date',
+        category: 'Security Tools',
+        fieldType: 'date',
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
+        valueType: 'date',
+        validationRules: {
+          description: 'Use within_days for a rolling recency window (value = number of days).'
+        }
       },
       // Security Tools - Dates (may need cross-field comparisons later)
       { 
@@ -323,10 +377,10 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         label: 'Last SAST Scan Date', 
         category: 'Security Tools', 
         fieldType: 'date',
-        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt'],
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Compare against deployment date or relative time (e.g., "1 day ago")'
+          description: 'Use within_days for a rolling recency window (value = number of days, e.g. 30). gte/lte compare against a fixed date, which goes stale.'
         }
       },
       { 
@@ -334,10 +388,10 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         label: 'Last DAST Scan Date', 
         category: 'Security Tools', 
         fieldType: 'date',
-        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt'],
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Compare against deployment date or relative time (e.g., "1 day ago")'
+          description: 'Use within_days for a rolling recency window (value = number of days, e.g. 30). gte/lte compare against a fixed date, which goes stale.'
         }
       },
       { 
@@ -345,10 +399,10 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         label: 'Last SCA Scan Date', 
         category: 'Security Tools', 
         fieldType: 'date',
-        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt'],
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Compare against deployment date or relative time (e.g., "1 day ago")'
+          description: 'Use within_days for a rolling recency window (value = number of days, e.g. 30). gte/lte compare against a fixed date, which goes stale.'
         }
       },
       
@@ -459,10 +513,10 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         label: 'Threat Model Last Reviewed',
         category: 'Threat Model',
         fieldType: 'date',
-        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt'],
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Fixed date only until relative-date operators land — see POLICY_CONTROL_COVERAGE_PLAN.md, Phase 2c.'
+          description: 'Use within_days for a rolling review window (value = number of days).'
         }
       },
 
@@ -505,6 +559,121 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         valueType: 'none'
       },
 
+      // Source Control — branch protection on the linked repo's default branch.
+      // Read during repo sync; null until a sync has run, which is why
+      // branchProtectionEnabled is tri-state rather than a plain boolean.
+      {
+        path: 'scmRepoLink.repo.requiredApprovingReviewCount',
+        label: 'Required Approving Reviews',
+        category: 'Source Control',
+        fieldType: 'number',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals', 'gte', 'gt', 'lte', 'lt'],
+        valueType: 'number',
+        validationRules: {
+          description: 'Approvals required to merge into the default branch. gte 1 is the usual bar for segregation of duties.'
+        }
+      },
+      {
+        path: 'scmRepoLink.repo.branchProtectionEnabled',
+        label: 'Branch Protection Enabled',
+        category: 'Source Control',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [
+          { value: true, label: 'Protected' },
+          { value: false, label: 'Not protected' }
+        ],
+        validationRules: {
+          description: 'Null until a repo sync has read it — "unknown" is not the same as "not protected".'
+        }
+      },
+      {
+        path: 'scmRepoLink.repo.dismissStaleReviews',
+        label: 'Dismiss Stale Reviews',
+        category: 'Source Control',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }]
+      },
+      {
+        path: 'scmRepoLink.repo.requireCodeOwnerReviews',
+        label: 'Require Code Owner Review',
+        category: 'Source Control',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }]
+      },
+      {
+        path: 'scmRepoLink.repo.requiresStatusChecks',
+        label: 'Required Status Checks',
+        category: 'Source Control',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }]
+      },
+      {
+        path: 'scmRepoLink.repo.enforcedForAdmins',
+        label: 'Protection Enforced for Admins',
+        category: 'Source Control',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Yes' }, { value: false, label: 'No (admins can bypass)' }]
+      },
+      {
+        path: 'scmRepoLink.repo.allowsForcePushes',
+        label: 'Allows Force Pushes',
+        category: 'Source Control',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }]
+      },
+      {
+        path: 'scmRepoLink.repo.branchProtectionSyncedAt',
+        label: 'Branch Protection Last Read',
+        category: 'Source Control',
+        fieldType: 'date',
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
+        valueType: 'date',
+        validationRules: {
+          description: 'Use within_days to require the evidence itself be recent.'
+        }
+      },
+      {
+        path: 'scmRepoLink.repo.prTemplateHasSecuritySection',
+        label: 'PR Template Has Security Section',
+        category: 'Source Control',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }],
+        validationRules: {
+          description: 'The repo has a pull request template containing a security heading or checklist item. Evidence that reviewers are prompted — NOT that any pull request was completed.'
+        }
+      },
+      {
+        path: 'scmRepoLink.repo.prTemplateFound',
+        label: 'PR Template Present',
+        category: 'Source Control',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }]
+      },
+      {
+        path: 'scmRepoLink.repo.prTemplateSyncedAt',
+        label: 'PR Template Last Read',
+        category: 'Source Control',
+        fieldType: 'date',
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
+        valueType: 'date'
+      },
+
       // Status
       {
         path: 'status',
@@ -519,10 +688,10 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         label: 'Metadata Last Reviewed',
         category: 'Status',
         fieldType: 'date',
-        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt'],
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Fixed date only. A rolling window (e.g. "reviewed in the last 6 months") needs a relative-date operator — see POLICY_CONTROL_COVERAGE_PLAN.md, Phase 2c.'
+          description: 'For "reviewed at least every six (6) months" use within_days with value 183.'
         }
       },
       { 

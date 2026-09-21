@@ -190,6 +190,14 @@ export const PERMISSIONS = {
     label: 'Manage policies',
     description: 'Author policies and policy controls that apply across companies.',
   },
+  'attestation.write': {
+    scope: PermissionScope.COMPANY,
+    // Kept separate from application.edit on purpose: attesting is a formal claim
+    // the attester must defend at audit, not routine metadata maintenance.
+    label: 'Attest to policy controls',
+    description:
+      "Assert on an application's behalf that a control which cannot be measured automatically is met, and accept that evidence may be requested at audit.",
+  },
   'division.manage': {
     scope: PermissionScope.SYSTEM,
     label: 'Manage divisions',

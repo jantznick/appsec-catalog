@@ -19,6 +19,12 @@ const COMPANY_LOOKUP = {
   Note: (id) => prisma.note.findUnique({ where: { id }, select: { companyId: true } }),
   SammAssessment: (id) => prisma.sammAssessment.findUnique({ where: { id }, select: { companyId: true } }),
   Company: async (id) => ({ companyId: id }),
+  // An attestation belongs to its application's company, so the owning team can
+  // read who attested and when without needing system admin.
+  ControlAttestation: (id) =>
+    prisma.controlAttestation
+      .findUnique({ where: { id }, select: { application: { select: { companyId: true } } } })
+      .then((row) => (row ? { companyId: row.application.companyId } : null)),
   // Policies and policy controls are authored across companies, so they have no
   // owning company; their trail stays system-admin only (see below).
   Policy: async () => null,

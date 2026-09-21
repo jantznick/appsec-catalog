@@ -26,6 +26,7 @@ model User {
   approvedVersions       ApplicationVersion[]        @relation("VersionApprover") // Versions approved by this user
   applicationReviews     ApplicationMetadataReview[] // Reviews performed by this user
   policyControlOverrides PolicyControlOverride[] // Policy control overrides set by this user
+  controlAttestations    ControlAttestation[] // Control attestations made by this user
   integrationCredentialUpdates IntegrationCredential[] @relation("IntegrationCredentialUpdates")
   securityFindingsJobs      SecurityFindingsJob[]
   productUpdates         ProductUpdate[]
@@ -304,6 +305,7 @@ model Application {
   reviews                ApplicationMetadataReview[] // History of metadata reviews
   apiSchema              ApplicationApiSchema?
   policyControlOverrides PolicyControlOverride[] // Manual overrides for policy controls
+  controlAttestations    ControlAttestation[] // Owner attestations for policy controls
   threatModel            ThreatModel?
   productApplications    ProductApplication[]
   applicationToolLinks  ApplicationToolLink[]
@@ -337,6 +339,20 @@ model Application {
   apiSecurityTool             String?
   apiSecurityIntegrationLevel Int?
 
+  // Secrets scanning — evidence for 4.6.9 ("secrets scan shall be employed for
+  // pull requests") and 6.3.3 ("passwords shall not be hard coded"): 6.3.3 is the
+  // requirement, secrets scanning is the control that detects violations.
+  // sastIncludesSecrets mirrors sastIncludesSca for SAST tools that cover both.
+  secretsScanTool                 String?
+  secretsScanIntegrationLevel     Int?
+  sastIncludesSecrets             Boolean? @default(false)
+
+  // IaC and container scanning — evidence for 4.6.14. One field rather than two:
+  // most tools in this space (Snyk, Trivy, Wiz) cover both, so separate columns
+  // would always be set together.
+  iacContainerScanTool            String?
+  iacContainerScanIntegrationLevel Int?
+
   apiSecurityNA  Boolean? @default(false)
   appFirewallNA  Boolean? @default(false)
 
@@ -349,6 +365,8 @@ model Application {
   lastDastScanDate      DateTime? // Date/time of last DAST (Dynamic Application Security Testing) scan
   lastSastScanDate      DateTime? // Date/time of last SAST (Static Application Security Testing) scan
   lastScaScanDate       DateTime? // SCA (dependency) scan; ignored for scoring when sastIncludesSca (uses lastSastScanDate)
+  lastSecretsScanDate      DateTime? // Secrets scan; ignored when sastIncludesSecrets (uses lastSastScanDate)
+  lastIacContainerScanDate DateTime? // IaC / container image scan
 
   // Interfaces with other applications (stored as JSON array of application IDs/names)
   interfaces String? // JSON array of application names/IDs
@@ -999,12 +1017,23 @@ model PolicyControl {
   // must confirm the rest. An admin PolicyControlOverride promotes it to "meeting".
   verificationRequired Boolean            @default(false)
   verificationNote     String?            @db.Text // what a reviewer still needs to confirm
+  // How to combine the "applies_when" field checks (see PolicyControlField.role).
+  // Controls with no applies_when checks apply to every application, as before.
+  appliesWhenLogic     String             @default("AND") // "AND" or "OR"
+
+  // Attestation: for controls no field could ever evidence (process and product
+  // properties — "no back doors", "secure coding guidelines are followed"). The
+  // application owner asserts compliance and accepts the audit risk.
+  // Off by default: a control is only attestable when someone decides it is.
+  allowsAttestation    Boolean            @default(false)
+  attestationValidDays Int                @default(365) // re-attestation period
   policyId        String // Required - all controls must belong to a policy
   policy          Policy                  @relation(fields: [policyId], references: [id], onDelete: Cascade)
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
   fields          PolicyControlField[] // Field mappings for this control
   overrides       PolicyControlOverride[] // Manual overrides for this control
+  attestations    ControlAttestation[] // Owner attestations for this control
   updatedById     String? // User ID who last updated this control
 
   @@index([controlId])
@@ -1022,15 +1051,53 @@ model PolicyControlField {
   operator     String // "exists", "equals", "not_equals", "gte", "gt", "lte", "lt", "contains", "in", "not_in"
   value        String? // JSON string for the value (supports different types: string, number, boolean, array)
   displayOrder Int           @default(0) // Order for display within the control
+  // "compliance" (default) — the check that decides meeting / not_meeting.
+  // "applies_when" — decides whether the control applies to this application at
+  // all. If the applies_when checks do not match, the control evaluates to
+  // "not_applicable" and its compliance checks are never run.
+  role         String        @default("compliance")
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
   @@index([controlId])
   @@index([fieldPath])
+  @@index([controlId, role])
 }
 
 // Policy control overrides - manual compliance overrides for controls without field mappings
 // Admin-only feature to mark controls as compliant when they can't be automatically evaluated
+// Owner attestation that a control is met, for controls no field could evidence
+// (process and product properties). Deliberately NOT PolicyControlOverride:
+//   - override   = an admin saying "trust me, this is fine"
+//   - attestation = an application owner asserting something they must defend at audit
+// Merging them would make "how much of our compliance is self-reported?" unanswerable,
+// which is the first question an auditor asks.
+model ControlAttestation {
+  id            String        @id @default(cuid())
+  applicationId String
+  application   Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  controlId     String
+  control       PolicyControl @relation(fields: [controlId], references: [id], onDelete: Cascade)
+
+  statement   String    @db.Text // required: what is being asserted, and on what basis
+  attestedBy  String
+  user        User      @relation(fields: [attestedBy], references: [id])
+  attestedAt  DateTime  @default(now())
+  expiresAt   DateTime // attestedAt + PolicyControl.attestationValidDays
+  revokedAt   DateTime? // withdrawn before expiry; kept for the audit trail
+  revokedBy   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // One live attestation per application/control. Re-attesting updates this row,
+  // and change history carries the previous statement.
+  @@unique([applicationId, controlId])
+  @@index([applicationId])
+  @@index([controlId])
+  @@index([expiresAt])
+}
+
 model PolicyControlOverride {
   id            String        @id @default(cuid())
   applicationId String
@@ -1240,6 +1307,36 @@ model ScmRepo {
   languages      Json? // { "TypeScript": 12345, ... }
   lastSyncedAt   DateTime?
   lastSyncedById String?
+
+  // Branch protection on the default branch, normalised across providers.
+  // Evidence for 4.6.3 (segregation of duties) and 6.3.12 (pre-release code
+  // review) — see POLICY_CONTROL_COVERAGE_PLAN.md Phase 5a.
+  //
+  // All nullable and tri-state on purpose: null means "not yet read", which is
+  // not the same as false ("read, and the protection is absent"). A control
+  // must be able to tell those apart rather than failing an application for
+  // data we never fetched.
+  protectedBranch              String? // branch the values below describe
+  branchProtectionEnabled      Boolean? // false = branch has no protection at all
+  requiredApprovingReviewCount Int? // 0 = protected but no approvals required
+  dismissStaleReviews          Boolean?
+  requireCodeOwnerReviews      Boolean?
+  requiresStatusChecks         Boolean?
+  enforcedForAdmins            Boolean? // false = admins can bypass
+  allowsForcePushes            Boolean?
+  branchProtectionSyncedAt     DateTime?
+  branchProtectionError        String? // why the read failed (permissions, unsupported provider)
+
+  // Pull-request template, read during repo sync. Evidence for 4.6.7.
+  // Establishes that a template exists and asks about security — NOT that anyone
+  // completed it. Same tri-state rule: null means "not read".
+  prTemplatePath               String? // e.g. ".github/PULL_REQUEST_TEMPLATE.md"
+  prTemplateFound              Boolean?
+  prTemplateHasSecuritySection Boolean?
+  prTemplateSecurityHeading    String? // the matched heading or checklist line, for evidence
+  prTemplateSyncedAt           DateTime?
+  prTemplateError              String?
+
   dependencies   RepoDependency[]
   applications   ApplicationScmRepo[]
   createdAt      DateTime             @default(now())

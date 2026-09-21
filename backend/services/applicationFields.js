@@ -95,6 +95,16 @@ export const APPLICATION_METADATA_FIELDS = Object.freeze(
     { key: 'dastIntegrationLevel', label: 'DAST Integration Level', group: 'security', type: 'int', versioned: true, approvable: true, splittable: true },
     { key: 'scaTool', label: 'SCA Tool', group: 'security', type: 'string', versioned: true, approvable: true, splittable: true },
     { key: 'scaIntegrationLevel', label: 'SCA Integration Level', group: 'security', type: 'int', versioned: true, approvable: true, splittable: true },
+    // Secrets scanning. approvable:false because the technical onboarding form does not
+    // post these — only the App Data tab does, which writes through PUT /:id and never
+    // enters the approval path. Same reasoning as lastSastScanDate below.
+    { key: 'secretsScanTool', label: 'Secrets Scanning Tool', group: 'security', type: 'string', versioned: true, approvable: false, splittable: true },
+    { key: 'secretsScanIntegrationLevel', label: 'Secrets Scanning Integration Level', group: 'security', type: 'int', versioned: true, approvable: false, splittable: true },
+    { key: 'sastIncludesSecrets', label: 'SAST includes secrets scanning', group: 'security', type: 'boolean', versioned: true, approvable: false, splittable: true },
+    // IaC and container share one field: most tools cover both, so separate entries
+    // would always be set together.
+    { key: 'iacContainerScanTool', label: 'IaC / Container Scanning Tool', group: 'security', type: 'string', versioned: true, approvable: false, splittable: true },
+    { key: 'iacContainerScanIntegrationLevel', label: 'IaC / Container Integration Level', group: 'security', type: 'int', versioned: true, approvable: false, splittable: true },
     { key: 'appFirewallTool', label: 'Application Firewall Tool', group: 'security', type: 'string', versioned: true, approvable: true, splittable: true },
     { key: 'appFirewallIntegrationLevel', label: 'Application Firewall Integration Level', group: 'security', type: 'int', versioned: true, approvable: true, splittable: true },
     // Superseded by the API schema upload; retained for existing data.
@@ -124,6 +134,14 @@ export const APPLICATION_METADATA_FIELDS = Object.freeze(
     { key: 'lastDastScanDate', label: 'Last DAST Scan Date', group: 'deployment', type: 'datetime', versioned: true, approvable: false, splittable: true },
     { key: 'lastSastScanDate', label: 'Last SAST Scan Date', group: 'deployment', type: 'datetime', versioned: true, approvable: false, splittable: true },
     { key: 'lastScaScanDate', label: 'Last SCA Scan Date', group: 'deployment', type: 'datetime', versioned: true, approvable: false, splittable: true },
+    // In the registry so policy controls can target it (4.6.6 maps
+    // `metadataLastReviewed within_days 183` for the six-month review rule), but
+    // versioned:false — it is deliberately excluded from version snapshots, since it
+    // describes when the record was reviewed rather than being part of the record.
+    // applicationFields.test.js pins that exclusion.
+    { key: 'metadataLastReviewed', label: 'Metadata Last Reviewed', group: 'deployment', type: 'datetime', versioned: false, approvable: false, splittable: false },
+    { key: 'lastSecretsScanDate', label: 'Last Secrets Scan Date', group: 'deployment', type: 'datetime', versioned: true, approvable: false, splittable: true },
+    { key: 'lastIacContainerScanDate', label: 'Last IaC / Container Scan Date', group: 'deployment', type: 'datetime', versioned: true, approvable: false, splittable: true },
 
     // --- Relations stored as scalars ---------------------------------------
     // JSON array of application ids in a String column. A split does not copy it:

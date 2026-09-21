@@ -243,6 +243,11 @@ function buildBulkImportRow(app, companyId) {
       ? parseInt(app.appFirewallIntegrationLevel)
       : null,
     apiSecurityTool: app.apiSecurityTool?.trim() || null,
+    secretsScanTool: app.secretsScanTool?.trim() || null,
+    secretsScanIntegrationLevel: app.secretsScanIntegrationLevel ? parseInt(app.secretsScanIntegrationLevel) : null,
+    sastIncludesSecrets: app.sastIncludesSecrets === true || app.sastIncludesSecrets === 'true',
+    iacContainerScanTool: app.iacContainerScanTool?.trim() || null,
+    iacContainerScanIntegrationLevel: app.iacContainerScanIntegrationLevel ? parseInt(app.iacContainerScanIntegrationLevel) : null,
     apiSecurityIntegrationLevel: app.apiSecurityIntegrationLevel
       ? parseInt(app.apiSecurityIntegrationLevel)
       : null,
@@ -601,6 +606,13 @@ router.put('/public/:id', async (req, res) => {
       appFirewallIntegrationLevel,
       apiSecurityTool,
       apiSecurityIntegrationLevel,
+      secretsScanTool,
+      secretsScanIntegrationLevel,
+      sastIncludesSecrets,
+      iacContainerScanTool,
+      iacContainerScanIntegrationLevel,
+      lastSecretsScanDate,
+      lastIacContainerScanDate,
       apiSecurityNA,
       appFirewallNA,
     } = req.body;
@@ -754,6 +766,13 @@ router.put('/public/:id', async (req, res) => {
       appFirewallIntegrationLevel: appFirewallIntegrationLevel ? parseInt(appFirewallIntegrationLevel) : existing.appFirewallIntegrationLevel,
       apiSecurityTool: apiSecurityTool?.trim() || existing.apiSecurityTool,
       apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : existing.apiSecurityIntegrationLevel,
+      secretsScanTool: secretsScanTool?.trim() || existing.secretsScanTool,
+      secretsScanIntegrationLevel: secretsScanIntegrationLevel ? parseInt(secretsScanIntegrationLevel) : existing.secretsScanIntegrationLevel,
+      sastIncludesSecrets: sastIncludesSecrets === true || sastIncludesSecrets === 'true' || existing.sastIncludesSecrets,
+      iacContainerScanTool: iacContainerScanTool?.trim() || existing.iacContainerScanTool,
+      iacContainerScanIntegrationLevel: iacContainerScanIntegrationLevel ? parseInt(iacContainerScanIntegrationLevel) : existing.iacContainerScanIntegrationLevel,
+      lastSecretsScanDate: lastSecretsScanDate ? new Date(lastSecretsScanDate) : existing.lastSecretsScanDate,
+      lastIacContainerScanDate: lastIacContainerScanDate ? new Date(lastIacContainerScanDate) : existing.lastIacContainerScanDate,
       apiSecurityNA: apiSecurityNA === true || apiSecurityNA === 'true' || existing.apiSecurityNA,
       appFirewallNA:
         appFirewallNA === true || appFirewallNA === 'true' || existing.appFirewallNA,
@@ -808,6 +827,11 @@ router.put('/public/:id', async (req, res) => {
         dastIntegrationLevel: 'DAST Integration Level',
         scaTool: 'SCA Tool',
         scaIntegrationLevel: 'SCA Integration Level',
+        secretsScanTool: 'Secrets Scanning Tool',
+        secretsScanIntegrationLevel: 'Secrets Scanning Integration Level',
+        sastIncludesSecrets: 'SAST includes secrets scanning',
+        iacContainerScanTool: 'IaC / Container Scanning Tool',
+        iacContainerScanIntegrationLevel: 'IaC / Container Integration Level',
         appFirewallTool: 'App Firewall Tool',
         appFirewallIntegrationLevel: 'App Firewall Integration Level',
         apiSecurityTool: 'Legacy API Security Tool',
@@ -886,6 +910,8 @@ router.get('/:id/score', requireAuth, async (req, res) => {
       { key: 'sast', label: 'SAST', toolField: 'sastTool', levelField: 'sastIntegrationLevel', scanField: 'lastSastScanDate' },
       { key: 'dast', label: 'DAST', toolField: 'dastTool', levelField: 'dastIntegrationLevel', scanField: 'lastDastScanDate' },
       { key: 'sca', label: 'SCA', toolField: 'scaTool', levelField: 'scaIntegrationLevel', scanField: 'lastScaScanDate' },
+      { key: 'secretsScan', label: 'Secrets Scanning', toolField: 'secretsScanTool', levelField: 'secretsScanIntegrationLevel', scanField: 'lastSecretsScanDate' },
+      { key: 'iacContainerScan', label: 'IaC / Container Scanning', toolField: 'iacContainerScanTool', levelField: 'iacContainerScanIntegrationLevel', scanField: 'lastIacContainerScanDate' },
       { key: 'appFirewall', label: 'Application Firewall', toolField: 'appFirewallTool', levelField: 'appFirewallIntegrationLevel', scanField: null },
       { key: 'apiSecurity', label: 'API Security', toolField: null, levelField: null, scanField: null },
     ];
@@ -1066,6 +1092,146 @@ router.get('/:id/policy-compliance', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error evaluating policy compliance:', error);
     res.status(500).json({ error: 'Failed to evaluate policy compliance' });
+  }
+});
+
+/**
+ * Control attestations.
+ *
+ * Distinct from policy overrides in both authority and meaning. An override is an
+ * admin saying "trust me, this is fine". An attestation is the application owner
+ * asserting something they must defend at audit, so it is company-scoped via
+ * `attestation.write`, carries a required statement, and expires.
+ */
+
+// List attestations for an application.
+router.get('/:id/attestations', requireAuth, async (req, res) => {
+  try {
+    await getApplicationForAccess(req, req.params.id, 'application.read');
+    const attestations = await prisma.controlAttestation.findMany({
+      where: { applicationId: req.params.id },
+      include: {
+        user: { select: { id: true, email: true } },
+        control: { select: { id: true, controlId: true, name: true, allowsAttestation: true } },
+      },
+      orderBy: { attestedAt: 'desc' },
+    });
+    const now = Date.now();
+    res.json({
+      attestations: attestations.map((a) => ({
+        ...a,
+        // Derived so callers do not each reimplement the expiry rule.
+        isActive: !a.revokedAt && new Date(a.expiresAt).getTime() >= now,
+      })),
+    });
+  } catch (error) {
+    sendAccessError(res, error);
+  }
+});
+
+// Create or renew an attestation. PUT because there is one live attestation per
+// application/control — re-attesting replaces it and change history keeps the rest.
+router.put('/:id/attestations/:controlId', requireAuth, async (req, res) => {
+  try {
+    await getApplicationForAccess(req, req.params.id, 'attestation.write');
+
+    const statement = typeof req.body?.statement === 'string' ? req.body.statement.trim() : '';
+    if (!statement) {
+      return res.status(400).json({ error: 'A statement is required to attest to a control' });
+    }
+
+    const control = await prisma.policyControl.findUnique({
+      where: { id: req.params.controlId },
+      select: { id: true, controlId: true, allowsAttestation: true, attestationValidDays: true },
+    });
+    if (!control) {
+      return res.status(404).json({ error: 'Policy control not found' });
+    }
+    // Refuse controls that were never meant to be attestable, rather than letting
+    // a measurable control be waved through by assertion.
+    if (!control.allowsAttestation) {
+      return res.status(400).json({
+        error: `Control ${control.controlId} does not accept attestation`,
+      });
+    }
+
+    const attestedAt = new Date();
+    const expiresAt = new Date(attestedAt.getTime() + control.attestationValidDays * 24 * 60 * 60 * 1000);
+    const { userId } = getAuthContext(req);
+
+    const data = {
+      statement,
+      attestedBy: userId,
+      attestedAt,
+      expiresAt,
+      // A fresh attestation clears any earlier withdrawal.
+      revokedAt: null,
+      revokedBy: null,
+    };
+
+    const before = await prisma.controlAttestation.findUnique({
+      where: { applicationId_controlId: { applicationId: req.params.id, controlId: control.id } },
+    });
+
+    const attestation = await prisma.controlAttestation.upsert({
+      where: { applicationId_controlId: { applicationId: req.params.id, controlId: control.id } },
+      create: { applicationId: req.params.id, controlId: control.id, ...data },
+      update: data,
+      include: { user: { select: { id: true, email: true } } },
+    });
+
+    await recordChange({
+      entityType: 'ControlAttestation',
+      entityId: attestation.id,
+      action: before ? 'update' : 'create',
+      userId,
+      changeSource: resolveChangeSource(req),
+      before,
+      after: attestation,
+    });
+
+    res.status(before ? 200 : 201).json(attestation);
+  } catch (error) {
+    sendAccessError(res, error);
+  }
+});
+
+// Withdraw an attestation. The row is kept, marked revoked, so the audit trail
+// still shows that someone attested and when they took it back.
+router.delete('/:id/attestations/:controlId', requireAuth, async (req, res) => {
+  try {
+    await getApplicationForAccess(req, req.params.id, 'attestation.write');
+    const { userId } = getAuthContext(req);
+
+    const existing = await prisma.controlAttestation.findUnique({
+      where: { applicationId_controlId: { applicationId: req.params.id, controlId: req.params.controlId } },
+    });
+    if (!existing) {
+      return res.status(404).json({ error: 'Attestation not found' });
+    }
+    if (existing.revokedAt) {
+      return res.status(200).json(existing);
+    }
+
+    const attestation = await prisma.controlAttestation.update({
+      where: { id: existing.id },
+      data: { revokedAt: new Date(), revokedBy: userId },
+      include: { user: { select: { id: true, email: true } } },
+    });
+
+    await recordChange({
+      entityType: 'ControlAttestation',
+      entityId: attestation.id,
+      action: 'update',
+      userId,
+      changeSource: resolveChangeSource(req),
+      before: existing,
+      after: attestation,
+    });
+
+    res.json(attestation);
+  } catch (error) {
+    sendAccessError(res, error);
   }
 });
 
@@ -2139,6 +2305,13 @@ router.post('/', requireAuth, async (req, res) => {
       appFirewallIntegrationLevel,
       apiSecurityTool,
       apiSecurityIntegrationLevel,
+      secretsScanTool,
+      secretsScanIntegrationLevel,
+      sastIncludesSecrets,
+      iacContainerScanTool,
+      iacContainerScanIntegrationLevel,
+      lastSecretsScanDate,
+      lastIacContainerScanDate,
       apiSecurityNA,
       appFirewallNA,
       currentVersion,
@@ -2259,6 +2432,13 @@ router.post('/', requireAuth, async (req, res) => {
         appFirewallTool: appFirewallTool?.trim() || null,
         appFirewallIntegrationLevel: appFirewallIntegrationLevel ? parseInt(appFirewallIntegrationLevel) : null,
         apiSecurityTool: apiSecurityTool?.trim() || null,
+        secretsScanTool: secretsScanTool?.trim() || null,
+        secretsScanIntegrationLevel: secretsScanIntegrationLevel ? parseInt(secretsScanIntegrationLevel) : null,
+        sastIncludesSecrets: sastIncludesSecrets === true || sastIncludesSecrets === 'true',
+        iacContainerScanTool: iacContainerScanTool?.trim() || null,
+        iacContainerScanIntegrationLevel: iacContainerScanIntegrationLevel ? parseInt(iacContainerScanIntegrationLevel) : null,
+        lastSecretsScanDate: lastSecretsScanDate ? new Date(lastSecretsScanDate) : null,
+        lastIacContainerScanDate: lastIacContainerScanDate ? new Date(lastIacContainerScanDate) : null,
         apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null,
         apiSecurityNA: apiSecurityNA || false,
         appFirewallNA: appFirewallNA || false,
@@ -2340,6 +2520,13 @@ router.put('/:id', requireAuth, async (req, res) => {
       appFirewallIntegrationLevel,
       apiSecurityTool,
       apiSecurityIntegrationLevel,
+      secretsScanTool,
+      secretsScanIntegrationLevel,
+      sastIncludesSecrets,
+      iacContainerScanTool,
+      iacContainerScanIntegrationLevel,
+      lastSecretsScanDate,
+      lastIacContainerScanDate,
       apiSecurityNA,
       appFirewallNA,
       status,
@@ -2483,6 +2670,13 @@ router.put('/:id', requireAuth, async (req, res) => {
         ...(appFirewallTool !== undefined && { appFirewallTool: appFirewallTool?.trim() || null }),
         ...(appFirewallIntegrationLevel !== undefined && { appFirewallIntegrationLevel: appFirewallIntegrationLevel ? parseInt(appFirewallIntegrationLevel) : null }),
         ...(apiSecurityTool !== undefined && { apiSecurityTool: apiSecurityTool?.trim() || null }),
+        ...(secretsScanTool !== undefined && { secretsScanTool: secretsScanTool?.trim() || null }),
+        ...(secretsScanIntegrationLevel !== undefined && { secretsScanIntegrationLevel: secretsScanIntegrationLevel ? parseInt(secretsScanIntegrationLevel) : null }),
+        ...(sastIncludesSecrets !== undefined && { sastIncludesSecrets: sastIncludesSecrets === true || sastIncludesSecrets === 'true' }),
+        ...(iacContainerScanTool !== undefined && { iacContainerScanTool: iacContainerScanTool?.trim() || null }),
+        ...(iacContainerScanIntegrationLevel !== undefined && { iacContainerScanIntegrationLevel: iacContainerScanIntegrationLevel ? parseInt(iacContainerScanIntegrationLevel) : null }),
+        ...(lastSecretsScanDate !== undefined && { lastSecretsScanDate: lastSecretsScanDate ? new Date(lastSecretsScanDate) : null }),
+        ...(lastIacContainerScanDate !== undefined && { lastIacContainerScanDate: lastIacContainerScanDate ? new Date(lastIacContainerScanDate) : null }),
         ...(apiSecurityIntegrationLevel !== undefined && { apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null }),
         ...(apiSecurityNA !== undefined && { apiSecurityNA: apiSecurityNA }),
         ...(appFirewallNA !== undefined && { appFirewallNA: appFirewallNA }),
@@ -3128,6 +3322,11 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
         dastIntegrationLevel: 'DAST Integration Level',
         scaTool: 'SCA Tool',
         scaIntegrationLevel: 'SCA Integration Level',
+        secretsScanTool: 'Secrets Scanning Tool',
+        secretsScanIntegrationLevel: 'Secrets Scanning Integration Level',
+        sastIncludesSecrets: 'SAST includes secrets scanning',
+        iacContainerScanTool: 'IaC / Container Scanning Tool',
+        iacContainerScanIntegrationLevel: 'IaC / Container Integration Level',
         appFirewallTool: 'App Firewall Tool',
         appFirewallIntegrationLevel: 'App Firewall Integration Level',
         apiSecurityTool: 'Legacy API Security Tool',

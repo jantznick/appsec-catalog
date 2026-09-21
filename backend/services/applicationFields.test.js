@@ -58,18 +58,57 @@ const GOLDEN_SPLITTABLE_FIELDS = [
   'additionalNotes',
 ];
 
+/**
+ * Fields added to the registry after it was extracted. The golden lists above stay a
+ * verbatim copy of the pre-registry state, so the extraction remains provably
+ * behaviour-preserving; anything added since is declared here instead. Adding a field
+ * means adding a line here, which is the visible, reviewable act the header asks for.
+ *
+ * Secrets scanning and IaC/container scanning (POLICY_CONTROL_COVERAGE_PLAN.md Phase 6a)
+ * plus metadataLastReviewed, a pre-existing column that was missing from the registry.
+ *
+ * All are approvable:false — the technical onboarding form does not post them, so a
+ * pending version could only ever carry a stale copy. Same reasoning as the scan dates.
+ */
+const ADDED_SINCE_REGISTRY = [
+  'secretsScanTool', 'secretsScanIntegrationLevel', 'sastIncludesSecrets',
+  'iacContainerScanTool', 'iacContainerScanIntegrationLevel',
+  'lastSecretsScanDate', 'lastIacContainerScanDate',
+];
+
+/**
+ * Also added: `metadataLastReviewed`, a pre-existing column the registry did not list.
+ * It is versioned:false, so it appears in METADATA_FIELD_KEYS — which is what lets a
+ * policy control target it — without entering version snapshots. The
+ * pickVersionedMetadata suite below pins that exclusion.
+ */
+const ADDED_UNVERSIONED = ['metadataLastReviewed'];
+
+/** Of the versioned additions, the ones that are not splittable. Currently none. */
+const ADDED_SINCE_REGISTRY_NOT_SPLITTABLE = [];
+
 describe('registry matches the lists it replaced', () => {
   it('derives the versioned field list in the same order', () => {
-    assert.deepEqual(VERSIONED_METADATA_FIELDS, GOLDEN_VERSIONED_FIELDS);
+    // The golden fields keep their original relative order; additions are appended.
+    const withoutAdditions = VERSIONED_METADATA_FIELDS.filter(
+      (k) => !ADDED_SINCE_REGISTRY.includes(k),
+    );
+    assert.deepEqual(withoutAdditions, GOLDEN_VERSIONED_FIELDS);
+    assert.deepEqual(
+      VERSIONED_METADATA_FIELDS.filter((k) => ADDED_SINCE_REGISTRY.includes(k)).sort(),
+      [...ADDED_SINCE_REGISTRY].sort(),
+      'every field added since the registry must still be versioned',
+    );
   });
 
   it('derives the splittable field set', () => {
     // Order is not contractual for splits (the route spreads it into an object), so
     // compare as sets while still catching an added or dropped field.
-    assert.deepEqual(
-      [...SPLITTABLE_METADATA_FIELDS].sort(),
-      [...GOLDEN_SPLITTABLE_FIELDS].sort(),
-    );
+    const expected = [
+      ...GOLDEN_SPLITTABLE_FIELDS,
+      ...ADDED_SINCE_REGISTRY.filter((k) => !ADDED_SINCE_REGISTRY_NOT_SPLITTABLE.includes(k)),
+    ];
+    assert.deepEqual([...SPLITTABLE_METADATA_FIELDS].sort(), expected.sort());
   });
 
   it('excludes the derived fields from approval', () => {
@@ -85,7 +124,9 @@ describe('registry matches the lists it replaced', () => {
       'lastDastScanDate',
       'lastSastScanDate',
       'lastScaScanDate',
-    ]);
+      // Added since; the onboarding form posts none of them either.
+      ...ADDED_SINCE_REGISTRY,
+    ].sort());
   });
 
   it('excludes exactly name, status and interfaces from splits', () => {
@@ -94,7 +135,15 @@ describe('registry matches the lists it replaced', () => {
     const versioned = new Set(VERSIONED_METADATA_FIELDS);
     const splittable = new Set(SPLITTABLE_METADATA_FIELDS);
     const versionedOnly = [...versioned].filter((k) => !splittable.has(k));
-    assert.deepEqual(versionedOnly.sort(), ['interfaces', 'name', 'status']);
+    assert.deepEqual(
+      versionedOnly.sort(),
+      ['interfaces', 'name', 'status', ...ADDED_SINCE_REGISTRY_NOT_SPLITTABLE].sort(),
+    );
+    // A registry field that is not versioned is in neither set.
+    for (const key of ADDED_UNVERSIONED) {
+      assert.ok(isMetadataField(key), `${key} should be a registry field`);
+      assert.ok(!versioned.has(key), `${key} must not be versioned`);
+    }
   });
 });
 

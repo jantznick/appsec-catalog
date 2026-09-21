@@ -1044,6 +1044,21 @@ export const api = {
   syncApplicationScmRepo: (applicationId) =>
     apiRequest(`/api/applications/${applicationId}/scm/sync`, { method: 'POST' }),
 
+  /** Control attestations — owner-asserted compliance for controls no field can measure. */
+  getApplicationAttestations: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/attestations`),
+
+  /** Create or renew. `statement` is required and is what the attester must defend at audit. */
+  attestControl: (applicationId, controlId, statement) =>
+    apiRequest(`/api/applications/${applicationId}/attestations/${controlId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ statement }),
+    }),
+
+  /** Withdraw. The row is kept and marked revoked, so the audit trail survives. */
+  withdrawAttestation: (applicationId, controlId) =>
+    apiRequest(`/api/applications/${applicationId}/attestations/${controlId}`, { method: 'DELETE' }),
+
   /** Re-run the OSV advisory scan against the already-stored dependencies (no SCM re-fetch). */
   rescanApplicationScmAdvisories: (applicationId) =>
     apiRequest(`/api/applications/${applicationId}/scm/rescan-advisories`, { method: 'POST' }),

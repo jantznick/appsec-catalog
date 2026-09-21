@@ -3,7 +3,16 @@ import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { getAuthContext, resolveChangeSource } from '../middleware/authContext.js';
 import { recordChange } from '../utils/changeHistory.js';
-import { validatePolicyControlFields } from '../services/policyFields.js';
+import { validatePolicyControlFields, isPolicyFieldRole } from '../services/policyFields.js';
+
+/**
+ * Normalise a field's role. The vocabulary lives in services/policyFields.js, which also
+ * rejects a supplied-but-invalid value — this only handles the omitted case.
+ */
+function normalizeFieldRole(role) {
+  const v = typeof role === 'string' ? role.trim() : '';
+  return isPolicyFieldRole(v) ? v : 'compliance';
+}
 
 function summarizeFields(fields) {
   return (fields || []).map((f) => ({ fieldPath: f.fieldPath, operator: f.operator, value: f.value }));
@@ -97,6 +106,9 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       fields,
       verificationRequired,
       verificationNote,
+      appliesWhenLogic,
+      allowsAttestation,
+      attestationValidDays,
     } = req.body;
 
     // Validate required fields
@@ -129,6 +141,17 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
 
     // A bad fieldPath or operator fails silently at evaluation time and marks every
     // application non-compliant for this control, so reject it here instead.
+    if (appliesWhenLogic && !['AND', 'OR'].includes(appliesWhenLogic)) {
+      return res.status(400).json({ error: 'Applies-when logic must be AND or OR' });
+    }
+
+    if (attestationValidDays !== undefined && attestationValidDays !== null) {
+      const days = Number(attestationValidDays);
+      if (!Number.isInteger(days) || days < 1 || days > 3650) {
+        return res.status(400).json({ error: 'Attestation validity must be a whole number of days between 1 and 3650' });
+      }
+    }
+
     const fieldProblems = validatePolicyControlFields(fields);
     if (fieldProblems.length > 0) {
       return res.status(400).json({
@@ -153,6 +176,11 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
           policyId: policyId.trim(),
           verificationRequired: verificationRequired === true,
           verificationNote: verificationNote?.trim() || null,
+          appliesWhenLogic: appliesWhenLogic || 'AND',
+          allowsAttestation: allowsAttestation === true,
+          ...(attestationValidDays !== undefined && attestationValidDays !== null
+            ? { attestationValidDays: Number(attestationValidDays) }
+            : {}),
         },
       });
 
@@ -162,6 +190,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
           data: fields.map((field, index) => ({
             controlId: newControl.id,
             fieldPath: field.fieldPath?.trim(),
+            role: normalizeFieldRole(field.role),
             operator: field.operator?.trim(),
             value: field.value !== null && field.value !== undefined ? JSON.stringify(field.value) : null,
             displayOrder: field.displayOrder !== undefined ? field.displayOrder : index,
@@ -217,6 +246,9 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       fields,
       verificationRequired,
       verificationNote,
+      appliesWhenLogic,
+      allowsAttestation,
+      attestationValidDays,
     } = req.body;
 
     // Validate required fields
@@ -253,6 +285,17 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
 
     // A bad fieldPath or operator fails silently at evaluation time and marks every
     // application non-compliant for this control, so reject it here instead.
+    if (appliesWhenLogic && !['AND', 'OR'].includes(appliesWhenLogic)) {
+      return res.status(400).json({ error: 'Applies-when logic must be AND or OR' });
+    }
+
+    if (attestationValidDays !== undefined && attestationValidDays !== null) {
+      const days = Number(attestationValidDays);
+      if (!Number.isInteger(days) || days < 1 || days > 3650) {
+        return res.status(400).json({ error: 'Attestation validity must be a whole number of days between 1 and 3650' });
+      }
+    }
+
     const fieldProblems = validatePolicyControlFields(fields);
     if (fieldProblems.length > 0) {
       return res.status(400).json({
@@ -288,6 +331,10 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       if (policyId !== undefined) updateData.policyId = policyId.trim();
       if (verificationRequired !== undefined) updateData.verificationRequired = verificationRequired === true;
       if (verificationNote !== undefined) updateData.verificationNote = verificationNote?.trim() || null;
+      if (appliesWhenLogic !== undefined) updateData.appliesWhenLogic = appliesWhenLogic || 'AND';
+      if (allowsAttestation !== undefined) updateData.allowsAttestation = allowsAttestation === true;
+      if (attestationValidDays !== undefined && attestationValidDays !== null)
+        updateData.attestationValidDays = Number(attestationValidDays);
 
       await tx.policyControl.update({
         where: { id },
@@ -307,6 +354,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
             data: fields.map((field, index) => ({
               controlId: id,
               fieldPath: field.fieldPath?.trim(),
+              role: normalizeFieldRole(field.role),
               operator: field.operator?.trim(),
               value: field.value !== null && field.value !== undefined ? JSON.stringify(field.value) : null,
               displayOrder: field.displayOrder !== undefined ? field.displayOrder : index,
