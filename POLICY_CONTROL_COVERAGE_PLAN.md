@@ -12,19 +12,29 @@ so activating them before mapping would fail every application against every unm
 
 ## Current state (2026-09-18)
 
-28 controls: **9 mapped**, **19 unmapped**.
+28 controls: **10 mapped**, **18 unmapped**.
 
 | Control | Logic | Field checks | Confidence |
 |---|---|---|---|
 | 4.6.2 Continuous security testing | AND | `sastTool exists` + `sastIntegrationLevel gte 1` | direct |
 | 4.6.5 Software composition mgmt | OR | `scaTool exists` / `sastIncludesSca = true` | direct |
 | 4.6.8 DAST and SAST coverage | OR | `sastIntegrationLevel gte 1` / `dastIntegrationLevel gte 1` | direct |
+| 4.6.11 Threat modeling | AND | `threatModel.status equals approved` | direct, **over-applies — see below** |
 | 4.6.13 SCA | OR | `scaIntegrationLevel gte 1` / `sastIncludesSca = true` | direct |
 | 6.3.4 Automated code review | AND | `sastTool exists` + `sastIntegrationLevel gte 1` | direct |
-| 4.6.6 Application metadata | AND | `businessCriticality exists` + `description exists` | **partial — see Phase 3** |
+| 4.6.6 Application metadata | AND | `businessCriticality exists` + `description exists` | **`verificationRequired`** — 2 of 5 bullets |
 | 6.3.7 OWASP Top 10 controls | AND | `dastTool exists` | proxy |
 | 4.6.1 SDLC-managed development | AND | `repoUrl exists` | proxy |
 | 6.3.1 SDLC process requirements | AND | `repoUrl exists` | proxy |
+
+**4.6.11 passes 0 of 91 today** — no `ThreatModel` row exists for any application. Unlike the
+`gitBranch` case this is a true finding rather than a dead check: the threat model feature exists
+and a compliant team would populate it, so 0% reflects the portfolio, not the mapping.
+
+**4.6.11 also over-applies.** The control text scopes it to *"internet facing and high risk
+application features"*, but with no per-control applicability it is evaluated against every
+application. An internal, low-criticality application fails a control that does not apply to it.
+Needs `appliesWhen` (Phase 2a) — same defect as 4.6.10, which is why 4.6.10 is still unmapped.
 
 Portfolio pass rates across all 91 applications at time of writing: 4.6.8 → 43%, 4.6.6 → 41%,
 6.3.7 → 40%, 4.6.2 / 6.3.4 → 31%, 4.6.5 / 4.6.13 → 27%, 4.6.1 / 6.3.1 → 16%.
