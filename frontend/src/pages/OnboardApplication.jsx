@@ -50,6 +50,12 @@ export function OnboardApplication() {
     dastIntegrationLevel: '',
     scaTool: '',
     scaIntegrationLevel: '',
+    secretsScanTool: '',
+    secretsScanIntegrationLevel: '',
+    sastIncludesSecrets: false,
+    iacContainerScanTool: '',
+    iacContainerScanIntegrationLevel: '',
+    iacContainerScanNA: false,
     appFirewallTool: '',
     appFirewallIntegrationLevel: '',
     apiSecurityTool: '',
@@ -218,6 +224,12 @@ export function OnboardApplication() {
           dastIntegrationLevel: formData.dastIntegrationLevel,
           scaTool: formData.scaTool,
           scaIntegrationLevel: formData.scaIntegrationLevel,
+          secretsScanTool: formData.secretsScanTool,
+          secretsScanIntegrationLevel: formData.secretsScanIntegrationLevel,
+          sastIncludesSecrets: formData.sastIncludesSecrets,
+          iacContainerScanTool: formData.iacContainerScanTool,
+          iacContainerScanIntegrationLevel: formData.iacContainerScanIntegrationLevel,
+          iacContainerScanNA: formData.iacContainerScanNA,
           appFirewallTool: formData.appFirewallTool,
           appFirewallIntegrationLevel: formData.appFirewallIntegrationLevel,
           apiSecurityTool: formData.apiSecurityTool,
@@ -618,7 +630,7 @@ export function OnboardApplication() {
                     name="hasSecurityTesting"
                     value="No"
                     checked={formData.hasSecurityTesting === 'No'}
-                    onChange={(e) => setFormData({ ...formData, hasSecurityTesting: e.target.value, securityTestingDescription: '', sastTool: '', sastIntegrationLevel: '', sastIncludesSca: false, dastTool: '', dastIntegrationLevel: '', scaTool: '', scaIntegrationLevel: '', appFirewallTool: '', appFirewallIntegrationLevel: '', appFirewallNA: false, apiSecurityTool: '', apiSecurityIntegrationLevel: '', apiSecurityNA: false })}
+                    onChange={(e) => setFormData({ ...formData, hasSecurityTesting: e.target.value, securityTestingDescription: '', sastTool: '', sastIntegrationLevel: '', sastIncludesSca: false, dastTool: '', dastIntegrationLevel: '', scaTool: '', scaIntegrationLevel: '', secretsScanTool: '', secretsScanIntegrationLevel: '', sastIncludesSecrets: false, iacContainerScanTool: '', iacContainerScanIntegrationLevel: '', iacContainerScanNA: false, appFirewallTool: '', appFirewallIntegrationLevel: '', appFirewallNA: false, apiSecurityTool: '', apiSecurityIntegrationLevel: '', apiSecurityNA: false })}
                     label="No"
                   />
                 </RadioGroup>
@@ -692,6 +704,59 @@ export function OnboardApplication() {
                         )}
                         {formData.sastIncludesSca && (
                           <p className="text-sm text-gray-600">SCA will be scored the same as SAST (tool and level).</p>
+                        )}
+                        <Checkbox
+                          id="sastIncludesSecretsOnboard"
+                          label="SAST output includes secrets scanning"
+                          checked={formData.sastIncludesSecrets}
+                          onChange={(e) => setFormData({ ...formData, sastIncludesSecrets: e.target.checked })}
+                        />
+                        {!formData.sastIncludesSecrets && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Input
+                              label="Secrets Scanning Tool"
+                              value={formData.secretsScanTool}
+                              onChange={(e) => setFormData({ ...formData, secretsScanTool: e.target.value })}
+                            />
+                            <Select
+                              label="Secrets Scanning Integration Level"
+                              value={formData.secretsScanIntegrationLevel}
+                              onChange={(e) => setFormData({ ...formData, secretsScanIntegrationLevel: e.target.value })}
+                              options={[
+                                { value: '', label: 'Select level' },
+                                ...integrationLevels,
+                              ]}
+                            />
+                          </div>
+                        )}
+                        {formData.sastIncludesSecrets && (
+                          <p className="text-sm text-gray-600">
+                            Secrets scanning will be scored the same as SAST (tool and level).
+                          </p>
+                        )}
+                        <Checkbox
+                          id="iacContainerScanNAOnboard"
+                          label="No infrastructure-as-code or container images (N/A)"
+                          checked={formData.iacContainerScanNA}
+                          onChange={(e) => setFormData({ ...formData, iacContainerScanNA: e.target.checked })}
+                        />
+                        {!formData.iacContainerScanNA && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Input
+                              label="IaC / Container Scanning Tool"
+                              value={formData.iacContainerScanTool}
+                              onChange={(e) => setFormData({ ...formData, iacContainerScanTool: e.target.value })}
+                            />
+                            <Select
+                              label="IaC / Container Integration Level"
+                              value={formData.iacContainerScanIntegrationLevel}
+                              onChange={(e) => setFormData({ ...formData, iacContainerScanIntegrationLevel: e.target.value })}
+                              options={[
+                                { value: '', label: 'Select level' },
+                                ...integrationLevels,
+                              ]}
+                            />
+                          </div>
                         )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <Input

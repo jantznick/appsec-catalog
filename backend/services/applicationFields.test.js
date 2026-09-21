@@ -87,6 +87,13 @@ const ADDED_UNVERSIONED = ['metadataLastReviewed'];
 /** Of the versioned additions, the ones that are not splittable. Currently none. */
 const ADDED_SINCE_REGISTRY_NOT_SPLITTABLE = [];
 
+/**
+ * Of the versioned additions, the ones the technical onboarding form does NOT post, so
+ * they must stay out of the approval write-back. The other six are collected by that
+ * form and are therefore approvable.
+ */
+const ADDED_SINCE_REGISTRY_NOT_APPROVABLE = ['lastSecretsScanDate', 'lastIacContainerScanDate'];
+
 describe('registry matches the lists it replaced', () => {
   it('derives the versioned field list in the same order', () => {
     // The golden fields keep their original relative order; additions are appended.
@@ -112,10 +119,10 @@ describe('registry matches the lists it replaced', () => {
   });
 
   it('excludes the derived fields from approval', () => {
-    // No intake form posts any of these six, so a pending version can only carry a
-    // stale copy taken at submit time. Applying it would revert whatever a deploy,
-    // a scanner integration or an admin set in the meantime. They stay versioned so
-    // history still records when they changed.
+    // No intake form posts any of these, so a pending version can only carry a stale
+    // copy taken at submit time. Applying it would revert whatever a deploy, a scanner
+    // integration or an admin set in the meantime. They stay versioned so history
+    // still records when they changed.
     const notApprovable = VERSIONED_METADATA_FIELDS.filter((k) => !APPROVABLE_METADATA_FIELDS.includes(k));
     assert.deepEqual(notApprovable.sort(), [
       'currentVersion',
@@ -124,9 +131,26 @@ describe('registry matches the lists it replaced', () => {
       'lastDastScanDate',
       'lastSastScanDate',
       'lastScaScanDate',
-      // Added since; the onboarding form posts none of them either.
-      ...ADDED_SINCE_REGISTRY,
+      ...ADDED_SINCE_REGISTRY_NOT_APPROVABLE,
     ].sort());
+  });
+
+  it('keeps every field the technical onboarding form collects approvable', () => {
+    // applyApprovedVersion only writes fields in APPROVABLE_METADATA_FIELDS. A field the
+    // form renders but that is not approvable produces the worst possible outcome: the
+    // submitter answers, the admin approves, and the answer is discarded with no error.
+    // This list is the security-tooling block of OnboardApplication.jsx.
+    const collectedByOnboardingForm = [
+      'sastTool', 'sastIntegrationLevel', 'sastIncludesSca',
+      'dastTool', 'dastIntegrationLevel',
+      'scaTool', 'scaIntegrationLevel',
+      'secretsScanTool', 'secretsScanIntegrationLevel', 'sastIncludesSecrets',
+      'iacContainerScanTool', 'iacContainerScanIntegrationLevel', 'iacContainerScanNA',
+      'appFirewallTool', 'appFirewallIntegrationLevel', 'appFirewallNA',
+      'apiSecurityNA',
+    ];
+    const dropped = collectedByOnboardingForm.filter((k) => !APPROVABLE_METADATA_FIELDS.includes(k));
+    assert.deepEqual(dropped, [], 'these are collected on the intake form but never applied on approval');
   });
 
   it('excludes exactly name, status and interfaces from splits', () => {

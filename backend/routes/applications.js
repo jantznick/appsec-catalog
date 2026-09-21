@@ -732,6 +732,18 @@ router.put('/public/:id', async (req, res) => {
     // this form does not ask for it, so leave it alone.
     const submittedNotes = additionalNotes?.trim() || null;
 
+    /**
+     * Read a checkbox the form posts, falling back to the stored value only when the
+     * form did not send the field at all.
+     *
+     * The previous form was `posted === true || posted === 'true' || existing`, which
+     * cannot express "unchecked": once the stored value was true, the OR short-circuited
+     * to true no matter what the submitter posted. Every one of these is a checkbox the
+     * technical form now renders, so unchecking it has to stick.
+     */
+    const submittedFlag = (posted, current) =>
+      posted === undefined ? current : posted === true || posted === 'true';
+
     // Instead of updating the application directly, create a pending version
     // Merge new data with existing data to create a complete snapshot
     const versionData = {
@@ -755,10 +767,7 @@ router.put('/public/:id', async (req, res) => {
       additionalNotes: submittedNotes || existing.additionalNotes,
       sastTool: sastTool?.trim() || existing.sastTool,
       sastIntegrationLevel: sastIntegrationLevel ? parseInt(sastIntegrationLevel) : existing.sastIntegrationLevel,
-      sastIncludesSca:
-        sastIncludesSca === undefined
-          ? existing.sastIncludesSca
-          : sastIncludesSca === true || sastIncludesSca === 'true',
+      sastIncludesSca: submittedFlag(sastIncludesSca, existing.sastIncludesSca),
       dastTool: dastTool?.trim() || existing.dastTool,
       dastIntegrationLevel: dastIntegrationLevel ? parseInt(dastIntegrationLevel) : existing.dastIntegrationLevel,
       scaTool: scaTool?.trim() || existing.scaTool,
@@ -771,15 +780,14 @@ router.put('/public/:id', async (req, res) => {
       apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : existing.apiSecurityIntegrationLevel,
       secretsScanTool: secretsScanTool?.trim() || existing.secretsScanTool,
       secretsScanIntegrationLevel: secretsScanIntegrationLevel ? parseInt(secretsScanIntegrationLevel) : existing.secretsScanIntegrationLevel,
-      sastIncludesSecrets: sastIncludesSecrets === true || sastIncludesSecrets === 'true' || existing.sastIncludesSecrets,
+      sastIncludesSecrets: submittedFlag(sastIncludesSecrets, existing.sastIncludesSecrets),
       iacContainerScanTool: iacContainerScanTool?.trim() || existing.iacContainerScanTool,
       iacContainerScanIntegrationLevel: iacContainerScanIntegrationLevel ? parseInt(iacContainerScanIntegrationLevel) : existing.iacContainerScanIntegrationLevel,
-      iacContainerScanNA: iacContainerScanNA === true || iacContainerScanNA === 'true' || existing.iacContainerScanNA,
+      iacContainerScanNA: submittedFlag(iacContainerScanNA, existing.iacContainerScanNA),
       lastSecretsScanDate: lastSecretsScanDate ? new Date(lastSecretsScanDate) : existing.lastSecretsScanDate,
       lastIacContainerScanDate: lastIacContainerScanDate ? new Date(lastIacContainerScanDate) : existing.lastIacContainerScanDate,
-      apiSecurityNA: apiSecurityNA === true || apiSecurityNA === 'true' || existing.apiSecurityNA,
-      appFirewallNA:
-        appFirewallNA === true || appFirewallNA === 'true' || existing.appFirewallNA,
+      apiSecurityNA: submittedFlag(apiSecurityNA, existing.apiSecurityNA),
+      appFirewallNA: submittedFlag(appFirewallNA, existing.appFirewallNA),
       currentVersion: existing.currentVersion,
       deploymentEnvironment: existing.deploymentEnvironment,
       gitBranch: existing.gitBranch,
