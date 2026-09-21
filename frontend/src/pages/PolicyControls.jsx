@@ -10,28 +10,46 @@ import { Select } from '../components/ui/Select.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import useAuthStore from '../store/authStore.js';
-import { POLICY_OPERATORS as OPERATORS } from '../lib/policyDisplay.js';
+import {
+  POLICY_OPERATORS as OPERATORS,
+  getOperatorOptionsFor,
+  isDayCountOperator,
+} from '../lib/policyDisplay.js';
 
-// Get available operators for a field
-const getOperatorsForField = (fieldPath, availableFields) => {
+/**
+ * Operators offered for a field.
+ *
+ * `currentOperator` is the value already stored on the mapping. It is always included in
+ * the returned options, even when this UI does not recognise it — see
+ * getOperatorOptionsFor. Without that, an operator the engine supports and this list has
+ * not caught up with was rewritten on load and destroyed on save.
+ */
+const getOperatorsForField = (fieldPath, availableFields, currentOperator) => {
   const field = availableFields.find(f => f.path === fieldPath);
-  if (!field) return OPERATORS;
-  
+  if (!field) return getOperatorOptionsFor(OPERATORS, currentOperator);
+
   // If field has specific allowedOperators, use those
   if (field.allowedOperators && field.allowedOperators.length > 0) {
-    return OPERATORS.filter(op => field.allowedOperators.includes(op.value));
+    return getOperatorOptionsFor(
+      OPERATORS.filter(op => field.allowedOperators.includes(op.value)),
+      currentOperator,
+    );
   }
   
   // Fallback to type-based filtering (backward compatibility)
   const fieldType = field.fieldType;
-  if (fieldType === 'number') {
-    return OPERATORS.filter(op => ['exists', 'not_exists', 'equals', 'not_equals', 'gte', 'gt', 'lte', 'lt'].includes(op.value));
-  } else if (fieldType === 'boolean') {
-    return OPERATORS.filter(op => ['exists', 'not_exists', 'equals', 'not_equals'].includes(op.value));
-  } else if (fieldType === 'date') {
-    return OPERATORS.filter(op => ['exists', 'not_exists', 'equals', 'not_equals', 'gte', 'gt', 'lte', 'lt'].includes(op.value));
-  }
-  return OPERATORS;
+  const byType =
+    fieldType === 'number'
+      ? ['exists', 'not_exists', 'equals', 'not_equals', 'gte', 'gt', 'lte', 'lt']
+      : fieldType === 'boolean'
+        ? ['exists', 'not_exists', 'equals', 'not_equals']
+        : fieldType === 'date'
+          ? ['exists', 'not_exists', 'equals', 'not_equals', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days']
+          : null;
+  return getOperatorOptionsFor(
+    byType ? OPERATORS.filter(op => byType.includes(op.value)) : OPERATORS,
+    currentOperator,
+  );
 };
 
 export function PolicyControls() {
@@ -395,8 +413,6 @@ export function PolicyControls() {
       policyId: control.policyId || (policies.length > 0 ? policies[0].id : ''),
       fields: control.fields.map(f => {
         const fieldMetadata = getFieldMetadata(f.fieldPath);
-        const availableOperators = getOperatorsForField(f.fieldPath, availableFields);
-        const isValidOperator = availableOperators.some(op => op.value === f.operator);
         
         let value = f.value ? (() => {
           try {
@@ -418,7 +434,10 @@ export function PolicyControls() {
         
         return {
           fieldPath: f.fieldPath,
-          operator: isValidOperator ? f.operator : (availableOperators[0]?.value || 'exists'),
+          // Preserved verbatim. This previously fell back to the first available
+          // operator when the UI did not recognise the stored one, which rewrote the
+          // mapping on load and saved the replacement.
+          operator: f.operator,
           value: value,
           displayOrder: f.displayOrder,
         };
@@ -1000,7 +1019,7 @@ export function PolicyControls() {
                               value={field.operator}
                               onChange={(e) => handleFieldChange(index, 'operator', e.target.value)}
                               required
-                              options={getOperatorsForField(field.fieldPath, availableFields)}
+                              options={getOperatorsForField(field.fieldPath, availableFields, field.operator)}
                               helperText={
                                 (() => {
                                   const fieldMetadata = getFieldMetadata(field.fieldPath);
@@ -1021,8 +1040,38 @@ export function PolicyControls() {
                             />
                             {(() => {
                               const fieldMetadata = getFieldMetadata(field.fieldPath);
-                              const valueType = fieldMetadata?.valueType || (getFieldType(field.fieldPath) === 'number' ? 'number' : getFieldType(field.fieldPath) === 'date' ? 'date' : 'text');
+                              // A rolling-window operator takes a COUNT OF DAYS, so the
+                              // input must be a number even on a date field — a date
+                              // picker cannot express "within the last 30 days".
+                              const dayCount = isDayCountOperator(field.operator);
+                              const valueType = dayCount
+                                ? 'days'
+                                : fieldMetadata?.valueType || (getFieldType(field.fieldPath) === 'number' ? 'number' : getFieldType(field.fieldPath) === 'date' ? 'date' : 'text');
                               const needsValue = field.operator !== 'exists' && field.operator !== 'not_exists';
+
+                              if (valueType === 'days') {
+                                return (
+                                  <Input
+                                    label="Value (days)"
+                                    type="number"
+                                    min="1"
+                                    value={field.value ?? ''}
+                                    onChange={(e) =>
+                                      handleFieldChange(
+                                        index,
+                                        'value',
+                                        e.target.value === '' ? null : Number(e.target.value),
+                                      )
+                                    }
+                                    required
+                                    helperText={
+                                      field.operator === 'within_days'
+                                        ? 'Met when the date is no more than this many days old. 183 is roughly six months.'
+                                        : 'Met when the date is more than this many days old.'
+                                    }
+                                  />
+                                );
+                              }
                               
                               // Dropdown for fields with valueOptions
                               if (valueType === 'dropdown' && fieldMetadata?.valueOptions && needsValue) {
@@ -1464,7 +1513,7 @@ export function PolicyControls() {
                     ) : (
                       policyFormData.conditionalConditions.map((condition, index) => {
                         const fieldMetadata = getFieldMetadata(condition.fieldPath);
-                        const availableOperators = getOperatorsForField(condition.fieldPath, availableFields);
+                        const availableOperators = getOperatorsForField(condition.fieldPath, availableFields, condition.operator);
                         const needsValue = condition.operator !== 'exists' && condition.operator !== 'not_exists';
                         
                         return (

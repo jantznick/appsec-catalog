@@ -703,7 +703,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'For "reviewed at least every six (6) months" use within_days with value 183.'
+          description: 'For "reviewed at least every six (6) months" use Within the last N days with 183.'
         }
       },
       { 

@@ -45,9 +45,28 @@ Also wrong on that row: the value input renders as a date picker (from `fieldTyp
 while the helper text reads "No value needed" (because the UI believes the operator is
 `exists`). For these operators the value is a **count of days** and should be a number.
 
-- [ ] Add both operators to the frontend list with clear labels
-- [ ] Render a number input for day-count operators
-- [ ] Make an unrecognised stored operator visible rather than silently replaced
+- [x] Add both operators to the frontend list with clear labels
+- [x] Render a number input for day-count operators
+- [x] Make an unrecognised stored operator visible rather than silently replaced
+
+**Fixed.** The corruption was not the `<Select>` coercing a value — `PolicyControls.jsx`
+line 420 *deliberately* rewrote an unrecognised operator to the first available one on
+load:
+
+```js
+operator: isValidOperator ? f.operator : (availableOperators[0]?.value || 'exists'),
+```
+
+It now preserves `f.operator` verbatim, and `getOperatorOptionsFor` guarantees the stored
+value is present in the options, labelled `(not supported by this UI)` when this list is
+behind the engine. So the next operator added degrades to an ugly label instead of
+destroying data.
+
+The `validationRules.description` hint that told the user to type `within_days` has been
+reworded to name the dropdown option, since the dropdown now has one.
+
+Verified: 8 assertions over the helpers. **Not yet verified in the browser** — the running
+dev server is served from the main checkout, not this worktree, so it needs a pull first.
 
 > The last point is the durable fix. Four independent operator lists existed; the backend
 > two were unified in #31 by deriving `POLICY_OPERATORS` from the engine's
@@ -142,22 +161,11 @@ lapse.
 
 - [ ] Attestations list, with expiry dates and the statement
 
-### F7 — Environments has no UI at all
+### F7 — Twenty-six API client methods no screen calls
 
-From PR #33. `api.getEnvironments`, `createEnvironment`, `updateEnvironment`,
-`deleteEnvironment` and `getEnvironmentKinds` all exist; **no page or component calls any
-of them.** The migration backfills environments from deployment history, so after
-migrating they exist in the database and are unmanageable through the app.
-
-Also missing from that PR, per its author: the adopt/triage endpoint for unassigned
-deployments (which the `environment.manage` permission description already promises), the
-per-application environment selector, and the Wiz tag triple the workstream began for.
-
-Owned by the environments workstream, not this one. Listed so it is not lost.
-
-### F8 — Twenty-six API client methods no screen calls
-
-Beyond the environments and attestation entries above:
+Beyond the attestation entry above, and excluding the five environments methods, which are **not** a gap: the environments UI is
+planned work in that workstream's own phases and has not started. Its client methods
+exist ahead of the screens by design.
 
 `assignUserToCompany`, `createApplicationOnboard`, `getAdminSecurityFindingsJob`,
 `getAiAvailability`, `getAiUsageMine`, `getApplicationApiSchema`, `getApplicationVersion`,
@@ -226,6 +234,11 @@ They would seed the original mappings: 4.6.3 and 4.6.7 empty, 4.6.6 with two fie
 secrets or IaC, no attestation flags.
 
 ### D5 — Blocked on the environments workstream
+
+The environments UI (management screen, per-application selector), the adopt/triage
+endpoint, and the Wiz tag triple are that workstream's planned phases, not gaps in this
+one. Listed only so the dependency is visible.
+
 
 - 4.6.4 mapping. Its author confirmed the records evidence only that environments exist,
   not that they are separated, so it lands as `verification_required`.
