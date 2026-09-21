@@ -2189,28 +2189,28 @@ export function ApplicationDetail() {
                 />
               )}
               <div className="space-y-8">
-                {/* Security Testing Description - Full Width */}
-                <div className="border-b border-gray-200 pb-6">
-                  {isEditing ? (
-                    <Textarea
-                      label="Security Testing Description"
-                      value={formData.securityTestingDescription}
-                      onChange={(e) => handleFieldChange('securityTestingDescription', e.target.value)}
-                      rows={6}
-                      placeholder="Describe the security testing practices, tools, and processes"
-                      helperText="Information about security testing in place"
-                    />
-                  ) : (
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Security Testing Description</label>
-                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                        <p className="text-gray-900 whitespace-pre-wrap leading-relaxed">
-                          {formData.securityTestingDescription || <span className="text-gray-400 italic">Not set</span>}
-                        </p>
-                      </div>
+                {/* Security Testing Description — no longer collected.
+                    The free-text answer was superseded by the structured tool fields
+                    below: a paragraph saying "we run Snyk in CI" cannot be evaluated
+                    by a policy control, cannot be scored, and cannot be reported on.
+                    Shown read-only where an application still holds one, so the text
+                    someone wrote is not silently discarded, and hidden entirely
+                    otherwise rather than presenting an empty box to fill in. */}
+                {formData.securityTestingDescription && (
+                  <div className="border-b border-gray-200 pb-6">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Security Testing Description <span className="font-normal text-gray-500">(no longer collected)</span>
+                    </label>
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <p className="text-gray-900 whitespace-pre-wrap leading-relaxed">
+                        {formData.securityTestingDescription}
+                      </p>
                     </div>
-                  )}
-                </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Kept from an earlier submission. The fields below replaced it.
+                    </p>
+                  </div>
+                )}
                 
                 {/* Security Tools - Grid Layout */}
                 <div>

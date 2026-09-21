@@ -84,6 +84,12 @@ export const APPLICATION_METADATA_FIELDS = Object.freeze(
     { key: 'devTeamContact', label: 'Development Team Contact', group: 'business', type: 'string', versioned: true, approvable: true, splittable: true },
 
     // --- Security testing ---------------------------------------------------
+    // DEPRECATED — no form collects this any more. The structured tool fields
+    // replaced it: a paragraph saying "we run Snyk in CI" cannot be evaluated by a
+    // policy control, scored, or reported on, and it was being answered instead of the
+    // fields that can. Kept versioned and approvable so existing values survive in
+    // history, still appear in a diff, and an in-flight pending version can still be
+    // approved. The CSV importer excludes it (see NOT_IMPORTABLE).
     { key: 'securityTestingDescription', label: 'Security Testing Description', group: 'security', type: 'string', versioned: true, approvable: true, splittable: true },
     { key: 'additionalNotes', label: 'Additional Notes', group: 'freetext', type: 'string', versioned: true, approvable: true, splittable: true },
 

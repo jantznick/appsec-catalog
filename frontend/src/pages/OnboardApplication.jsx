@@ -41,7 +41,6 @@ export function OnboardApplication() {
     piiData: false,
     phiData: false,
     hasSecurityTesting: '',
-    securityTestingDescription: '',
     additionalNotes: '',
     sastTool: '',
     sastIntegrationLevel: '',
@@ -215,7 +214,6 @@ export function OnboardApplication() {
           piiData: formData.piiData,
           phiData: formData.phiData,
           hasSecurityTesting: formData.hasSecurityTesting,
-          securityTestingDescription: formData.securityTestingDescription,
           additionalNotes: formData.additionalNotes,
           sastTool: formData.sastTool,
           sastIntegrationLevel: formData.sastIntegrationLevel,
@@ -630,19 +628,15 @@ export function OnboardApplication() {
                     name="hasSecurityTesting"
                     value="No"
                     checked={formData.hasSecurityTesting === 'No'}
-                    onChange={(e) => setFormData({ ...formData, hasSecurityTesting: e.target.value, securityTestingDescription: '', sastTool: '', sastIntegrationLevel: '', sastIncludesSca: false, dastTool: '', dastIntegrationLevel: '', scaTool: '', scaIntegrationLevel: '', secretsScanTool: '', secretsScanIntegrationLevel: '', sastIncludesSecrets: false, iacContainerScanTool: '', iacContainerScanIntegrationLevel: '', iacContainerScanNA: false, appFirewallTool: '', appFirewallIntegrationLevel: '', appFirewallNA: false, apiSecurityTool: '', apiSecurityIntegrationLevel: '', apiSecurityNA: false })}
+                    onChange={(e) => setFormData({ ...formData, hasSecurityTesting: e.target.value, sastTool: '', sastIntegrationLevel: '', sastIncludesSca: false, dastTool: '', dastIntegrationLevel: '', scaTool: '', scaIntegrationLevel: '', secretsScanTool: '', secretsScanIntegrationLevel: '', sastIncludesSecrets: false, iacContainerScanTool: '', iacContainerScanIntegrationLevel: '', iacContainerScanNA: false, appFirewallTool: '', appFirewallIntegrationLevel: '', appFirewallNA: false, apiSecurityTool: '', apiSecurityIntegrationLevel: '', apiSecurityNA: false })}
                     label="No"
                   />
                 </RadioGroup>
+                {/* The free-text "describe your security testing" box is gone. It
+                    asked for the same information as the structured fields below, in a
+                    form nothing could evaluate, so it was answered instead of them. */}
                 {formData.hasSecurityTesting === 'Yes' && (
                   <>
-                    <Textarea
-                      label="Describe the security testing in place"
-                      value={formData.securityTestingDescription}
-                      onChange={(e) => setFormData({ ...formData, securityTestingDescription: e.target.value })}
-                      rows={4}
-                      placeholder="Describe the security testing practices, tools, and processes"
-                    />
                     <div className="mt-6 pt-6 border-t">
                       <h3 className="text-lg font-semibold text-gray-900 mb-4">Security Tools</h3>
                       <div className="space-y-6">

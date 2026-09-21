@@ -43,7 +43,6 @@ export function ApplicationNew() {
     criticalAspects: [],
     criticalAspectsOther: '',
     devTeamContact: '',
-    securityTestingDescription: '',
     additionalNotes: '',
     sastTool: '',
     sastIntegrationLevel: '',
@@ -481,15 +480,6 @@ export function ApplicationNew() {
                     placeholder="Please specify"
                   />
                 </div>
-              </div>
-              <div className="mt-4">
-                <Textarea
-                  label="Security Testing Description"
-                  value={formData.securityTestingDescription}
-                  onChange={(e) => setFormData({ ...formData, securityTestingDescription: e.target.value })}
-                  rows={3}
-                  placeholder="Describe the security testing in place"
-                />
               </div>
               <div className="mt-4">
                 <Textarea

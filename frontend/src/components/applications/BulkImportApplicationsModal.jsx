@@ -35,7 +35,6 @@ const FALLBACK_APPLICATION_FIELDS = [
   { key: 'devTeamContact', label: 'Dev Team Contact', required: false, dataType: 'string' },
   { key: 'businessCriticality', label: 'Business Criticality (1-5)', required: false, dataType: 'number' },
   { key: 'criticalAspects', label: 'Critical Aspects', required: false, dataType: 'string' },
-  { key: 'securityTestingDescription', label: 'Security Testing Description', required: false, dataType: 'string' },
   { key: 'additionalNotes', label: 'Additional Notes', required: false, dataType: 'string' },
   { key: 'sastTool', label: 'SAST Tool', required: false, dataType: 'string' },
   { key: 'sastIntegrationLevel', label: 'SAST Integration Level', required: false, dataType: 'number' },
@@ -69,6 +68,11 @@ const NOT_IMPORTABLE = new Set([
   // A JSON array of application ids. buildBulkImportRow stores a string cell verbatim,
   // so a free-text column here writes malformed JSON into the interfaces column.
   'interfaces',
+  // No longer collected anywhere: the structured tool fields replaced the free-text
+  // answer. Existing values are still shown and still version-controlled, but nothing
+  // should be creating new ones. Left approvable in the registry so an in-flight
+  // pending version can still be approved.
+  'securityTestingDescription',
 ]);
 
 /** Registry types -> the three types this mapper knows how to convert. */
