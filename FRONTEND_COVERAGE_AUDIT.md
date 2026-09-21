@@ -25,6 +25,54 @@ Documenting a limitation instead of fixing it.
 
 ---
 
+## Status
+
+Branch `claude/policy-gaps-followup`. Run `npm test` in `backend/` (149 cases) and
+`npx vite build` in `frontend/` before any commit here.
+
+| | Item | State |
+|---|---|---|
+| — | Version snapshots silently failing | **done** `ee23c00` |
+| — | IaC / container N/A option | **done** `133b77a` |
+| F1 | Editor destroys rolling-window mappings | **done** `04e6ad5` |
+| F2 | Editor cannot set scope / verification / attestation | **done** `c0e4d30` |
+| F4 | Dashboards understate compliance | **done** `891d30c` |
+| F3 | Field registry served; VersionHistory, PendingApprovals, SplitApplicationModal | **done** `feddfcc` |
+| F3 | OnboardApplication, ApplicationNew, BulkImportApplicationsModal | **next** |
+| F5 | Statuses handled in one file only | open |
+| F6 | Attestations cannot be listed | open |
+| F7 | 21 uncalled client methods, untriaged | open |
+| D1 | One `calculateCompleteness` driving the score | open — **explicitly requested** |
+| D2 | Remove `securityTestingDescription` | open |
+| D3 | Point 4.6.14 at `iacContainerScanNA` | open — needs the migration applied |
+| D4 | Regenerate the prod import script | open |
+| D5 | 4.6.4 / 4.6.10 | blocked on the environments workstream |
+
+### Migrations awaiting `prisma migrate deploy`
+
+- `20260922140000_version_secrets_iac_columns`
+- `20260922150000_add_iac_container_na`
+
+### Decision taken for the next item
+
+The Phase 6a tool fields go **into the technical onboarding form**, which means the five
+tool entries (`secretsScanTool`, `secretsScanIntegrationLevel`, `sastIncludesSecrets`,
+`iacContainerScanTool`, `iacContainerScanIntegrationLevel`, plus `iacContainerScanNA`)
+must flip to `approvable: true` in `services/applicationFields.js`.
+
+The rule is *approvable iff the technical onboarding form posts it* — that tab writes
+through `PUT /:id`, which never enters the approval path, so only the onboarding form
+creates a pending version. `applicationFields.test.js` pins the non-approvable set in
+`ADDED_SINCE_REGISTRY`, and `applicationVersionColumns.test.js` asserts every approvable
+field has a snapshot column. Both must be updated in the same commit.
+
+The two scan dates (`lastSecretsScanDate`, `lastIacContainerScanDate`) stay
+`approvable: false`, matching `lastSastScanDate` and `lastScaScanDate`: they are derived
+from scanner integrations, so applying a months-old snapshot over the current value would
+regress the freshness component of the tool score.
+
+---
+
 ## Findings
 
 Ordered by damage. Every item states how it was verified.
