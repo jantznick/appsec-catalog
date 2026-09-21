@@ -10,6 +10,13 @@ import { api } from '../../lib/api.js';
 import { checkPermission } from '../../lib/permissions.js';
 import useAuthStore from '../../store/authStore.js';
 
+/** Local date+time, or an em dash when the value is missing or unparseable. */
+function formatDateTime(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+}
+
 export function PolicyComplianceView({ applicationId, companyId, compliance, loading, onLoad, onRefresh }) {
   const { isAdmin, permissions } = useAuthStore();
   const [availableFields, setAvailableFields] = useState([]);
@@ -23,9 +30,40 @@ export function PolicyComplianceView({ applicationId, companyId, compliance, loa
   // { control, mode: 'attest' | 'withdraw', statement }
   const [attestModal, setAttestModal] = useState(null);
   const [savingAttestation, setSavingAttestation] = useState(false);
+  // Every attestation row for this application, including withdrawn and expired ones.
+  const [attestations, setAttestations] = useState([]);
+  const [loadingAttestations, setLoadingAttestations] = useState(false);
 
   // Rendering only — attestation.write is enforced on the server for every action.
   const canAttest = checkPermission(permissions, 'attestation.write', companyId);
+
+  /**
+   * The attestation record, which is not the same thing as the compliance view above.
+   *
+   * `evaluateControl` only ever reports the attestation that currently counts, so a
+   * withdrawn or expired one simply stops appearing and the control silently reverts
+   * to not meeting. The rows are kept on purpose — `DELETE` sets `revokedAt` instead
+   * of deleting — precisely so "who signed for this, and when did they take it back"
+   * survives. Without this list nothing in the UI could answer that.
+   */
+  const loadAttestations = async () => {
+    if (!applicationId) return;
+    try {
+      setLoadingAttestations(true);
+      const data = await api.getApplicationAttestations(applicationId);
+      setAttestations(Array.isArray(data?.attestations) ? data.attestations : []);
+    } catch (error) {
+      // Non-fatal: the compliance view above is the primary content and still renders.
+      console.error('Failed to load attestations:', error);
+    } finally {
+      setLoadingAttestations(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAttestations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applicationId]);
 
   const handleAttest = async () => {
     if (!attestModal) return;
@@ -40,7 +78,7 @@ export function PolicyComplianceView({ applicationId, companyId, compliance, loa
         toast.success(`Attested to ${control.controlId}`);
       }
       setAttestModal(null);
-      await onRefresh();
+      await Promise.all([onRefresh(), loadAttestations()]);
     } catch (error) {
       toast.error(error.message || 'Failed to save attestation');
     } finally {
@@ -732,6 +770,69 @@ export function PolicyComplianceView({ applicationId, companyId, compliance, loa
         <Card>
           <CardContent className="py-8 text-center text-gray-500">
             No policy controls configured
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Attestation record. Rendered whenever there is history, even if nothing is
+          live right now — an expired attestation is the case worth seeing. */}
+      {(loadingAttestations || attestations.length > 0) && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Attestation Record</CardTitle>
+            <p className="text-sm text-gray-500 mt-1">
+              Self-reported compliance. Withdrawn and expired attestations are kept so the
+              record of who asserted what, and when, is not lost.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {loadingAttestations ? (
+              <p className="text-sm text-gray-500">Loading attestations...</p>
+            ) : (
+              <div className="space-y-3">
+                {attestations.map((a) => {
+                  const state = a.revokedAt
+                    ? { label: 'Withdrawn', cls: 'bg-gray-100 text-gray-700' }
+                    : a.isActive
+                      ? { label: 'Active', cls: 'bg-blue-100 text-blue-800' }
+                      : { label: 'Expired', cls: 'bg-amber-100 text-amber-800' };
+                  return (
+                    <div key={a.id} className="border border-gray-200 rounded-lg p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-gray-900">
+                              {a.control?.controlId ? `${a.control.controlId} — ` : ''}
+                              {a.control?.name || 'Control removed'}
+                            </span>
+                            <span className={`px-2 py-0.5 text-xs font-semibold rounded ${state.cls}`}>
+                              {state.label}
+                            </span>
+                            {/* A control can stop accepting attestation after one was
+                                given. The row still counts for nothing, so say why. */}
+                            {a.control && !a.control.allowsAttestation && (
+                              <span className="px-2 py-0.5 text-xs rounded bg-red-100 text-red-800">
+                                Control no longer accepts attestation
+                              </span>
+                            )}
+                          </div>
+                          {a.statement && (
+                            <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{a.statement}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-2">
+                        Attested by {a.user?.email || 'an authorised user'} on {formatDateTime(a.attestedAt)}
+                        {' • '}
+                        {a.revokedAt
+                          ? `withdrawn ${formatDateTime(a.revokedAt)}`
+                          : `${a.isActive ? 'expires' : 'expired'} ${formatDateTime(a.expiresAt)}`}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
