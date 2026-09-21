@@ -12,6 +12,7 @@ import {
 import {
   getSensitiveFieldsConfig,
   getToolQualityConfig,
+  TOOL_CATEGORIES,
   saveSensitiveFieldsConfig,
   saveToolQualityConfig,
 } from '../services/scoringConfig.js';
@@ -45,7 +46,12 @@ router.get('/integration-levels', (req, res) => {
 // Admin: Get editable tool quality scoring config
 router.get('/tool-quality', requireAdmin, (req, res) => {
   try {
-    res.json(getToolQualityConfig());
+    // `categories` is served alongside the config because the editor used to carry its
+    // own copy of the list. A category the backend accepts but the checkboxes do not
+    // offer cannot be assigned to any tool, and every tool then scores zero in it —
+    // a silent failure, since nothing errors and the score simply stops rewarding the
+    // field. Serving it means the screen cannot fall behind.
+    res.json({ ...getToolQualityConfig(), categories: TOOL_CATEGORIES });
   } catch (error) {
     console.error('Error loading tool quality config:', error);
     res.status(500).json({ error: 'Failed to load tool quality config' });

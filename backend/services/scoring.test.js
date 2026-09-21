@@ -29,7 +29,7 @@ import {
   normalizeFacing,
   resolveCategoryToolInputs,
 } from './scoring.js';
-import { getToolQualityConfig } from './scoringConfig.js';
+import { getToolQualityConfig, TOOL_CATEGORIES } from './scoringConfig.js';
 
 /**
  * A fully-populated application using *unmanaged* tools, so each test can vary one
@@ -89,12 +89,16 @@ function managedToolFor(category) {
   return match ? match[0] : null;
 }
 
-const MANAGED = {
-  sast: managedToolFor('sast'),
-  sca: managedToolFor('sca'),
-  dast: managedToolFor('dast'),
-  appFirewall: managedToolFor('appFirewall'),
-};
+/**
+ * Derived from TOOL_CATEGORIES rather than listed, so a new scored category cannot be
+ * quietly left out of "full marks". It was listed, and when secrets and IaC/container
+ * scanning became scored categories this object still named four — so managedApp()
+ * kept claiming to be fully tooled while scoring 36/50, and the assertion below failed
+ * with a bare number instead of saying which categories had no managed tool.
+ */
+const MANAGED = Object.fromEntries(
+  TOOL_CATEGORIES.map((category) => [category, managedToolFor(category)]),
+);
 
 /** True when the config still defines a fully-weighted managed tool for every category. */
 const HAS_FULL_MANAGED_SET = Object.values(MANAGED).every(Boolean);
@@ -110,14 +114,19 @@ const MISSING_MANAGED = `no fully-weighted managed tool configured for: ${Object
  */
 function managedApp(overrides = {}) {
   const now = new Date();
+  // One `${category}Tool` per scored category, so adding a category to the config
+  // extends this fixture instead of silently leaving a hole in it.
+  const tools = Object.fromEntries(
+    TOOL_CATEGORIES.map((category) => [`${category}Tool`, MANAGED[category]]),
+  );
   return app({
-    sastTool: MANAGED.sast,
-    scaTool: MANAGED.sca,
-    dastTool: MANAGED.dast,
-    appFirewallTool: MANAGED.appFirewall,
+    ...tools,
     lastSastScanDate: now,
     lastDastScanDate: now,
     lastScaScanDate: now,
+    lastSecretsScanDate: now,
+    lastIacContainerScanDate: now,
+    iacContainerScanNA: false,
     ...overrides,
   });
 }
@@ -417,6 +426,8 @@ describe('calculateToolUsageScore', () => {
       sastTool: null, sastIntegrationLevel: null,
       dastTool: null, dastIntegrationLevel: null,
       scaTool: null, scaIntegrationLevel: null,
+      secretsScanTool: null, secretsScanIntegrationLevel: null, sastIncludesSecrets: false,
+      iacContainerScanTool: null, iacContainerScanIntegrationLevel: null, iacContainerScanNA: null,
       appFirewallTool: null, appFirewallIntegrationLevel: null,
       apiSchema: null,
     });

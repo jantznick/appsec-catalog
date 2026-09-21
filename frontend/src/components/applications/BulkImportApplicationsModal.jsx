@@ -73,6 +73,13 @@ const NOT_IMPORTABLE = new Set([
   // should be creating new ones. Left approvable in the registry so an in-flight
   // pending version can still be approved.
   'securityTestingDescription',
+  // There is no such thing as an API security tool here. The apiSecurity score comes
+  // from the uploaded OpenAPI schema; these two are dead columns that no form renders
+  // and no scorer reads. VersionHistory and PendingApprovals already hide them by name
+  // (HIDDEN_VERSION_FIELDS) — deriving this list from `approvable` re-exposed them,
+  // which is the opposite of what the rest of the app decided.
+  'apiSecurityTool',
+  'apiSecurityIntegrationLevel',
 ]);
 
 /** Registry types -> the three types this mapper knows how to convert. */

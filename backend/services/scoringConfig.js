@@ -14,7 +14,29 @@ const sensitiveFieldsPath = path.join(scoringConfigDir, 'sensitiveFields.json');
 const TOOL_QUALITY_COMMENT =
   'Defines category-specific quality multipliers for tools. Weights are 0.0 to 1.0 and cap how much credit a tool can receive.';
 
-export const TOOL_CATEGORIES = ['sast', 'dast', 'sca', 'appFirewall'];
+/**
+ * Categories a tool can be credited in.
+ *
+ * This gates three things at once: what `saveToolQualityConfig` will accept, what the
+ * Scoring Settings screen offers as checkboxes, and — via SCORED_TOOL_CATEGORIES in
+ * scoring.js — what the tool score grades. Adding a category here without ticking the
+ * box for the relevant tools leaves those tools scoring ZERO in it: `getToolQualityWeight`
+ * returns 0 for a managed tool that does not list the category, which is deliberate
+ * (Tenable WAS named as a SAST tool should not earn SAST credit) but means a newly
+ * added category starts out worse than an unrecognised tool's 0.8 fallback.
+ *
+ * `apiSecurity` is deliberately absent: that category is scored from the uploaded API
+ * schema, not from a named tool, and normalizeToolCategories strips it from legacy
+ * config entries.
+ */
+export const TOOL_CATEGORIES = [
+  'sast',
+  'dast',
+  'sca',
+  'secretsScan',
+  'iacContainerScan',
+  'appFirewall',
+];
 
 function readJsonFile(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
