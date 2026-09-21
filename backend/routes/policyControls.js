@@ -94,6 +94,8 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       displayOrder,
       policyId,
       fields,
+      verificationRequired,
+      verificationNote,
     } = req.body;
 
     // Validate required fields
@@ -137,6 +139,8 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
           isActive: isActive !== undefined ? isActive : true,
           displayOrder: displayOrder || 0,
           policyId: policyId.trim(),
+          verificationRequired: verificationRequired === true,
+          verificationNote: verificationNote?.trim() || null,
         },
       });
 
@@ -199,6 +203,8 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       displayOrder,
       policyId,
       fields,
+      verificationRequired,
+      verificationNote,
     } = req.body;
 
     // Validate required fields
@@ -257,6 +263,8 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       if (isActive !== undefined) updateData.isActive = isActive;
       if (displayOrder !== undefined) updateData.displayOrder = displayOrder;
       if (policyId !== undefined) updateData.policyId = policyId.trim();
+      if (verificationRequired !== undefined) updateData.verificationRequired = verificationRequired === true;
+      if (verificationNote !== undefined) updateData.verificationNote = verificationNote?.trim() || null;
 
       await tx.policyControl.update({
         where: { id },

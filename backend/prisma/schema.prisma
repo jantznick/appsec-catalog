@@ -994,6 +994,11 @@ model PolicyControl {
   evaluationLogic String                  @default("AND") // "AND" or "OR" - how to combine field checks
   isActive        Boolean                 @default(true)
   displayOrder    Int                     @default(0) // Order for display in UI
+  // When true, passing every field check yields "verification_required" rather than
+  // "meeting": the automated checks cover only part of the requirement and a human
+  // must confirm the rest. An admin PolicyControlOverride promotes it to "meeting".
+  verificationRequired Boolean            @default(false)
+  verificationNote     String?            @db.Text // what a reviewer still needs to confirm
   policyId        String // Required - all controls must belong to a policy
   policy          Policy                  @relation(fields: [policyId], references: [id], onDelete: Cascade)
   createdAt       DateTime                @default(now())

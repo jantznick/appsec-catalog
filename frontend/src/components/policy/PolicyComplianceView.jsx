@@ -255,7 +255,7 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <div className="text-center p-4 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-gray-800">{summary?.total || 0}</div>
               <div className="text-sm text-gray-600 mt-1">Total Controls</div>
@@ -267,6 +267,10 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
             <div className="text-center p-4 bg-red-50 rounded-lg">
               <div className="text-2xl font-bold text-red-700">{summary?.not_meeting || 0}</div>
               <div className="text-sm text-red-600 mt-1">Not Meeting</div>
+            </div>
+            <div className="text-center p-4 bg-amber-50 rounded-lg">
+              <div className="text-2xl font-bold text-amber-700">{summary?.verification_required || 0}</div>
+              <div className="text-sm text-amber-600 mt-1">Verification Required</div>
             </div>
             <div className="text-center p-4 bg-blue-50 rounded-lg">
               <div className="text-2xl font-bold text-blue-700">{summary?.compliance_percentage || 0}%</div>
@@ -340,22 +344,35 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
                     policyEntry.controls.map((controlResult) => {
                       const { control, status, evidence, details } = controlResult;
                       const isMeeting = status === 'meeting';
+                      // Partial automated coverage: the checks passed but a human still has
+                      // to confirm the rest, so this is neither a pass nor a failure.
+                      const needsVerification = status === 'verification_required';
+
+                      const borderClass = isMeeting
+                        ? 'border-green-200'
+                        : needsVerification
+                          ? 'border-amber-200'
+                          : 'border-red-200';
+                      const badgeClass = isMeeting
+                        ? 'bg-green-100 text-green-800'
+                        : needsVerification
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-red-100 text-red-800';
+                      const badgeLabel = isMeeting
+                        ? 'Meeting'
+                        : needsVerification
+                          ? 'Verification Required'
+                          : 'Not Meeting';
 
                       return (
-                        <Card key={control.id} className={`bg-gray-50 ${isMeeting ? 'border-green-200' : 'border-red-200'}`}>
+                        <Card key={control.id} className={`bg-gray-50 ${borderClass}`}>
                           <CardHeader>
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
                                 <div className="flex items-center gap-3">
                                   <CardTitle className="text-base">{control.name}</CardTitle>
-                                  <span
-                                    className={`px-2 py-1 text-xs font-semibold rounded ${
-                                      isMeeting
-                                        ? 'bg-green-100 text-green-800'
-                                        : 'bg-red-100 text-red-800'
-                                    }`}
-                                  >
-                                    {isMeeting ? 'Meeting' : 'Not Meeting'}
+                                  <span className={`px-2 py-1 text-xs font-semibold rounded ${badgeClass}`}>
+                                    {badgeLabel}
                                   </span>
                                 </div>
                                 {control.controlId && (
