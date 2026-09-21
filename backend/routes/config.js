@@ -505,6 +505,92 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         valueType: 'none'
       },
 
+      // Source Control — branch protection on the linked repo's default branch.
+      // Read during repo sync; null until a sync has run, which is why
+      // branchProtectionEnabled is tri-state rather than a plain boolean.
+      {
+        path: 'scmRepoLink.repo.requiredApprovingReviewCount',
+        label: 'Required Approving Reviews',
+        category: 'Source Control',
+        fieldType: 'number',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals', 'gte', 'gt', 'lte', 'lt'],
+        valueType: 'number',
+        validationRules: {
+          description: 'Approvals required to merge into the default branch. gte 1 is the usual bar for segregation of duties.'
+        }
+      },
+      {
+        path: 'scmRepoLink.repo.branchProtectionEnabled',
+        label: 'Branch Protection Enabled',
+        category: 'Source Control',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [
+          { value: true, label: 'Protected' },
+          { value: false, label: 'Not protected' }
+        ],
+        validationRules: {
+          description: 'Null until a repo sync has read it — "unknown" is not the same as "not protected".'
+        }
+      },
+      {
+        path: 'scmRepoLink.repo.dismissStaleReviews',
+        label: 'Dismiss Stale Reviews',
+        category: 'Source Control',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }]
+      },
+      {
+        path: 'scmRepoLink.repo.requireCodeOwnerReviews',
+        label: 'Require Code Owner Review',
+        category: 'Source Control',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }]
+      },
+      {
+        path: 'scmRepoLink.repo.requiresStatusChecks',
+        label: 'Required Status Checks',
+        category: 'Source Control',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }]
+      },
+      {
+        path: 'scmRepoLink.repo.enforcedForAdmins',
+        label: 'Protection Enforced for Admins',
+        category: 'Source Control',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Yes' }, { value: false, label: 'No (admins can bypass)' }]
+      },
+      {
+        path: 'scmRepoLink.repo.allowsForcePushes',
+        label: 'Allows Force Pushes',
+        category: 'Source Control',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }]
+      },
+      {
+        path: 'scmRepoLink.repo.branchProtectionSyncedAt',
+        label: 'Branch Protection Last Read',
+        category: 'Source Control',
+        fieldType: 'date',
+        allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
+        valueType: 'date',
+        validationRules: {
+          description: 'Use within_days to require the evidence itself be recent.'
+        }
+      },
+
       // Status
       {
         path: 'status',

@@ -15,6 +15,22 @@
  * @property {(code: string) => Promise<{token, refreshToken?, externalUserId, login, avatarUrl, scopes}>} exchangeOAuthCode
  * @property {(connection: object) => Promise<Array<object>>} listRepos
  * @property {(connection: object, owner: string, name: string) => Promise<{metadata, languages, dependencies}>} fetchRepoIntel
+ * @property {((connection: object, owner: string, name: string, branch: string) => Promise<BranchProtection>)} [fetchBranchProtection]
+ *           Optional. Omit it and the registry reports the provider as unsupported
+ *           rather than the repo as unprotected — see fetchBranchProtection below.
+ *
+ * @typedef {Object} BranchProtection
+ * Normalised branch protection, provider-agnostic. Every field is nullable:
+ * null means "unknown", which is deliberately distinct from false.
+ * @property {string|null} protectedBranch
+ * @property {boolean|null} branchProtectionEnabled
+ * @property {number|null} requiredApprovingReviewCount
+ * @property {boolean|null} dismissStaleReviews
+ * @property {boolean|null} requireCodeOwnerReviews
+ * @property {boolean|null} requiresStatusChecks
+ * @property {boolean|null} enforcedForAdmins
+ * @property {boolean|null} allowsForcePushes
+ * @property {string|null} branchProtectionError
  */
 import { githubProvider } from './githubProvider.js';
 import { bitbucketProvider } from './bitbucketProvider.js';
@@ -49,6 +65,50 @@ export function listConfiguredProviders() {
 /** Fetch repo intel using the connection's provider adapter. */
 export function fetchRepoIntel(connection, owner, name) {
   return getScmProvider(connection.provider).fetchRepoIntel(connection, owner, name);
+}
+
+/** A BranchProtection with everything unknown, carrying the reason. */
+export function unknownBranchProtection(reason, branch = null) {
+  return {
+    protectedBranch: branch,
+    branchProtectionEnabled: null,
+    requiredApprovingReviewCount: null,
+    dismissStaleReviews: null,
+    requireCodeOwnerReviews: null,
+    requiresStatusChecks: null,
+    enforcedForAdmins: null,
+    allowsForcePushes: null,
+    branchProtectionError: reason,
+  };
+}
+
+/**
+ * Read branch protection for a repo's default branch.
+ *
+ * A provider that does not implement it yields "unknown" with a reason rather
+ * than an unprotected-looking result. That distinction matters: reporting an
+ * Azure DevOps repo as having no required reviewers, when we simply never
+ * asked, would fail its applications for a control they may well satisfy.
+ *
+ * @param {object} connection
+ * @param {string} owner
+ * @param {string} name
+ * @param {string|null} branch default branch; null lets the provider resolve it
+ * @returns {Promise<BranchProtection>}
+ */
+export async function fetchBranchProtection(connection, owner, name, branch = null) {
+  // getScmProvider throws on an unregistered provider id, so it belongs inside
+  // the try: this function is called during repo sync and must never be the
+  // reason a sync fails.
+  try {
+    const provider = getScmProvider(connection?.provider);
+    if (typeof provider.fetchBranchProtection !== 'function') {
+      return unknownBranchProtection(`Branch protection is not supported for ${provider.id} yet`, branch);
+    }
+    return await provider.fetchBranchProtection(connection, owner, name, branch);
+  } catch (e) {
+    return unknownBranchProtection(e?.message || 'Failed to read branch protection', branch);
+  }
 }
 
 /** List a connection's accessible repos using its provider adapter. */

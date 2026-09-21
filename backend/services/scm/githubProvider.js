@@ -138,6 +138,98 @@ async function fetchFileText(octokit, owner, repo, path) {
 }
 
 /**
+ * Read branch protection for a repo's default branch.
+ *
+ * Distinguishes three outcomes, because a policy control has to tell them apart:
+ *   - protected      -> the real settings
+ *   - not protected  -> enabled:false, 0 required reviewers (a definite answer)
+ *   - unreadable     -> everything null plus branchProtectionError (permissions,
+ *                       missing branch). Never reported as "unprotected", which
+ *                       would fail applications for data we could not fetch.
+ *
+ * @param {object} connection
+ * @param {string} owner
+ * @param {string} name
+ * @param {string|null} branch default branch; resolved from the repo when null
+ * @returns {Promise<import('./index.js').BranchProtection>}
+ */
+async function fetchBranchProtection(connection, owner, name, branch = null) {
+  const octokit = await getInstallationOctokit(connection.installationId);
+
+  let targetBranch = branch;
+  if (!targetBranch) {
+    const { data: repo } = await octokit.rest.repos.get({ owner, repo: name });
+    targetBranch = repo.default_branch;
+  }
+  if (!targetBranch) {
+    return {
+      protectedBranch: null,
+      branchProtectionEnabled: null,
+      requiredApprovingReviewCount: null,
+      dismissStaleReviews: null,
+      requireCodeOwnerReviews: null,
+      requiresStatusChecks: null,
+      enforcedForAdmins: null,
+      allowsForcePushes: null,
+      branchProtectionError: 'Repository has no default branch',
+    };
+  }
+
+  try {
+    const { data } = await octokit.rest.repos.getBranchProtection({
+      owner,
+      repo: name,
+      branch: targetBranch,
+    });
+    const reviews = data.required_pull_request_reviews;
+    return {
+      protectedBranch: targetBranch,
+      branchProtectionEnabled: true,
+      // Protection can exist without requiring any review, which is exactly the
+      // case 4.6.3 cares about — so 0, not null, when the block is absent.
+      requiredApprovingReviewCount: reviews?.required_approving_review_count ?? 0,
+      dismissStaleReviews: Boolean(reviews?.dismiss_stale_reviews),
+      requireCodeOwnerReviews: Boolean(reviews?.require_code_owner_reviews),
+      requiresStatusChecks: Boolean(data.required_status_checks),
+      enforcedForAdmins: Boolean(data.enforce_admins?.enabled),
+      allowsForcePushes: Boolean(data.allow_force_pushes?.enabled),
+      branchProtectionError: null,
+    };
+  } catch (e) {
+    // 404 on this endpoint means "branch is not protected" — a real answer.
+    // GitHub uses the same status when the branch is missing, so check the message.
+    const msg = e?.message || '';
+    if (e.status === 404 && !/branch not found/i.test(msg)) {
+      return {
+        protectedBranch: targetBranch,
+        branchProtectionEnabled: false,
+        requiredApprovingReviewCount: 0,
+        dismissStaleReviews: false,
+        requireCodeOwnerReviews: false,
+        requiresStatusChecks: false,
+        enforcedForAdmins: false,
+        allowsForcePushes: true,
+        branchProtectionError: null,
+      };
+    }
+    return {
+      protectedBranch: targetBranch,
+      branchProtectionEnabled: null,
+      requiredApprovingReviewCount: null,
+      dismissStaleReviews: null,
+      requireCodeOwnerReviews: null,
+      requiresStatusChecks: null,
+      enforcedForAdmins: null,
+      allowsForcePushes: null,
+      branchProtectionError:
+        e.status === 403
+          ? 'No permission to read branch protection (the app installation needs Administration: read)'
+          : `Failed to read branch protection: ${msg}`,
+    };
+  }
+}
+
+/**
  * Pull metadata + languages + a normalized top-level dependency inventory for a repo.
  * @returns {Promise<{ metadata, languages, dependencies }>}
  */
@@ -197,4 +289,5 @@ export const githubProvider = {
   exchangeOAuthCode,
   listRepos,
   fetchRepoIntel,
+  fetchBranchProtection,
 };

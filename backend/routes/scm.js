@@ -12,6 +12,7 @@ import {
   getScmProvider,
   listConfiguredProviders,
   fetchRepoIntel,
+  fetchBranchProtection,
   listReposForConnection,
   saveRepoDependencies,
   topLanguagesString,
@@ -501,6 +502,18 @@ function parseRepoUrl(url) {
 /** Fetch intel + upsert the shared ScmRepo (+ dependencies), and set the application's repoUrl. */
 async function upsertRepoWithIntel(connection, userId, ownerName, repoName, applicationId, changeSource = 'scm_sync') {
   const { metadata, languages, dependencies } = await fetchRepoIntel(connection, ownerName, repoName);
+
+  // Branch protection on the default branch — evidence for 4.6.3 / 6.3.12.
+  // fetchBranchProtection never throws: an unreadable result comes back as nulls
+  // plus a reason, so a permissions problem cannot fail the whole repo sync, and
+  // it is never mistaken for "this repo has no protection".
+  const protection = await fetchBranchProtection(
+    connection,
+    ownerName,
+    repoName,
+    metadata.defaultBranch || null
+  );
+
   const now = new Date();
   const fields = {
     fullName: metadata.fullName,
@@ -515,6 +528,16 @@ async function upsertRepoWithIntel(connection, userId, ownerName, repoName, appl
     languages,
     lastSyncedAt: now,
     lastSyncedById: userId,
+    protectedBranch: protection.protectedBranch,
+    branchProtectionEnabled: protection.branchProtectionEnabled,
+    requiredApprovingReviewCount: protection.requiredApprovingReviewCount,
+    dismissStaleReviews: protection.dismissStaleReviews,
+    requireCodeOwnerReviews: protection.requireCodeOwnerReviews,
+    requiresStatusChecks: protection.requiresStatusChecks,
+    enforcedForAdmins: protection.enforcedForAdmins,
+    allowsForcePushes: protection.allowsForcePushes,
+    branchProtectionSyncedAt: now,
+    branchProtectionError: protection.branchProtectionError,
   };
   const repo = await prisma.scmRepo.upsert({
     where: {

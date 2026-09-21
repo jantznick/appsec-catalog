@@ -307,17 +307,44 @@ the extension point. Each of the three providers (`githubProvider`, `bitbucketPr
 `azureDevopsProvider`) exposes a uniform object; the results need normalizing into one shape since
 the upstream APIs differ.
 
-### 5a. Branch protection → 4.6.3 and 6.3.12
+### 5a. Branch protection → 4.6.3 and 6.3.12 — **built, not yet mapped**
 
-`repos.getBranchProtection` / rulesets give `required_approving_review_count`, dismiss-stale-reviews,
-and whether admins are exempt. `>= 1 required approver` is direct, auditable evidence.
+`fetchBranchProtection` is now part of the provider contract, dispatched off `connection.provider`
+like the rest. Implemented for GitHub via `repos.getBranchProtection`; read during repo sync and
+stored on `ScmRepo`, reachable from a control as `scmRepoLink.repo.*`.
 
-4.6.3 (App Sec, segregation of duties) and 6.3.12 (SDLC, pre-release code review) map to the same
-signal. They live in **different policies**, so this is not double-weighting within one policy — the
-source documents overlap. Both should map to it.
+Stored, normalised across providers: `requiredApprovingReviewCount`, `branchProtectionEnabled`,
+`dismissStaleReviews`, `requireCodeOwnerReviews`, `requiresStatusChecks`, `enforcedForAdmins`,
+`allowsForcePushes`, plus `protectedBranch`, `branchProtectionSyncedAt` and
+`branchProtectionError`.
+
+**Three outcomes, kept distinct.** Protected returns the real settings; not protected returns
+`enabled: false` with `0` required reviewers (a definite answer); unreadable returns all nulls
+plus a reason. The third case must never look like the second — reporting a repo as having no
+required reviewers when we were denied permission, or when the provider is unimplemented, would
+fail applications for evidence we never fetched. Bitbucket and Azure DevOps have no
+implementation yet and therefore report *unknown*, not *unprotected*.
+
+`fetchBranchProtection` never throws. It runs inside repo sync, so a permissions error or an
+unregistered provider must not fail the sync.
+
+**Not yet mapped to 4.6.3 / 6.3.12**: no repo in the dev portfolio has been synced since this
+landed, so every value is null. Mapping now would fail all 91 applications on missing evidence.
+Map it once a sync has populated real values.
+
+The suggested mapping, once there is data:
+`scmRepoLink.repo.requiredApprovingReviewCount gte 1` **AND**
+`scmRepoLink.repo.enforcedForAdmins equals true` — a required reviewer that admins can bypass is
+not segregation of duties.
+
+4.6.3 (App Sec) and 6.3.12 (SDLC) map to the same signal. They live in **different policies**, so
+this is not double-weighting within one policy — the source documents overlap.
 
 Note this covers **code review** segregation, not **deploy** segregation. Deploy-time separation
 depends on the environments work (Phase 6).
+
+**GitHub App permission:** reading branch protection needs `Administration: read` on the
+installation. Without it the read returns unknown with that message rather than failing.
 
 ### 5b. PR template → 4.6.7
 

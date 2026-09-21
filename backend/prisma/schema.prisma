@@ -1249,6 +1249,26 @@ model ScmRepo {
   languages      Json? // { "TypeScript": 12345, ... }
   lastSyncedAt   DateTime?
   lastSyncedById String?
+
+  // Branch protection on the default branch, normalised across providers.
+  // Evidence for 4.6.3 (segregation of duties) and 6.3.12 (pre-release code
+  // review) — see POLICY_CONTROL_COVERAGE_PLAN.md Phase 5a.
+  //
+  // All nullable and tri-state on purpose: null means "not yet read", which is
+  // not the same as false ("read, and the protection is absent"). A control
+  // must be able to tell those apart rather than failing an application for
+  // data we never fetched.
+  protectedBranch              String? // branch the values below describe
+  branchProtectionEnabled      Boolean? // false = branch has no protection at all
+  requiredApprovingReviewCount Int? // 0 = protected but no approvals required
+  dismissStaleReviews          Boolean?
+  requireCodeOwnerReviews      Boolean?
+  requiresStatusChecks         Boolean?
+  enforcedForAdmins            Boolean? // false = admins can bypass
+  allowsForcePushes            Boolean?
+  branchProtectionSyncedAt     DateTime?
+  branchProtectionError        String? // why the read failed (permissions, unsupported provider)
+
   dependencies   RepoDependency[]
   applications   ApplicationScmRepo[]
   createdAt      DateTime             @default(now())

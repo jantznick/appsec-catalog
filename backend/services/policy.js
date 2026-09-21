@@ -675,6 +675,26 @@ const EVALUABLE_RELATIONS = {
   ingressProducts: { id: true },
   outgoingProductFlows: { id: true },
   incomingProductFlows: { id: true },
+  // Branch protection lives on the shared repo, one hop further out:
+  // scmRepoLink.repo.requiredApprovingReviewCount and friends.
+  scmRepoLink: {
+    id: true,
+    repo: {
+      select: {
+        fullName: true,
+        protectedBranch: true,
+        branchProtectionEnabled: true,
+        requiredApprovingReviewCount: true,
+        dismissStaleReviews: true,
+        requireCodeOwnerReviews: true,
+        requiresStatusChecks: true,
+        enforcedForAdmins: true,
+        allowsForcePushes: true,
+        branchProtectionSyncedAt: true,
+        branchProtectionError: true,
+      },
+    },
+  },
 };
 
 /**
