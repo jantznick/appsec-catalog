@@ -7,10 +7,11 @@ import { Textarea } from '../ui/Textarea.jsx';
 import { Modal } from '../ui/Modal.jsx';
 import { toast } from '../ui/Toast.jsx';
 import { api } from '../../lib/api.js';
+import { checkPermission } from '../../lib/permissions.js';
 import useAuthStore from '../../store/authStore.js';
 
-export function PolicyComplianceView({ applicationId, compliance, loading, onLoad, onRefresh }) {
-  const { isAdmin } = useAuthStore();
+export function PolicyComplianceView({ applicationId, companyId, compliance, loading, onLoad, onRefresh }) {
+  const { isAdmin, permissions } = useAuthStore();
   const [availableFields, setAvailableFields] = useState([]);
   const [loadingFields, setLoadingFields] = useState(false);
   const [expandedPolicies, setExpandedPolicies] = useState(new Set());
@@ -19,6 +20,33 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
   const [editingOverrides, setEditingOverrides] = useState({}); // { controlId: { isCompliant, noteContent } }
   const [savingOverride, setSavingOverride] = useState(null);
   const [overrideModal, setOverrideModal] = useState(null); // { controlId, isCompliant, noteContent, mode: 'edit' | 'delete' }
+  // { control, mode: 'attest' | 'withdraw', statement }
+  const [attestModal, setAttestModal] = useState(null);
+  const [savingAttestation, setSavingAttestation] = useState(false);
+
+  // Rendering only — attestation.write is enforced on the server for every action.
+  const canAttest = checkPermission(permissions, 'attestation.write', companyId);
+
+  const handleAttest = async () => {
+    if (!attestModal) return;
+    const { control, mode, statement } = attestModal;
+    try {
+      setSavingAttestation(true);
+      if (mode === 'withdraw') {
+        await api.withdrawAttestation(applicationId, control.id);
+        toast.success(`Attestation withdrawn for ${control.controlId}`);
+      } else {
+        await api.attestControl(applicationId, control.id, statement);
+        toast.success(`Attested to ${control.controlId}`);
+      }
+      setAttestModal(null);
+      await onRefresh();
+    } catch (error) {
+      toast.error(error.message || 'Failed to save attestation');
+    } finally {
+      setSavingAttestation(false);
+    }
+  };
 
   useEffect(() => {
     // Load compliance data when component mounts (tab becomes active)
@@ -415,6 +443,38 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
                                   <div className="text-sm text-gray-500">{control.category}</div>
                                 )}
                               </div>
+                              {/* Attest / withdraw. Only offered on controls that opted
+                                  in via allowsAttestation — a measurable control should
+                                  never be satisfiable by assertion. */}
+                              {control.allowsAttestation && canAttest && (
+                                <div className="shrink-0">
+                                  {attested ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() =>
+                                        setAttestModal({ control, mode: 'withdraw', statement: '' })
+                                      }
+                                    >
+                                      Withdraw
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() =>
+                                        setAttestModal({
+                                          control,
+                                          mode: 'attest',
+                                          statement: details?.attestation?.statement || '',
+                                        })
+                                      }
+                                    >
+                                      {details?.attestation ? 'Re-attest' : 'Attest'}
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </CardHeader>
                           <CardContent>
@@ -655,6 +715,71 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
             No policy controls configured
           </CardContent>
         </Card>
+      )}
+
+      {/* Attest / withdraw */}
+      {attestModal && (
+        <Modal
+          isOpen={!!attestModal}
+          onClose={() => setAttestModal(null)}
+          title={
+            attestModal.mode === 'withdraw'
+              ? `Withdraw attestation — ${attestModal.control.controlId}`
+              : `Attest to ${attestModal.control.controlId}`
+          }
+          size="md"
+        >
+          {attestModal.mode === 'withdraw' ? (
+            <div className="space-y-4">
+              <p className="text-gray-600">
+                This control will go back to not meeting its requirement. The attestation is kept
+                and marked withdrawn, so the record of who attested and when is not lost.
+              </p>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="secondary" onClick={() => setAttestModal(null)} disabled={savingAttestation}>
+                  Cancel
+                </Button>
+                <Button variant="danger" onClick={handleAttest} loading={savingAttestation}>
+                  Withdraw Attestation
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">{attestModal.control.description}</p>
+
+              <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                You are asserting on this application&apos;s behalf that this control is met.
+                This is recorded as <strong>self-reported, not measured</strong>, and you may be
+                asked to provide evidence at audit. It expires after{' '}
+                {attestModal.control.attestationValidDays ?? 365} days and will need renewing.
+              </div>
+
+              <Textarea
+                id="attestation-statement"
+                label="Statement"
+                required
+                rows={4}
+                placeholder="What is being asserted, and on what basis? e.g. which standard the team follows, where the evidence lives, who reviewed it."
+                value={attestModal.statement}
+                onChange={(e) => setAttestModal({ ...attestModal, statement: e.target.value })}
+              />
+
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="secondary" onClick={() => setAttestModal(null)} disabled={savingAttestation}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleAttest}
+                  loading={savingAttestation}
+                  disabled={!attestModal.statement.trim()}
+                >
+                  Attest
+                </Button>
+              </div>
+            </div>
+          )}
+        </Modal>
       )}
 
       {/* Override Edit/Delete Modal */}

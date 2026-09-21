@@ -480,18 +480,35 @@ handling confidential data.
 5. **Phase 6** — new tool columns, environments, encryption split
 6. **Phase 3** — per-release SBOM, then finish 4.6.6
 
-## Projected coverage
+## Coverage
 
-| Stage | Mapped | Attested | Unmapped |
-|---|---|---|---|
-| Today | 9 | 0 | 19 |
-| After Phases 1–2 | 11 | 0 | 17 |
-| After Phase 5 | 14 | 0 | 14 |
-| After Phase 4 | 14 | 8 | 6 |
-| After Phase 6 | 19 | 8 | 1 |
-| After Phase 3 | 20 | 8 | 0 |
+**Now: 22 of 28 covered — 14 mapped, 8 attestable.**
 
-Measured coverage ends at 20 of 28 with 8 honestly labelled as self-reported — rather than 28
+| Stage | Mapped | Attestable | Uncovered | |
+|---|---|---|---|---|
+| Start | 9 | 0 | 19 | |
+| After Phases 1–2 | 11 | 0 | 17 | done |
+| After Phase 5 | 14 | 0 | 14 | done |
+| After Phase 4 | 14 | 8 | 6 | **← here** |
+| After Phase 6 | 19 | 8 | 1 | |
+| After Phase 3 | 20 | 8 | 0 | |
+
+Attestable: 4.6.12, 6.3.2, 6.3.5, 6.3.6, 6.3.8, 6.3.9, 6.3.10, 6.3.13 — all at the 365-day
+default. `attestationValidDays` is per-control, so the riskier ones (no back doors, no clear-text
+passwords) can be tightened without changing the rest.
+
+The six still uncovered, and what each needs:
+
+| Control | Needs |
+|---|---|
+| 4.6.9 Secrets scanning | `secretsScanTool` columns (Phase 6a) |
+| 6.3.3 No hard-coded passwords | same fields as 4.6.9 |
+| 4.6.14 IaC / container scanning | `iacContainerScanTool` columns (Phase 6a) |
+| 4.6.15 Finding review and SLA | expose findings data as policy fields |
+| 6.3.11 Vulnerability management | same findings data as 4.6.15 |
+| 4.6.4 Environment separation | the environments workstream (outside this plan) |
+
+Measured coverage ends at 20 of 28, with 8 honestly labelled self-reported — rather than 28
 controls silently failing closed.
 
 ## Activation checklist

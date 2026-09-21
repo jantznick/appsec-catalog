@@ -934,6 +934,11 @@ export async function evaluateAllControls(application) {
           description: control.description,
           category: control.category,
           evaluationLogic: control.evaluationLogic,
+          // The UI needs these to know whether to offer an Attest action and
+          // what re-attestation period to warn about.
+          allowsAttestation: control.allowsAttestation === true,
+          attestationValidDays: control.attestationValidDays,
+          verificationRequired: control.verificationRequired === true,
         },
         policy: control.policy,
         status: evaluation.status,

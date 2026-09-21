@@ -2801,8 +2801,9 @@ export function ApplicationDetail() {
 
         {/* Infosec Policy Compliance Tab */}
         <TabPanel>
-          <PolicyComplianceView 
+          <PolicyComplianceView
             applicationId={id}
+            companyId={application?.companyId}
             compliance={policyCompliance}
             loading={loadingCompliance}
             onLoad={loadPolicyCompliance}
