@@ -1,7 +1,7 @@
 -- Make the application name constraint agree with the application's own definition of
 -- a duplicate name.
 --
--- 20260916120000_add_environments created Application_companyId_lower_name_key as
+-- 20260922120000_add_environments created Application_companyId_lower_name_key as
 -- ("companyId", lower("name")). That is case-insensitive but not whitespace-insensitive,
 -- while services/applicationNames.js applicationNameKey() folds with
 -- `trim().toLowerCase()`. So "Checkout " and "checkout" are the same name to the bulk

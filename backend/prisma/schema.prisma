@@ -368,7 +368,7 @@ model Application {
 
   // `name` is unique within a company, enforced by the functional index
   // `Application_companyId_lower_name_key` on ("companyId", lower(btrim(name))) - see
-  // migrations 20260916120000 and 20260916130000. Prisma cannot express that, so it is
+  // migrations 20260922120000 and 20260922130000. Prisma cannot express that, so it is
   // deliberately not declared as @@unique here: a plain @@unique([companyId, name])
   // would be case- and whitespace-sensitive, and would disagree with both the split
   // endpoint (which matches with mode: 'insensitive') and applicationNameKey() in

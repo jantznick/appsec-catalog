@@ -3,7 +3,7 @@
  * can be tested without a database.
  *
  * IMPORTANT: the name -> kind mapping here is duplicated as a CASE expression in
- * migration 20260916120000_add_environments, which seeds the vocabulary from
+ * migration 20260922120000_add_environments, which seeds the vocabulary from
  * existing deployment history. If you change one, change the other, or a company's
  * seeded environments will disagree with what new deployments infer.
  */
