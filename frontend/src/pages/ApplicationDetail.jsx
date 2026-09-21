@@ -164,9 +164,7 @@ export function ApplicationDetail() {
     }
     try {
       const data = await api.getPendingVersionsCountForApplication(id);
-      const count = data.count || 0;
-      console.log('Pending versions count for application:', id, count);
-      setPendingVersionsCount(count);
+      setPendingVersionsCount(data.count || 0);
     } catch (error) {
       console.error('Failed to load pending versions count:', error);
       setPendingVersionsCount(0);

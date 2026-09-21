@@ -43,11 +43,6 @@ export function Tabs({ children, defaultTab = 0, className = '' }) {
 }
 
 export function Tab({ children, isActive, onClick, index, className = '', badge }) {
-  // Debug: log badge value for "Application Metadata History" tab
-  if (children === 'Application Metadata History') {
-    console.log('Tab badge value:', badge, 'type:', typeof badge);
-  }
-  
   return (
     <button
       onClick={onClick}

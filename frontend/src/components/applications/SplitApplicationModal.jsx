@@ -21,6 +21,7 @@ import {
  * groups do not, so adding a field to the registry can never silently drop it from a
  * split. That is what happened to the Phase 6a fields: splittable in the registry,
  * invisible here.
+ */
 const SPLIT_FIELD_GROUPS = [
   {
     title: 'Basic Information',
