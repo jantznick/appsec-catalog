@@ -81,28 +81,26 @@ function serializeRepo(repo) {
     license: repo.license,
     languages: repo.languages || {},
     lastSyncedAt: repo.lastSyncedAt,
-    // Policy evidence read during sync. Nulls are meaningful here — "not read"
-    // is distinct from "absent" — so pass them through rather than defaulting.
-    branchProtection: {
-      protectedBranch: repo.protectedBranch,
-      enabled: repo.branchProtectionEnabled,
-      requiredApprovingReviewCount: repo.requiredApprovingReviewCount,
-      dismissStaleReviews: repo.dismissStaleReviews,
-      requireCodeOwnerReviews: repo.requireCodeOwnerReviews,
-      requiresStatusChecks: repo.requiresStatusChecks,
-      enforcedForAdmins: repo.enforcedForAdmins,
-      allowsForcePushes: repo.allowsForcePushes,
-      syncedAt: repo.branchProtectionSyncedAt,
-      error: repo.branchProtectionError,
-    },
-    prTemplate: {
-      path: repo.prTemplatePath,
-      found: repo.prTemplateFound,
-      hasSecuritySection: repo.prTemplateHasSecuritySection,
-      securityHeading: repo.prTemplateSecurityHeading,
-      syncedAt: repo.prTemplateSyncedAt,
-      error: repo.prTemplateError,
-    },
+    // Policy evidence read during sync. Kept flat and column-named so this matches
+    // GET /api/applications/:id, which returns the repo via Prisma `include` and so
+    // emits the raw columns — the repo panel reads from that payload, not this one.
+    // Nulls are meaningful ("not read" is not "absent"), so pass them through.
+    protectedBranch: repo.protectedBranch,
+    branchProtectionEnabled: repo.branchProtectionEnabled,
+    requiredApprovingReviewCount: repo.requiredApprovingReviewCount,
+    dismissStaleReviews: repo.dismissStaleReviews,
+    requireCodeOwnerReviews: repo.requireCodeOwnerReviews,
+    requiresStatusChecks: repo.requiresStatusChecks,
+    enforcedForAdmins: repo.enforcedForAdmins,
+    allowsForcePushes: repo.allowsForcePushes,
+    branchProtectionSyncedAt: repo.branchProtectionSyncedAt,
+    branchProtectionError: repo.branchProtectionError,
+    prTemplatePath: repo.prTemplatePath,
+    prTemplateFound: repo.prTemplateFound,
+    prTemplateHasSecuritySection: repo.prTemplateHasSecuritySection,
+    prTemplateSecurityHeading: repo.prTemplateSecurityHeading,
+    prTemplateSyncedAt: repo.prTemplateSyncedAt,
+    prTemplateError: repo.prTemplateError,
     dependencies: (repo.dependencies || []).map((d) => ({
       ecosystem: d.ecosystem,
       name: d.name,

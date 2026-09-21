@@ -22,19 +22,23 @@ const Yes = ({ children }) => <span className="text-green-700">{children}</span>
 const No = ({ children }) => <span className="text-red-700">{children}</span>;
 
 /**
- * Branch protection summary. null means the sync has not read it (or could not),
- * which must not look the same as "this repo has no protection".
+ * Branch protection summary. Reads the repo's flat columns, which is the shape
+ * GET /api/applications/:id returns (Prisma `include`, so raw columns).
+ *
+ * null means the sync has not read it, or could not — that must not look the
+ * same as "this repo has no protection".
  */
-function describeBranchProtection(bp) {
-  if (!bp || bp.enabled === null || bp.enabled === undefined) {
-    return <Unknown reason={bp?.error} />;
+function describeBranchProtection(repo) {
+  const enabled = repo?.branchProtectionEnabled;
+  if (enabled === null || enabled === undefined) {
+    return <Unknown reason={repo?.branchProtectionError} />;
   }
-  if (bp.enabled === false) return <No>Not protected</No>;
+  if (enabled === false) return <No>Not protected</No>;
 
-  const reviews = bp.requiredApprovingReviewCount ?? 0;
+  const reviews = repo.requiredApprovingReviewCount ?? 0;
   const parts = [reviews === 1 ? '1 review' : `${reviews} reviews`];
-  if (bp.enforcedForAdmins === false) parts.push('admins can bypass');
-  return reviews > 0 && bp.enforcedForAdmins !== false ? (
+  if (repo.enforcedForAdmins === false) parts.push('admins can bypass');
+  return reviews > 0 && repo.enforcedForAdmins !== false ? (
     <Yes>{parts.join(' · ')}</Yes>
   ) : (
     <No>{parts.join(' · ')}</No>
@@ -42,11 +46,14 @@ function describeBranchProtection(bp) {
 }
 
 /** PR template summary, same unknown-vs-absent rule. */
-function describePrTemplate(t) {
-  if (!t || t.found === null || t.found === undefined) return <Unknown reason={t?.error} />;
-  if (t.found === false) return <No>No template</No>;
-  return t.hasSecuritySection ? (
-    <Yes title={t.securityHeading || undefined}>Present</Yes>
+function describePrTemplate(repo) {
+  const found = repo?.prTemplateFound;
+  if (found === null || found === undefined) return <Unknown reason={repo?.prTemplateError} />;
+  if (found === false) return <No>No template</No>;
+  return repo.prTemplateHasSecuritySection ? (
+    <Yes>
+      <span title={repo.prTemplateSecurityHeading || undefined}>Present</span>
+    </Yes>
   ) : (
     <No>Template, no security section</No>
   );
@@ -173,11 +180,11 @@ export function ApplicationScmBlock({ application, canManage, onRefresh }) {
                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
                   <div className="flex items-start justify-between gap-3">
                     <dt className="text-gray-600">Branch protection</dt>
-                    <dd className="text-right">{describeBranchProtection(repo.branchProtection)}</dd>
+                    <dd className="text-right">{describeBranchProtection(repo)}</dd>
                   </div>
                   <div className="flex items-start justify-between gap-3">
                     <dt className="text-gray-600">PR security checklist</dt>
-                    <dd className="text-right">{describePrTemplate(repo.prTemplate)}</dd>
+                    <dd className="text-right">{describePrTemplate(repo)}</dd>
                   </div>
                 </dl>
               </div>

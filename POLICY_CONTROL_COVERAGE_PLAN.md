@@ -12,11 +12,20 @@ so activating them before mapping would fail every application against every unm
 
 ## Current state (2026-09-18)
 
-28 controls: **11 mapped**, **17 unmapped**.
+28 controls: **14 mapped**, **14 unmapped**.
+
+SCM-derived controls (4.6.3, 4.6.7, 6.3.12) each pair their signal with a
+`within_days 30` freshness check on the corresponding `*SyncedAt` column. Sync is manual —
+there is no scheduler or webhook — so without it Orbit would keep asserting compliance from
+evidence of unbounded age. Removing branch protection would go unnoticed until someone
+happened to press Sync. The freshness check turns silent staleness into a visible failure.
 
 | Control | Scope (`applies_when`) | Compliance checks | Confidence |
 |---|---|---|---|
 | 4.6.2 Continuous security testing | all | `sastTool exists` + `sastIntegrationLevel gte 1` | direct |
+| 4.6.3 Segregation of duties | all | `…requiredApprovingReviewCount gte 1` + `…enforcedForAdmins equals true` + `…branchProtectionSyncedAt within_days 30` | direct |
+| 4.6.7 PR security review | all | `…prTemplateHasSecuritySection equals true` + `…prTemplateSyncedAt within_days 30` | **`verificationRequired`** |
+| 6.3.12 Pre-release code review | all | `…requiredApprovingReviewCount gte 1` + `…branchProtectionSyncedAt within_days 30` | direct |
 | 4.6.5 Software composition mgmt | all | `scaTool exists` / `sastIncludesSca = true` (OR) | direct |
 | 4.6.8 DAST and SAST coverage | all | `sastIntegrationLevel gte 1` / `dastIntegrationLevel gte 1` (OR) | direct |
 | 4.6.10 Scheduled re-scans | internet-facing | `lastDastScanDate within_days 90` | direct |
