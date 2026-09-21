@@ -125,6 +125,27 @@ describe('validatePolicyControlFields', () => {
     }
   });
 
+  it('accepts dot notation through a relation', () => {
+    // getFieldValue in services/policy.js has always traversed dotted paths. Those
+    // targets are not columns on Application, so the flat registry cannot confirm them,
+    // and rejecting them would block a control the engine can evaluate perfectly well.
+    for (const fieldPath of ['company.divisionId', 'threatModel.status', 'scmRepoLink.repo.name']) {
+      assert.deepEqual(
+        validatePolicyControlFields([{ fieldPath, operator: 'exists' }]),
+        [],
+        fieldPath,
+      );
+    }
+  });
+
+  it('still rejects a malformed dotted path', () => {
+    for (const fieldPath of ['a..b', '.leading', 'trailing.', '1bad.path', 'has space.x']) {
+      const problems = validatePolicyControlFields([{ fieldPath, operator: 'exists' }]);
+      assert.equal(problems.length, 1, `${fieldPath} should be rejected`);
+      assert.match(problems[0], /not a valid field path/);
+    }
+  });
+
   it('rejects an unknown operator', () => {
     const problems = validatePolicyControlFields([{ fieldPath: 'sastTool', operator: 'is' }]);
     assert.equal(problems.length, 1);

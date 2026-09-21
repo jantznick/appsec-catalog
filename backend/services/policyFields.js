@@ -83,6 +83,18 @@ export function validatePolicyControlFields(fields) {
 
     if (!fieldPath) {
       problems.push(`${position}: fieldPath is required`);
+    } else if (fieldPath.includes('.')) {
+      // Dot notation traverses a relation, which `getFieldValue` in services/policy.js
+      // has always supported ("company.divisionId", "threatModel.status"). Those targets
+      // are not columns on Application, so the flat registry cannot confirm them — and
+      // rejecting them here would block a legitimate control the engine can evaluate.
+      // Check the shape only; an unresolvable path still yields null at evaluation time.
+      if (!/^[A-Za-z][A-Za-z0-9]*(\.[A-Za-z][A-Za-z0-9]*)+$/.test(fieldPath)) {
+        problems.push(
+          `${position}: "${fieldPath}" is not a valid field path. ` +
+            'Use a column name, or dot notation through a relation (e.g. "company.divisionId").',
+        );
+      }
     } else if (!isMetadataField(fieldPath)) {
       problems.push(
         `${position}: "${fieldPath}" is not an application field. ` +
