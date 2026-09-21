@@ -96,6 +96,26 @@ because they can never be blank, and `owner` is excluded because the App Data ta
 not ask for it. If you want any of them counted, it is one line in
 `backend/services/completeness.js`.
 
+## 3b. The tool score now has seven categories
+
+Secrets and IaC/container scanning are graded. **Do this first — until a tool is
+credited in the new categories, every application scores zero in both.**
+
+| # | Do | Expect |
+|---|---|---|
+| 3b.1 | Settings → Scoring → Tool quality | Each tool row now has six category checkboxes: SAST, DAST, SCA, **Secrets**, **IaC / Container**, Firewall |
+| 3b.2 | Tick **Secrets** on the tools that genuinely cover it, **IaC / Container** likewise, and save | Saves without a validation error; reload shows them ticked |
+| 3b.3 | Reopen an application with a secrets tool named | Its tool score rises now that the tool is credited |
+| 3b.4 | Name a tool that is *managed for something else* (e.g. Snyk) as your secrets tool, without ticking Secrets for it | Scores **0** for that category, not the 0.8 unknown-tool fallback. That is existing behaviour — a managed tool only earns credit in its listed categories — but it bites here because the config ships with nothing credited for the new ones |
+| 3b.5 | Tick "SAST output includes secrets scanning" on an application, leave the standalone fields blank | The score **rises**. It is judged as your SAST tool. Before this change it scored zero, making the checkbox worse than useless |
+| 3b.6 | Tick the IaC N/A box on an application with no containers | The score **rises** — the category leaves the denominator rather than sitting at zero |
+| 3b.7 | Leave `iacContainerScanNA` unanswered with no tool | Still scores zero. Unanswered is a gap; only an explicit N/A is an answer |
+| 3b.8 | CSV importer dropdown | **No** "Legacy API Security Tool" or "Legacy API Security Integration Level" — there is no API security tool in this product, and I had wrongly added them |
+
+**Worth a decision:** the shipped `toolQuality.json` credits no tool for secrets or
+IaC. Until you tick those boxes every application loses two categories' worth of score,
+so portfolio numbers will dip before they recover.
+
 ## 4. Policy compliance display
 
 | # | Do | Expect |
