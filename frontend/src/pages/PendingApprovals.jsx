@@ -8,6 +8,29 @@ import { LoadingPage } from '../components/ui/Loading.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import { Textarea } from '../components/ui/Textarea.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
+import {
+  loadApplicationFieldRegistry,
+  getVersionedFields,
+  getFieldLabel as registryFieldLabel,
+} from '../lib/applicationFields.js';
+
+/**
+ * Fallback field list, used ONLY when the registry fetch fails. The registry served by
+ * GET /api/config/application-fields is the definition — a field missing from here is a
+ * stale fallback rather than a field that vanishes from the approval diff.
+ */
+const FALLBACK_VERSIONED_FIELDS = [
+  'name', 'description', 'owner', 'repoUrl', 'language', 'framework',
+  'serverEnvironment', 'facing', 'deploymentType', 'authProfiles', 'dataTypes',
+  'status', 'businessCriticality', 'criticalAspects', 'devTeamContact',
+  'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel', 'sastIncludesSca',
+  'dastTool', 'dastIntegrationLevel', 'scaTool', 'scaIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
+  'apiSecurityNA',
+  'appFirewallNA',
+  'currentVersion', 'deploymentEnvironment', 'gitBranch',
+  'lastDastScanDate', 'lastSastScanDate', 'lastScaScanDate', 'interfaces',
+];
+
 
 const HIDDEN_VERSION_FIELDS = new Set(['apiSecurityTool', 'apiSecurityIntegrationLevel']);
 const visibleVersionFields = (fields = []) => fields.filter((field) => !HIDDEN_VERSION_FIELDS.has(field));
@@ -32,6 +55,8 @@ export function PendingApprovals() {
   const loadPendingVersions = async () => {
     try {
       setLoading(true);
+      // Populate the field registry before anything reads it synchronously below.
+      await loadApplicationFieldRegistry();
       const versions = await api.getPendingVersions();
       setPendingVersions(versions);
       
@@ -54,17 +79,7 @@ export function PendingApprovals() {
             changes[version.id] = comparison.comparison;
           } else {
             // Initial version - get all non-null fields
-            const fieldsToCheck = [
-              'name', 'description', 'owner', 'repoUrl', 'language', 'framework',
-              'serverEnvironment', 'facing', 'deploymentType', 'authProfiles', 'dataTypes',
-              'status', 'businessCriticality', 'criticalAspects', 'devTeamContact',
-              'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel', 'sastIncludesSca',
-              'dastTool', 'dastIntegrationLevel', 'scaTool', 'scaIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
-              'apiSecurityNA',
-              'appFirewallNA',
-              'currentVersion', 'deploymentEnvironment', 'gitBranch',
-              'lastDastScanDate', 'lastSastScanDate', 'lastScaScanDate', 'interfaces',
-            ];
+            const fieldsToCheck = getVersionedFields(FALLBACK_VERSIONED_FIELDS);
             const changedFields = fieldsToCheck.filter(field => version[field] !== null && version[field] !== undefined);
             changes[version.id] = {
               changedFields,
@@ -123,6 +138,11 @@ export function PendingApprovals() {
       lastScaScanDate: 'Last SCA Scan Date',
       interfaces: 'Interfaces',
     };
+    // The registry carries a label for every field it knows, so a newly added field is
+    // named correctly here without this map being updated. The map remains for fields
+    // the registry has no entry for, and for its own wording where it differs.
+    const fromRegistry = registryFieldLabel(field);
+    if (fromRegistry && fromRegistry !== field) return labels[field] || fromRegistry;
     return labels[field] || field.replace(/([A-Z])/g, ' $1').trim();
   };
 

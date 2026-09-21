@@ -4,6 +4,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { requireAdmin, requireAuth } from '../middleware/auth.js';
 import {
+  APPLICATION_METADATA_FIELDS,
+  VERSIONED_METADATA_FIELDS,
+  APPROVABLE_METADATA_FIELDS,
+  SPLITTABLE_METADATA_FIELDS,
+} from '../services/applicationFields.js';
+import {
   getSensitiveFieldsConfig,
   getToolQualityConfig,
   saveSensitiveFieldsConfig,
@@ -79,6 +85,32 @@ router.put('/sensitive-fields', requireAdmin, async (req, res) => {
       error: 'Failed to save sensitive fields config',
       message: error.message,
     });
+  }
+});
+
+/**
+ * The application metadata field registry, served so the frontend stops hand-mirroring
+ * it (read-only; any authenticated user).
+ *
+ * services/applicationFields.js became the single source of truth on the backend, but
+ * the frontend still carried its own copies — two inside VersionHistory.jsx alone, plus
+ * PendingApprovals.jsx and SplitApplicationModal.jsx. Every field added since has had to
+ * be pasted into each, and each paste that was missed is a field that silently vanishes
+ * from version history, from an approval diff, or from a split.
+ *
+ * The derived sets are included so a caller never has to re-derive them from the flags.
+ */
+router.get('/application-fields', requireAuth, (req, res) => {
+  try {
+    res.json({
+      fields: APPLICATION_METADATA_FIELDS,
+      versioned: VERSIONED_METADATA_FIELDS,
+      approvable: APPROVABLE_METADATA_FIELDS,
+      splittable: SPLITTABLE_METADATA_FIELDS,
+    });
+  } catch (error) {
+    console.error('Error serving application field registry:', error);
+    res.status(500).json({ error: 'Failed to load application fields' });
   }
 });
 
