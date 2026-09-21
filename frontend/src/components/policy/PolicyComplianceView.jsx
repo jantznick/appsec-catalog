@@ -255,7 +255,7 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div className="text-center p-4 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-gray-800">{summary?.total || 0}</div>
               <div className="text-sm text-gray-600 mt-1">Total Controls</div>
@@ -271,6 +271,10 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
             <div className="text-center p-4 bg-amber-50 rounded-lg">
               <div className="text-2xl font-bold text-amber-700">{summary?.verification_required || 0}</div>
               <div className="text-sm text-amber-600 mt-1">Verification Required</div>
+            </div>
+            <div className="text-center p-4 bg-gray-100 rounded-lg">
+              <div className="text-2xl font-bold text-gray-700">{summary?.not_applicable || 0}</div>
+              <div className="text-sm text-gray-600 mt-1">Not Applicable</div>
             </div>
             <div className="text-center p-4 bg-blue-50 rounded-lg">
               <div className="text-2xl font-bold text-blue-700">{summary?.compliance_percentage || 0}%</div>
@@ -347,22 +351,30 @@ export function PolicyComplianceView({ applicationId, compliance, loading, onLoa
                       // Partial automated coverage: the checks passed but a human still has
                       // to confirm the rest, so this is neither a pass nor a failure.
                       const needsVerification = status === 'verification_required';
+                      // Out of scope for this application — not a pass and not a failure.
+                      const notApplicable = status === 'not_applicable';
 
                       const borderClass = isMeeting
                         ? 'border-green-200'
                         : needsVerification
                           ? 'border-amber-200'
-                          : 'border-red-200';
+                          : notApplicable
+                            ? 'border-gray-300'
+                            : 'border-red-200';
                       const badgeClass = isMeeting
                         ? 'bg-green-100 text-green-800'
                         : needsVerification
                           ? 'bg-amber-100 text-amber-800'
-                          : 'bg-red-100 text-red-800';
+                          : notApplicable
+                            ? 'bg-gray-100 text-gray-600'
+                            : 'bg-red-100 text-red-800';
                       const badgeLabel = isMeeting
                         ? 'Meeting'
                         : needsVerification
                           ? 'Verification Required'
-                          : 'Not Meeting';
+                          : notApplicable
+                            ? 'Not Applicable'
+                            : 'Not Meeting';
 
                       return (
                         <Card key={control.id} className={`bg-gray-50 ${borderClass}`}>

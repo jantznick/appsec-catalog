@@ -4,8 +4,41 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { getAuthContext, resolveChangeSource } from '../middleware/authContext.js';
 import { recordChange } from '../utils/changeHistory.js';
 
+const FIELD_ROLES = ['compliance', 'applies_when'];
+
 function summarizeFields(fields) {
-  return (fields || []).map((f) => ({ fieldPath: f.fieldPath, operator: f.operator, value: f.value }));
+  return (fields || []).map((f) => ({
+    fieldPath: f.fieldPath,
+    operator: f.operator,
+    value: f.value,
+    role: f.role,
+  }));
+}
+
+/**
+ * Normalise a field's role. "applies_when" fields decide whether the control is
+ * in scope for an application; anything else is a compliance check.
+ */
+function normalizeFieldRole(role) {
+  const v = typeof role === 'string' ? role.trim() : '';
+  return FIELD_ROLES.includes(v) ? v : 'compliance';
+}
+
+/**
+ * Reject a field whose role was supplied but is not a recognised value, so a
+ * typo like "appliesWhen" cannot silently become a compliance check — which
+ * would invert the control's meaning rather than just scoping it wrongly.
+ * @returns {string|null} error message, or null when valid
+ */
+function validateFieldRoles(fields) {
+  if (!Array.isArray(fields)) return null;
+  for (const field of fields) {
+    if (field?.role === undefined || field?.role === null) continue;
+    if (typeof field.role !== 'string' || !FIELD_ROLES.includes(field.role.trim())) {
+      return `Field role must be one of: ${FIELD_ROLES.join(', ')}`;
+    }
+  }
+  return null;
 }
 
 const router = express.Router();
@@ -96,6 +129,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       fields,
       verificationRequired,
       verificationNote,
+      appliesWhenLogic,
     } = req.body;
 
     // Validate required fields
@@ -126,6 +160,15 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Evaluation logic must be AND or OR' });
     }
 
+    if (appliesWhenLogic && !['AND', 'OR'].includes(appliesWhenLogic)) {
+      return res.status(400).json({ error: 'Applies-when logic must be AND or OR' });
+    }
+
+    const roleError = validateFieldRoles(fields);
+    if (roleError) {
+      return res.status(400).json({ error: roleError });
+    }
+
     // Create control with fields in a transaction
     const control = await prisma.$transaction(async (tx) => {
       // Create the control
@@ -141,6 +184,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
           policyId: policyId.trim(),
           verificationRequired: verificationRequired === true,
           verificationNote: verificationNote?.trim() || null,
+          appliesWhenLogic: appliesWhenLogic || 'AND',
         },
       });
 
@@ -153,6 +197,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
             operator: field.operator?.trim(),
             value: field.value !== null && field.value !== undefined ? JSON.stringify(field.value) : null,
             displayOrder: field.displayOrder !== undefined ? field.displayOrder : index,
+            role: normalizeFieldRole(field.role),
           })),
         });
       }
@@ -205,6 +250,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       fields,
       verificationRequired,
       verificationNote,
+      appliesWhenLogic,
     } = req.body;
 
     // Validate required fields
@@ -239,6 +285,15 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Evaluation logic must be AND or OR' });
     }
 
+    if (appliesWhenLogic && !['AND', 'OR'].includes(appliesWhenLogic)) {
+      return res.status(400).json({ error: 'Applies-when logic must be AND or OR' });
+    }
+
+    const roleError = validateFieldRoles(fields);
+    if (roleError) {
+      return res.status(400).json({ error: roleError });
+    }
+
     // Update control and fields in a transaction
     let beforeControl = null;
     const control = await prisma.$transaction(async (tx) => {
@@ -265,6 +320,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       if (policyId !== undefined) updateData.policyId = policyId.trim();
       if (verificationRequired !== undefined) updateData.verificationRequired = verificationRequired === true;
       if (verificationNote !== undefined) updateData.verificationNote = verificationNote?.trim() || null;
+      if (appliesWhenLogic !== undefined) updateData.appliesWhenLogic = appliesWhenLogic || 'AND';
 
       await tx.policyControl.update({
         where: { id },
@@ -287,6 +343,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
               operator: field.operator?.trim(),
               value: field.value !== null && field.value !== undefined ? JSON.stringify(field.value) : null,
               displayOrder: field.displayOrder !== undefined ? field.displayOrder : index,
+              role: normalizeFieldRole(field.role),
             })),
           });
         }

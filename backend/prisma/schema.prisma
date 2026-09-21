@@ -999,6 +999,9 @@ model PolicyControl {
   // must confirm the rest. An admin PolicyControlOverride promotes it to "meeting".
   verificationRequired Boolean            @default(false)
   verificationNote     String?            @db.Text // what a reviewer still needs to confirm
+  // How to combine the "applies_when" field checks (see PolicyControlField.role).
+  // Controls with no applies_when checks apply to every application, as before.
+  appliesWhenLogic     String             @default("AND") // "AND" or "OR"
   policyId        String // Required - all controls must belong to a policy
   policy          Policy                  @relation(fields: [policyId], references: [id], onDelete: Cascade)
   createdAt       DateTime                @default(now())
@@ -1022,11 +1025,17 @@ model PolicyControlField {
   operator     String // "exists", "equals", "not_equals", "gte", "gt", "lte", "lt", "contains", "in", "not_in"
   value        String? // JSON string for the value (supports different types: string, number, boolean, array)
   displayOrder Int           @default(0) // Order for display within the control
+  // "compliance" (default) — the check that decides meeting / not_meeting.
+  // "applies_when" — decides whether the control applies to this application at
+  // all. If the applies_when checks do not match, the control evaluates to
+  // "not_applicable" and its compliance checks are never run.
+  role         String        @default("compliance")
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
   @@index([controlId])
   @@index([fieldPath])
+  @@index([controlId, role])
 }
 
 // Policy control overrides - manual compliance overrides for controls without field mappings

@@ -91,17 +91,31 @@ mode as the `gitBranch` note above.
 These are prerequisites, not parallel work. Scope is **`services/policy.js` (control evaluation)
 only** — `services/scoring.js` (the 0–100 application score) is explicitly out of scope for now.
 
-### 2a. Conditional applicability per control
-Add an `appliesWhen` set of field checks, evaluated separately from the compliance checks. Without
-it there is no way to express "N/A", so any conditionally-scoped control fails closed on every
-application it does not apply to.
+### 2a. Conditional applicability per control — **done**
+`PolicyControlField.role` splits a control's checks in two: `compliance` (the default — decides
+meeting/not_meeting, as before) and `applies_when` (decides whether the control is in scope at
+all). `PolicyControl.appliesWhenLogic` combines the applies_when checks with AND or OR.
 
-Blocks: **4.6.10** (internet-facing only), **6.3.13** (confidential data only).
+When the applies_when checks do not match, the control returns `not_applicable` and **its
+compliance checks never run**, so a control that does not apply cannot count against an
+application.
 
-`Policy` already has a `conditional` scope; `PolicyControl` has no equivalent.
+Backward compatible: existing fields default to `compliance` and existing controls to `AND` with
+no applies_when checks, so every current control keeps applying to every application.
 
-### 2b. Additional result states
-Evaluation is currently binary (`meeting` / `not_meeting`). Three more states are needed:
+Unblocks: **4.6.10** (internet-facing only), **6.3.13** (confidential data only), and fixes
+**4.6.11**, which currently over-applies.
+
+### 2a-bis. Override precedence — **fixed**
+`evaluateControl` only consulted the admin override inside its "no field mappings" branch, so an
+override on a *mapped* control was accepted by the API and then silently ignored. That made
+`verification_required` unresolvable, since 4.6.6 has field mappings.
+
+An override now outranks every other outcome — applicability, verification, and the field checks
+themselves. It is a recorded human decision, so it wins.
+
+### 2b. Additional result states — `verification_required` and `not_applicable` **done**
+Evaluation was binary (`meeting` / `not_meeting`). Three more states are needed:
 
 - **`verification_required`** — the control's automated checks pass, but they do not cover the
   whole requirement, so a human must confirm the rest. Driven by a new
@@ -109,12 +123,16 @@ Evaluation is currently binary (`meeting` / `not_meeting`). Three more states ar
   `verification_required` instead of `meeting`. Failing checks still yield `not_meeting`.
   An admin `PolicyControlOverride` promotes it to `meeting`, which is what records the human
   judgement. First consumer is 4.6.6 (Phase 3).
-- **`not_applicable`** — the control does not apply to this application. Required for conditional
-  scoping (2a) to be meaningful; without it a scoped-out control still counts as failing.
-- **`attested`** — owner-asserted rather than measured (Phase 4).
+- **`not_applicable`** — the control does not apply to this application. **Done** alongside 2a.
+- **`attested`** — owner-asserted rather than measured (Phase 4). **Not built.**
 
-Reporting should treat these distinctly. `verification_required` is *not* compliance, and rolling
-it into `meeting` would defeat the point.
+Reporting treats these distinctly, and the distinction is in the denominator:
+
+- `not_applicable` **leaves the denominator** — `compliance_percentage` is now
+  `meeting / (total - not_applicable)`, with a new `applicable` count alongside it. Otherwise
+  scoping a control out would still drag the figure down, defeating the point of 2a.
+- `verification_required` **stays in the denominator** but does not count as `meeting`. It is not
+  compliance yet.
 
 ### 2c. Relative date operators
 `PolicyControlField.value` holds static JSON, so a date threshold is correct on the day it is set

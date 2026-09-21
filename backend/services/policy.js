@@ -142,8 +142,14 @@ export function evaluateFieldCheck(fieldCheck, fieldValue) {
  * @returns {Object} - Evaluation result
  */
 export async function evaluateControl(control, application, override = null) {
-  // If control has no field mappings, check for manual override
-  if (!control.fields || control.fields.length === 0) {
+  // An explicit admin override outranks every other outcome — applicability,
+  // partial-coverage verification, and the field checks themselves. It is a
+  // recorded human decision, so it wins.
+  //
+  // This was previously only consulted when a control had no field mappings,
+  // which meant an override on a mapped control was accepted by the API and
+  // then silently ignored at evaluation time.
+  if (override || !control.fields || control.fields.length === 0) {
     if (override) {
       return {
         status: override.isCompliant ? 'meeting' : 'not_meeting',
@@ -183,8 +189,66 @@ export async function evaluateControl(control, application, override = null) {
     };
   }
   
-  // Sort fields by displayOrder
-  const sortedFields = [...control.fields].sort((a, b) => a.displayOrder - b.displayOrder);
+  // Partition the checks. "applies_when" decides whether this control is in
+  // scope for the application at all; "compliance" decides whether it is met.
+  // Controls with no applies_when checks apply to everything, as before.
+  const allFields = [...control.fields].sort((a, b) => a.displayOrder - b.displayOrder);
+  const scopeFields = allFields.filter(f => f.role === 'applies_when');
+  const complianceFields = allFields.filter(f => f.role !== 'applies_when');
+
+  if (scopeFields.length > 0) {
+    const scopeResults = scopeFields.map(fieldCheck => {
+      const fieldValue = getFieldValue(application, fieldCheck.fieldPath);
+      return {
+        fieldPath: fieldCheck.fieldPath,
+        operator: fieldCheck.operator,
+        value: fieldCheck.value,
+        fieldValue,
+        result: evaluateFieldCheck(fieldCheck, fieldValue),
+      };
+    });
+
+    const appliesWhenLogic = control.appliesWhenLogic === 'OR' ? 'OR' : 'AND';
+    const inScope = appliesWhenLogic === 'OR'
+      ? scopeResults.some(r => r.result)
+      : scopeResults.every(r => r.result);
+
+    // Out of scope: report not_applicable and never run the compliance checks,
+    // so a control that does not apply cannot count against the application.
+    if (!inScope) {
+      return {
+        status: 'not_applicable',
+        evidence: [
+          'This control does not apply to this application.',
+          ...scopeResults
+            .filter(r => !r.result)
+            .map(r => `${r.fieldPath} is "${r.fieldValue ?? 'not set'}"`),
+        ],
+        details: {
+          fieldResults: [],
+          evaluationLogic: control.evaluationLogic,
+          finalResult: null,
+          notApplicable: true,
+          appliesWhen: { logic: appliesWhenLogic, fieldResults: scopeResults },
+        },
+      };
+    }
+  }
+
+  // In scope, but nothing to measure it with — fail closed, as before.
+  if (complianceFields.length === 0) {
+    return {
+      status: 'not_meeting',
+      evidence: ['No field mappings defined for this control'],
+      details: {
+        fieldResults: [],
+        evaluationLogic: control.evaluationLogic,
+        finalResult: false,
+      },
+    };
+  }
+
+  const sortedFields = complianceFields;
   
   // Evaluate each field check
   const fieldResults = sortedFields.map(fieldCheck => {
@@ -245,7 +309,7 @@ export async function evaluateControl(control, application, override = null) {
   
   // A control whose automated checks cover only part of its requirement passes to
   // "verification_required", not "meeting" — a human still has to confirm the rest.
-  // An admin override (handled above) is what promotes it to "meeting".
+  // An admin override resolves it to "meeting" (handled at the top of this function).
   const needsVerification = finalResult && control.verificationRequired === true;
 
   if (needsVerification) {
@@ -676,6 +740,7 @@ export async function evaluateAllControls(application) {
         meeting: 0,
         not_meeting: 0,
         verification_required: 0,
+        not_applicable: 0,
         compliance_percentage: 0,
       },
     });
@@ -693,16 +758,24 @@ export async function evaluateAllControls(application) {
         policyEntry.summary.meeting++;
       } else if (controlResult.status === 'verification_required') {
         policyEntry.summary.verification_required++;
+      } else if (controlResult.status === 'not_applicable') {
+        policyEntry.summary.not_applicable++;
       } else {
         policyEntry.summary.not_meeting++;
       }
     }
   });
 
-  // Calculate compliance percentages for each policy
+  // Compliance percentage is measured against the controls that actually apply:
+  // not_applicable leaves the denominator entirely, otherwise scoping a control
+  // out would still drag the figure down. verification_required stays in the
+  // denominator but is not counted as meeting — it is not compliance yet.
   policiesMap.forEach(policyEntry => {
-    const { total, meeting } = policyEntry.summary;
-    policyEntry.summary.compliance_percentage = total > 0 ? Math.round((meeting / total) * 100) : 100;
+    const { total, meeting, not_applicable } = policyEntry.summary;
+    const applicable = total - not_applicable;
+    policyEntry.summary.applicable = applicable;
+    policyEntry.summary.compliance_percentage =
+      applicable > 0 ? Math.round((meeting / applicable) * 100) : 100;
   });
 
   // Convert to array
@@ -714,7 +787,9 @@ export async function evaluateAllControls(application) {
   const meeting = allControls.filter(cr => cr.status === 'meeting').length;
   const notMeeting = allControls.filter(cr => cr.status === 'not_meeting').length;
   const verificationRequired = allControls.filter(cr => cr.status === 'verification_required').length;
-  const compliancePercentage = total > 0 ? Math.round((meeting / total) * 100) : 100;
+  const notApplicable = allControls.filter(cr => cr.status === 'not_applicable').length;
+  const applicable = total - notApplicable;
+  const compliancePercentage = applicable > 0 ? Math.round((meeting / applicable) * 100) : 100;
 
   // Overall compliance: all policies must be 100% compliant
   const allPoliciesCompliant = policies.every(p => p.summary.compliance_percentage === 100);
@@ -723,9 +798,11 @@ export async function evaluateAllControls(application) {
     policies,
     summary: {
       total,
+      applicable,
       meeting,
       not_meeting: notMeeting,
       verification_required: verificationRequired,
+      not_applicable: notApplicable,
       compliance_percentage: compliancePercentage,
       all_policies_compliant: allPoliciesCompliant,
       total_policies: policies.length,
