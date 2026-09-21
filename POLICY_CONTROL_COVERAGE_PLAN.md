@@ -12,7 +12,7 @@ so activating them before mapping would fail every application against every unm
 
 ## Current state (2026-09-21)
 
-28 controls: **17 mapped**, **8 attestable**, **3 uncovered**.
+28 controls: **17 mapped**, **10 attestable**, **1 uncovered**.
 
 SCM-derived controls (4.6.3, 4.6.7, 6.3.12) each pair their signal with a
 `within_days 30` freshness check on the corresponding `*SyncedAt` column. Sync is manual —
@@ -113,7 +113,7 @@ Relations, resolved on demand by `withEvaluableRelations` (see 2d):
 | `threatModel.status`, `threatModel.lastReviewedAt` | 4.6.11 Threat modeling | exposed |
 | `apiSchema` | 4.6.6 bullet 1 | exposed, deliberately unmapped |
 | `ingressProducts`, `outgoingProductFlows`, `incomingProductFlows` | 4.6.6 bullet 1 | exposed, deliberately unmapped |
-| findings / SLA data | 4.6.15, 6.3.11 | **not yet exposed** |
+| ~~findings / SLA data~~ | 4.6.15, 6.3.11 | **never — see below** |
 
 **Status: done.** 43 mappable fields, up from 34. Any relation added to `EVALUABLE_RELATIONS`
 must also be listed here, or a mapping against it resolves to `null` forever — the same failure
@@ -275,10 +275,11 @@ same as documentation being complete and current, which is exactly the judgement
 For controls where no field could ever provide evidence. The owner asserts compliance, accepts
 audit risk, and re-attests on a schedule.
 
-Applies to: **4.6.12**, **6.3.2** (secure coding guidelines), **6.3.5** (no confidential prod
-data in testing), **6.3.6** (default account removal), **6.3.8** (no back doors), **6.3.9**
-(no clear-text passwords), **6.3.10** (no dev utilities in prod), and the at-rest half of
-**6.3.13**.
+Applies to ten controls: **4.6.12**, **6.3.2** (secure coding guidelines), **6.3.5** (no
+confidential prod data in testing), **6.3.6** (default account removal), **6.3.8** (no back
+doors), **6.3.9** (no clear-text passwords), **6.3.10** (no dev utilities in prod), the at-rest
+half of **6.3.13**, plus **4.6.15** (finding review and SLA) and **6.3.11** (vulnerability
+management) — the last two because findings live in Wiz, not Orbit (see below).
 
 ### Why not reuse `PolicyControlOverride`
 
@@ -485,7 +486,7 @@ handling confidential data.
 
 ## Coverage
 
-**Now: 25 of 28 covered — 17 mapped, 8 attestable.**
+**Now: 27 of 28 covered — 17 mapped, 10 attestable.** Only 4.6.4 remains.
 
 > **Completeness deliberately untouched.** The new secrets and IaC fields are *not* added to
 > `services/completeness.js` or `frontend/src/utils/applicationCompleteness.js`. Adding them grows
@@ -501,9 +502,9 @@ handling confidential data.
 | After Phases 1–2 | 11 | 0 | 17 | done |
 | After Phase 5 | 14 | 0 | 14 | done |
 | After Phase 4 | 14 | 8 | 6 | done |
-| After Phase 6a | 17 | 8 | 3 | **← here** |
-| After findings exposure | 19 | 8 | 1 | |
-| After Phase 3 | 20 | 8 | 0 | |
+| After Phase 6a | 17 | 8 | 3 | done |
+| After 4.6.15 / 6.3.11 as attestable | 17 | 10 | 1 | **← here** |
+| After the environments workstream | 18 | 10 | 0 | |
 
 Attestable: 4.6.12, 6.3.2, 6.3.5, 6.3.6, 6.3.8, 6.3.9, 6.3.10, 6.3.13 — all at the 365-day
 default. `attestationValidDays` is per-control, so the riskier ones (no back doors, no clear-text
@@ -513,9 +514,29 @@ The six still uncovered, and what each needs:
 
 | Control | Needs |
 |---|---|
-| 4.6.15 Finding review and SLA | expose findings data as policy fields |
-| 6.3.11 Vulnerability management | same findings data as 4.6.15 |
 | 4.6.4 Environment separation | the environments workstream (outside this plan) |
+
+### Why 4.6.15 and 6.3.11 are attestable, not measurable
+
+An earlier draft of this plan listed them as a vocabulary gap — "expose findings data as policy
+fields." **That was wrong, and the reasoning matters.**
+
+Orbit does not hold findings and is not going to. `SecurityFindingsJob` is an *export*: it
+fetches live from Wiz via [integrations/wiz.js](./backend/integrations/wiz.js), renders a CSV into
+`resultCsv`, and keeps nothing. There is no findings model, no severities, no remediation state,
+and no SLA field anywhere in the schema. **Wiz is the source of truth for findings.**
+
+So the review-and-closure activity these controls describe happens in a system Orbit cannot
+observe. No field could ever evidence them, which is the definition of the attestation category —
+the same bucket as "no back doors" and "secure coding guidelines are followed". They are not a
+collection gap to be filled later; persisting findings into Orbit would mean two systems
+disagreeing about the same data.
+
+> **Both are at the 365-day default, and are the strongest candidates for tightening.** Attesting
+> once a year that you are meeting remediation SLAs is a weak claim, because SLA compliance
+> changes continuously — unlike "we do not ship back doors", which is a stable property.
+> 90 days would be more defensible. `attestationValidDays` is per-control, so it is a one-value
+> change.
 
 Measured coverage ends at 20 of 28, with 8 honestly labelled self-reported — rather than 28
 controls silently failing closed.
