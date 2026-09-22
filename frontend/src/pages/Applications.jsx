@@ -294,9 +294,19 @@ export function Applications() {
       enableSorting: isAdmin(),
     },
     {
-      accessorKey: 'owner',
-      header: 'Owner',
-      cell: ({ row }) => row.original.owner || '-',
+      // `owner` is not shown: no form sets it (ApplicationNew strips it explicitly,
+      // "use devTeamContact instead"), so it was empty on all 91 applications and the
+      // column was a screenful of dashes. The column now carries the field the App
+      // Data tab actually collects. `owner` still exists on the model and is still
+      // importable; it is just no longer given table width it never earned.
+      accessorKey: 'devTeamContact',
+      header: 'Team Contact',
+      cell: ({ row }) => {
+        const contact = row.original.devTeamContact?.trim();
+        return contact
+          ? <span className="text-sm text-gray-600" title={contact}>{contact}</span>
+          : <span className="text-xs text-gray-400">Not set</span>;
+      },
     },
     {
       accessorKey: 'status',
@@ -388,19 +398,22 @@ export function Applications() {
       header: 'Actions',
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          <Button
-            variant="danger"
-            size="sm"
+          {/* A quiet red text button, not a solid red block. Ten filled Delete
+              buttons made the most destructive action the most prominent thing on
+              the page, louder than the application names. Matches the treatment on
+              Policies & Controls. The confirmation modal is unchanged. */}
+          <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               setApplicationToDelete(row.original);
               setDeleteModalOpen(true);
               setDeleteConfirmText('');
             }}
-            className="text-xs"
+            className="rounded px-2 py-1 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
           >
             Delete
-          </Button>
+          </button>
         </div>
       ),
     }] : []),
@@ -481,19 +494,18 @@ export function Applications() {
         </div>
       </div>
 
-      {/* Admin Filters */}
+      {/* Admin Filters.
+          Was a full Card with a "Filters" heading wrapping one row of four controls —
+          card padding, header padding and a title, to hold four labelled inputs that
+          say what they are. Now just the row. */}
       {isAdmin() && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Filters</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <Input
                 label="Search"
                 value={globalFilter}
                 onChange={(e) => setGlobalFilter(e.target.value)}
-                placeholder="Search by name, description, or owner..."
+                placeholder="Search by name, description, or contact..."
               />
               <Select
                 label="Division"
@@ -525,8 +537,7 @@ export function Applications() {
                 ]}
               />
             </div>
-          </CardContent>
-        </Card>
+        </div>
       )}
 
       {/* Applications Table */}

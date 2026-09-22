@@ -1139,13 +1139,45 @@ export function ApplicationDetail() {
             {formData.repoUrl}
           </a>
         ) : (
-          <p className="text-sm text-gray-400 italic mt-0.5">Not set</p>
+          <p className="text-sm mt-0.5">{emptyMarker('repoUrl')}</p>
         )}
         {linkButton}
       </div>
     );
   };
 
+  /**
+   * Marker for an empty field, distinguishing the ones that count toward completeness.
+   *
+   * The score card says "9 of 12 fields filled" and, until now, nothing on this tab
+   * said WHICH. Every empty field rendered the same grey "Not set", whether it was one
+   * of the thirteen App Data questions completeness is built from or something that
+   * has no bearing on it at all. The reader had to cross-reference the Quick Wins card
+   * to find out.
+   *
+   * `completeness.missing` comes from the server, so the list lives in exactly one
+   * place (services/completeness.js) and this cannot drift from what is scored.
+   */
+  const emptyMarker = (fieldKey) => {
+    const counts = application?.completeness?.missing?.includes(fieldKey);
+    return counts ? (
+      <span className="italic text-amber-500/90" title="This field counts toward the completeness score">
+        Not set — counts toward completeness
+      </span>
+    ) : (
+      <span className="text-gray-400 italic">Not set</span>
+    );
+  };
+
+  /**
+   * Enter edit mode from a click anywhere in a card's body.
+   *
+   * The clickable region is an invisible `absolute inset-0` overlay on the card
+   * CONTENT. The "(click to edit)" hint sat in the card HEADER, outside that overlay,
+   * so clicking the words that told you to click did nothing. The hint is now an
+   * explicit Edit button in the header calling handleEditClick directly — directly,
+   * because this handler deliberately ignores clicks that land on a button.
+   */
   const handleFieldClick = (e) => {
     if (!canEdit() || isEditing) {
       return;
@@ -1427,7 +1459,14 @@ export function ApplicationDetail() {
                 <CardTitle>
                   Basic Information
                   {canEdit() && !isEditing && (
-                    <span className="ml-2 text-xs text-gray-400 font-normal">(click to edit)</span>
+                    <button
+                      type="button"
+                      onClick={handleEditClick}
+                      title="Edit these fields"
+                      className="ml-2 rounded px-1.5 py-0.5 text-xs font-normal text-gray-400 underline decoration-dotted underline-offset-2 transition-colors hover:bg-white/5 hover:text-gray-200"
+                    >
+                      Edit
+                    </button>
                   )}
                   </CardTitle>
               </CardHeader>
@@ -1535,6 +1574,14 @@ export function ApplicationDetail() {
                     </>
                   ) : (
                     <div className="space-y-4">
+                      <div className="bg-slate-50/5 rounded-lg p-4 border border-white/10">
+                        <h5 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+                          </svg>
+                          Identity
+                        </h5>
+                        <div className="space-y-3">
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-1">Application Name</label>
                         <p className="text-base text-gray-900 font-medium">{formData.name || <span className="text-gray-400 italic">Not set</span>}</p>
@@ -1554,10 +1601,19 @@ export function ApplicationDetail() {
                       </div>
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-1">Description / Use Case</label>
-                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                          <p className="text-sm text-gray-900 whitespace-pre-wrap leading-relaxed">
-                            {formData.description || <span className="text-gray-400 italic">Not set</span>}
-                          </p>
+                        {/* The bordered box only when there is prose to put in it. An
+                            empty one was a full-height container announcing that there
+                            was nothing to contain. */}
+                        {formData.description ? (
+                          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                            <p className="text-sm text-gray-900 whitespace-pre-wrap leading-relaxed">
+                              {formData.description}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-sm mt-0.5">{emptyMarker('description')}</p>
+                        )}
+                      </div>
                         </div>
                       </div>
 
@@ -1573,11 +1629,15 @@ export function ApplicationDetail() {
                           {renderRepoField(false)}
                           <div>
                             <span className="text-xs font-medium text-gray-600">Development Team Contact Info:</span>
-                            <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 mt-1">
-                              <p className="text-sm text-gray-900 whitespace-pre-wrap leading-relaxed">
-                                {formData.devTeamContact || <span className="text-gray-400 italic">Not set</span>}
-                              </p>
-                            </div>
+                            {formData.devTeamContact ? (
+                              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 mt-1">
+                                <p className="text-sm text-gray-900 whitespace-pre-wrap leading-relaxed">
+                                  {formData.devTeamContact}
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="text-sm mt-1">{emptyMarker('devTeamContact')}</p>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1594,12 +1654,12 @@ export function ApplicationDetail() {
                           <div>
                             <span className="text-xs font-medium text-gray-600">Business Criticality:</span>
                             <p className="text-sm text-gray-900 mt-0.5 font-medium">
-                              {formData.businessCriticality ? `${formData.businessCriticality}/5` : <span className="text-gray-400 italic">Not set</span>}
+                              {formData.businessCriticality ? `${formData.businessCriticality}/5` : emptyMarker('businessCriticality')}
                             </p>
                           </div>
                           <div>
                             <span className="text-xs font-medium text-gray-600">Critical Aspects:</span>
-                            <p className="text-sm text-gray-900 mt-0.5">{formData.criticalAspects || <span className="text-gray-400 italic">Not set</span>}</p>
+                            <p className="text-sm text-gray-900 mt-0.5">{formData.criticalAspects || emptyMarker('criticalAspects')}</p>
                           </div>
                         </div>
                       </div>
@@ -1621,7 +1681,14 @@ export function ApplicationDetail() {
                 <CardTitle>
                   Technical Information
                   {canEdit() && !isEditing && (
-                    <span className="ml-2 text-xs text-gray-400 font-normal">(click to edit)</span>
+                    <button
+                      type="button"
+                      onClick={handleEditClick}
+                      title="Edit these fields"
+                      className="ml-2 rounded px-1.5 py-0.5 text-xs font-normal text-gray-400 underline decoration-dotted underline-offset-2 transition-colors hover:bg-white/5 hover:text-gray-200"
+                    >
+                      Edit
+                    </button>
                   )}
                 </CardTitle>
               </CardHeader>
@@ -1776,15 +1843,15 @@ export function ApplicationDetail() {
                         <div className="grid grid-cols-3 gap-4">
                           <div>
                             <span className="text-xs font-medium text-gray-600">Language:</span>
-                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.language || <span className="text-gray-400 italic">Not set</span>}</p>
+                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.language || emptyMarker('language')}</p>
                           </div>
                           <div>
                             <span className="text-xs font-medium text-gray-600">Framework:</span>
-                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.framework || <span className="text-gray-400 italic">Not set</span>}</p>
+                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.framework || emptyMarker('framework')}</p>
                           </div>
                           <div>
                             <span className="text-xs font-medium text-gray-600">Server Environment:</span>
-                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.serverEnvironment || <span className="text-gray-400 italic">Not set</span>}</p>
+                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.serverEnvironment || emptyMarker('serverEnvironment')}</p>
                           </div>
                         </div>
                         <div className="mt-3 pt-3 border-t border-indigo-200 relative z-20 flex items-center gap-2 flex-wrap">
@@ -1828,15 +1895,15 @@ export function ApplicationDetail() {
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <span className="text-xs font-medium text-gray-600">Current Version:</span>
-                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.currentVersion || <span className="text-gray-400 italic">Not set</span>}</p>
+                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.currentVersion || emptyMarker('currentVersion')}</p>
                           </div>
                           <div>
                             <span className="text-xs font-medium text-gray-600">Facing:</span>
-                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.facing || <span className="text-gray-400 italic">Not set</span>}</p>
+                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.facing || emptyMarker('facing')}</p>
                           </div>
                           <div>
                             <span className="text-xs font-medium text-gray-600">Deployment Type:</span>
-                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.deploymentType || <span className="text-gray-400 italic">Not set</span>}</p>
+                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.deploymentType || emptyMarker('deploymentType')}</p>
                           </div>
                         </div>
                       </div>
@@ -1852,11 +1919,11 @@ export function ApplicationDetail() {
                         <div className="space-y-2">
                           <div>
                             <span className="text-xs font-medium text-gray-600">Auth Profiles:</span>
-                            <p className="text-sm text-gray-900 mt-0.5">{formData.authProfiles || <span className="text-gray-400 italic">Not set</span>}</p>
+                            <p className="text-sm text-gray-900 mt-0.5">{formData.authProfiles || emptyMarker('authProfiles')}</p>
                           </div>
                           <div>
                             <span className="text-xs font-medium text-gray-600">Data Types:</span>
-                            <p className="text-sm text-gray-900 mt-0.5">{formData.dataTypes || <span className="text-gray-400 italic">Not set</span>}</p>
+                            <p className="text-sm text-gray-900 mt-0.5">{formData.dataTypes || emptyMarker('dataTypes')}</p>
                           </div>
                         </div>
                       </div>
@@ -1891,7 +1958,14 @@ export function ApplicationDetail() {
               <CardTitle>
                 Interfaces with Other Applications
                 {canEdit() && !isEditing && (
-                  <span className="ml-2 text-xs text-gray-400 font-normal">(click to edit)</span>
+                  <button
+                    type="button"
+                    onClick={handleEditClick}
+                    title="Edit these fields"
+                    className="ml-2 rounded px-1.5 py-0.5 text-xs font-normal text-gray-400 underline decoration-dotted underline-offset-2 transition-colors hover:bg-white/5 hover:text-gray-200"
+                  >
+                    Edit
+                  </button>
                 )}
               </CardTitle>
             </CardHeader>
@@ -2174,7 +2248,14 @@ export function ApplicationDetail() {
               <CardTitle>
                 Security Tools
                 {canEdit() && !isEditing && (
-                  <span className="ml-2 text-xs text-gray-400 font-normal">(click to edit)</span>
+                  <button
+                    type="button"
+                    onClick={handleEditClick}
+                    title="Edit these fields"
+                    className="ml-2 rounded px-1.5 py-0.5 text-xs font-normal text-gray-400 underline decoration-dotted underline-offset-2 transition-colors hover:bg-white/5 hover:text-gray-200"
+                  >
+                    Edit
+                  </button>
                 )}
               </CardTitle>
             </CardHeader>

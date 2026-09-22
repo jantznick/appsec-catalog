@@ -242,7 +242,7 @@ function ToolWeightTable({ title, rows, onChange, onAdd, onRemove, categoryOptio
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                 Tool
               </th>
-              <th className="w-36 px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+              <th className="w-24 px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                 Weight
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -282,8 +282,12 @@ function ToolWeightTable({ title, rows, onChange, onAdd, onRemove, categoryOptio
                       onChange={(event) => onChange(index, 'weight', event.target.value)}
                     />
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
+                  {/* w-px + whitespace-nowrap: the cell takes exactly the width its
+                      chips need and the slack goes to Tool. Six chips no longer wrap,
+                      which they did the moment Secrets and IaC/Container were added —
+                      orphaning "Firewall" onto a second line on every single row. */}
+                  <td className="w-px whitespace-nowrap px-4 py-3">
+                    <div className="flex items-center gap-2">
                       {categoryOptions.map((category) => {
                         const checked = row.categories?.includes(category.value) ?? false;
                         return (
@@ -692,7 +696,7 @@ export function ScoringSettings() {
         <LoadingPage message="Loading..." />
       ) : (
         <div className="space-y-8">
-          <Card className="max-w-5xl">
+          <Card className="max-w-7xl">
             <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <CardTitle>Tool quality weights</CardTitle>
@@ -749,7 +753,7 @@ export function ScoringSettings() {
             </CardContent>
           </Card>
 
-          <Card className="max-w-5xl">
+          <Card className="max-w-7xl">
             <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <CardTitle>API schema sensitive field rules</CardTitle>

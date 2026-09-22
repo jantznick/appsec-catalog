@@ -30,8 +30,14 @@ export function Tabs({ children, defaultTab = 0, className = '' }) {
 
   return (
     <div className={className}>
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+      {/* The strip scrolls, the page does not.
+          Tabs are `whitespace-nowrap`, so with nine of them (the application detail
+          page) the row simply ran past the viewport below about 1100px. Nothing
+          constrained it, so the *document* gained a horizontal scrollbar and the last
+          two tabs were unreachable without scrolling the whole page sideways.
+          overflow-x-auto keeps the overflow inside this strip. */}
+      <div className="border-b border-gray-200 overflow-x-auto overscroll-x-contain">
+        <nav className="-mb-px flex space-x-8 min-w-max" aria-label="Tabs">
           {tabs}
         </nav>
       </div>

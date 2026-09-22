@@ -2212,7 +2212,12 @@ router.get('/:id', requireAuth, async (req, res) => {
       }
     }
 
-    res.json(application);
+    // Completeness, including WHICH fields are missing, so the App Data tab can mark
+    // them. Without this the detail page knows the score says "9 of 12 fields filled"
+    // and has no way to say which three — the reader had to infer it from the Quick
+    // Wins card. Computed after the deployment fallbacks above, so a value inherited
+    // from the latest deployment counts as filled, exactly as it does for the score.
+    res.json({ ...application, completeness: calculateCompleteness(application) });
   } catch (error) {
     console.error('Error fetching application:', error);
     res.status(500).json({ error: 'Failed to fetch application' });
