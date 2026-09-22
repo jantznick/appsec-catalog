@@ -86,3 +86,73 @@ export function formatPolicyFieldValue(value) {
   }
   return String(value);
 }
+
+/**
+ * Plain-English statement of what a field check requires.
+ *
+ * WHY THIS IS SHARED
+ *
+ * This was a thirty-line ternary chain inline in PolicyComplianceView's JSX, and it had
+ * two faults the Policies list did not:
+ *
+ * - `within_days` and `older_than_days` were missing, so they fell through to a
+ *   catch-all that printed the raw identifier: "Requirement: within_days 30".
+ * - It interpolated the stored value directly. Values are stored as JSON, so a string
+ *   arrives already quoted and rendered as `Must equal ""approved""`.
+ *
+ * Both are fixed by going through formatPolicyFieldValue, the same decoder the Policies
+ * list uses — which is why that screen was right and this one was not.
+ *
+ * @param {string} operator
+ * @param {unknown} value stored (JSON-encoded) value from the field check
+ * @returns {string}
+ */
+export function describeRequirement(operator, value) {
+  const v = formatPolicyFieldValue(value);
+  const list = Array.isArray(value) ? value.join(', ') : v;
+
+  switch (operator) {
+    case 'exists':
+      return 'Field must exist';
+    case 'not_exists':
+      return 'Field must not exist';
+    case 'equals':
+      return `Must equal "${v}"`;
+    case 'not_equals':
+      return `Must not equal "${v}"`;
+    case 'gte':
+      return `Must be \u2265 ${v}`;
+    case 'gt':
+      return `Must be > ${v}`;
+    case 'lte':
+      return `Must be \u2264 ${v}`;
+    case 'lt':
+      return `Must be < ${v}`;
+    case 'contains':
+      return `Must contain "${v}"`;
+    case 'in':
+      return `Must be one of: ${list}`;
+    case 'not_in':
+      return `Must not be one of: ${list}`;
+    case 'within_days':
+      return `Must be within the last ${v} days`;
+    case 'older_than_days':
+      return `Must be older than ${v} days`;
+    default:
+      // An operator the UI does not know. Say so rather than printing the identifier
+      // as though it were prose.
+      return `Unrecognised check (${operator})${v ? ` \u2014 ${v}` : ''}`;
+  }
+}
+
+/**
+ * How a control's checks combine, as a sentence.
+ *
+ * Was built inline as "All fields must " + (AND ? "pass" : "at least one must pass"),
+ * which rendered every OR control as "All fields must at least one must pass".
+ */
+export function describeEvaluationLogic(logic) {
+  return logic === 'OR'
+    ? 'At least one field must pass for this control to be met'
+    : 'All fields must pass for this control to be met';
+}

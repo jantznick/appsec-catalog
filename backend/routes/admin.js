@@ -1,4 +1,5 @@
 import express from 'express';
+import { calculateCompleteness } from '../services/completeness.js';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import {
@@ -158,7 +159,19 @@ router.get('/applications', async (req, res) => {
       },
     });
 
-    res.json(applications);
+    // Completeness travels with the row, exactly as it does on GET /api/applications.
+    //
+    // The Applications table calls THIS endpoint for an admin and that one for everyone
+    // else. When the frontend's own copy of calculateCompleteness was deleted in favour
+    // of a served value, only the non-admin endpoint was given it, so the figure
+    // silently vanished from the table for every admin — which is every user who looks
+    // at that page.
+    res.json(
+      applications.map((application) => ({
+        ...application,
+        completeness: calculateCompleteness(application),
+      })),
+    );
   } catch (error) {
     console.error('Error fetching admin applications:', error);
     res.status(500).json({ error: 'Failed to fetch applications' });

@@ -620,7 +620,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals', 'gte', 'gt', 'lte', 'lt'],
         valueType: 'number',
         validationRules: {
-          description: 'Approvals required to merge into the default branch. gte 1 is the usual bar for segregation of duties.'
+          description: 'Approvals required to merge into the default branch. \u2265 1 is the usual bar for segregation of duties.'
         }
       },
       {

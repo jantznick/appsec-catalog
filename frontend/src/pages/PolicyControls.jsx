@@ -1189,7 +1189,7 @@ export function PolicyControls() {
                               ("Protection Enforced for Ad"). Value sits on the same
                               line rather than being pushed below by helper text. */}
                           <div className="grid grid-cols-12 gap-3 items-start">
-                            <div className="col-span-4">
+                            <div className="col-span-3">
                             <Select
                               label="Field"
                               value={field.fieldPath}
@@ -1226,7 +1226,10 @@ export function PolicyControls() {
                                 Value — the same sentence twice in one row. It now appears
                                 once, below the row. This slot carries an operator-specific
                                 warning, and only when there is one. */}
-                            <div className="col-span-2">
+                            {/* 3 columns, not 2: at 2 the longest labels truncated to
+                                "Greater Tha" and "Within the la". Field gives up a
+                                column for it — its labels are shorter. */}
+                            <div className="col-span-3">
                             <Select
                               label="Operator"
                               value={field.operator}
@@ -1264,7 +1267,7 @@ export function PolicyControls() {
                                     required
                                     helperText={
                                       field.operator === 'within_days'
-                                        ? 'Met when the date is no more than this many days old. 183 is roughly six months.'
+                                        ? 'Met when the date is no more than this many days old.'
                                         : 'Met when the date is more than this many days old.'
                                     }
                                   />
@@ -1294,7 +1297,7 @@ export function PolicyControls() {
                                       { value: '', label: 'Select value' },
                                       ...fieldMetadata.valueOptions
                                     ]}
-                                    helperText="Select a value from the dropdown"
+
                                   />
                                 );
                               }
@@ -1319,7 +1322,7 @@ export function PolicyControls() {
                                       { value: '', label: 'Select value' },
                                       ...fieldMetadata.valueOptions
                                     ]}
-                                    helperText="Select true or false"
+
                                   />
                                 );
                               }
@@ -1411,13 +1414,16 @@ export function PolicyControls() {
                                   helperText={
                                     !needsValue
                                       ? 'No value needed'
-                                      : valueType === 'number'
-                                      ? `Enter a numeric value${fieldMetadata?.validationRules?.min !== undefined || fieldMetadata?.validationRules?.max !== undefined ? ` between ${fieldMetadata?.validationRules?.min || 'any'} and ${fieldMetadata?.validationRules?.max || 'any'}` : ''}`
-                                      : valueType === 'boolean'
-                                      ? 'Enter true/false or yes/no'
+                                      : fieldMetadata?.validationRules?.min !== undefined ||
+                                        fieldMetadata?.validationRules?.max !== undefined
+                                      ? `Between ${fieldMetadata?.validationRules?.min ?? 'any'} and ${fieldMetadata?.validationRules?.max ?? 'any'}`
                                       : field.operator === 'in' || field.operator === 'not_in'
-                                      ? 'Comma-separated values (e.g., "value1, value2")'
-                                      : 'Enter comparison value'
+                                      ? 'Comma-separated'
+                                      // Nothing useful to say. "Enter a numeric value"
+                                      // under an input labelled Value, on a row that
+                                      // already names the field and operator, is a line
+                                      // of noise per check.
+                                      : undefined
                                   }
                                 />
                               );
