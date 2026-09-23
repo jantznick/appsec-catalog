@@ -2,6 +2,7 @@ import { prisma } from '../prisma/client.js';
 import {
   getFieldValue,
   evaluateFieldCheck,
+  evaluateScopeCheck,
   parseValue,
   formatDate,
   toTime,
@@ -151,7 +152,7 @@ export async function evaluateControl(control, application, override = null, att
         operator: fieldCheck.operator,
         value: fieldCheck.value,
         fieldValue,
-        result: evaluateFieldCheck(fieldCheck, fieldValue),
+        result: evaluateScopeCheck(fieldCheck, fieldValue),
       };
     });
 
