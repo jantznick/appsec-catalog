@@ -293,21 +293,14 @@ export function Applications() {
       },
       enableSorting: isAdmin(),
     },
-    {
-      // `owner` is not shown: no form sets it (ApplicationNew strips it explicitly,
-      // "use devTeamContact instead"), so it was empty on all 91 applications and the
-      // column was a screenful of dashes. The column now carries the field the App
-      // Data tab actually collects. `owner` still exists on the model and is still
-      // importable; it is just no longer given table width it never earned.
-      accessorKey: 'devTeamContact',
-      header: 'Team Contact',
-      cell: ({ row }) => {
-        const contact = row.original.devTeamContact?.trim();
-        return contact
-          ? <span className="text-sm text-gray-600" title={contact}>{contact}</span>
-          : <span className="text-xs text-gray-400">Not set</span>;
-      },
-    },
+    // No people column. `owner` was empty on all 91 applications — no form sets it,
+    // and ApplicationNew strips it explicitly ("use devTeamContact instead") — so it
+    // was a screenful of dashes. Replacing it with devTeamContact was worse: it is
+    // free text, up to 59 characters in the current data, and an uncapped cell in an
+    // auto-layout table sizes to its content. It measured 459px and pushed the table
+    // to 1471px inside a 1166px wrapper, shoving Score and Actions out of view.
+    // Capping it would truncate the one useful thing in it. The contact belongs on
+    // the App Data tab, where it has room; the table is for scanning and sorting.
     {
       accessorKey: 'status',
       header: 'Status',
@@ -505,7 +498,7 @@ export function Applications() {
                 label="Search"
                 value={globalFilter}
                 onChange={(e) => setGlobalFilter(e.target.value)}
-                placeholder="Search by name, description, or contact..."
+                placeholder="Search by name or description..."
               />
               <Select
                 label="Division"
