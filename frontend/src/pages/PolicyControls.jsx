@@ -17,6 +17,30 @@ import {
   isDayCountOperator,
 } from '../lib/policyDisplay.js';
 
+/**
+ * Coerce a <select> value back to the type the field actually holds.
+ *
+ * Every option value that reaches an onChange is a STRING — the DOM has no other kind.
+ * The dropdown branch coerced only numbers, so a boolean field rendered as a dropdown
+ * saved the string "true" instead of the boolean true.
+ *
+ * That is not cosmetic. The evaluator compares with === , so a stored "true" against a
+ * real boolean true makes `equals` return FALSE and `not_equals` return TRUE — every
+ * boolean check saved through this editor evaluates backwards. It is the same shape as
+ * the rolling-window bug: the editor quietly rewriting a mapping into something that
+ * still looks right on screen.
+ *
+ * Verified against services/policyEvaluation.js:
+ *   stored "true" vs actual true  ->  equals false, not_equals true   (both wrong)
+ *   stored  true  vs actual true  ->  equals true,  not_equals false  (both right)
+ */
+function coerceSelectValue(raw, fieldType) {
+  if (raw === '') return null;
+  if (fieldType === 'number') return Number(raw);
+  if (fieldType === 'boolean') return raw === 'true';
+  return raw;
+}
+
 /** Operators that compare a date against one fixed calendar date. */
 const FIXED_DATE_OPERATORS = new Set(['gte', 'gt', 'lte', 'lt']);
 
@@ -1281,16 +1305,11 @@ export function PolicyControls() {
                                     label="Value"
                                     value={field.value !== null && field.value !== undefined ? String(field.value) : ''}
                                     onChange={(e) => {
-                                      let value = e.target.value;
-                                      if (value === '') {
-                                        value = null;
-                                      } else {
-                                        // Convert to number if field type is number
-                                        if (fieldMetadata.fieldType === 'number') {
-                                          value = Number(value);
-                                        }
-                                      }
-                                      handleFieldChange(index, 'value', value);
+                                      handleFieldChange(
+                                        index,
+                                        'value',
+                                        coerceSelectValue(e.target.value, fieldMetadata.fieldType),
+                                      );
                                     }}
                                     required={needsValue}
                                     options={[
@@ -1826,12 +1845,10 @@ export function PolicyControls() {
                                         value={condition.value !== null && condition.value !== undefined ? String(condition.value) : ''}
                                         onChange={(e) => {
                                           const newConditions = [...policyFormData.conditionalConditions];
-                                          let value = e.target.value;
-                                          if (value === '') {
-                                            value = null;
-                                          } else if (fieldMetadata.fieldType === 'number') {
-                                            value = Number(value);
-                                          }
+                                          const value = coerceSelectValue(
+                                            e.target.value,
+                                            fieldMetadata.fieldType,
+                                          );
                                           newConditions[index] = { ...newConditions[index], value };
                                           setPolicyFormData({ ...policyFormData, conditionalConditions: newConditions });
                                         }}
