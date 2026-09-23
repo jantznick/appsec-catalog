@@ -64,6 +64,34 @@ describe('ApplicationVersion carries every versioned field', () => {
     assert.ok(!VERSIONED_METADATA_FIELDS.includes('metadataLastReviewed'));
   });
 
+  /**
+   * Bookkeeping on the snapshot row itself, rather than a copy of a metadata field.
+   * Everything outside this list is expected to correspond to a registry entry.
+   */
+  const SNAPSHOT_BOOKKEEPING = new Set([
+    'id', 'applicationId', 'application', 'versionNumber', 'createdBy', 'user',
+    'requesterEmail', 'createdAt', 'changeSource', 'approvalStatus', 'approvedBy',
+    'approver', 'approvedAt', 'approvedFields', 'approvalNotes', 'rejectionReason',
+  ]);
+
+  it('has no snapshot column the registry does not know about', () => {
+    // The same failure with the arrow reversed. A column here with no registry entry
+    // is never written by pickVersionedMetadata, never compared by compareVersions and
+    // never applied on approval — so it exists, looks like history, and silently holds
+    // nothing. The other direction (a versioned field with no column) is caught above;
+    // nothing caught this one until now.
+    const columns = modelColumns('ApplicationVersion');
+    const versioned = new Set(VERSIONED_METADATA_FIELDS);
+    const orphans = [...columns].filter(
+      (c) => !versioned.has(c) && !SNAPSHOT_BOOKKEEPING.has(c),
+    );
+    assert.deepEqual(
+      orphans,
+      [],
+      'these ApplicationVersion columns are silently un-versioned: add a registry entry or drop the column',
+    );
+  });
+
   it('every versioned field is also a column on Application', () => {
     // The other direction of the same trap: a registry field that is not on the
     // source model reads as undefined and snapshots as null, quietly blanking it.
