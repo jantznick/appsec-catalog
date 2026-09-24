@@ -2,63 +2,126 @@
 
 ## Overview
 
-Environments are currently implied by three unrelated free-text fields (`Application.serverEnvironment`, `Application.deploymentEnvironment`, `Deployment.environment`) and nothing ties them together. This plan makes an environment a first-class entity sitting between `Application` and `Domain`, so that a deployed instance of an application — "Orbit Backend in production" — is a thing the catalog can name, attach a domain to, and point at a Wiz tag.
+Environments were implied by three unrelated free-text fields (`Application.serverEnvironment`, `Application.deploymentEnvironment`, `Deployment.environment`) with nothing tying them together. This plan makes an environment a first-class entity sitting between `Application` and `Domain`, so a deployed instance — "Orbit Backend in production" — is a thing the catalog can name, attach a domain to, and point a Wiz tag at.
 
-The immediate driver is Wiz tagging. Containers and images are now tagged with three keys — `Product`, `Environment`, `Application` — and that triple is precisely the natural key of an application/environment pair resolved inside a company's Wiz folder. The catalog currently has nowhere to put the `Environment` half of that.
+The driver is Wiz tagging. Containers and images are tagged with three keys — `Product`, `Environment`, `Application` — and that triple is the natural key of an application/environment pair inside a company's Wiz folder. The catalog had nowhere to put the `Environment` half.
 
-## Finalized Decisions
+**This document is the specification.** Work not described here does not get done, and context not recorded here is not available to whoever picks this up. Roughly half the decisions governing this feature previously lived in conversation rather than in the file; this revision folds them in.
 
-These were settled in design discussion and are not open for re-litigation during build.
+---
 
-1. **An environment is an instance, not a label.** `Application` today mixes logical facts (name, owner, repo, language, criticality) with facts about a particular running copy (`currentVersion`, `gitBranch`, `deploymentEnvironment`, scan dates). The latter belong to the instance.
-2. **Two tables, not one.** A company-scoped `Environment` vocabulary, plus an `ApplicationEnvironment` instance row. The vocabulary makes "production" mean one thing per company and gives Wiz tag values something to validate against; the instance holds the per-copy data.
+## Status
+
+Phases 1 and 2 are **built and on main** (PR #33). Phases 3 and 4 are not started.
+
+### Built
+
+- `Environment` and `ApplicationEnvironment` models, and migration `20260922120000_add_environments` with its backfill
+- `20260922130000_application_name_key_trim`, which tightens the application-name index
+- `services/environmentResolver.js`, with both deployment write paths going through it — `routes/deploymentTokens.js` (CI) and `routes/applications.js` (manual entry)
+- `routes/environments.js` CRUD, behind the `environment.manage` permission
+- Real environment names in the CI sample payload on the deployment-token screen
+- The "Unassigned" bucket in deploy history, showing the raw submitted string
+
+### Migrated and measured
+
+Both migrations **are applied** to the dev database (`prisma migrate status` reports the schema up to date). The backfill ran cleanly. Measured on dev, 91 applications across 18 companies:
+
+| | |
+|---|---|
+| `Environment` rows | 17 — **all `kind = PRODUCTION`** |
+| `ApplicationEnvironment` rows | 91 — exactly one per application |
+| Deployments | 4, all linked, 0 unassigned |
+| Domains re-homed | 46 / 46 |
+| Instances carrying a `currentVersion` | 1 — the same count as applications carrying one |
+
+No duplicate application names exist under `lower(btrim(name))`, so the tightened index applies cleanly.
+
+### The state to understand before testing
+
+**The model is live but nothing is using it.** Every environment came out `PRODUCTION`, so no application has a second one. The per-application selector is hidden on all 91, no Unassigned bucket has contents, and none of the multi-environment behaviour has data to exercise. Anyone testing this must hand-create a second environment first.
+
+### Dual-write / single-read
+
+`Application` remains the read path for everything. Per-environment copies exist but nothing reads them:
+
+| Field | Written to `Application` | Written to `ApplicationEnvironment` |
+|---|---|---|
+| `currentVersion` | yes | yes, by the resolver |
+| `gitBranch` | yes | yes, by the resolver |
+| `lastDastScanDate` | yes | copied once by the backfill; nothing writes it since |
+| `deploymentEnvironment` | yes | never — it is replaced by the relation |
+
+---
+
+## Decisions
+
+Settled. Not open for re-litigation during build.
+
+1. **An environment is an instance, not a label.** `Application` mixes logical facts (name, owner, repo, language, criticality) with facts about a particular running copy. The latter belong to the instance.
+2. **Two tables, not one.** A company-scoped `Environment` vocabulary plus an `ApplicationEnvironment` instance row. The vocabulary makes "production" mean one thing per company and gives Wiz tag values something to validate against; the instance holds the per-copy data.
 3. **`kind` on the vocabulary row** (`PRODUCTION | STAGING | DEVELOPMENT | QA | OTHER`) so a company can call it `uat` while cross-company reporting still knows what production is. Name is free text; `kind` is canonical.
-4. **Four fields move** to `ApplicationEnvironment`: `currentVersion`, `gitBranch`, `lastDastScanDate`, and `deploymentEnvironment` (which is deleted rather than relocated — its only job is recording which environment a row describes, and that becomes the relation).
-5. **Four fields stay on `Application`:** `lastSastScanDate` and `lastScaScanDate` (SAST scans a codebase, SCA scans a dependency manifest — both are properties of the repo at a commit, identical across environments), plus `serverEnvironment` and `deploymentType` (submitter claims collected by the intake forms).
-6. **The four moved fields leave the version system.** They come out of the `ApplicationVersion` snapshot, the diff list, and the apply list, and stop being approvable. They are operational data written by deployments and integrations, not claims a submitter makes.
-7. **Scoring takes the most recent DAST date across any environment.** No per-environment score divergence. The winning environment is recorded and surfaced in the UI so the provenance stays visible.
-8. **Domains attach to the environment, not the application.** `app.hearst.com` and `staging.app.hearst.com` are currently indistinguishable to the DNS and web snapshot machinery.
-9. **Every application gets a default environment.** The selector is hidden in the UI until a second one exists.
+4. **Four fields move** to `ApplicationEnvironment`: `currentVersion`, `gitBranch`, `lastDastScanDate`, and `deploymentEnvironment` — the last deleted rather than relocated, since its only job is recording which environment a row describes, and that becomes the relation.
+5. **Four fields stay on `Application`:** `lastSastScanDate` and `lastScaScanDate` (SAST scans a codebase, SCA a dependency manifest — both properties of the repo at a commit, identical across environments), plus `serverEnvironment` and `deploymentType`.
+6. **The four moved fields leave the version system.** They are operational data written by deployments and integrations, not claims a submitter makes. **Half done:** all four are already `approvable: false` on main (`09cdd0e`). Setting `versioned: false` and dropping the columns remains, and belongs to Phase 3.
+7. **Scoring takes the most recent DAST date across ANY environment.** Not the primary. Deliberate, for two reasons: teams should not be pushed toward scanning production, and this measures policy compliance rather than serving as a hard audit — a real audit requests the scan evidence itself. The winning environment is recorded and surfaced so the provenance stays visible.
+8. **Domains attach to the environment, not the application.** `app.hearst.com` and `staging.app.hearst.com` are otherwise indistinguishable to the DNS and web-snapshot machinery.
+9. **Every application gets a default environment.** The selector stays hidden until a second one exists. A default environment is a container, not something scored — decision 7 gives one score per application and decision 9 hides the UI, so a seeded default cannot distort anything.
 10. **Environments have an active/retired status.** A retired environment keeps its deploy history and its Wiz tag without cluttering pickers.
-11. **Unmatched CI environment strings do not auto-create environments.** They land in an "Unassigned" bucket. A phantom row from one typo'd pipeline yaml would otherwise surface in the environment selector and the Wiz tag picker as though it were real.
-12. **No mirror or derived columns on `Application`.** Per-environment values are resolved at read time. The existing mirror fields only backfill when null and freeze after the first deploy; that bug is not being reproduced at wider scope.
+11. **Unmatched CI environment strings do not auto-create environments.** They land in an "Unassigned" bucket. A phantom row from one typo'd pipeline yaml would otherwise appear in the environment selector and the Wiz tag picker as though it were real.
+12. **No mirror or derived columns on `Application`.** Per-environment values are resolved at read time.
+
+### Primary environment
+
+13. **An explicit primary flag on `ApplicationEnvironment`**, marking the production or main environment. A stored designation, not a value re-derived per read — re-deriving would make every read depend on a heuristic.
+14. **An application with no primary counts as failing** anything that needs one. It is a data point we do not have, and flagging it is how it gets fixed.
+15. **Retiring the primary leaves the application with no primary.** The retirement is allowed and nothing is silently promoted in its place; the application then reads as a data gap, exactly as if one had never been set. Blocking the retirement would make decommissioning awkward for no gain.
+16. **An application's only environment may be marked primary automatically** if that is cheap to implement. If it is not, leave it unset — the resulting failures surface it and the user marks it, which is the same outcome by a slower route.
+17. **DAST reads any environment; completeness reads the primary.** Two rules on one model, deliberately. DAST is deliberately permissive (decision 7). `currentVersion` is deliberately specific, because knowing what is running in production is the thing worth knowing and is useful during outreach to companies. Other checks already exist to catch a DAST scan that ran against the wrong branch.
+
+### Compliance outcomes
+
+18. **4.6.4 Environment Separation lands as `verification_required`, satisfiable by attestation.** The model can evidence that environments **exist**; it cannot evidence that they are **isolated**, and no isolation signal is planned. Distinct domains per environment (available now) and distinct Wiz tags per environment (after Phase 4) are partial evidence behind a human check; neither upgrades the control to a pass. The control is attestable today (365 days) as the interim route.
+19. **The primary environment does not change 4.6.10.** That control reads any environment, per decision 7. Do not switch it on the strength of a primary existing.
+
+### Naming
+
+20. **`serverEnvironment` is a hosting platform, not a deployment environment.** The demo import CSV carries `Server Environment` = "Cloud (AWS)" with `Facing` = "External" as a separate column. It is load-bearing in knowledge scoring, in company-level defaults on `Company`, and in the threat-model AI prompt. Removal is off the table. Renaming it to `hostingPlatform` is correct and is **deferred** — roughly 20 files, and it should not ride inside this refactor.
+21. **Company settings will show `Company.serverEnvironment` beside an Environments section.** Label the latter "Deployment Environments" to keep the two apart.
+
+---
 
 ## Goals
 
 - An application can have several environments, each with its own domain(s), current version, git branch, and Wiz tag.
 - A Wiz `Product`/`Application`/`Environment` tag triple resolves to exactly one catalog row.
 - CI pipelines are told the valid environment names up front, and a mismatch is visible rather than silent.
-- Scoring and completeness keep working with no behavioural change other than the DAST-date rule.
+- Scoring and completeness keep working, with no behavioural change other than the DAST-date rule.
 
-## Non-Goals (For This Iteration)
+## Non-Goals
 
-- **Findings and export pipeline changes.** The Wiz tag is identity — how the catalog points at the real deployed thing. What the export service does with it is separate work. (Note that `wizFor` in `services/securityFindingsExportService.js` currently ignores `tagValue` entirely and filters only by folder; that is a pre-existing gap, not something this plan introduces or fixes.)
+- **Findings and export pipeline changes.** The Wiz tag is identity. What the export service does with it is separate work. (`wizFor` in `services/securityFindingsExportService.js` ignores `tagValue` entirely and filters only by folder — a pre-existing gap this plan neither introduces nor fixes.)
 - **Per-environment scoring.** One score per application, per decision 7.
-- **CI scan-date reporting.** Nothing writes scan dates from a pipeline today, and this plan does not add it.
-- **Renaming `serverEnvironment` → `hostingModel`.** It means "cloud / on-premises / hybrid", not a deployment environment, and having both names in the schema is a trap. Queued as follow-on cleanup; it crosses the shared field registry so it should land after that.
-- **Reconciling the four competing definitions of completeness.** Three of them read fields touched here and will need the shared scan-date resolver, but consolidating them is its own task.
+- **CI scan-date reporting.** Nothing writes scan dates from a pipeline today and this plan does not add it.
+- **The `hostingPlatform` rename.** Decision 20.
 
-## Dependency
+---
 
-**The shared metadata field registry must land first.** The metadata field list is currently hand-maintained in eight places (the `ApplicationVersion` model, `createApplicationVersion`, `createVersionFromData`, `compareVersions`, `applyApprovedVersion`, `routes/config.js` `availableFields`, `BulkImportApplicationsModal.APPLICATION_FIELDS`, and a copy inside `PendingApprovals.jsx`). Removing four fields from eight hand-maintained lists is exactly the change that goes wrong quietly: a field missing from the diff list is invisible in version history, and one missing from the apply list is silently discarded on approval — neither raises an error.
+## Data Model
 
-This is being extracted into one registry in separate work (`APP_DATA_FIXES_PLAN.md` finding D2/1.1). Phase 1 below can proceed in parallel; Phase 3 must wait.
-
-## Data Model Plan
-
-### 1) New Model: `Environment` (company vocabulary)
+### `Environment` — company vocabulary
 
 ```prisma
 model Environment {
   id           String                   @id @default(cuid())
   companyId    String
   company      Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name         String                   // what the company calls it: "prod", "uat", "staging"
+  name         String                   // "prod", "uat", "staging"
   kind         String                   // PRODUCTION | STAGING | DEVELOPMENT | QA | OTHER
   description  String?
   status       String                   @default("active") // active | retired
   displayOrder Int                      @default(0)
-  sourceLabel  String?                  // original free-text value this row was seeded from
+  sourceLabel  String?                  // original free text this row was seeded from
   applications ApplicationEnvironment[]
   deployments  Deployment[]
   createdAt    DateTime                 @default(now())
@@ -73,7 +136,7 @@ model Environment {
 
 `sourceLabel` preserves whatever free text the row was migrated from, so a bad seed can be cleaned up later without losing what the data originally said.
 
-### 2) New Model: `ApplicationEnvironment` (the instance)
+### `ApplicationEnvironment` — the instance
 
 ```prisma
 model ApplicationEnvironment {
@@ -84,7 +147,7 @@ model ApplicationEnvironment {
   environment   Environment @relation(fields: [environmentId], references: [id], onDelete: Restrict)
   status        String      @default("active") // active | retired
 
-  // Moved from Application - facts about this running copy
+  isPrimary        Boolean   @default(false)   // PHASE 3 — see decisions 13-17
   currentVersion   String?
   gitBranch        String?
   lastDastScanDate DateTime?
@@ -97,145 +160,154 @@ model ApplicationEnvironment {
   @@unique([applicationId, environmentId])
   @@index([applicationId])
   @@index([environmentId])
+  @@index([status])
 }
 ```
 
-Naming follows the existing join convention in this schema (`ProductApplication`, `ApplicationDomain`, `ApplicationScmRepo`). `onDelete: Restrict` on the environment relation is deliberate — deleting a vocabulary row that instances still reference should fail loudly, not cascade away deploy history.
+`onDelete: Restrict` on the environment relation is deliberate — deleting a vocabulary row that instances still reference should fail loudly, not cascade away deploy history.
 
-### 3) Changes to `Deployment`
+**`isPrimary` needs a partial unique index**, hand-written because Prisma cannot express it:
+
+```sql
+CREATE UNIQUE INDEX "ApplicationEnvironment_primary_key"
+  ON "ApplicationEnvironment"("applicationId") WHERE "isPrimary";
+```
+
+Same pattern as `Application_companyId_lower_name_key`.
+
+### `Deployment`
 
 ```prisma
-  environmentId String?      // nullable: unmatched CI strings land here as null
+  environmentId  String?      // nullable: unmatched CI strings land here as null
   environmentRef Environment? @relation(fields: [environmentId], references: [id], onDelete: SetNull)
-  environment   String       // KEEP: the raw string as submitted, for audit
+  environment    String       // KEEP: the raw string as submitted, for audit
 ```
 
-The free-text column stays. When a pipeline sends `Production ` with a trailing space, or an environment is renamed later, the original submission is still recoverable. Nullable FK plus retained string is what makes the "Unassigned" bucket possible.
+The free-text column stays. When a pipeline sends `Production ` with a trailing space, or an environment is renamed later, the original submission is still recoverable. Nullable FK plus retained string is what makes the Unassigned bucket possible.
 
-### 4) Changes to `ApplicationDomain`
+### `ApplicationDomain` and `ApplicationToolLink`
 
-```prisma
-  applicationEnvironmentId String?
-  applicationEnvironment   ApplicationEnvironment? @relation(fields: [applicationEnvironmentId], references: [id], onDelete: Cascade)
+Both gained a nullable `applicationEnvironmentId`. **Neither has a write path that maintains it** — the backfill re-homed domains once and nothing has touched either since. Phase 4 changes `ApplicationToolLink`'s unique constraint from `[applicationId, provider]` to include the environment, which must move the `applicationId_provider` upsert in the routes at the same time.
+
+### Application-name uniqueness — correcting this document
+
+Earlier revisions of this plan said to add `@@unique([companyId, name])`. **That is not what shipped, and the difference matters.** What exists is a functional unique index:
+
+```sql
+CREATE UNIQUE INDEX "Application_companyId_lower_name_key"
+  ON "Application"("companyId", lower(btrim("name")));
 ```
 
-Added rather than replacing `applicationId`. The redundancy is deliberate: `routes/domains.js` reads `domain.applicationDomains.map(ad => ad.application)` in several places and those queries keep working untouched. Migration re-homes existing rows onto each app's seeded default environment. A consistency check (the environment's `applicationId` matches the row's `applicationId`) belongs in the write path.
+`schema.prisma` deliberately does *not* declare `@@unique`, with a comment explaining why: a plain Prisma constraint is case- and whitespace-sensitive, while `applicationNameKey()` in `services/applicationNames.js` folds with `trim().toLowerCase()`. A case-sensitive constraint would disagree with the split endpoint's own conflict check. The migration carries a `DO` block that counts collisions and raises a readable error rather than failing as a raw index violation. **Keep the index expression and `applicationNameKey()` in step.**
 
-### 5) Changes to `ApplicationToolLink`
-
-```prisma
-  applicationEnvironmentId String?
-  applicationEnvironment   ApplicationEnvironment? @relation(fields: [applicationEnvironmentId], references: [id], onDelete: Cascade)
-
-  @@unique([applicationId, applicationEnvironmentId, provider])  // was [applicationId, provider]
-```
-
-A null `applicationEnvironmentId` means "applies to the whole application", which is what every existing row becomes. That keeps the current `.find(l => l.provider === 'WIZ')` lookups in the export service and dashboard working during the transition.
-
-### 6) Changes to `Application`
-
-```prisma
-  @@unique([companyId, name])
-  @@index([companyId])
-```
-
-The model has no `@@` block at all today — no unique constraint and not even an index on `companyId`. Wiz tag resolution needs application names to be unique within a company. **This migration will fail if duplicate names already exist**; see Open Questions.
-
-Removed: `currentVersion`, `gitBranch`, `deploymentEnvironment`, `lastDastScanDate`.
-Retained: `serverEnvironment`, `deploymentType`, `lastSastScanDate`, `lastScaScanDate`.
+---
 
 ## Migration Plan
 
 `prisma migrate dev` fails against the shadow database in this repo. Use `prisma migrate diff` to generate SQL, then `prisma migrate deploy`.
 
-Ordered steps, all reversible up to step 5:
+Steps 1–4 are **done and applied**:
 
-1. Create `Environment` and `ApplicationEnvironment`; add the nullable FKs to `Deployment`, `ApplicationDomain`, and `ApplicationToolLink`. No data changes.
-2. **Seed the vocabulary.** For each company, create an `Environment` row per distinct `Deployment.environment` value (trimmed, case-folded for matching). Map values onto `kind` where they clearly match a known kind; everything else gets `OTHER`. Retain the original string in `sourceLabel`.
-3. **Seed one default instance per application.** Derive the name from `deploymentEnvironment`, falling back to `serverEnvironment`, falling back to a `PRODUCTION`/"Production" default. Anything that does not map cleanly onto a known kind gets a Production default rather than a junk name — this row becomes visible in the UI the moment a second environment is added, so it must not be garbage.
-4. **Backfill the FKs.** Attach `Deployment` rows to environments by trimmed case-insensitive name match (unmatched stay null); re-home `ApplicationDomain` rows onto each app's default instance; copy `currentVersion` / `gitBranch` / `lastDastScanDate` from `Application` onto the default instance.
-5. **Add `@@unique([companyId, name])` on `Application`.** Run a duplicate check first (see Open Questions).
-6. **Drop the four moved columns** from `Application` and from the `ApplicationVersion` snapshot. Only after the shared field registry has landed and its generated lists no longer reference them.
+1. ~~Create `Environment` and `ApplicationEnvironment`; add nullable FKs to `Deployment`, `ApplicationDomain`, `ApplicationToolLink`.~~
+2. ~~Seed the vocabulary, one `Environment` per distinct `Deployment.environment` value per company, mapping onto `kind` where it matches and `OTHER` otherwise, retaining the original string in `sourceLabel`.~~
+3. ~~Seed one default instance per application.~~
+4. ~~Backfill the FKs and copy the three fields onto the default instance.~~
+5. ~~Tighten the application-name index.~~
 
-## Backend Implementation Plan
+Remaining:
 
-### Phase 1: Schema, Migration, Backfill
+6. **Add `isPrimary` and its partial unique index, and populate it.** The seeding heuristic already exists and is proven: backfill step 6 of `20260922120000_add_environments` already picks each application's primary — the environment whose name matches `Application.deploymentEnvironment`, else one with `kind = PRODUCTION`, else first by name — uses it to copy the three fields and re-home domains, then discards the choice. **Persist that same choice rather than inventing a new rule.** It has already run cleanly across all 91 dev applications.
+7. **Drop the four moved columns** from `Application` and from the `ApplicationVersion` snapshot. Phase 3 only.
 
-Steps 1–4 above. Everything still reads from `Application`; nothing breaks.
+---
 
-### Phase 2: Environment Resolution Service
+## Phase 3 — Field Migration and Read Resolvers
 
-One helper, used by both deployment write paths — `routes/deploymentTokens.js:330` (CI) and `routes/applications.js:3246` (manual entry in the UI). Not `services/deployService.js`, which despite the name is the prod-deploy trigger for Orbit itself.
+The registry gate is **cleared**: `services/applicationFields.js` is on main. The `versioned` / `approvable` / `splittable` flags on `APPLICATION_METADATA_FIELDS` are now the control surface for the field moves — removing four fields is flag changes plus entry deletion in one file, not the eight hand-maintained lists an earlier revision of this document enumerated.
 
-The helper:
+This is **one commit**. A half-done removal is the failure mode: a field missing from the diff list is invisible in version history, and one missing from the apply list is silently discarded on approval. Neither raises an error.
 
-1. Trims and case-insensitively matches the incoming string against the company's `Environment` rows.
-2. On a match, resolves or creates the `ApplicationEnvironment` row for that app/environment pair.
-3. On no match, leaves `environmentId` null and keeps the raw string. No auto-creation.
-4. Writes `currentVersion` and `gitBranch` onto the `ApplicationEnvironment`, **always overwriting**. A deploy is authoritative for its own environment. This is the fix for the existing freeze-after-first-deploy behaviour at `routes/applications.js:3266-3272` and `routes/deploymentTokens.js:355-361`, which only backfill when the column is null.
+### Acceptance criteria
 
-### Phase 3: Field Migration and Read Resolvers
+1. `isPrimary` exists, is populated per migration step 6, and the partial unique index is in place.
+2. A read resolver attaches per-environment values onto the application object **under the same property names**, so dynamic dereferences (`app[scanField]` at `services/scoring.js`, and `routes/applications.js`) keep working. Done this way, **`services/scoring.js` needs no changes at all.**
+   - `lastDastScanDate` — max across the application's active environments, plus which environment it came from (decision 7).
+   - `currentVersion` — from the primary environment only (decision 17).
+3. **The resolver throws when the relation is not loaded.** Prisma returns `undefined` for a relation that was never `include`d and `[]` for one that was included and is empty. Those two states mean completely different things and look identical if you only check for a missing value:
+   - `undefined` → **throw.** A query forgot its include. Reporting a data gap here would mean the same application scores differently depending on which endpoint you hit, which is exactly how finding E5 shipped (one of four scoring call sites omitted `apiSchema` and silently zeroed a category).
+   - `[]`, or no primary → **dock the score and surface it** as a real gap, per decision 14.
+   - There are **7 completeness call sites across 5 files** today, one of which is `services/scoring.js`, reached from every query that scores an application. Each is a chance to forget.
+4. `currentVersion` **stays in `FIELD_SETS.metadata`**, reading from the primary environment. It is not dropped. Measured: instances carrying a version and applications carrying one are both 1 on dev, so a resolver moves no completeness percentage and no knowledge score. Dropping it instead would shift every number in the portfolio.
+5. The four fields are `versioned: false` in `services/applicationFields.js` and their columns are dropped from `Application` and `ApplicationVersion`.
+6. `services/applicationVersionColumns.test.js` passes. It asserts in both directions — a versioned registry field with no snapshot column, and a snapshot column with no registry entry — and is the guard against a half-done removal.
+7. **`ApplicationEnvironment` and `Deployment` are added to `TRACKED_FIELDS`** in `utils/changeHistory.js`. Neither is there today, so the moved fields would lose what change-history coverage they have. Note that the deploy write paths do not call `recordChange` at all — provenance for a CI-written value currently comes from the `Deployment` row (`deployedBy`, `version`, `gitBranch`, `deployedAt`, resolved `environmentId`), which is arguably better for that case.
+8. Delete the read-time fallback in `routes/applications.js` that patches the GET response without fixing the stored row. It exists to hide the stale-mirror bug and is why two screens disagree today.
 
-Blocked on the shared field registry.
+### Also fixed by the resolver
 
-- Remove the four fields from the registry's snapshot / diff / apply lists, then drop the columns.
-- Add a shared scan-date resolver that attaches `lastDastScanDate` (max across the app's active environments, plus which environment it came from) onto the application object. Both consumers dereference the field dynamically — `app[scanField]` at `services/scoring.js:512` and `routes/applications.js:730` — so attaching the resolved value under the same property name means **`scoring.js` needs no changes at all**. `lastSastScanDate` and `lastScaScanDate` remain plain column reads.
-- Delete the read-time fallback at `routes/applications.js:1858` that patches the GET response without fixing the stored row. It exists to hide the stale-mirror bug and is what makes two screens disagree today.
+Both deployment write paths currently backfill `currentVersion` / `gitBranch` only when the column is null, so the value freezes after the first deploy. The resolver **always overwrites** — a deploy is authoritative for its own environment.
 
-### Phase 4: Wiz Tag Triple
+---
 
-- Rewrite `normalizeWizTagValues` (`integrations/wiz.js:389`) to return per-resource tag *objects* rather than flattened `key:value` strings. The current flattening cannot correlate `Product`, `Environment`, and `Application` read off the same resource.
-- Rewrite `listWizTagsForFolder` (`integrations/wiz.js:418`), which currently filters to values starting with `Application:`, to return `{product, application, environment}` triples.
-- Extend `validateWizApplicationFilter` / `normalizeWizApplicationFilter` (`integrations/resolve.js`) to carry the triple, and link against the `ApplicationEnvironment` rather than the `Application`.
+## Phase 4 — Wiz Tag Triple
 
-## Frontend Implementation Plan
+Entirely unstarted, and the original point of the exercise.
 
-### `ApplicationDetail.jsx`
+- Rewrite `normalizeWizTagValues` (`integrations/wiz.js`) to return per-resource tag **objects** rather than flattened `key:value` strings. The current flattening cannot correlate `Product`, `Environment` and `Application` read off the same resource.
+- Rewrite `listWizTagsForFolder` (`integrations/wiz.js`), which filters to values starting with `Application:`, to return `{product, application, environment}` triples.
+- Extend `validateWizApplicationFilter` / `normalizeWizApplicationFilter` (`integrations/resolve.js`) to carry the triple and link against the `ApplicationEnvironment` rather than the `Application`.
+- **All three tag keys are required**, plus a per-company config for what each key is called — some companies call a product a "solution". That config lands in `CompanyToolLink.filter` alongside the existing `folderId`.
+- Retired environments **keep** their Wiz tag links; the tag still describes what ran there.
+- `ApplicationToolLink`'s unique constraint becomes per-environment, moving the `applicationId_provider` upsert in the routes at the same time.
 
-The environment selector partly exists already: `deploymentEnvironmentFilter` (line 1932) filters deploy history by environment string. That becomes the real selector — picked once at the top, scoping both the metadata panel and the deploy history, instead of a metadata box describing one environment and a separate filter for the list. Net reduction in UI.
+---
 
-Hidden entirely when the app has one environment, per decision 9.
+## Frontend
 
-### `CICDDeploymentView.jsx`
+### Already shipped
 
-The sample payload hardcodes `"environment": "{env}"` in both generators — line 129 (curl) and line 148 (wget). Both become the app's actual environment names joined with `|`, e.g. `"{prod|qa|uat}"`, or the bare name when there is only one. The note at line 325 ("replace the example values with your actual deployment data") should state that the environment must match one of the listed names.
+The CI sample payload on the deployment-token screen lists the company's real environment names instead of `{env}`, and deploy history shows unmatched deployments with a warning badge and an "Unassigned (n)" filter. **Both appear regardless of environment count** — decision 9's "no new UI" applies to the *selector* specifically, not to the feature.
 
-### Deploy History
+### Not built
 
-An "Unassigned" group for deployments with a null `environmentId`, showing the raw submitted string, so a pipeline sending `Prod` against an environment named `prod` is visible and fixable from either side.
+- **The adopt/triage endpoint.** The `environment.manage` permission description already promises it. Adopt a raw string into an existing environment, or create a new one from it.
+- **Environment management UI** — CRUD for the company vocabulary: name, kind, status, display order, primary.
+- **The per-application selector.** `deploymentEnvironmentFilter` in `ApplicationDetail.jsx` already filters deploy history by environment string; that becomes the real selector, picked once at the top and scoping both the metadata panel and the deploy history. Net reduction in UI. Hidden when the application has one environment.
+- **The tag picker.** `IntegrationTagPickerModal` becomes three dependent selects (product → application → environment) instead of a flat list of `Application:`-prefixed strings.
 
-### Environment Management
+### Suggested order
 
-CRUD for the company vocabulary — name, kind, status, display order. Plus triage for unassigned deployments: adopt a raw string into an existing environment, or create a new one from it.
+Adopt/triage endpoint → environment management UI → per-application selector → tag picker. Pipelines can then be corrected before anything depends on them.
 
-### Tag Picker
+---
 
-`IntegrationTagPickerModal` becomes three dependent selects (product → application → environment) reflecting the triple, instead of a flat list of `Application:`-prefixed strings.
+## Permissions
 
-## Phased Delivery Order
+`environment.manage`, on `EDIT_PERMISSIONS`, so `company_edit` and `company_admin` both hold it (the latter via its blanket `COMPANY_PERMISSIONS` grant). `company_member` is being removed.
 
-1. Phase 1 — schema, migration, backfill. Safe to land alone; nothing reads the new tables yet.
-2. Phase 2 — resolution service and both deployment write paths. Environments start populating from CI.
-3. Frontend: token screen sample command + Unassigned bucket. Pipelines can be corrected before anything depends on them.
-4. Frontend: environment management + selector.
-5. Phase 3 — field migration and read resolvers. **Gated on the shared field registry.**
-6. Phase 4 — Wiz tag triple and per-environment linking.
+**Unassigned triage is therefore self-service** for `company_edit` and up, not admin-only. Hard-deleting an environment is the only admin-only piece and has no permission string at all, per the catalog's invariant — retiring is the delegatable equivalent.
 
-## Open Questions To Confirm During Build
+---
 
-1. **Do duplicate application names exist within any company?** `@@unique([companyId, name])` will fail the migration if so. Needs a check against production data before step 5, and a decision on how to resolve collisions. Also needs confirming that nothing in CSV import or the merge-at-approval path relies on duplicates being allowed.
-2. **Is `Product` in the Wiz tag redundant?** `ProductApplication` is many-to-many, so an application can sit under two products. If that happens in practice, the `Product` tag value carries information the app/environment pair does not, and resolution needs all three keys. If a deployed instance always belongs to exactly one product, the tag is human-readable context and the key is just application + environment.
-3. **Do retired environments keep their Wiz tag links?** Retained is probably right — the tag still describes what ran there — but it affects whether retired instances appear in the tag picker.
-4. **Who can create environments?** Company users, or admins only? Affects whether the Unassigned triage flow is self-service.
-5. **Should the two scan dates that stay on `Application` remain approvable?** They are still operational data written by integrations rather than submitter claims. Removing them from the version lists is defensible on those grounds but is not required by this plan, since their columns keep holding the truth. Owned by the field-registry work.
+## Notes For Whoever Builds This
+
+- **Scope checks: unknown keeps a control in scope.** `evaluateScopeCheck` treats a nullish field as "does not exclude", except for `exists` / `not_exists`. Before that fix, `not_equals` could not express "applies unless explicitly X" — it meant "has a value, and that value isn't X" — and a control scoped that way excused itself for every application with an unanswered field. If this work adds scope checks (by environment kind, by facing, by an N/A declaration), read `POLICY_CONTROL_AUTHORING.md` first.
+- **The name-to-kind mapping is duplicated** — JS in `services/environmentNaming.js`, a SQL `CASE` in the migration. Both carry comments pointing at the other. Mitigation, not a fix.
+- **File and line references elsewhere in this document have drifted** since the merge. Treat them as pointers to the right function, not the right line.
+- **Phase 3 touches `createVersionFromData` and `applyApprovedVersion`.** So does the merge-at-approval work (section 10 of `APP_DATA_MODEL_EXPLORATION.md`). Merge-at-approval lands first; do not start Phase 3 until it has.
+- Migrations were renamed to `20260922120000` / `20260922130000` to sort after the policy-controls branch.
+
+---
 
 ## Definition of Done
 
-- An application can hold several environments; each carries its own domain(s), current version, git branch, and DAST scan date.
-- One application with one environment looks exactly as it does today — no new UI surfaces.
-- A CI deploy naming a known environment attaches to it and overwrites that environment's version and branch. A deploy naming an unknown one is recorded, visible under Unassigned, and creates nothing.
-- The token setup screen shows the app's real environment names.
+- An application can hold several environments, each with its own domain(s), current version, git branch and DAST scan date.
+- One application with one environment looks as it does today, bar the two already-shipped surfaces above.
+- A CI deploy naming a known environment attaches to it and **overwrites** that environment's version and branch. A deploy naming an unknown one is recorded, visible under Unassigned, and creates nothing.
+- Exactly one primary environment per application, or none; never two.
+- An application with no primary reads as a data gap rather than silently passing.
 - Scoring output is unchanged except that `lastDastScanDate` is the most recent across active environments, and the UI shows which environment it came from.
 - `services/scoring.js` is unmodified.
-- The four moved fields appear in no version snapshot, diff, or approval list, and no code reads them off `Application`.
+- The four moved fields appear in no version snapshot, diff or approval list, and no code reads them off `Application`.
 - No derived or mirrored per-environment column exists on `Application`.
+- A Wiz `Product`/`Environment`/`Application` triple resolves to exactly one `ApplicationEnvironment`.
