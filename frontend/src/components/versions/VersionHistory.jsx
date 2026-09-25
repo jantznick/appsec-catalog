@@ -34,6 +34,25 @@ const FALLBACK_VERSIONED_FIELDS = [
 ];
 
 
+/**
+ * Narrow a comparison to the fields a pending submission actually carried.
+ *
+ * `submittedFields` is null for a version created before the column existed, and for any
+ * version that was not a form submission — in both cases every changed field stays
+ * offered, which is the previous behaviour.
+ */
+function restrictToSubmitted(comparison, version) {
+  if (version?.approvalStatus !== 'pending' || !version?.submittedFields) return comparison;
+
+  const submitted = new Set(String(version.submittedFields).split(',').map((f) => f.trim()));
+  const changedFields = (comparison.changedFields || []).filter((f) => submitted.has(f));
+  return {
+    ...comparison,
+    changedFields,
+    diff: Object.fromEntries(changedFields.map((f) => [f, comparison.diff?.[f]])),
+  };
+}
+
 const HIDDEN_VERSION_FIELDS = new Set(['apiSecurityTool', 'apiSecurityIntegrationLevel']);
 const visibleVersionFields = (fields = []) => fields.filter((field) => !HIDDEN_VERSION_FIELDS.has(field));
 
@@ -189,7 +208,15 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
               currentVersion.versionNumber
             );
             comparisonData.comparison.changedFields = visibleVersionFields(comparisonData.comparison.changedFields);
-            return { id: currentVersion.id, comparison: comparisonData.comparison };
+            // A pending version may only have its SUBMITTED fields approved — the
+            // backend enforces that, and offering more here would let an admin tick a
+            // field that then silently does nothing. Version-to-version comparison is
+            // still the right thing to show for history; this only narrows what the
+            // approve flow offers.
+            return {
+              id: currentVersion.id,
+              comparison: restrictToSubmitted(comparisonData.comparison, currentVersion),
+            };
           } catch (error) {
             console.error(`Failed to compare version ${currentVersion.versionNumber}:`, error);
             // If comparison fails, calculate changes manually
@@ -211,7 +238,10 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
               }
             }
             
-            return { id: currentVersion.id, comparison: { changedFields, diff } };
+            return {
+              id: currentVersion.id,
+              comparison: restrictToSubmitted({ changedFields, diff }, currentVersion),
+            };
           }
         } else {
           // First version - mark as initial version (no comparison needed)
