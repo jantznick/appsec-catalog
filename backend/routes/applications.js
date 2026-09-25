@@ -17,7 +17,8 @@ import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { getApexDomain } from '../utils/domainApex.js';
 import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
 import { createApplicationVersion, createVersionFromData, applyApprovedVersion } from '../utils/applicationVersion.js';
-import { compareVersions } from '../services/applicationFields.js';
+import { compareVersions, pickVersionedMetadata } from '../services/applicationFields.js';
+import { buildSubmission, parseSubmittedFields } from '../services/versionSubmission.js';
 import {
   BULK_IMPORT_MAX_ROWS,
   resolveApplicationNames,
@@ -742,69 +743,57 @@ router.put('/public/:id', async (req, res) => {
     // this form does not ask for it, so leave it alone.
     const submittedNotes = additionalNotes?.trim() || null;
 
+    // Instead of updating the application directly, create a pending version.
+    //
+    // The unchecked-checkbox problem `submittedFlag` used to solve here is now handled
+    // for every type by coerceSubmittedValue: presence of the key decides whether the
+    // field was submitted, and the value decides what it was set to.
     /**
-     * Read a checkbox the form posts, falling back to the stored value only when the
-     * form did not send the field at all.
+     * What this submission actually carried.
      *
-     * The previous form was `posted === true || posted === 'true' || existing`, which
-     * cannot express "unchecked": once the stored value was true, the OR short-circuited
-     * to true no matter what the submitter posted. Every one of these is a checkbox the
-     * technical form now renders, so unchecking it has to stick.
+     * A key present here was sent by the form; its value may be null, which is the
+     * submitter clearing the field. A key absent was not asked or not sent, and an
+     * approval must never write it — that is what stops approving Monday's form on
+     * Wednesday reverting Tuesday's edits.
+     *
+     * The several form inputs that feed one column (deployment frequency + method,
+     * the six data-handling answers, the auth pair) count as submitted when the form
+     * sent ANY of them, since the derived value is only meaningful as a whole.
      */
-    const submittedFlag = (posted, current) =>
-      posted === undefined ? current : posted === true || posted === 'true';
+    const sent = (key) => Object.prototype.hasOwnProperty.call(req.body, key);
+    const sentAny = (...keys) => keys.some(sent);
 
-    // Instead of updating the application directly, create a pending version
-    // Merge new data with existing data to create a complete snapshot
-    const versionData = {
-      name: existing.name,
-      description: existing.description,
-      owner: existing.owner,
-      repoUrl: repoUrl?.trim() || existing.repoUrl,
-      language: existing.language,
-      framework: existing.framework,
-      serverEnvironment: existing.serverEnvironment,
-      facing: existing.facing,
-      deploymentType: deploymentType || existing.deploymentType,
-      authProfiles: authProfiles || existing.authProfiles,
-      dataTypes: dataTypes || existing.dataTypes,
-      interfaces: interfacesJson || existing.interfaces,
-      status: 'onboarded', // Mark as fully onboarded
-      businessCriticality: existing.businessCriticality,
-      criticalAspects: existing.criticalAspects,
-      devTeamContact: existing.devTeamContact,
-      securityTestingDescription: securityTestingDescription?.trim() || existing.securityTestingDescription,
-      additionalNotes: submittedNotes || existing.additionalNotes,
-      sastTool: sastTool?.trim() || existing.sastTool,
-      sastIntegrationLevel: sastIntegrationLevel ? parseInt(sastIntegrationLevel) : existing.sastIntegrationLevel,
-      sastIncludesSca: submittedFlag(sastIncludesSca, existing.sastIncludesSca),
-      dastTool: dastTool?.trim() || existing.dastTool,
-      dastIntegrationLevel: dastIntegrationLevel ? parseInt(dastIntegrationLevel) : existing.dastIntegrationLevel,
-      scaTool: scaTool?.trim() || existing.scaTool,
-      scaIntegrationLevel: scaIntegrationLevel
-        ? parseInt(scaIntegrationLevel)
-        : existing.scaIntegrationLevel,
-      appFirewallTool: appFirewallTool?.trim() || existing.appFirewallTool,
-      appFirewallIntegrationLevel: appFirewallIntegrationLevel ? parseInt(appFirewallIntegrationLevel) : existing.appFirewallIntegrationLevel,
-      apiSecurityTool: apiSecurityTool?.trim() || existing.apiSecurityTool,
-      apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : existing.apiSecurityIntegrationLevel,
-      secretsScanTool: secretsScanTool?.trim() || existing.secretsScanTool,
-      secretsScanIntegrationLevel: secretsScanIntegrationLevel ? parseInt(secretsScanIntegrationLevel) : existing.secretsScanIntegrationLevel,
-      sastIncludesSecrets: submittedFlag(sastIncludesSecrets, existing.sastIncludesSecrets),
-      iacContainerScanTool: iacContainerScanTool?.trim() || existing.iacContainerScanTool,
-      iacContainerScanIntegrationLevel: iacContainerScanIntegrationLevel ? parseInt(iacContainerScanIntegrationLevel) : existing.iacContainerScanIntegrationLevel,
-      iacContainerScanNA: submittedFlag(iacContainerScanNA, existing.iacContainerScanNA),
-      lastSecretsScanDate: lastSecretsScanDate ? new Date(lastSecretsScanDate) : existing.lastSecretsScanDate,
-      lastIacContainerScanDate: lastIacContainerScanDate ? new Date(lastIacContainerScanDate) : existing.lastIacContainerScanDate,
-      apiSecurityNA: submittedFlag(apiSecurityNA, existing.apiSecurityNA),
-      appFirewallNA: submittedFlag(appFirewallNA, existing.appFirewallNA),
-      currentVersion: existing.currentVersion,
-      deploymentEnvironment: existing.deploymentEnvironment,
-      gitBranch: existing.gitBranch,
-      lastDastScanDate: existing.lastDastScanDate,
-      lastSastScanDate: existing.lastSastScanDate,
-      lastScaScanDate: existing.lastScaScanDate,
-    };
+    const submitted = {};
+    if (sent('repoUrl')) submitted.repoUrl = repoUrl;
+    if (sentAny('deploymentFrequency', 'deploymentMethod')) submitted.deploymentType = deploymentType;
+    if (sentAny('requiresSpecialAccess', 'authInfo')) submitted.authProfiles = authProfiles;
+    if (sentAny('handlesUserData', 'userDataTypes', 'userDataStorage', 'pciData', 'piiData', 'phiData')) {
+      submitted.dataTypes = dataTypes;
+    }
+    if (sentAny('hasInterfaces', 'interfaces')) submitted.interfaces = interfacesJson;
+    if (sent('securityTestingDescription')) submitted.securityTestingDescription = securityTestingDescription;
+    if (sent('additionalNotes')) submitted.additionalNotes = submittedNotes;
+
+    for (const field of [
+      'sastTool', 'sastIntegrationLevel', 'sastIncludesSca',
+      'dastTool', 'dastIntegrationLevel',
+      'scaTool', 'scaIntegrationLevel',
+      'appFirewallTool', 'appFirewallIntegrationLevel', 'appFirewallNA',
+      'apiSecurityTool', 'apiSecurityIntegrationLevel', 'apiSecurityNA',
+      'secretsScanTool', 'secretsScanIntegrationLevel', 'sastIncludesSecrets',
+      'iacContainerScanTool', 'iacContainerScanIntegrationLevel', 'iacContainerScanNA',
+      'lastSecretsScanDate', 'lastIacContainerScanDate',
+    ]) {
+      if (sent(field)) submitted[field] = req.body[field];
+    }
+
+    // Submitting the technical form always completes onboarding, whatever else it says.
+    submitted.status = 'onboarded';
+
+    const { versionData, submittedFields } = buildSubmission(
+      pickVersionedMetadata(existing),
+      submitted,
+    );
 
     // Create pending version instead of updating application
     const pendingVersion = await createVersionFromData(
@@ -813,7 +802,8 @@ router.put('/public/:id', async (req, res) => {
       null, // No user ID for technical form submissions
       'technical_form',
       'pending',
-      requesterEmail.trim() // Store the requester email directly
+      requesterEmail.trim(), // Store the requester email directly
+      submittedFields, // Only these may be written back on approval
     );
 
     // Don't update the application - it will be updated when admin approves the version
@@ -3966,7 +3956,52 @@ router.get('/versions/pending', requireAuth, requireAdmin, async (req, res) => {
         createdAt: 'desc',
       },
     });
-    res.json(pendingVersions);
+    // Diff each pending version against the LIVE application, not against the previous
+    // version.
+    //
+    // The two drift apart in three ordinary situations, and the previous-version
+    // baseline is wrong in all of them: after a partial approval (the version keeps
+    // fields the application never took), when two submissions are queued at once (the
+    // second is compared against the first, which was never applied), and when an admin
+    // edits between submission and approval.
+    //
+    // Restricted to the fields the submission actually carried, so an admin sees what
+    // the submitter asked for rather than every field that happens to differ. A version
+    // predating submittedFields has no such list and falls back to comparing everything.
+    const applicationIds = [...new Set(pendingVersions.map((v) => v.applicationId))];
+    const applications = applicationIds.length
+      ? await prisma.application.findMany({ where: { id: { in: applicationIds } } })
+      : [];
+    const applicationById = new Map(applications.map((a) => [a.id, a]));
+
+    const withDiff = pendingVersions.map((version) => {
+      const application = applicationById.get(version.applicationId);
+      const submittedFields = parseSubmittedFields(version.submittedFields);
+      const { changedFields, diff } = compareVersions(application || {}, version);
+
+      // `from` is the live value and `to` is what was submitted, which is the direction
+      // an approver reads it in.
+      const relevant = submittedFields
+        ? changedFields.filter((f) => submittedFields.includes(f))
+        : changedFields;
+
+      return {
+        ...version,
+        submittedFieldList: submittedFields,
+        comparison: {
+          changedFields: relevant,
+          diff: Object.fromEntries(relevant.map((f) => [f, diff[f]])),
+          // Submitted but identical to what is already stored — nothing to approve, but
+          // worth not presenting as a change.
+          unchangedFields: submittedFields
+            ? submittedFields.filter((f) => !changedFields.includes(f))
+            : [],
+          comparedAgainst: 'application',
+        },
+      };
+    });
+
+    res.json(withDiff);
   } catch (error) {
     console.error('Error fetching pending versions:', error);
     res.status(500).json({ error: 'Failed to fetch pending versions' });

@@ -10,26 +10,9 @@ import { Textarea } from '../components/ui/Textarea.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
 import {
   loadApplicationFieldRegistry,
-  getVersionedFields,
   getFieldLabel as registryFieldLabel,
 } from '../lib/applicationFields.js';
 
-/**
- * Fallback field list, used ONLY when the registry fetch fails. The registry served by
- * GET /api/config/application-fields is the definition — a field missing from here is a
- * stale fallback rather than a field that vanishes from the approval diff.
- */
-const FALLBACK_VERSIONED_FIELDS = [
-  'name', 'description', 'owner', 'repoUrl', 'language', 'framework',
-  'serverEnvironment', 'facing', 'deploymentType', 'authProfiles', 'dataTypes',
-  'status', 'businessCriticality', 'criticalAspects', 'devTeamContact',
-  'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel', 'sastIncludesSca',
-  'dastTool', 'dastIntegrationLevel', 'scaTool', 'scaIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
-  'apiSecurityNA',
-  'appFirewallNA',
-  'currentVersion', 'deploymentEnvironment', 'gitBranch',
-  'lastDastScanDate', 'lastSastScanDate', 'lastScaScanDate', 'interfaces',
-];
 
 
 const HIDDEN_VERSION_FIELDS = new Set(['apiSecurityTool', 'apiSecurityIntegrationLevel']);
@@ -59,37 +42,23 @@ export function PendingApprovals() {
       await loadApplicationFieldRegistry();
       const versions = await api.getPendingVersions();
       setPendingVersions(versions);
-      
-      // Load comparison data for each version
+
+      // The server computes each diff against the LIVE application and restricts it to
+      // the fields the submission actually carried, so there is nothing to fetch here.
+      //
+      // This used to make two extra requests per pending version and compare against the
+      // previous VERSION, which is a different baseline: it drifts after a partial
+      // approval, when two submissions are queued at once, and whenever an admin edits
+      // between submission and approval.
       const changes = {};
       for (const version of versions) {
-        try {
-          // Get previous version to compare
-          const allVersions = await api.getApplicationVersions(version.applicationId);
-          const currentIndex = allVersions.findIndex(v => v.id === version.id);
-          const previousVersion = allVersions[currentIndex + 1];
-          
-          if (previousVersion) {
-            const comparison = await api.compareApplicationVersions(
-              version.applicationId,
-              previousVersion.versionNumber,
-              version.versionNumber
-            );
-            comparison.comparison.changedFields = visibleVersionFields(comparison.comparison.changedFields);
-            changes[version.id] = comparison.comparison;
-          } else {
-            // Initial version - get all non-null fields
-            const fieldsToCheck = getVersionedFields(FALLBACK_VERSIONED_FIELDS);
-            const changedFields = fieldsToCheck.filter(field => version[field] !== null && version[field] !== undefined);
-            changes[version.id] = {
-              changedFields,
-              diff: {},
-              isInitialVersion: true,
-            };
-          }
-        } catch (error) {
-          console.error(`Failed to load comparison for version ${version.id}:`, error);
-        }
+        const comparison = version.comparison;
+        if (!comparison) continue;
+        changes[version.id] = {
+          ...comparison,
+          changedFields: visibleVersionFields(comparison.changedFields || []),
+          unchangedFields: visibleVersionFields(comparison.unchangedFields || []),
+        };
       }
       setVersionChanges(changes);
     } catch (error) {
@@ -99,6 +68,9 @@ export function PendingApprovals() {
       setLoading(false);
     }
   };
+
+  /** Null, undefined or empty string — all render as an absent value. */
+  const isBlank = (value) => value === null || value === undefined || value === '';
 
   const getFieldLabel = (field) => {
     const labels = {
@@ -370,8 +342,10 @@ export function PendingApprovals() {
                             {changedFields.map((field) => {
                               const isSelected = selectedFields.includes(field);
                               const diff = changes.diff[field];
-                              const currentValue = version[field];
+                              // `from` is what the application holds now; the version
+                              // column is what the submitter asked for.
                               const previousValue = diff?.from;
+                              const currentValue = version[field];
 
                               return (
                                 <div
@@ -395,30 +369,27 @@ export function PendingApprovals() {
                                           </svg>
                                         )}
                                       </div>
-                                      {changes.isInitialVersion ? (
-                                        <div className="text-xs text-gray-600">
-                                          {currentValue === null || currentValue === undefined ? (
-                                            <span className="text-gray-400 italic">(empty)</span>
-                                          ) : (
-                                            String(currentValue)
-                                          )}
+                                      <div className="text-xs text-gray-600 space-y-1">
+                                        <div>
+                                          <span className="font-medium">Current:</span>{' '}
+                                          <span className={isBlank(previousValue) ? 'text-gray-400 italic' : ''}>
+                                            {isBlank(previousValue) ? '(empty)' : String(previousValue)}
+                                          </span>
                                         </div>
-                                      ) : (
-                                        <div className="text-xs text-gray-600 space-y-1">
-                                          <div>
-                                            <span className="font-medium">From:</span>{' '}
-                                            <span className={previousValue === null || previousValue === undefined ? 'text-gray-400 italic' : ''}>
-                                              {previousValue === null || previousValue === undefined ? '(empty)' : String(previousValue)}
-                                            </span>
-                                          </div>
-                                          <div>
-                                            <span className="font-medium">To:</span>{' '}
-                                            <span className={currentValue === null || currentValue === undefined ? 'text-gray-400 italic' : ''}>
-                                              {currentValue === null || currentValue === undefined ? '(empty)' : String(currentValue)}
-                                            </span>
-                                          </div>
+                                        <div>
+                                          <span className="font-medium">Requested:</span>{' '}
+                                          {/*
+                                            A submitted-but-empty value is the submitter
+                                            asking to REMOVE the value, not a field they
+                                            skipped — the two used to be indistinguishable
+                                            and the removal was silently discarded. Say
+                                            which one this is.
+                                          */}
+                                          <span className={isBlank(currentValue) ? 'text-amber-700 italic' : ''}>
+                                            {isBlank(currentValue) ? 'Clear this field' : String(currentValue)}
+                                          </span>
                                         </div>
-                                      )}
+                                      </div>
                                     </div>
                                   </div>
                                 </div>

@@ -961,6 +961,19 @@ model ApplicationVersion {
   approver        User?     @relation("VersionApprover", fields: [approvedBy], references: [id])
   approvedAt      DateTime? // When this version was approved/rejected
   approvedFields  String? // Comma-separated list of field names that were approved (null = all fields)
+  // Comma-separated list of the fields this submission actually carried.
+  //
+  // The snapshot columns below are always a COMPLETE picture of the application at
+  // submit time, so version history and diffs keep working. This says which of them the
+  // submitter actually sent, which is what an approval is allowed to write back.
+  //
+  // Without it, "not answered" and "cleared" are both null and indistinguishable, so a
+  // submitter could never remove a value and approving a stale version silently reverted
+  // fields nobody had touched.
+  //
+  // NULL means a version predating this column: fall back to applying every approvable
+  // field, which is the old behaviour, so versions already queued do not change meaning.
+  submittedFields String?
   approvalNotes   String? // Optional notes for approval
   rejectionReason String? // Optional reason for rejection
 

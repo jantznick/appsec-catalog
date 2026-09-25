@@ -1,0 +1,21 @@
+-- Records which fields a submission actually carried.
+--
+-- The technical onboarding form used to merge every submitted field with the stored
+-- value BEFORE writing the pending version, so a submitter could never clear anything:
+-- the version held the old value, the approval diff showed no change, and the admin was
+-- never shown the attempt. "Not answered" and "cleared" were both null and therefore
+-- indistinguishable.
+--
+-- The snapshot columns stay a COMPLETE picture of the application at submit time, so
+-- version history and version-to-version diffs are unaffected. This column says which
+-- of those columns the submitter actually sent, which is the subset an approval is
+-- allowed to write back. That also stops a stale pending version reverting fields
+-- nobody touched: approved Monday's form on Wednesday used to overwrite Tuesday's edits.
+--
+-- Nullable on purpose. NULL means a version created before this column existed, and
+-- applyApprovedVersion falls back to applying every approvable field — the previous
+-- behaviour — so versions already sitting in the approval queue do not change meaning.
+-- It is not backfilled: there is no way to reconstruct what an old submission sent.
+
+-- AlterTable
+ALTER TABLE "ApplicationVersion" ADD COLUMN     "submittedFields" TEXT;
