@@ -72,6 +72,10 @@ describe('ApplicationVersion carries every versioned field', () => {
     'id', 'applicationId', 'application', 'versionNumber', 'createdBy', 'user',
     'requesterEmail', 'createdAt', 'changeSource', 'approvalStatus', 'approvedBy',
     'approver', 'approvedAt', 'approvedFields', 'approvalNotes', 'rejectionReason',
+    // Which fields the submission carried. Bookkeeping about the version, like
+    // approvedFields — not a metadata column, so it is correctly absent from the
+    // registry. See services/versionSubmission.js.
+    'submittedFields',
   ]);
 
   it('has no snapshot column the registry does not know about', () => {
