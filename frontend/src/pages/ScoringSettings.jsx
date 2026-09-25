@@ -10,14 +10,39 @@ import { Input } from '../components/ui/Input.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import { Textarea } from '../components/ui/Textarea.jsx';
 
-const CATEGORY_OPTIONS = [
-  { value: 'sast', label: 'SAST' },
-  { value: 'dast', label: 'DAST' },
-  { value: 'sca', label: 'SCA' },
-  { value: 'appFirewall', label: 'Firewall' },
-];
+/**
+ * Display names for the scoring categories. Values come from the server; only the
+ * labels live here, because the server has no opinion about wording.
+ */
+const CATEGORY_LABELS = {
+  sast: 'SAST',
+  dast: 'DAST',
+  sca: 'SCA',
+  secretsScan: 'Secrets',
+  iacContainerScan: 'IaC / Container',
+  appFirewall: 'Firewall',
+};
 
-const CATEGORY_VALUES = CATEGORY_OPTIONS.map((category) => category.value);
+/**
+ * Used only until GET /api/config/tool-quality answers.
+ *
+ * This screen used to define the category list outright, which made it the third copy
+ * after TOOL_CATEGORIES in scoringConfig.js and the scored list in scoring.js. A
+ * category missing from this one cannot be ticked for any tool, and `getToolQualityWeight`
+ * returns 0 for a managed tool that does not list the category — so the category
+ * silently scores zero everywhere while the backend happily accepts it.
+ */
+const FALLBACK_CATEGORY_VALUES = Object.keys(CATEGORY_LABELS);
+
+/** Humanise an unrecognised value rather than rendering a blank checkbox. */
+const categoryLabel = (value) =>
+  CATEGORY_LABELS[value] || value.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
+
+const toCategoryOptions = (values) =>
+  (Array.isArray(values) && values.length ? values : FALLBACK_CATEGORY_VALUES).map((value) => ({
+    value,
+    label: categoryLabel(value),
+  }));
 const SEVERITY_OPTIONS = ['Low', 'Medium', 'High', 'Critical'];
 
 const emptyRow = () => ({ tool: '', weight: '1.0', categories: [] });
@@ -67,9 +92,10 @@ function buildSensitiveRulesPayload(rules) {
   };
 }
 
-function normalizeToolEntry(entry) {
+function normalizeToolEntry(entry, categoryValues) {
   if (typeof entry === 'number') {
-    return { weight: String(entry), categories: [...CATEGORY_VALUES] };
+    // Legacy bare-number form meant "all categories".
+    return { weight: String(entry), categories: [...categoryValues] };
   }
 
   return {
@@ -78,11 +104,11 @@ function normalizeToolEntry(entry) {
   };
 }
 
-function mapConfigToRows(config) {
+function mapConfigToRows(config, categoryValues = FALLBACK_CATEGORY_VALUES) {
   const toRows = (tools = {}) =>
     Object.entries(tools)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([tool, entry]) => ({ tool, ...normalizeToolEntry(entry) }));
+      .map(([tool, entry]) => ({ tool, ...normalizeToolEntry(entry, categoryValues) }));
 
   return {
     managed: toRows(config.managed),
@@ -112,7 +138,7 @@ function buildPayload(rows) {
   };
 }
 
-function validateRows(rows) {
+function validateRows(rows, categoryValues = FALLBACK_CATEGORY_VALUES) {
   const errors = [];
   const seen = new Set();
 
@@ -136,7 +162,7 @@ function validateRows(rows) {
         errors.push(`${tool} must belong to at least one category.`);
       }
       for (const category of row.categories || []) {
-        if (!CATEGORY_VALUES.includes(category)) {
+        if (!categoryValues.includes(category)) {
           errors.push(`${tool} has an unknown category.`);
         }
       }
@@ -191,7 +217,7 @@ function validateSensitiveRules(rules) {
   return [...new Set(errors)];
 }
 
-function ToolWeightTable({ title, rows, onChange, onAdd, onRemove }) {
+function ToolWeightTable({ title, rows, onChange, onAdd, onRemove, categoryOptions }) {
   const toggleCategory = (index, category) => {
     const row = rows[index];
     const current = Array.isArray(row.categories) ? row.categories : [];
@@ -216,7 +242,7 @@ function ToolWeightTable({ title, rows, onChange, onAdd, onRemove }) {
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                 Tool
               </th>
-              <th className="w-36 px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+              <th className="w-24 px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                 Weight
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -256,9 +282,13 @@ function ToolWeightTable({ title, rows, onChange, onAdd, onRemove }) {
                       onChange={(event) => onChange(index, 'weight', event.target.value)}
                     />
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      {CATEGORY_OPTIONS.map((category) => {
+                  {/* w-px + whitespace-nowrap: the cell takes exactly the width its
+                      chips need and the slack goes to Tool. Six chips no longer wrap,
+                      which they did the moment Secrets and IaC/Container were added —
+                      orphaning "Firewall" onto a second line on every single row. */}
+                  <td className="w-px whitespace-nowrap px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      {categoryOptions.map((category) => {
                         const checked = row.categories?.includes(category.value) ?? false;
                         return (
                           <label
@@ -508,8 +538,11 @@ export function ScoringSettings() {
   const [rows, setRows] = useState({ managed: [], approvedUnmanaged: [], other: '0.8' });
   const [sensitiveRules, setSensitiveRules] = useState([]);
   const [sensitiveRuleModal, setSensitiveRuleModal] = useState(null);
+  // Served with the config, so the checkboxes cannot fall behind TOOL_CATEGORIES.
+  const [categoryValues, setCategoryValues] = useState(FALLBACK_CATEGORY_VALUES);
+  const categoryOptions = useMemo(() => toCategoryOptions(categoryValues), [categoryValues]);
 
-  const validationErrors = useMemo(() => validateRows(rows), [rows]);
+  const validationErrors = useMemo(() => validateRows(rows, categoryValues), [rows, categoryValues]);
   const sensitiveRuleErrors = useMemo(() => validateSensitiveRules(sensitiveRules), [sensitiveRules]);
 
   const load = async () => {
@@ -519,7 +552,11 @@ export function ScoringSettings() {
         api.getToolQualityConfig(),
         api.getSensitiveFieldsConfig(),
       ]);
-      setRows(mapConfigToRows(config));
+      const served = Array.isArray(config.categories) && config.categories.length
+        ? config.categories
+        : FALLBACK_CATEGORY_VALUES;
+      setCategoryValues(served);
+      setRows(mapConfigToRows(config, served));
       setSensitiveRules((sensitiveFields.rules || []).map(normalizeSensitiveRuleForUi));
     } catch (error) {
       console.error(error);
@@ -624,7 +661,7 @@ export function ScoringSettings() {
     setSaving(true);
     try {
       const saved = await api.updateToolQualityConfig(buildPayload(rows));
-      setRows(mapConfigToRows(saved));
+      setRows(mapConfigToRows(saved, categoryValues));
       toast.success('Scoring settings saved');
     } catch (error) {
       console.error(error);
@@ -659,7 +696,7 @@ export function ScoringSettings() {
         <LoadingPage message="Loading..." />
       ) : (
         <div className="space-y-8">
-          <Card className="max-w-5xl">
+          <Card className="max-w-7xl">
             <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <CardTitle>Tool quality weights</CardTitle>
@@ -702,6 +739,7 @@ export function ScoringSettings() {
                 onChange={(index, field, value) => updateRow('managed', index, field, value)}
                 onAdd={() => addRow('managed')}
                 onRemove={(index) => removeRow('managed', index)}
+                categoryOptions={categoryOptions}
               />
 
               <ToolWeightTable
@@ -710,11 +748,12 @@ export function ScoringSettings() {
                 onChange={(index, field, value) => updateRow('approvedUnmanaged', index, field, value)}
                 onAdd={() => addRow('approvedUnmanaged')}
                 onRemove={(index) => removeRow('approvedUnmanaged', index)}
+                categoryOptions={categoryOptions}
               />
             </CardContent>
           </Card>
 
-          <Card className="max-w-5xl">
+          <Card className="max-w-7xl">
             <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <CardTitle>API schema sensitive field rules</CardTitle>

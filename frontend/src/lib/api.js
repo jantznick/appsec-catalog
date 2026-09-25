@@ -1075,6 +1075,12 @@ export const api = {
     apiRequest(`/api/applications/${applicationId}/scm/sync`, { method: 'POST' }),
 
   /** Control attestations — owner-asserted compliance for controls no field can measure. */
+  /**
+   * The application metadata field registry, so the UI stops hand-mirroring it.
+   * Returns { fields, versioned, approvable, splittable }.
+   */
+  getApplicationFieldRegistry: () => apiRequest('/api/config/application-fields'),
+
   getApplicationAttestations: (applicationId) =>
     apiRequest(`/api/applications/${applicationId}/attestations`),
 

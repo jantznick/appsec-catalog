@@ -4,11 +4,14 @@
  * See the note at the top of scoring.test.js on why this uses `node --test` with no
  * dependencies.
  *
- * `APP_DATA_FIXES_PLAN.md` 1.2 documents four disagreeing definitions of "complete":
- * this one, a hand-mirrored copy in frontend/src/utils/applicationCompleteness.js,
- * a third pair in backend/utils/portfolioCompleteness.js, and KNOWLEDGE_SCORING_FIELDS
- * in services/scoring.js. These tests pin the behaviour of this one so the collapse
- * into a single definition is a refactor with a safety net rather than a rewrite.
+ * `APP_DATA_FIXES_PLAN.md` 1.2 documented four disagreeing definitions of "complete".
+ * There is now one: `FIELD_SETS.metadata`, which is exactly what the App Data tab
+ * asks for. `calculateCompleteness`, the 40-point completeness component of the 0-100
+ * knowledge score, the dashboard percentage and the portfolio CSV's metadata column
+ * all read it, so an application has one completeness number wherever it is shown.
+ *
+ * What these tests are for now: keeping it that way. The set is small and easy to add
+ * a field to in passing, and every addition moves published numbers.
  */
 
 import { describe, it } from 'node:test';
@@ -25,22 +28,30 @@ import {
 } from './completeness.js';
 
 /**
- * Every field this module scores, filled. When a field joins a set, it joins here in
- * the same commit — otherwise "fully populated" quietly stops meaning 100%.
+ * Every field the metadata set scores, filled, plus the security fields the `security`
+ * set still needs. When a field joins a set, it joins here in the same commit —
+ * otherwise "fully populated" quietly stops meaning 100%.
  */
 function completeApp(overrides = {}) {
   return {
-    name: 'Checkout',
+    // metadata — the App Data tab
     description: 'Takes payments',
-    owner: 'Payments team',
     repoUrl: 'https://github.com/acme/checkout',
+    devTeamContact: 'payments@acme.test',
+    criticalAspects: 'Card capture',
+    businessCriticality: 4,
     language: 'TypeScript',
     framework: 'Express',
     serverEnvironment: 'AWS',
+    currentVersion: '3.2.1',
     facing: 'External',
     deploymentType: 'Daily - Automated CI/CD Pipeline',
     authProfiles: 'OIDC',
     dataTypes: 'PII',
+    // not scored, but present on a real row
+    name: 'Checkout',
+    owner: 'Payments team',
+    // security — the Security tab, counted by the `security` set only
     sastTool: 'Snyk',
     sastIntegrationLevel: 4,
     sastIncludesSca: false,
@@ -48,11 +59,10 @@ function completeApp(overrides = {}) {
     dastIntegrationLevel: 4,
     scaTool: 'Snyk',
     scaIntegrationLevel: 4,
-    // Phase 6a: secrets and IaC/container scanning joined the security tooling a
-    // record declares. sastIncludesSecrets:false so the standalone pair counts.
     sastIncludesSecrets: false,
     secretsScanTool: 'GitHub secret scanning',
     secretsScanIntegrationLevel: 4,
+    iacContainerScanNA: false,
     iacContainerScanTool: 'Trivy',
     iacContainerScanIntegrationLevel: 4,
     appFirewallTool: 'Fastly NGWAF',
@@ -71,15 +81,29 @@ describe('calculateCompleteness', () => {
     assert.equal(percentage, 100);
   });
 
-  it('counts the standalone SCA fields only when SAST does not cover them', () => {
-    const standalone = calculateCompleteness(completeApp({ sastIncludesSca: false }));
-    const covered = calculateCompleteness(completeApp({ sastIncludesSca: true }));
-    assert.equal(
-      standalone.total - covered.total,
-      2,
-      'scaTool and scaIntegrationLevel leave the denominator when SAST includes SCA',
+  it('scores the App Data tab and nothing else', () => {
+    // The whole point of the set. Blanking every security-tooling field must not
+    // change completeness, because the Security tab is not the App Data tab.
+    const base = calculateCompleteness(completeApp());
+    const noTooling = calculateCompleteness(
+      completeApp({
+        sastTool: '', sastIntegrationLevel: null, dastTool: '', dastIntegrationLevel: null,
+        scaTool: '', scaIntegrationLevel: null, secretsScanTool: '',
+        secretsScanIntegrationLevel: null, iacContainerScanTool: '',
+        iacContainerScanIntegrationLevel: null, iacContainerScanNA: null,
+        appFirewallTool: '', appFirewallIntegrationLevel: null, apiSchema: null,
+        apiSecurityNA: null, appFirewallNA: null,
+      }),
     );
-    assert.equal(covered.percentage, 100);
+    assert.deepEqual(noTooling, base);
+  });
+
+  it('does not score name, which is required and so can never be a gap', () => {
+    // Counting it would add the same point to every application in the system.
+    assert.ok(!FIELD_SETS.metadata.includes('name'));
+    const named = calculateCompleteness(completeApp({ name: 'Checkout' }));
+    const unnamed = calculateCompleteness(completeApp({ name: '' }));
+    assert.deepEqual(unnamed, named);
   });
 
   it('drops NA fields from the denominator rather than counting them missing', () => {
@@ -89,63 +113,29 @@ describe('calculateCompleteness', () => {
     assert.equal(withNA.percentage, 100);
   });
 
-  it('counts empty strings and nulls as unfilled', () => {
-    const { filled, total } = calculateCompleteness(
-      completeApp({ description: '', owner: null, language: undefined }),
+  it('counts empty, whitespace-only and null as unfilled', () => {
+    // `trimmed` is the metadata set's blank rule, so "   " is a gap.
+    const { filled, total, missing } = calculateCompleteness(
+      completeApp({ description: '', framework: '   ', language: null }),
     );
     assert.equal(total - filled, 3);
+    assert.deepEqual([...missing].sort(), ['description', 'framework', 'language']);
   });
 
-  it('treats apiSchema as a relation, not a string', () => {
-    const present = calculateCompleteness(completeApp({ apiSchema: { id: 'x' } }));
-    const absent = calculateCompleteness(completeApp({ apiSchema: null }));
-    assert.equal(present.total, absent.total);
-    assert.equal(present.filled - absent.filled, 1);
-
-    // Callers may include it as a boolean instead of the row.
-    const asBoolean = calculateCompleteness(completeApp({ apiSchema: true }));
-    assert.equal(asBoolean.percentage, 100);
+  it('names the missing fields, so scoring does not have to re-derive them', () => {
+    const { missing } = calculateCompleteness(completeApp({ currentVersion: '' }));
+    assert.deepEqual(missing, ['currentVersion']);
   });
 
-  it('counts integration level 0 as answered', () => {
-    // 0 is a real integration level ("Unknown / Nothing"), not an absence.
-    const { percentage } = calculateCompleteness(completeApp({ sastIntegrationLevel: 0 }));
+  it('counts businessCriticality as answered whenever it is set', () => {
+    const { percentage } = calculateCompleteness(completeApp({ businessCriticality: 1 }));
     assert.equal(percentage, 100);
-  });
-
-  /**
-   * Fixes doc C2: apiSecurityNA and appFirewallNA are declared Boolean? but carry
-   * @default(false) in the schema, so they are never null on a real row and always
-   * count as filled. That is two free points on every application in the system.
-   *
-   * This test documents the current behaviour. When Phase 2 drops the defaults, the
-   * `false` case stays filled and a genuinely null value becomes unfilled — at which
-   * point the second assertion below should be updated, deliberately.
-   */
-  it('counts the N/A booleans as filled whenever they are not null (fixes doc C2)', () => {
-    const asFalse = calculateCompleteness(completeApp({ apiSecurityNA: false, appFirewallNA: false }));
-    assert.equal(asFalse.percentage, 100, 'false is an answer');
-
-    const asNull = calculateCompleteness(completeApp({ apiSecurityNA: null, appFirewallNA: null }));
-    assert.equal(
-      asNull.total - asNull.filled,
-      2,
-      'null is unfilled - but @default(false) means production rows are never null',
-    );
+    const unset = calculateCompleteness(completeApp({ businessCriticality: null }));
+    assert.ok(unset.missing.includes('businessCriticality'));
   });
 
   it('never divides by zero', () => {
-    // Every scorable field set to the NA sentinel empties the denominator.
-    const allNA = {
-      name: 'NA', description: 'NA', owner: 'NA', repoUrl: 'NA', language: 'NA',
-      framework: 'NA', serverEnvironment: 'NA', facing: 'NA', deploymentType: 'NA',
-      authProfiles: 'NA', dataTypes: 'NA', sastTool: 'NA', sastIntegrationLevel: 'NA',
-      dastTool: 'NA', dastIntegrationLevel: 'NA', scaTool: 'NA', scaIntegrationLevel: 'NA',
-      appFirewallTool: 'NA', appFirewallIntegrationLevel: 'NA', apiSchema: 'NA',
-      apiSecurityNA: 'NA', appFirewallNA: 'NA',
-      secretsScanTool: 'NA', secretsScanIntegrationLevel: 'NA',
-      iacContainerScanTool: 'NA', iacContainerScanIntegrationLevel: 'NA',
-    };
+    const allNA = Object.fromEntries(FIELD_SETS.metadata.map((k) => [k, 'NA']));
     const result = calculateCompleteness(allNA);
     assert.equal(result.total, 0);
     assert.equal(result.percentage, 0);
@@ -156,51 +146,85 @@ describe('calculateCompleteness', () => {
     assert.equal(result.filled, 0);
     assert.ok(result.total > 0);
     assert.equal(result.percentage, 0);
+    assert.deepEqual(result.missing, [...FIELD_SETS.metadata]);
   });
 });
 
 describe('field sets', () => {
   /**
-   * Golden sizes. The original values were measured against the four hand-maintained
-   * implementations on main @ cb149b1, which an 18,000-case differential run showed
-   * zero divergence from.
+   * Golden sizes.
    *
-   * RE-BASELINED for POLICY_CONTROL_COVERAGE_PLAN.md Phase 6a. Secrets scanning and
-   * IaC/container scanning are now part of the security tooling a record is expected
-   * to declare, so four fields joined the record and security sets:
+   * RE-BASELINED for the completeness consolidation. `record` is gone: it mixed the
+   * App Data tab's questions with the Security tab's tooling and called the mixture
+   * "completeness". `metadata` replaced it and is what every completeness number now
+   * reads — thirteen fields, exactly the App Data tab's two cards, minus `name`
+   * (required, so never a gap) and `companyId` (an assignment, not an answer).
    *
-   *   record    22 -> 26      security  11 -> 15
-   *
-   * The metadata sets are untouched, which is why portfolioBasic and portfolioTechnical
-   * still read 6 and 8. Measured across the 91 dev applications, average record
-   * completeness moved 35% -> 30% — purely the denominator growing, since no
-   * application had any of the new fields set yet.
+   * `security` is unchanged and is still reported separately by the portfolio CSV.
+   * `portfolioBasic` and `portfolioTechnical` remain declared only so the differential
+   * suite can measure the change; nothing in the application reads them.
    */
-  it('has the sizes the implementations it replaced had, plus the Phase 6a additions', () => {
+  it('has the size the App Data tab has', () => {
     const standalone = { sastIncludesSca: false, sastIncludesSecrets: false };
-    assert.equal(resolveFieldSet('record', standalone).length, 26);
-    assert.equal(resolveFieldSet('security', standalone).length, 15);
+    assert.equal(resolveFieldSet('metadata', standalone).length, 13);
+    assert.equal(resolveFieldSet('security', standalone).length, 16);
     assert.equal(resolveFieldSet('portfolioBasic', standalone).length, 6);
     assert.equal(resolveFieldSet('portfolioTechnical', standalone).length, 8);
   });
 
-  it('drops the standalone SCA fields when SAST covers them', () => {
-    const covered = { sastIncludesSca: true, sastIncludesSecrets: false };
-    assert.equal(resolveFieldSet('record', covered).length, 24);
-    assert.equal(resolveFieldSet('security', covered).length, 13);
-    // The metadata sets have no SCA fields, so they are unaffected.
-    assert.equal(resolveFieldSet('portfolioBasic', covered).length, 6);
+  it('is the union of the two sets it replaced, less name', () => {
+    // The consolidation is meant to be exactly this and nothing more, so state it
+    // rather than leaving the reader to compare two lists by eye.
+    const app = { sastIncludesSca: false, sastIncludesSecrets: false };
+    const union = [
+      ...resolveFieldSet('portfolioBasic', app),
+      ...resolveFieldSet('portfolioTechnical', app),
+    ].filter((k) => k !== 'name');
+    assert.deepEqual([...resolveFieldSet('metadata', app)].sort(), [...union].sort());
+  });
+
+  it('holds no security-tooling field', () => {
+    const security = new Set(resolveFieldSet('security', { sastIncludesSca: false, sastIncludesSecrets: false }));
+    const overlap = resolveFieldSet('metadata', {}).filter((k) => security.has(k));
+    assert.deepEqual(overlap, [], 'the Security tab is not the App Data tab');
+  });
+
+  it('does not vary with the security conditionals', () => {
+    // The SCA, secrets and IaC markers only ever expanded inside the security set.
+    // Metadata must be the same size whatever a team answered about its tooling.
+    const sizes = new Set();
+    for (const sastIncludesSca of [true, false]) {
+      for (const sastIncludesSecrets of [true, false]) {
+        for (const iacContainerScanNA of [true, false]) {
+          sizes.add(
+            resolveFieldSet('metadata', { sastIncludesSca, sastIncludesSecrets, iacContainerScanNA }).length,
+          );
+        }
+      }
+    }
+    assert.deepEqual([...sizes], [13]);
+  });
+
+  it('drops the standalone SCA fields from the security set when SAST covers them', () => {
+    assert.equal(resolveFieldSet('security', { sastIncludesSca: true, sastIncludesSecrets: false }).length, 14);
   });
 
   it('drops the standalone secrets fields when SAST covers them', () => {
     // Same rule as SCA, and the two are independent.
-    const secretsCovered = { sastIncludesSca: false, sastIncludesSecrets: true };
-    assert.equal(resolveFieldSet('record', secretsCovered).length, 24);
-    assert.equal(resolveFieldSet('security', secretsCovered).length, 13);
+    assert.equal(resolveFieldSet('security', { sastIncludesSca: false, sastIncludesSecrets: true }).length, 14);
+    assert.equal(resolveFieldSet('security', { sastIncludesSca: true, sastIncludesSecrets: true }).length, 12);
+  });
 
-    const bothCovered = { sastIncludesSca: true, sastIncludesSecrets: true };
-    assert.equal(resolveFieldSet('record', bothCovered).length, 22);
-    assert.equal(resolveFieldSet('security', bothCovered).length, 11);
+  it('drops the IaC tool fields when the team declares it not applicable', () => {
+    // The declaration itself still counts — "we have no IaC" is a complete answer,
+    // not two permanent gaps. Without this an application with no containers could
+    // never reach 100% on its tooling and would fail 4.6.14 forever.
+    const applies = { sastIncludesSca: false, sastIncludesSecrets: false, iacContainerScanNA: false };
+    const notApplicable = { ...applies, iacContainerScanNA: true };
+    assert.equal(resolveFieldSet('security', applies).length, 16);
+    assert.equal(resolveFieldSet('security', notApplicable).length, 14);
+    assert.ok(resolveFieldSet('security', notApplicable).includes('iacContainerScanNA'));
+    assert.ok(!resolveFieldSet('security', notApplicable).includes('iacContainerScanTool'));
   });
 
   it('names only real fields, so a typo cannot count as permanently missing', () => {
@@ -209,58 +233,40 @@ describe('field sets', () => {
     assert.deepEqual(findUnknownFieldsInSets(), []);
   });
 
-  it('makes the security set an exact tail of the record set', () => {
-    const record = resolveFieldSet('record', {});
-    const security = resolveFieldSet('security', {});
-    assert.deepEqual(record.slice(-security.length), security);
-  });
-
   it('declares a blank rule for every set', () => {
     for (const name of Object.keys(FIELD_SETS)) {
-      assert.ok(SET_BLANK_RULES[name], `${name} has no blank rule`);
+      assert.ok(SET_BLANK_RULES[name], `no blank rule declared for set "${name}"`);
     }
   });
 
-  it('rejects an unknown set name rather than counting zero fields', () => {
+  it('rejects an unknown set name', () => {
     assert.throws(() => resolveFieldSet('nope', {}), /Unknown completeness field set/);
-  });
-
-  it('accepts an explicit field list', () => {
-    const { filled, total } = countFieldSet({ name: 'x' }, ['name', 'description']);
-    assert.equal(total, 2);
-    assert.equal(filled, 1);
   });
 });
 
 describe('per-set blank rules', () => {
   /**
-   * The two prior implementations disagreed on whitespace-only values, and the
-   * difference is preserved deliberately - unifying it would move numbers already on
-   * dashboards. See the note in completeness.js. If that product decision is ever made,
-   * this is the test that should change.
+   * The two prior implementations disagreed on whitespace-only values. The disagreement
+   * is now resolved rather than preserved: `metadata` uses `trimmed`, which was always
+   * the more defensible of the two — a description of three spaces is not a description.
+   * `security` keeps `exact` because it is a different question and its numbers were
+   * not part of the consolidation.
    */
-  it('counts a whitespace-only value as filled for the record set', () => {
+  it('counts a whitespace-only value as blank for the metadata set', () => {
+    const ws = countFieldSet({ language: '   ' }, 'metadata');
+    const empty = countFieldSet({ language: '' }, 'metadata');
+    assert.equal(ws.filled, empty.filled, 'whitespace is blank for metadata');
+    assert.ok(ws.missing.includes('language'));
+  });
+
+  it('still counts a whitespace-only value as filled for the security set', () => {
+    const ws = countFieldSet({ sastTool: '   ' }, 'security');
+    const empty = countFieldSet({ sastTool: '' }, 'security');
+    assert.equal(ws.filled - empty.filled, 1, 'whitespace counts as filled for security');
+  });
+
+  it('defaults an explicit field list to the trimmed rule', () => {
     const { filled } = countFieldSet({ description: '   ' }, ['description']);
-    // An explicit list defaults to the trimmed rule...
     assert.equal(filled, 0);
-    // ...but the record set keeps the looser historical rule.
-    const record = countFieldSet({ description: '   ' }, 'record');
-    const empty = countFieldSet({ description: '' }, 'record');
-    assert.equal(record.filled - empty.filled, 1, 'whitespace counts as filled for record');
-  });
-
-  it('counts a whitespace-only value as blank for the portfolio metadata sets', () => {
-    const ws = countFieldSet({ language: '   ' }, 'portfolioTechnical');
-    const empty = countFieldSet({ language: '' }, 'portfolioTechnical');
-    assert.equal(ws.filled, empty.filled, 'whitespace is blank for portfolioTechnical');
-  });
-});
-
-describe('toPercentage', () => {
-  it('rounds and never returns NaN', () => {
-    assert.equal(toPercentage(1, 3), 33);
-    assert.equal(toPercentage(2, 3), 67);
-    assert.equal(toPercentage(0, 0), 0);
-    assert.equal(toPercentage(5, 5), 100);
   });
 });

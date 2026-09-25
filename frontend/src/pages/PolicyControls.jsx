@@ -9,29 +9,88 @@ import { Textarea } from '../components/ui/Textarea.jsx';
 import { Select } from '../components/ui/Select.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
+import { Drawer } from '../components/ui/Drawer.jsx';
 import useAuthStore from '../store/authStore.js';
-import { POLICY_OPERATORS as OPERATORS } from '../lib/policyDisplay.js';
+import {
+  POLICY_OPERATORS as OPERATORS,
+  getOperatorOptionsFor,
+  isDayCountOperator,
+} from '../lib/policyDisplay.js';
 
-// Get available operators for a field
-const getOperatorsForField = (fieldPath, availableFields) => {
+/**
+ * Coerce a <select> value back to the type the field actually holds.
+ *
+ * Every option value that reaches an onChange is a STRING — the DOM has no other kind.
+ * The dropdown branch coerced only numbers, so a boolean field rendered as a dropdown
+ * saved the string "true" instead of the boolean true.
+ *
+ * That is not cosmetic. The evaluator compares with === , so a stored "true" against a
+ * real boolean true makes `equals` return FALSE and `not_equals` return TRUE — every
+ * boolean check saved through this editor evaluates backwards. It is the same shape as
+ * the rolling-window bug: the editor quietly rewriting a mapping into something that
+ * still looks right on screen.
+ *
+ * Verified against services/policyEvaluation.js:
+ *   stored "true" vs actual true  ->  equals false, not_equals true   (both wrong)
+ *   stored  true  vs actual true  ->  equals true,  not_equals false  (both right)
+ */
+function coerceSelectValue(raw, fieldType) {
+  if (raw === '') return null;
+  if (fieldType === 'number') return Number(raw);
+  if (fieldType === 'boolean') return raw === 'true';
+  return raw;
+}
+
+/** Operators that compare a date against one fixed calendar date. */
+const FIXED_DATE_OPERATORS = new Set(['gte', 'gt', 'lte', 'lt']);
+
+/**
+ * Warn when a date check is pinned to a calendar date.
+ *
+ * These evaluate correctly, so nothing is broken — but "last reviewed >= 2026-01-01"
+ * passes forever once an application crosses that date, and silently stops measuring
+ * anything. The rolling-window operators are almost always what a date requirement
+ * means. Returns undefined when there is nothing to say, so the row stays quiet.
+ */
+function staleDateWarning(field, fieldType) {
+  if (fieldType !== 'date' || !FIXED_DATE_OPERATORS.has(field.operator)) return undefined;
+  return 'Compares against one fixed date, so this keeps passing once an application crosses it. For "recently enough", use Within the last N days.';
+}
+
+/**
+ * Operators offered for a field.
+ *
+ * `currentOperator` is the value already stored on the mapping. It is always included in
+ * the returned options, even when this UI does not recognise it — see
+ * getOperatorOptionsFor. Without that, an operator the engine supports and this list has
+ * not caught up with was rewritten on load and destroyed on save.
+ */
+const getOperatorsForField = (fieldPath, availableFields, currentOperator) => {
   const field = availableFields.find(f => f.path === fieldPath);
-  if (!field) return OPERATORS;
-  
+  if (!field) return getOperatorOptionsFor(OPERATORS, currentOperator);
+
   // If field has specific allowedOperators, use those
   if (field.allowedOperators && field.allowedOperators.length > 0) {
-    return OPERATORS.filter(op => field.allowedOperators.includes(op.value));
+    return getOperatorOptionsFor(
+      OPERATORS.filter(op => field.allowedOperators.includes(op.value)),
+      currentOperator,
+    );
   }
   
   // Fallback to type-based filtering (backward compatibility)
   const fieldType = field.fieldType;
-  if (fieldType === 'number') {
-    return OPERATORS.filter(op => ['exists', 'not_exists', 'equals', 'not_equals', 'gte', 'gt', 'lte', 'lt'].includes(op.value));
-  } else if (fieldType === 'boolean') {
-    return OPERATORS.filter(op => ['exists', 'not_exists', 'equals', 'not_equals'].includes(op.value));
-  } else if (fieldType === 'date') {
-    return OPERATORS.filter(op => ['exists', 'not_exists', 'equals', 'not_equals', 'gte', 'gt', 'lte', 'lt'].includes(op.value));
-  }
-  return OPERATORS;
+  const byType =
+    fieldType === 'number'
+      ? ['exists', 'not_exists', 'equals', 'not_equals', 'gte', 'gt', 'lte', 'lt']
+      : fieldType === 'boolean'
+        ? ['exists', 'not_exists', 'equals', 'not_equals']
+        : fieldType === 'date'
+          ? ['exists', 'not_exists', 'equals', 'not_equals', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days']
+          : null;
+  return getOperatorOptionsFor(
+    byType ? OPERATORS.filter(op => byType.includes(op.value)) : OPERATORS,
+    currentOperator,
+  );
 };
 
 export function PolicyControls() {
@@ -54,6 +113,11 @@ export function PolicyControls() {
     description: '',
     category: '',
     evaluationLogic: 'AND',
+    appliesWhenLogic: 'AND',
+    verificationRequired: false,
+    verificationNote: '',
+    allowsAttestation: false,
+    attestationValidDays: 365,
     isActive: true,
     displayOrder: 0,
     policyId: '',
@@ -72,6 +136,9 @@ export function PolicyControls() {
     conditionalConditions: [],
   });
   const [saving, setSaving] = useState(false);
+  // Index of the field check currently being dragged, and the row it is over.
+  const [dragIndex, setDragIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deletingPolicy, setDeletingPolicy] = useState(false);
@@ -368,17 +435,7 @@ export function PolicyControls() {
 
   const handleCreate = () => {
     setEditingControl(null);
-    setFormData({
-      controlId: '',
-      name: '',
-      description: '',
-      category: '',
-      evaluationLogic: 'AND',
-      isActive: true,
-      displayOrder: controls.length,
-      policyId: policies.length > 0 ? policies[0].id : '',
-      fields: [],
-    });
+    setFormData(emptyControlForm());
     setShowModal(true);
   };
 
@@ -390,13 +447,16 @@ export function PolicyControls() {
       description: control.description,
       category: control.category || '',
       evaluationLogic: control.evaluationLogic,
+      appliesWhenLogic: control.appliesWhenLogic || 'AND',
+      verificationRequired: control.verificationRequired === true,
+      verificationNote: control.verificationNote || '',
+      allowsAttestation: control.allowsAttestation === true,
+      attestationValidDays: control.attestationValidDays ?? 365,
       isActive: control.isActive,
       displayOrder: control.displayOrder,
       policyId: control.policyId || (policies.length > 0 ? policies[0].id : ''),
       fields: control.fields.map(f => {
         const fieldMetadata = getFieldMetadata(f.fieldPath);
-        const availableOperators = getOperatorsForField(f.fieldPath, availableFields);
-        const isValidOperator = availableOperators.some(op => op.value === f.operator);
         
         let value = f.value ? (() => {
           try {
@@ -418,7 +478,11 @@ export function PolicyControls() {
         
         return {
           fieldPath: f.fieldPath,
-          operator: isValidOperator ? f.operator : (availableOperators[0]?.value || 'exists'),
+          role: f.role === 'applies_when' ? 'applies_when' : 'compliance',
+          // Preserved verbatim. This previously fell back to the first available
+          // operator when the UI did not recognise the stored one, which rewrote the
+          // mapping on load and saved the replacement.
+          operator: f.operator,
           value: value,
           displayOrder: f.displayOrder,
         };
@@ -447,6 +511,33 @@ export function PolicyControls() {
     }
   };
 
+  /**
+   * Blank form state, written out in full at three call sites before this.
+   */
+  const emptyControlForm = () => ({
+    controlId: '',
+    name: '',
+    description: '',
+    category: '',
+    evaluationLogic: 'AND',
+    appliesWhenLogic: 'AND',
+    verificationRequired: false,
+    verificationNote: '',
+    allowsAttestation: false,
+    attestationValidDays: 365,
+    isActive: true,
+    displayOrder: 0,
+    policyId: policies.length > 0 ? policies[0].id : '',
+    fields: [],
+  });
+
+  /** Close the editor drawer and discard whatever was being edited. */
+  const closeEditor = () => {
+    setShowModal(false);
+    setFormData(emptyControlForm());
+    setEditingControl(null);
+  };
+
   const handleAddField = () => {
     setFormData({
       ...formData,
@@ -456,6 +547,7 @@ export function PolicyControls() {
           fieldPath: '',
           operator: 'exists',
           value: null,
+          role: 'compliance',
           displayOrder: formData.fields.length,
         },
       ],
@@ -504,6 +596,23 @@ export function PolicyControls() {
     });
   };
 
+  /**
+   * Reorder by dragging.
+   *
+   * Native HTML5 drag and drop rather than a library: the list is short, the only
+   * operation is "move this row to that position", and a dependency for that is not
+   * worth the bundle. The arrow buttons stay for keyboard users, since a drag handle
+   * alone is not reachable without a mouse.
+   */
+  const handleDropField = (from, to) => {
+    if (from === to || from === null || to === null) return;
+    const next = [...formData.fields];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    next.forEach((f, i) => { f.displayOrder = i; });
+    setFormData({ ...formData, fields: next });
+  };
+
   const handleMoveField = (index, direction) => {
     if (
       (direction === 'up' && index === 0) ||
@@ -546,6 +655,15 @@ export function PolicyControls() {
       setSaving(true);
       const payload = {
         ...formData,
+        // Only send a validity period when attestation is on, and never send an empty
+        // string — the API requires a whole number of days between 1 and 3650, so a
+        // cleared input would be rejected rather than treated as "use the default".
+        ...(formData.allowsAttestation && Number(formData.attestationValidDays) >= 1
+          ? { attestationValidDays: Number(formData.attestationValidDays) }
+          : { attestationValidDays: undefined }),
+        verificationNote: formData.verificationRequired
+          ? formData.verificationNote?.trim() || null
+          : null,
         fields: formData.fields.map(f => {
           // Convert comma-separated strings to arrays for in/not_in operators before saving
           let value = f.value;
@@ -568,16 +686,7 @@ export function PolicyControls() {
         toast.success('Policy control created successfully');
       }
       setShowModal(false);
-      setFormData({
-        controlId: '',
-        name: '',
-        description: '',
-        category: '',
-        evaluationLogic: 'AND',
-        isActive: true,
-        displayOrder: 0,
-        fields: [],
-      });
+      setFormData(emptyControlForm());
       setEditingControl(null);
       await loadControls();
     } catch (error) {
@@ -827,56 +936,71 @@ export function PolicyControls() {
         </div>
       )}
 
-      {/* Create/Edit Modal */}
+      {/* Create/Edit. A right-hand drawer rather than a centred modal: the form is
+          long and has repeating field-check rows, which a modal capped at 80vh either
+          cramps or forces into a second modal on top of the first. A drawer is full
+          height, so the header and the Cancel/Update footer pin while only the body
+          scrolls, and it is wide enough to keep each check on one line. */}
       {showModal && (
-        <Modal
+        <Drawer
           isOpen={showModal}
-          onClose={() => {
-            setShowModal(false);
-            setFormData({
-              controlId: '',
-              name: '',
-              description: '',
-              category: '',
-              evaluationLogic: 'AND',
-              isActive: true,
-              displayOrder: 0,
-              policyId: policies.length > 0 ? policies[0].id : '',
-              fields: [],
-            });
-            setEditingControl(null);
-          }}
+          onClose={closeEditor}
           title={editingControl ? 'Edit Policy Control' : 'Create Policy Control'}
+          description={
+            editingControl
+              ? `${editingControl.controlId} — changes re-evaluate every application immediately.`
+              : 'A control is a requirement plus the field checks that decide whether an application meets it.'
+          }
           size="xl"
+          footer={
+            <>
+              <Button type="button" variant="secondary" onClick={closeEditor}>
+                Cancel
+              </Button>
+              {/* Lives outside the <form>, so it submits by id. */}
+              <Button type="submit" form="policy-control-form" variant="primary" loading={saving}>
+                {editingControl ? 'Update' : 'Create'}
+              </Button>
+            </>
+          }
         >
-          <form onSubmit={handleSubmit}>
-            <div className="space-y-6 max-h-[80vh] overflow-y-auto pr-2">
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Control ID"
-                  value={formData.controlId}
-                  onChange={(e) => setFormData({ ...formData, controlId: e.target.value })}
-                  required
-                  placeholder="e.g., 3.4.2"
-                  helperText="Unique identifier for this control"
-                />
-                <Input
-                  label="Display Order"
-                  type="number"
-                  value={formData.displayOrder}
-                  onChange={(e) => setFormData({ ...formData, displayOrder: parseInt(e.target.value) || 0 })}
-                  helperText="Order for display (lower numbers appear first)"
-                />
+          {/* The form owns the whole drawer body so the submit button in the footer
+              still submits it; `h-full flex flex-col` lets the field list scroll
+              rather than the page. */}
+          <form onSubmit={handleSubmit} id="policy-control-form">
+            <div className="space-y-5">
+              {/* Identity. Three short fields shared one row each before, so the top of
+                  the form was three rows of mostly empty space before the control's own
+                  name appeared. Helper text is dropped where the label already says it. */}
+              <div className="grid grid-cols-12 gap-3">
+                <div className="col-span-3">
+                  <Input
+                    label="Control ID"
+                    value={formData.controlId}
+                    onChange={(e) => setFormData({ ...formData, controlId: e.target.value })}
+                    required
+                    placeholder="4.6.3"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Input
+                    label="Order"
+                    type="number"
+                    value={formData.displayOrder}
+                    onChange={(e) => setFormData({ ...formData, displayOrder: parseInt(e.target.value) || 0 })}
+                    title="Lower numbers appear first"
+                  />
+                </div>
+                <div className="col-span-7">
+                  <Select
+                    label="Policy"
+                    value={formData.policyId}
+                    onChange={(e) => setFormData({ ...formData, policyId: e.target.value })}
+                    required
+                    options={policies.map(p => ({ value: p.id, label: p.name }))}
+                  />
+                </div>
               </div>
-
-              <Select
-                label="Policy"
-                value={formData.policyId}
-                onChange={(e) => setFormData({ ...formData, policyId: e.target.value })}
-                required
-                options={policies.map(p => ({ value: p.id, label: p.name }))}
-                helperText="Select the policy this control belongs to"
-              />
 
               <Input
                 label="Control Name"
@@ -891,67 +1015,168 @@ export function PolicyControls() {
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 required
-                rows={3}
+                rows={2}
                 placeholder="Full description of the control requirement"
               />
 
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Category"
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  placeholder="e.g., Security Testing"
-                  helperText="Optional category for grouping"
-                />
-                <Select
-                  label="Evaluation Logic"
-                  value={formData.evaluationLogic}
-                  onChange={(e) => setFormData({ ...formData, evaluationLogic: e.target.value })}
-                  options={[
-                    { value: 'AND', label: 'AND (all fields must pass)' },
-                    { value: 'OR', label: 'OR (at least one field must pass)' },
-                  ]}
-                  helperText="How to combine field checks"
-                />
+              {/* Category and Active share a row: a lone checkbox on its own full-width
+                  row was the emptiest line in the form. */}
+              <div className="grid grid-cols-12 gap-3 items-end">
+                <div className="col-span-8">
+                  <Input
+                    label="Category"
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    placeholder="e.g., Security Testing"
+                  />
+                </div>
+                <div className="col-span-4 pb-2">
+                  <Checkbox
+                    id="isActive"
+                    label="Active"
+                    checked={formData.isActive}
+                    onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Only active controls are evaluated.</p>
+                </div>
               </div>
 
-              <Checkbox
-                id="isActive"
-                label="Active"
-                checked={formData.isActive}
-                onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                helperText="Only active controls are evaluated"
-              />
+              {/* Verification and attestation. These were API-only until now: every
+                  control using them had to be configured with a direct request.
+
+                  The applies-when logic selector used to live here too, above the field
+                  checks it combines and visible whether or not any existed. It now sits
+                  with those checks, and only appears once there is one. */}
+              <div className="border-t pt-4 space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800">How this control can be met</h3>
+                  <p className="text-sm text-gray-600">
+                    Both are optional. Leave them off and the field checks below decide on their own.
+                  </p>
+                </div>
+
+                <Checkbox
+                  id="verificationRequired"
+                  label="Requires human verification"
+                  checked={formData.verificationRequired}
+                  onChange={(e) => setFormData({ ...formData, verificationRequired: e.target.checked })}
+                  helperText="For a control the field checks only partly cover. Passing them reports Verification Required instead of Meeting, so it is not counted as met until someone confirms the rest."
+                />
+
+                {formData.verificationRequired && (
+                  <Textarea
+                    label="What a reviewer still needs to confirm"
+                    rows={3}
+                    value={formData.verificationNote}
+                    onChange={(e) => setFormData({ ...formData, verificationNote: e.target.value })}
+                    placeholder="Name the parts of the requirement the automated checks do not cover."
+                    helperText="Shown as evidence on every application, so be specific."
+                  />
+                )}
+
+                <Checkbox
+                  id="allowsAttestation"
+                  label="Can be attested"
+                  checked={formData.allowsAttestation}
+                  onChange={(e) => setFormData({ ...formData, allowsAttestation: e.target.checked })}
+                  helperText="For a control no field could evidence. An owner asserts compliance in writing; it counts as met but is reported as self-reported, never as measured."
+                />
+
+                {formData.allowsAttestation && (
+                  <Input
+                    label="Attestation valid for (days)"
+                    type="number"
+                    min="1"
+                    max="3650"
+                    value={formData.attestationValidDays}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        attestationValidDays: e.target.value === '' ? '' : Number(e.target.value),
+                      })
+                    }
+                    helperText="After this it expires and the control reverts to not meeting. 365 is annual; shorter suits anything that changes continuously, such as remediation SLAs."
+                  />
+                )}
+              </div>
 
               {/* Fields Section */}
               <div className="border-t pt-4">
                 <div className="flex justify-between items-center mb-4">
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-800">Field Mappings</h3>
-                    <p className="text-sm text-gray-600">Define which application fields are checked for this control</p>
+                    <h3 className="text-lg font-semibold text-gray-800">Field checks</h3>
+                    <p className="text-sm text-gray-600">
+                      Which application data decides this control. Drag to reorder.
+                    </p>
                   </div>
+                  {/* shrink-0 and a nowrap label: squeezed beside the description the
+                      button wrapped onto two lines. */}
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={handleAddField}
+                    className="shrink-0 whitespace-nowrap"
                   >
-                    Add Field
+                    Add check
                   </Button>
                 </div>
 
+                {/* How the checks combine, next to the checks. There are two of these
+                    and they are not interchangeable, so showing them together — and only
+                    when each is relevant — is the only way the difference reads. */}
+                {formData.fields.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                    <Select
+                      label="Combine compliance checks with"
+                      value={formData.evaluationLogic}
+                      onChange={(e) => setFormData({ ...formData, evaluationLogic: e.target.value })}
+                      options={[
+                        { value: 'AND', label: 'AND — every check must pass' },
+                        { value: 'OR', label: 'OR — any one check may pass' },
+                      ]}
+                    />
+                    {formData.fields.some((f) => f.role === 'applies_when') && (
+                      <Select
+                        label="Combine applies-when checks with"
+                        value={formData.appliesWhenLogic}
+                        onChange={(e) => setFormData({ ...formData, appliesWhenLogic: e.target.value })}
+                        options={[
+                          { value: 'AND', label: 'AND — every check must match' },
+                          { value: 'OR', label: 'OR — any one check may match' },
+                        ]}
+                      />
+                    )}
+                  </div>
+                )}
+
                 {formData.fields.length === 0 ? (
                   <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
-                    <p className="text-sm text-gray-500">No field mappings. Click "Add Field" to add one.</p>
+                    <p className="text-sm text-gray-500 mb-1">No field mappings yet.</p>
+                    <p className="text-xs text-gray-500">
+                      A control with no compliance checks reports Not Meeting for every application
+                      until an admin overrides it.
+                    </p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-2">
                     {formData.fields.map((field, index) => (
-                      <Card key={index} className="bg-gray-50">
-                        <CardContent className="pt-4">
-                          <div className="flex justify-between items-start mb-4">
-                            <h4 className="text-sm font-semibold text-gray-700">Field {index + 1}</h4>
-                            <div className="flex gap-2">
+                      <Card
+                        key={index}
+                        className={`bg-gray-50 ${dragOverIndex === index && dragIndex !== index ? 'ring-2 ring-blue-400' : ''} ${dragIndex === index ? 'opacity-50' : ''}`}
+                        draggable
+                        onDragStart={() => setDragIndex(index)}
+                        onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
+                        onDragOver={(e) => { e.preventDefault(); setDragOverIndex(index); }}
+                        onDrop={(e) => { e.preventDefault(); handleDropField(dragIndex, index); setDragIndex(null); setDragOverIndex(null); }}
+                      >
+                        <CardContent className="py-3">
+                          <div className="flex justify-between items-center mb-2">
+                            <h4 className="text-xs font-semibold text-gray-500 flex items-center gap-2">
+                              <span className="cursor-grab select-none text-gray-400" title="Drag to reorder">⠿</span>
+                              Check {index + 1}
+                            </h4>
+                            <div className="flex gap-1">
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -983,7 +1208,12 @@ export function PolicyControls() {
                               </Button>
                             </div>
                           </div>
-                          <div className="grid grid-cols-3 gap-4">
+                          {/* 12-col so the Field select gets the width it needs: at a
+                              third of the modal every option was truncated mid-word
+                              ("Protection Enforced for Ad"). Value sits on the same
+                              line rather than being pushed below by helper text. */}
+                          <div className="grid grid-cols-12 gap-3 items-start">
+                            <div className="col-span-3">
                             <Select
                               label="Field"
                               value={field.fieldPath}
@@ -995,34 +1225,78 @@ export function PolicyControls() {
                               ])}
                               placeholder="Select field"
                             />
+                            </div>
+                            {/* The explanation is a tooltip, not three lines of body
+                                text. Printed inline it doubled the row's height and
+                                pushed Value onto a line of its own; the one-line summary
+                                for the whole row lives under the grid instead. */}
+                            <div className="col-span-3">
+                            <Select
+                              label="Check type"
+                              value={field.role || 'compliance'}
+                              onChange={(e) => handleFieldChange(index, 'role', e.target.value)}
+                              options={[
+                                { value: 'compliance', label: 'Compliance' },
+                                { value: 'applies_when', label: 'Applies when' },
+                              ]}
+                              title={
+                                field.role === 'applies_when'
+                                  ? 'Decides whether this control applies. If this does not match, the control reports Not Applicable and is left out of the score entirely.'
+                                  : 'Decides whether the control is met. Failing this marks the application Not Meeting.'
+                              }
+                            />
+                            </div>
+                            {/* The field's own guidance used to print here AND again under
+                                Value — the same sentence twice in one row. It now appears
+                                once, below the row. This slot carries an operator-specific
+                                warning, and only when there is one. */}
+                            {/* 3 columns, not 2: at 2 the longest labels truncated to
+                                "Greater Tha" and "Within the la". Field gives up a
+                                column for it — its labels are shorter. */}
+                            <div className="col-span-3">
                             <Select
                               label="Operator"
                               value={field.operator}
                               onChange={(e) => handleFieldChange(index, 'operator', e.target.value)}
                               required
-                              options={getOperatorsForField(field.fieldPath, availableFields)}
-                              helperText={
-                                (() => {
-                                  const fieldMetadata = getFieldMetadata(field.fieldPath);
-                                  if (fieldMetadata?.validationRules?.description) {
-                                    return fieldMetadata.validationRules.description;
-                                  }
-                                  const fieldType = getFieldType(field.fieldPath);
-                                  if (fieldType === 'number') {
-                                    return 'Use comparison operators (≥, >, ≤, <) for numeric values';
-                                  } else if (fieldType === 'boolean') {
-                                    return 'Use equals/not equals for boolean values';
-                                  } else if (fieldType === 'date') {
-                                    return 'Use comparison operators for date values';
-                                  }
-                                  return '';
-                                })()
-                              }
+                              options={getOperatorsForField(field.fieldPath, availableFields, field.operator)}
                             />
+                            </div>
+                            <div className="col-span-3">
                             {(() => {
                               const fieldMetadata = getFieldMetadata(field.fieldPath);
-                              const valueType = fieldMetadata?.valueType || (getFieldType(field.fieldPath) === 'number' ? 'number' : getFieldType(field.fieldPath) === 'date' ? 'date' : 'text');
+                              // A rolling-window operator takes a COUNT OF DAYS, so the
+                              // input must be a number even on a date field — a date
+                              // picker cannot express "within the last 30 days".
+                              const dayCount = isDayCountOperator(field.operator);
+                              const valueType = dayCount
+                                ? 'days'
+                                : fieldMetadata?.valueType || (getFieldType(field.fieldPath) === 'number' ? 'number' : getFieldType(field.fieldPath) === 'date' ? 'date' : 'text');
                               const needsValue = field.operator !== 'exists' && field.operator !== 'not_exists';
+
+                              if (valueType === 'days') {
+                                return (
+                                  <Input
+                                    label="Value (days)"
+                                    type="number"
+                                    min="1"
+                                    value={field.value ?? ''}
+                                    onChange={(e) =>
+                                      handleFieldChange(
+                                        index,
+                                        'value',
+                                        e.target.value === '' ? null : Number(e.target.value),
+                                      )
+                                    }
+                                    required
+                                    helperText={
+                                      field.operator === 'within_days'
+                                        ? 'Met when the date is no more than this many days old.'
+                                        : 'Met when the date is more than this many days old.'
+                                    }
+                                  />
+                                );
+                              }
                               
                               // Dropdown for fields with valueOptions
                               if (valueType === 'dropdown' && fieldMetadata?.valueOptions && needsValue) {
@@ -1031,23 +1305,18 @@ export function PolicyControls() {
                                     label="Value"
                                     value={field.value !== null && field.value !== undefined ? String(field.value) : ''}
                                     onChange={(e) => {
-                                      let value = e.target.value;
-                                      if (value === '') {
-                                        value = null;
-                                      } else {
-                                        // Convert to number if field type is number
-                                        if (fieldMetadata.fieldType === 'number') {
-                                          value = Number(value);
-                                        }
-                                      }
-                                      handleFieldChange(index, 'value', value);
+                                      handleFieldChange(
+                                        index,
+                                        'value',
+                                        coerceSelectValue(e.target.value, fieldMetadata.fieldType),
+                                      );
                                     }}
                                     required={needsValue}
                                     options={[
                                       { value: '', label: 'Select value' },
                                       ...fieldMetadata.valueOptions
                                     ]}
-                                    helperText={fieldMetadata?.validationRules?.description || 'Select a value from the dropdown'}
+
                                   />
                                 );
                               }
@@ -1072,7 +1341,7 @@ export function PolicyControls() {
                                       { value: '', label: 'Select value' },
                                       ...fieldMetadata.valueOptions
                                     ]}
-                                    helperText={fieldMetadata?.validationRules?.description || 'Select true or false'}
+
                                   />
                                 );
                               }
@@ -1164,20 +1433,37 @@ export function PolicyControls() {
                                   helperText={
                                     !needsValue
                                       ? 'No value needed'
-                                      : fieldMetadata?.validationRules?.description
-                                      ? fieldMetadata.validationRules.description
-                                      : valueType === 'number'
-                                      ? `Enter a numeric value${fieldMetadata?.validationRules?.min !== undefined || fieldMetadata?.validationRules?.max !== undefined ? ` between ${fieldMetadata?.validationRules?.min || 'any'} and ${fieldMetadata?.validationRules?.max || 'any'}` : ''}`
-                                      : valueType === 'boolean'
-                                      ? 'Enter true/false or yes/no'
+                                      : fieldMetadata?.validationRules?.min !== undefined ||
+                                        fieldMetadata?.validationRules?.max !== undefined
+                                      ? `Between ${fieldMetadata?.validationRules?.min ?? 'any'} and ${fieldMetadata?.validationRules?.max ?? 'any'}`
                                       : field.operator === 'in' || field.operator === 'not_in'
-                                      ? 'Comma-separated values (e.g., "value1, value2")'
-                                      : 'Enter comparison value'
+                                      ? 'Comma-separated'
+                                      // Nothing useful to say. "Enter a numeric value"
+                                      // under an input labelled Value, on a row that
+                                      // already names the field and operator, is a line
+                                      // of noise per check.
+                                      : undefined
                                   }
                                 />
                               );
                             })()}
+                            </div>
                           </div>
+                          {/* One muted line per row carrying everything that used to be
+                              three separate helperText blocks: the operator warning
+                              first, because it is the actionable one, then the field's
+                              own guidance. Both are optional, so most rows stay quiet. */}
+                          {(staleDateWarning(field, getFieldType(field.fieldPath)) ||
+                            getFieldMetadata(field.fieldPath)?.validationRules?.description) && (
+                            <p className="mt-2 text-xs text-gray-500">
+                              {staleDateWarning(field, getFieldType(field.fieldPath)) && (
+                                <span className="text-amber-600">
+                                  {staleDateWarning(field, getFieldType(field.fieldPath))}{' '}
+                                </span>
+                              )}
+                              {getFieldMetadata(field.fieldPath)?.validationRules?.description}
+                            </p>
+                          )}
                         </CardContent>
                       </Card>
                     ))}
@@ -1186,34 +1472,8 @@ export function PolicyControls() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-6 mt-6">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setShowModal(false);
-                  setFormData({
-                    controlId: '',
-                    name: '',
-                    description: '',
-                    category: '',
-                    evaluationLogic: 'AND',
-                    isActive: true,
-                    displayOrder: 0,
-                    policyId: policies.length > 0 ? policies[0].id : '',
-                    fields: [],
-                  });
-                  setEditingControl(null);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" loading={saving}>
-                {editingControl ? 'Update' : 'Create'}
-              </Button>
-            </div>
           </form>
-        </Modal>
+        </Drawer>
       )}
 
       {/* Delete Confirmation Modal */}
@@ -1464,7 +1724,7 @@ export function PolicyControls() {
                     ) : (
                       policyFormData.conditionalConditions.map((condition, index) => {
                         const fieldMetadata = getFieldMetadata(condition.fieldPath);
-                        const availableOperators = getOperatorsForField(condition.fieldPath, availableFields);
+                        const availableOperators = getOperatorsForField(condition.fieldPath, availableFields, condition.operator);
                         const needsValue = condition.operator !== 'exists' && condition.operator !== 'not_exists';
                         
                         return (
@@ -1585,12 +1845,10 @@ export function PolicyControls() {
                                         value={condition.value !== null && condition.value !== undefined ? String(condition.value) : ''}
                                         onChange={(e) => {
                                           const newConditions = [...policyFormData.conditionalConditions];
-                                          let value = e.target.value;
-                                          if (value === '') {
-                                            value = null;
-                                          } else if (fieldMetadata.fieldType === 'number') {
-                                            value = Number(value);
-                                          }
+                                          const value = coerceSelectValue(
+                                            e.target.value,
+                                            fieldMetadata.fieldType,
+                                          );
                                           newConditions[index] = { ...newConditions[index], value };
                                           setPolicyFormData({ ...policyFormData, conditionalConditions: newConditions });
                                         }}

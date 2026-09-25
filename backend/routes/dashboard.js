@@ -140,10 +140,33 @@ async function summarizeCompliance(applications) {
     acc.applicationsWithPolicies += result.summary.total_policies > 0 ? 1 : 0;
     acc.totalControls += result.summary.total;
     acc.meetingControls += result.summary.meeting;
+    acc.attestedControls += result.summary.attested || 0;
+    acc.verificationRequiredControls += result.summary.verification_required || 0;
+    acc.notApplicableControls += result.summary.not_applicable || 0;
     acc.compliantApplications += result.summary.all_policies_compliant ? 1 : 0;
     return acc;
-  }, { applicationsWithPolicies: 0, totalControls: 0, meetingControls: 0, compliantApplications: 0 });
-  summary.compliancePercentage = percentage(summary.meetingControls, summary.totalControls);
+  }, {
+    applicationsWithPolicies: 0,
+    totalControls: 0,
+    meetingControls: 0,
+    attestedControls: 0,
+    verificationRequiredControls: 0,
+    notApplicableControls: 0,
+    compliantApplications: 0,
+  });
+  // A control scoped out of an application must leave the denominator, or scoping one
+  // out still drags the figure down. Attested controls are claims of compliance and so
+  // count toward adherence; measuredCompliancePercentage reports only what was verified,
+  // keeping "how much of this is self-reported?" answerable.
+  summary.applicableControls = summary.totalControls - summary.notApplicableControls;
+  summary.compliancePercentage = percentage(
+    summary.meetingControls + summary.attestedControls,
+    summary.applicableControls,
+  );
+  summary.measuredCompliancePercentage = percentage(
+    summary.meetingControls,
+    summary.applicableControls,
+  );
   summary.status = summary.totalControls ? 'available' : 'needs_configuration';
   return summary;
 }
@@ -259,6 +282,7 @@ router.get('/executive', requireAuth, async (req, res) => {
       summary.notMeetingControls += result.summary.not_meeting;
       summary.verificationRequiredControls += result.summary.verification_required || 0;
       summary.notApplicableControls += result.summary.not_applicable || 0;
+      summary.attestedControls += result.summary.attested || 0;
       summary.compliantApplications += result.summary.all_policies_compliant ? 1 : 0;
       summary.policiesEvaluated += result.summary.total_policies;
       summary.compliantPolicies += result.summary.compliant_policies;
@@ -277,6 +301,7 @@ router.get('/executive', requireAuth, async (req, res) => {
       notMeetingControls: 0,
       verificationRequiredControls: 0,
       notApplicableControls: 0,
+      attestedControls: 0,
       compliantApplications: 0,
       policiesEvaluated: 0,
       compliantPolicies: 0,
@@ -285,8 +310,14 @@ router.get('/executive', requireAuth, async (req, res) => {
     });
     compliance.policyCount = compliance.policyNames.size;
     delete compliance.policyNames;
-    compliance.compliancePercentage = compliance.totalControls
-      ? Math.round((compliance.meetingControls / compliance.totalControls) * 100)
+    // See the note in summarizeCompliance: not_applicable leaves the denominator and
+    // attested counts toward adherence but not toward what was measured.
+    compliance.applicableControls = compliance.totalControls - compliance.notApplicableControls;
+    compliance.compliancePercentage = compliance.applicableControls
+      ? Math.round(((compliance.meetingControls + compliance.attestedControls) / compliance.applicableControls) * 100)
+      : null;
+    compliance.measuredCompliancePercentage = compliance.applicableControls
+      ? Math.round((compliance.meetingControls / compliance.applicableControls) * 100)
       : null;
     compliance.status = compliance.totalControls ? 'available' : 'needs_configuration';
     // Evidence is intentionally null until Atlas has an evidence model and

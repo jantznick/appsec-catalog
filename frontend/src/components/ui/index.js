@@ -8,6 +8,7 @@ export { Radio, RadioGroup } from './Radio.jsx';
 export { Card, CardHeader, CardTitle, CardContent } from './Card.jsx';
 export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './Table.jsx';
 export { Modal } from './Modal.jsx';
+export { Drawer } from './Drawer.jsx';
 export { LoadingSpinner } from './Loading.jsx';
 export { Alert } from './Alert.jsx';
 export { toast } from './Toast.jsx';

@@ -4,8 +4,15 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { requireAdmin, requireAuth } from '../middleware/auth.js';
 import {
+  APPLICATION_METADATA_FIELDS,
+  VERSIONED_METADATA_FIELDS,
+  APPROVABLE_METADATA_FIELDS,
+  SPLITTABLE_METADATA_FIELDS,
+} from '../services/applicationFields.js';
+import {
   getSensitiveFieldsConfig,
   getToolQualityConfig,
+  TOOL_CATEGORIES,
   saveSensitiveFieldsConfig,
   saveToolQualityConfig,
 } from '../services/scoringConfig.js';
@@ -39,7 +46,12 @@ router.get('/integration-levels', (req, res) => {
 // Admin: Get editable tool quality scoring config
 router.get('/tool-quality', requireAdmin, (req, res) => {
   try {
-    res.json(getToolQualityConfig());
+    // `categories` is served alongside the config because the editor used to carry its
+    // own copy of the list. A category the backend accepts but the checkboxes do not
+    // offer cannot be assigned to any tool, and every tool then scores zero in it —
+    // a silent failure, since nothing errors and the score simply stops rewarding the
+    // field. Serving it means the screen cannot fall behind.
+    res.json({ ...getToolQualityConfig(), categories: TOOL_CATEGORIES });
   } catch (error) {
     console.error('Error loading tool quality config:', error);
     res.status(500).json({ error: 'Failed to load tool quality config' });
@@ -79,6 +91,32 @@ router.put('/sensitive-fields', requireAdmin, async (req, res) => {
       error: 'Failed to save sensitive fields config',
       message: error.message,
     });
+  }
+});
+
+/**
+ * The application metadata field registry, served so the frontend stops hand-mirroring
+ * it (read-only; any authenticated user).
+ *
+ * services/applicationFields.js became the single source of truth on the backend, but
+ * the frontend still carried its own copies — two inside VersionHistory.jsx alone, plus
+ * PendingApprovals.jsx and SplitApplicationModal.jsx. Every field added since has had to
+ * be pasted into each, and each paste that was missed is a field that silently vanishes
+ * from version history, from an approval diff, or from a split.
+ *
+ * The derived sets are included so a caller never has to re-derive them from the flags.
+ */
+router.get('/application-fields', requireAuth, (req, res) => {
+  try {
+    res.json({
+      fields: APPLICATION_METADATA_FIELDS,
+      versioned: VERSIONED_METADATA_FIELDS,
+      approvable: APPROVABLE_METADATA_FIELDS,
+      splittable: SPLITTABLE_METADATA_FIELDS,
+    });
+  } catch (error) {
+    console.error('Error serving application field registry:', error);
+    res.status(500).json({ error: 'Failed to load application fields' });
   }
 });
 
@@ -350,6 +388,18 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         }
       },
       {
+        path: 'iacContainerScanNA',
+        label: 'IaC / Container Not Applicable',
+        category: 'Security Tools',
+        fieldType: 'boolean',
+        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
+        valueType: 'dropdown',
+        valueOptions: [{ value: true, label: 'Not applicable' }, { value: false, label: 'Applies' }],
+        validationRules: {
+          description: 'Use as an applies_when check so 4.6.14 reports not_applicable for an application with no IaC or containers, rather than failing it.'
+        }
+      },
+      {
         path: 'lastSecretsScanDate',
         label: 'Last Secrets Scan Date',
         category: 'Security Tools',
@@ -357,7 +407,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Use within_days for a rolling recency window (value = number of days).'
+          description: 'Use "Within the last N days" for a rolling window (value = a number of days, e.g. 30). The ≥ / > / ≤ / < operators compare against one fixed calendar date, so a control that passes today keeps passing forever.'
         }
       },
       {
@@ -368,7 +418,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Use within_days for a rolling recency window (value = number of days).'
+          description: 'Use "Within the last N days" for a rolling window (value = a number of days, e.g. 30). The ≥ / > / ≤ / < operators compare against one fixed calendar date, so a control that passes today keeps passing forever.'
         }
       },
       // Security Tools - Dates (may need cross-field comparisons later)
@@ -380,7 +430,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Use within_days for a rolling recency window (value = number of days, e.g. 30). gte/lte compare against a fixed date, which goes stale.'
+          description: 'Use "Within the last N days" for a rolling window (value = a number of days, e.g. 30). The ≥ / > / ≤ / < operators compare against one fixed calendar date, so a control that passes today keeps passing forever.'
         }
       },
       { 
@@ -391,7 +441,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Use within_days for a rolling recency window (value = number of days, e.g. 30). gte/lte compare against a fixed date, which goes stale.'
+          description: 'Use "Within the last N days" for a rolling window (value = a number of days, e.g. 30). The ≥ / > / ≤ / < operators compare against one fixed calendar date, so a control that passes today keeps passing forever.'
         }
       },
       { 
@@ -402,7 +452,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Use within_days for a rolling recency window (value = number of days, e.g. 30). gte/lte compare against a fixed date, which goes stale.'
+          description: 'Use "Within the last N days" for a rolling window (value = a number of days, e.g. 30). The ≥ / > / ≤ / < operators compare against one fixed calendar date, so a control that passes today keeps passing forever.'
         }
       },
       
@@ -516,7 +566,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Use within_days for a rolling review window (value = number of days).'
+          description: 'Use "Within the last N days" for a rolling window (value = a number of days, e.g. 30). The ≥ / > / ≤ / < operators compare against one fixed calendar date, so a control that passes today keeps passing forever.'
         }
       },
 
@@ -570,7 +620,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals', 'gte', 'gt', 'lte', 'lt'],
         valueType: 'number',
         validationRules: {
-          description: 'Approvals required to merge into the default branch. gte 1 is the usual bar for segregation of duties.'
+          description: 'Approvals required to merge into the default branch. \u2265 1 is the usual bar for segregation of duties.'
         }
       },
       {
@@ -641,7 +691,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'Use within_days to require the evidence itself be recent.'
+          description: 'Use "Within the last N days" to require the evidence itself be recent — this records when Orbit last read the setting, not when anyone changed it. The ≥ / > / ≤ / < operators compare against one fixed calendar date and go stale.'
         }
       },
       {
@@ -691,7 +741,7 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'gte', 'gt', 'lte', 'lt', 'within_days', 'older_than_days'],
         valueType: 'date',
         validationRules: {
-          description: 'For "reviewed at least every six (6) months" use within_days with value 183.'
+          description: 'For "reviewed at least every six (6) months" use Within the last N days with 183.'
         }
       },
       { 

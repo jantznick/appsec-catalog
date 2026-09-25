@@ -14,6 +14,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { calculateCompleteness } from './completeness.js';
+
 import {
   KNOWLEDGE_SCORING_FIELDS,
   SCORING_INCLUDE,
@@ -22,13 +24,12 @@ import {
   calculateToolUsageScore,
   detectDataClassifications,
   getKnowledgeSharingFieldBreakdown,
-  isKnowledgeFieldFilledForScore,
   isMetadataValueNA,
   isSecurityToolCategoryNotApplicable,
   normalizeFacing,
   resolveCategoryToolInputs,
 } from './scoring.js';
-import { getToolQualityConfig } from './scoringConfig.js';
+import { getToolQualityConfig, TOOL_CATEGORIES } from './scoringConfig.js';
 
 /**
  * A fully-populated application using *unmanaged* tools, so each test can vary one
@@ -47,6 +48,13 @@ function app(overrides = {}) {
     authProfiles: 'OIDC',
     dataTypes: 'PII',
     facing: 'External',
+    // Joined the knowledge-score denominator when it was consolidated onto the one
+    // completeness set: the score now asks the App Data tab's thirteen questions,
+    // not a hand-picked eight of them.
+    criticalAspects: 'Card capture',
+    businessCriticality: 4,
+    currentVersion: '3.2.1',
+    deploymentType: 'Daily - Automated CI/CD Pipeline',
     sastTool: 'Example SAST',
     sastIntegrationLevel: 4,
     sastIncludesSca: false,
@@ -81,12 +89,16 @@ function managedToolFor(category) {
   return match ? match[0] : null;
 }
 
-const MANAGED = {
-  sast: managedToolFor('sast'),
-  sca: managedToolFor('sca'),
-  dast: managedToolFor('dast'),
-  appFirewall: managedToolFor('appFirewall'),
-};
+/**
+ * Derived from TOOL_CATEGORIES rather than listed, so a new scored category cannot be
+ * quietly left out of "full marks". It was listed, and when secrets and IaC/container
+ * scanning became scored categories this object still named four — so managedApp()
+ * kept claiming to be fully tooled while scoring 36/50, and the assertion below failed
+ * with a bare number instead of saying which categories had no managed tool.
+ */
+const MANAGED = Object.fromEntries(
+  TOOL_CATEGORIES.map((category) => [category, managedToolFor(category)]),
+);
 
 /** True when the config still defines a fully-weighted managed tool for every category. */
 const HAS_FULL_MANAGED_SET = Object.values(MANAGED).every(Boolean);
@@ -102,14 +114,19 @@ const MISSING_MANAGED = `no fully-weighted managed tool configured for: ${Object
  */
 function managedApp(overrides = {}) {
   const now = new Date();
+  // One `${category}Tool` per scored category, so adding a category to the config
+  // extends this fixture instead of silently leaving a hole in it.
+  const tools = Object.fromEntries(
+    TOOL_CATEGORIES.map((category) => [`${category}Tool`, MANAGED[category]]),
+  );
   return app({
-    sastTool: MANAGED.sast,
-    scaTool: MANAGED.sca,
-    dastTool: MANAGED.dast,
-    appFirewallTool: MANAGED.appFirewall,
+    ...tools,
     lastSastScanDate: now,
     lastDastScanDate: now,
     lastScaScanDate: now,
+    lastSecretsScanDate: now,
+    lastIacContainerScanDate: now,
+    iacContainerScanNA: false,
     ...overrides,
   });
 }
@@ -224,6 +241,52 @@ describe('isMetadataValueNA', () => {
   });
 });
 
+describe('one completeness number', () => {
+  /**
+   * The requirement this consolidation exists to satisfy: there is a single
+   * calculateCompleteness, and it drives the 0-100 score as well as the percentage
+   * shown on the dashboard and the applications table.
+   *
+   * Before, the score asked eight questions and the percentage asked twenty-seven, so
+   * an application could be "100% complete" and still lose knowledge points, or score
+   * full marks while the same screen called it 40% complete.
+   */
+  it('gives the score component and the displayed percentage the same fraction', () => {
+    const partials = [
+      app(),
+      app({ devTeamContact: '', criticalAspects: null, currentVersion: null }),
+      app({ description: '', language: '', framework: '', serverEnvironment: '' }),
+      app({ framework: 'NA', dataTypes: 'NA' }),
+      { name: 'Bare' },
+    ];
+    for (const a of partials) {
+      const { totalScorable, fieldsFilled } = getKnowledgeSharingFieldBreakdown(a);
+      const { filled, total } = calculateCompleteness(a);
+      assert.equal(totalScorable, total, JSON.stringify(a));
+      assert.equal(fieldsFilled, filled, JSON.stringify(a));
+    }
+  });
+
+  it('awards the full 40 completeness points exactly when completeness is 100%', () => {
+    const complete = app();
+    assert.equal(calculateCompleteness(complete).percentage, 100);
+    // 40 of the 50 knowledge points are completeness; the other 10 are review freshness,
+    // which this fixture does not set.
+    assert.equal(Math.round(calculateKnowledgeSharingScore(complete)), 40);
+  });
+
+  it('scores security tooling outside completeness', () => {
+    // Blanking every tool must not change the knowledge score, because tooling is the
+    // Security tab and completeness is the App Data tab.
+    const withTools = calculateKnowledgeSharingScore(app());
+    const without = calculateKnowledgeSharingScore(
+      app({ sastTool: '', sastIntegrationLevel: null, dastTool: '', dastIntegrationLevel: null,
+            scaTool: '', scaIntegrationLevel: null, appFirewallTool: '', apiSchema: null }),
+    );
+    assert.equal(withTools, without);
+  });
+});
+
 describe('getKnowledgeSharingFieldBreakdown', () => {
   it('counts every scoring field as filled for a complete application', () => {
     const { totalScorable, fieldsFilled, missingFields } = getKnowledgeSharingFieldBreakdown(app());
@@ -245,7 +308,9 @@ describe('getKnowledgeSharingFieldBreakdown', () => {
     const { missingFields } = getKnowledgeSharingFieldBreakdown(
       app({ authProfiles: '', dataTypes: null }),
     );
-    assert.deepEqual(missingFields.sort(), ['Authentication Profiles', 'Data Types']);
+    // Labels come from the field registry now, not a second hand-typed list, so they
+    // read the same here as they do on the App Data tab.
+    assert.deepEqual(missingFields.sort(), ['Auth Profiles', 'Data Types']);
   });
 
   // This is the scoring half of fixes doc A4: answering "No" to the special-access and
@@ -259,21 +324,16 @@ describe('getKnowledgeSharingFieldBreakdown', () => {
   });
 });
 
-describe('isKnowledgeFieldFilledForScore', () => {
-  it('treats empty and NA as unfilled', () => {
-    assert.equal(isKnowledgeFieldFilledForScore(''), false);
-    assert.equal(isKnowledgeFieldFilledForScore('   '), false);
-    assert.equal(isKnowledgeFieldFilledForScore('NA'), false);
-    assert.equal(isKnowledgeFieldFilledForScore(null), false);
-    assert.equal(isKnowledgeFieldFilledForScore(undefined), false);
-  });
-
-  it('treats real content and truthy non-strings as filled', () => {
-    assert.equal(isKnowledgeFieldFilledForScore('OIDC'), true);
-    assert.equal(isKnowledgeFieldFilledForScore(3), true);
-    assert.equal(isKnowledgeFieldFilledForScore(0), false);
-  });
-});
+/**
+ * `isKnowledgeFieldFilledForScore` is gone: it was a third definition of "filled",
+ * used only by the breakdown loop this consolidation replaced. countFieldSet's
+ * `trimmed` rule is the one definition now, and completeness.test.js covers it.
+ *
+ * The one semantic difference, recorded so it is not rediscovered as a bug: the old
+ * helper treated the number 0 as unfilled. countFieldSet treats a set
+ * businessCriticality of 0 as answered. businessCriticality is validated 1-5 on every
+ * write path, so no row can carry 0, and no other metadata field is numeric.
+ */
 
 describe('isSecurityToolCategoryNotApplicable', () => {
   it('honours the N/A booleans for API security and app firewall', () => {
@@ -366,6 +426,8 @@ describe('calculateToolUsageScore', () => {
       sastTool: null, sastIntegrationLevel: null,
       dastTool: null, dastIntegrationLevel: null,
       scaTool: null, scaIntegrationLevel: null,
+      secretsScanTool: null, secretsScanIntegrationLevel: null, sastIncludesSecrets: false,
+      iacContainerScanTool: null, iacContainerScanIntegrationLevel: null, iacContainerScanNA: null,
       appFirewallTool: null, appFirewallIntegrationLevel: null,
       apiSchema: null,
     });

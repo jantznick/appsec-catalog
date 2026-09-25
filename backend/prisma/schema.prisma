@@ -355,6 +355,16 @@ model Application {
   iacContainerScanTool            String?
   iacContainerScanIntegrationLevel Int?
 
+  // Not every application has infrastructure-as-code or containers, so 4.6.14 needs a
+  // way to say "does not apply" rather than failing forever.
+  //
+  // Deliberately WITHOUT @default(false), unlike apiSecurityNA and appFirewallNA below.
+  // Their defaults mean they are never null on a real row, so they always count as
+  // filled — two guaranteed points of completeness on every application, recorded as
+  // wart C2 in APP_DATA_FIXES_PLAN.md. Adding a third would extend a known defect.
+  // Null here means "not answered" and counts as unfilled, which is the honest reading.
+  iacContainerScanNA Boolean?
+
   apiSecurityNA  Boolean? @default(false)
   appFirewallNA  Boolean? @default(false)
 
@@ -983,6 +993,17 @@ model ApplicationVersion {
   appFirewallIntegrationLevel Int?
   apiSecurityTool             String?
   apiSecurityIntegrationLevel Int?
+  // Phase 6a secrets and IaC/container fields. These are versioned:true in the
+  // registry, so pickVersionedMetadata writes them into every snapshot — without the
+  // columns the create throws, and createApplicationVersion swallows the error and
+  // returns null, so version history and the pending-approval queue silently stop
+  // working rather than failing loudly.
+  secretsScanTool                  String?
+  secretsScanIntegrationLevel      Int?
+  sastIncludesSecrets              Boolean?
+  iacContainerScanTool             String?
+  iacContainerScanIntegrationLevel Int?
+  iacContainerScanNA          Boolean?
   apiSecurityNA               Boolean?
   appFirewallNA               Boolean?
   currentVersion              String?
@@ -991,6 +1012,8 @@ model ApplicationVersion {
   lastDastScanDate            DateTime?
   lastSastScanDate            DateTime?
   lastScaScanDate             DateTime?
+  lastSecretsScanDate         DateTime?
+  lastIacContainerScanDate    DateTime?
   interfaces                  String? // JSON array
 
   @@index([applicationId])

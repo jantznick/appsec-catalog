@@ -12,7 +12,6 @@ import { Modal } from '../components/ui/Modal.jsx';
 import { BulkImportApplicationsModal } from '../components/applications/BulkImportApplicationsModal.jsx';
 import useAuthStore from '../store/authStore.js';
 import useScopeStore from '../store/scopeStore.js';
-import { calculateCompleteness } from '../utils/applicationCompleteness.js';
 import { copyToClipboard, isClipboardAvailable } from '../utils/clipboard.js';
 
 export function Applications() {
@@ -294,17 +293,22 @@ export function Applications() {
       },
       enableSorting: isAdmin(),
     },
-    {
-      accessorKey: 'owner',
-      header: 'Owner',
-      cell: ({ row }) => row.original.owner || '-',
-    },
+    // No people column. `owner` was empty on all 91 applications — no form sets it,
+    // and ApplicationNew strips it explicitly ("use devTeamContact instead") — so it
+    // was a screenful of dashes. Replacing it with devTeamContact was worse: it is
+    // free text, up to 59 characters in the current data, and an uncapped cell in an
+    // auto-layout table sizes to its content. It measured 459px and pushed the table
+    // to 1471px inside a 1166px wrapper, shoving Score and Actions out of view.
+    // Capping it would truncate the one useful thing in it. The contact belongs on
+    // the App Data tab, where it has room; the table is for scanning and sorting.
     {
       accessorKey: 'status',
       header: 'Status',
       cell: ({ row }) => {
         const app = row.original;
-        const completeness = calculateCompleteness(app);
+        // Served by GET /api/applications. It used to be recomputed here from a copy
+        // of the backend's field list that had to be kept in step by hand.
+        const completeness = app.completeness;
         return (
           <div className="flex items-center gap-2">
             <span className={`px-2 py-1 text-xs font-medium rounded ${
@@ -316,9 +320,14 @@ export function Applications() {
             }`}>
               {app.status || 'onboarded'}
             </span>
-            <span className="text-xs text-gray-500">
-              {completeness.filled}/{completeness.total} ({completeness.percentage}%)
-            </span>
+            {completeness && (
+              <span
+                className="text-xs text-gray-500"
+                title="Application metadata answered, from the App Data tab. Security tooling is not counted."
+              >
+                {completeness.filled}/{completeness.total} ({completeness.percentage}%)
+              </span>
+            )}
           </div>
         );
       },
@@ -382,19 +391,22 @@ export function Applications() {
       header: 'Actions',
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          <Button
-            variant="danger"
-            size="sm"
+          {/* A quiet red text button, not a solid red block. Ten filled Delete
+              buttons made the most destructive action the most prominent thing on
+              the page, louder than the application names. Matches the treatment on
+              Policies & Controls. The confirmation modal is unchanged. */}
+          <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               setApplicationToDelete(row.original);
               setDeleteModalOpen(true);
               setDeleteConfirmText('');
             }}
-            className="text-xs"
+            className="rounded px-2 py-1 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
           >
             Delete
-          </Button>
+          </button>
         </div>
       ),
     }] : []),
@@ -475,19 +487,18 @@ export function Applications() {
         </div>
       </div>
 
-      {/* Admin Filters */}
+      {/* Admin Filters.
+          Was a full Card with a "Filters" heading wrapping one row of four controls —
+          card padding, header padding and a title, to hold four labelled inputs that
+          say what they are. Now just the row. */}
       {isAdmin() && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Filters</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <Input
                 label="Search"
                 value={globalFilter}
                 onChange={(e) => setGlobalFilter(e.target.value)}
-                placeholder="Search by name, description, or owner..."
+                placeholder="Search by name or description..."
               />
               <Select
                 label="Division"
@@ -519,8 +530,7 @@ export function Applications() {
                 ]}
               />
             </div>
-          </CardContent>
-        </Card>
+        </div>
       )}
 
       {/* Applications Table */}

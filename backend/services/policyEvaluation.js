@@ -256,3 +256,57 @@ export const IMPLEMENTED_OPERATORS = Object.freeze([
 
 /** Operators whose `value` is a count of days, so it must be a positive number. */
 export const DAY_COUNT_OPERATORS = Object.freeze(['within_days', 'older_than_days']);
+
+/**
+ * Operators whose entire purpose is to test whether a value is present. They must keep
+ * their own answer on a nullish field, because that answer IS the question being asked.
+ */
+const PRESENCE_OPERATORS = new Set(['exists', 'not_exists']);
+
+/**
+ * Evaluate one `applies_when` check.
+ *
+ * WHY THIS IS NOT JUST evaluateFieldCheck
+ *
+ * A scope check decides whether a control applies at all. Failing one means
+ * `not_applicable`: the control is excused and leaves the compliance denominator
+ * entirely. So on a scope check, "false" is the PERMISSIVE answer — the opposite of
+ * what it means on a compliance check.
+ *
+ * Every comparison operator returns false for a nullish field, deliberately: a value
+ * nobody has supplied cannot satisfy an assertion. Correct for compliance, where it
+ * fails closed. Backwards for scope, where it excuses the control on exactly the
+ * applications we know least about.
+ *
+ * That bit us concretely. `iacContainerScanNA not_equals true` reads as "applies unless
+ * the team said it does not", and because every application had that field null, the
+ * check returned false for all 91 and the control excused itself for the entire
+ * portfolio — silently, reported as a deliberate Not Applicable.
+ *
+ * The rule here: an unanswered field cannot take a control OUT of scope. Unknown means
+ * the control still applies, which is the same "we do not know, so flag it" principle
+ * the rest of the product follows.
+ *
+ * EXPRESSIVENESS IS PRESERVED — this narrows nothing:
+ *
+ *   "applies only when the field is set"        -> `exists`, which still answers false
+ *   "applies only when it is definitely X"      -> `exists` AND `equals X`
+ *   "applies unless explicitly X"               -> `not_equals X`, which now works
+ *   "applies when unanswered"                   -> `not_exists`, unchanged
+ *
+ * Before this, the third of those was inexpressible in one check and had to be written
+ * as `not_exists OR equals <other>` — a workaround already load-bearing in 4.6.10,
+ * 4.6.11 and 4.6.14, with the reason recorded nowhere. Those keep working: they now
+ * reach the same answer by a shorter route.
+ *
+ * @param {Object} fieldCheck PolicyControlField with role 'applies_when'
+ * @param {any} fieldValue value read off the application
+ * @returns {boolean} true when this check does not exclude the application
+ */
+export function evaluateScopeCheck(fieldCheck, fieldValue) {
+  const isNullish = fieldValue === null || fieldValue === undefined;
+  if (isNullish && !PRESENCE_OPERATORS.has(fieldCheck.operator)) {
+    return true;
+  }
+  return evaluateFieldCheck(fieldCheck, fieldValue);
+}

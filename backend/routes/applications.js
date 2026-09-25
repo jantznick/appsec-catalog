@@ -12,6 +12,7 @@ import {
   resolveCategoryToolInputs,
 } from '../services/scoring.js';
 import { evaluateAllControls } from '../services/policy.js';
+import { calculateCompleteness } from '../services/completeness.js';
 import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { getApexDomain } from '../utils/domainApex.js';
 import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
@@ -249,6 +250,7 @@ function buildBulkImportRow(app, companyId) {
     sastIncludesSecrets: app.sastIncludesSecrets === true || app.sastIncludesSecrets === 'true',
     iacContainerScanTool: app.iacContainerScanTool?.trim() || null,
     iacContainerScanIntegrationLevel: app.iacContainerScanIntegrationLevel ? parseInt(app.iacContainerScanIntegrationLevel) : null,
+    iacContainerScanNA: app.iacContainerScanNA === true || app.iacContainerScanNA === 'true',
     apiSecurityIntegrationLevel: app.apiSecurityIntegrationLevel
       ? parseInt(app.apiSecurityIntegrationLevel)
       : null,
@@ -485,7 +487,16 @@ router.get('/', requireAuth, async (req, res) => {
       },
     });
 
-    res.json(applications);
+    // Completeness is computed here rather than in the browser. The Applications table
+    // used to call its own copy of calculateCompleteness, which is how the frontend
+    // ended up with a second definition that had to be kept in step by hand. One
+    // implementation, one answer, served with the row.
+    res.json(
+      applications.map((application) => ({
+        ...application,
+        completeness: calculateCompleteness(application),
+      })),
+    );
   } catch (error) {
     console.error('Error fetching applications:', error);
     res.status(500).json({ error: 'Failed to fetch applications' });
@@ -612,6 +623,7 @@ router.put('/public/:id', async (req, res) => {
       sastIncludesSecrets,
       iacContainerScanTool,
       iacContainerScanIntegrationLevel,
+      iacContainerScanNA,
       lastSecretsScanDate,
       lastIacContainerScanDate,
       apiSecurityNA,
@@ -730,6 +742,18 @@ router.put('/public/:id', async (req, res) => {
     // this form does not ask for it, so leave it alone.
     const submittedNotes = additionalNotes?.trim() || null;
 
+    /**
+     * Read a checkbox the form posts, falling back to the stored value only when the
+     * form did not send the field at all.
+     *
+     * The previous form was `posted === true || posted === 'true' || existing`, which
+     * cannot express "unchecked": once the stored value was true, the OR short-circuited
+     * to true no matter what the submitter posted. Every one of these is a checkbox the
+     * technical form now renders, so unchecking it has to stick.
+     */
+    const submittedFlag = (posted, current) =>
+      posted === undefined ? current : posted === true || posted === 'true';
+
     // Instead of updating the application directly, create a pending version
     // Merge new data with existing data to create a complete snapshot
     const versionData = {
@@ -753,10 +777,7 @@ router.put('/public/:id', async (req, res) => {
       additionalNotes: submittedNotes || existing.additionalNotes,
       sastTool: sastTool?.trim() || existing.sastTool,
       sastIntegrationLevel: sastIntegrationLevel ? parseInt(sastIntegrationLevel) : existing.sastIntegrationLevel,
-      sastIncludesSca:
-        sastIncludesSca === undefined
-          ? existing.sastIncludesSca
-          : sastIncludesSca === true || sastIncludesSca === 'true',
+      sastIncludesSca: submittedFlag(sastIncludesSca, existing.sastIncludesSca),
       dastTool: dastTool?.trim() || existing.dastTool,
       dastIntegrationLevel: dastIntegrationLevel ? parseInt(dastIntegrationLevel) : existing.dastIntegrationLevel,
       scaTool: scaTool?.trim() || existing.scaTool,
@@ -769,14 +790,14 @@ router.put('/public/:id', async (req, res) => {
       apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : existing.apiSecurityIntegrationLevel,
       secretsScanTool: secretsScanTool?.trim() || existing.secretsScanTool,
       secretsScanIntegrationLevel: secretsScanIntegrationLevel ? parseInt(secretsScanIntegrationLevel) : existing.secretsScanIntegrationLevel,
-      sastIncludesSecrets: sastIncludesSecrets === true || sastIncludesSecrets === 'true' || existing.sastIncludesSecrets,
+      sastIncludesSecrets: submittedFlag(sastIncludesSecrets, existing.sastIncludesSecrets),
       iacContainerScanTool: iacContainerScanTool?.trim() || existing.iacContainerScanTool,
       iacContainerScanIntegrationLevel: iacContainerScanIntegrationLevel ? parseInt(iacContainerScanIntegrationLevel) : existing.iacContainerScanIntegrationLevel,
+      iacContainerScanNA: submittedFlag(iacContainerScanNA, existing.iacContainerScanNA),
       lastSecretsScanDate: lastSecretsScanDate ? new Date(lastSecretsScanDate) : existing.lastSecretsScanDate,
       lastIacContainerScanDate: lastIacContainerScanDate ? new Date(lastIacContainerScanDate) : existing.lastIacContainerScanDate,
-      apiSecurityNA: apiSecurityNA === true || apiSecurityNA === 'true' || existing.apiSecurityNA,
-      appFirewallNA:
-        appFirewallNA === true || appFirewallNA === 'true' || existing.appFirewallNA,
+      apiSecurityNA: submittedFlag(apiSecurityNA, existing.apiSecurityNA),
+      appFirewallNA: submittedFlag(appFirewallNA, existing.appFirewallNA),
       currentVersion: existing.currentVersion,
       deploymentEnvironment: existing.deploymentEnvironment,
       gitBranch: existing.gitBranch,
@@ -833,6 +854,7 @@ router.put('/public/:id', async (req, res) => {
         sastIncludesSecrets: 'SAST includes secrets scanning',
         iacContainerScanTool: 'IaC / Container Scanning Tool',
         iacContainerScanIntegrationLevel: 'IaC / Container Integration Level',
+        iacContainerScanNA: 'IaC / Container N/A',
         appFirewallTool: 'App Firewall Tool',
         appFirewallIntegrationLevel: 'App Firewall Integration Level',
         apiSecurityTool: 'Legacy API Security Tool',
@@ -2190,7 +2212,12 @@ router.get('/:id', requireAuth, async (req, res) => {
       }
     }
 
-    res.json(application);
+    // Completeness, including WHICH fields are missing, so the App Data tab can mark
+    // them. Without this the detail page knows the score says "9 of 12 fields filled"
+    // and has no way to say which three — the reader had to infer it from the Quick
+    // Wins card. Computed after the deployment fallbacks above, so a value inherited
+    // from the latest deployment counts as filled, exactly as it does for the score.
+    res.json({ ...application, completeness: calculateCompleteness(application) });
   } catch (error) {
     console.error('Error fetching application:', error);
     res.status(500).json({ error: 'Failed to fetch application' });
@@ -2311,6 +2338,7 @@ router.post('/', requireAuth, async (req, res) => {
       sastIncludesSecrets,
       iacContainerScanTool,
       iacContainerScanIntegrationLevel,
+      iacContainerScanNA,
       lastSecretsScanDate,
       lastIacContainerScanDate,
       apiSecurityNA,
@@ -2438,6 +2466,7 @@ router.post('/', requireAuth, async (req, res) => {
         sastIncludesSecrets: sastIncludesSecrets === true || sastIncludesSecrets === 'true',
         iacContainerScanTool: iacContainerScanTool?.trim() || null,
         iacContainerScanIntegrationLevel: iacContainerScanIntegrationLevel ? parseInt(iacContainerScanIntegrationLevel) : null,
+        iacContainerScanNA: iacContainerScanNA === true || iacContainerScanNA === 'true',
         lastSecretsScanDate: lastSecretsScanDate ? new Date(lastSecretsScanDate) : null,
         lastIacContainerScanDate: lastIacContainerScanDate ? new Date(lastIacContainerScanDate) : null,
         apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null,
@@ -2526,6 +2555,7 @@ router.put('/:id', requireAuth, async (req, res) => {
       sastIncludesSecrets,
       iacContainerScanTool,
       iacContainerScanIntegrationLevel,
+      iacContainerScanNA,
       lastSecretsScanDate,
       lastIacContainerScanDate,
       apiSecurityNA,
@@ -2676,6 +2706,7 @@ router.put('/:id', requireAuth, async (req, res) => {
         ...(sastIncludesSecrets !== undefined && { sastIncludesSecrets: sastIncludesSecrets === true || sastIncludesSecrets === 'true' }),
         ...(iacContainerScanTool !== undefined && { iacContainerScanTool: iacContainerScanTool?.trim() || null }),
         ...(iacContainerScanIntegrationLevel !== undefined && { iacContainerScanIntegrationLevel: iacContainerScanIntegrationLevel ? parseInt(iacContainerScanIntegrationLevel) : null }),
+        ...(iacContainerScanNA !== undefined && { iacContainerScanNA: iacContainerScanNA === true || iacContainerScanNA === 'true' }),
         ...(lastSecretsScanDate !== undefined && { lastSecretsScanDate: lastSecretsScanDate ? new Date(lastSecretsScanDate) : null }),
         ...(lastIacContainerScanDate !== undefined && { lastIacContainerScanDate: lastIacContainerScanDate ? new Date(lastIacContainerScanDate) : null }),
         ...(apiSecurityIntegrationLevel !== undefined && { apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null }),
@@ -3328,6 +3359,7 @@ router.post('/bulk-import', requireAuth, async (req, res) => {
         sastIncludesSecrets: 'SAST includes secrets scanning',
         iacContainerScanTool: 'IaC / Container Scanning Tool',
         iacContainerScanIntegrationLevel: 'IaC / Container Integration Level',
+        iacContainerScanNA: 'IaC / Container N/A',
         appFirewallTool: 'App Firewall Tool',
         appFirewallIntegrationLevel: 'App Firewall Integration Level',
         apiSecurityTool: 'Legacy API Security Tool',

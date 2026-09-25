@@ -8,6 +8,31 @@ import { Checkbox } from '../ui/Checkbox.jsx';
 import { Modal } from '../ui/Modal.jsx';
 import { Textarea } from '../ui/Textarea.jsx';
 import useAuthStore from '../../store/authStore.js';
+import {
+  loadApplicationFieldRegistry,
+  getVersionedFields,
+} from '../../lib/applicationFields.js';
+
+/**
+ * Fallback field list, used ONLY when the registry fetch fails.
+ *
+ * This was two inline copies, and adding a field meant remembering both. It is kept as a
+ * safety net so a transient network failure degrades a diff rather than blanking it —
+ * but the registry served by GET /api/config/application-fields is the definition, and a
+ * field missing from here is now a stale fallback rather than an invisible field.
+ */
+const FALLBACK_VERSIONED_FIELDS = [
+  'name', 'description', 'owner', 'repoUrl', 'language', 'framework',
+  'serverEnvironment', 'facing', 'deploymentType', 'authProfiles', 'dataTypes',
+  'status', 'businessCriticality', 'criticalAspects', 'devTeamContact',
+  'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel', 'sastIncludesSca',
+  'dastTool', 'dastIntegrationLevel', 'scaTool', 'scaIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
+  'apiSecurityNA',
+  'appFirewallNA',
+  'currentVersion', 'deploymentEnvironment', 'gitBranch',
+  'lastDastScanDate', 'lastSastScanDate', 'lastScaScanDate', 'interfaces',
+];
+
 
 const HIDDEN_VERSION_FIELDS = new Set(['apiSecurityTool', 'apiSecurityIntegrationLevel']);
 const visibleVersionFields = (fields = []) => fields.filter((field) => !HIDDEN_VERSION_FIELDS.has(field));
@@ -44,6 +69,8 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
   const loadLatestVersion = async () => {
     try {
       setLoading(true);
+      // Populate the field registry before anything reads it synchronously below.
+      await loadApplicationFieldRegistry();
       const versionsData = await api.getApplicationVersions(applicationId);
       const versionsList = Array.isArray(versionsData) ? versionsData : [];
       // Store total count for display
@@ -72,15 +99,7 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
           } else if (isInitialVersion) {
             // For initial version, get all non-null fields
             const fieldsToCheck = [
-              'name', 'description', 'owner', 'repoUrl', 'language', 'framework',
-              'serverEnvironment', 'facing', 'deploymentType', 'authProfiles', 'dataTypes',
-              'status', 'businessCriticality', 'criticalAspects', 'devTeamContact',
-              'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel', 'sastIncludesSca',
-              'dastTool', 'dastIntegrationLevel', 'scaTool', 'scaIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
-              'apiSecurityNA',
-              'appFirewallNA',
-              'currentVersion', 'deploymentEnvironment', 'gitBranch',
-              'lastDastScanDate', 'lastSastScanDate', 'lastScaScanDate', 'interfaces',
+              ...getVersionedFields(FALLBACK_VERSIONED_FIELDS),
             ];
             changedFields = fieldsToCheck.filter(field => latestVersion[field] !== null && latestVersion[field] !== undefined);
           }
@@ -136,6 +155,8 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
   const loadData = async () => {
     try {
       setLoading(true);
+      // Populate the field registry before anything reads it synchronously below.
+      await loadApplicationFieldRegistry();
       const [versionsData, reviewsData] = await Promise.all([
         api.getApplicationVersions(applicationId),
         api.getApplicationReviews(applicationId),
@@ -175,15 +196,7 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
             const changedFields = [];
             const diff = {};
             const fieldsToCompare = [
-              'name', 'description', 'owner', 'repoUrl', 'language', 'framework',
-              'serverEnvironment', 'facing', 'deploymentType', 'authProfiles', 'dataTypes',
-              'status', 'businessCriticality', 'criticalAspects', 'devTeamContact',
-              'securityTestingDescription', 'additionalNotes', 'sastTool', 'sastIntegrationLevel', 'sastIncludesSca',
-              'dastTool', 'dastIntegrationLevel', 'scaTool', 'scaIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
-              'apiSecurityNA',
-              'appFirewallNA',
-              'currentVersion', 'deploymentEnvironment', 'gitBranch',
-              'lastDastScanDate', 'lastSastScanDate', 'lastScaScanDate', 'interfaces',
+              ...getVersionedFields(FALLBACK_VERSIONED_FIELDS),
             ];
             
             for (const field of fieldsToCompare) {

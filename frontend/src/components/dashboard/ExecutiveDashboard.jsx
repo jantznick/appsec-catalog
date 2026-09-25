@@ -188,12 +188,35 @@ export function ExecutiveDashboard() {
           subtitle="Policy adherence, controls, and evidence"
           tone="compliance"
         >
+{/* Denominator is applicableControls, not totalControls: a control scoped out of
+              an application must not count against it. Attested controls are claims of
+              compliance so they count here, and the detail line names them so a
+              self-reported figure is never mistaken for a measured one. */}
           <ProgressMetric
             label="Policy adherence"
-            numerator={compliance.meetingControls ?? '—'}
-            denominator={compliance.totalControls ?? '—'}
+            numerator={
+              compliance.applicableControls
+                ? (compliance.meetingControls ?? 0) + (compliance.attestedControls ?? 0)
+                : '—'
+            }
+            denominator={compliance.applicableControls ?? '—'}
             percentage={compliance.compliancePercentage}
-            detail={compliance.totalControls ? 'Meeting field-mapped controls' : 'No active controls configured'}
+            detail={
+              compliance.applicableControls
+                ? [
+                    `${compliance.meetingControls ?? 0} measured`,
+                    compliance.attestedControls ? `${compliance.attestedControls} attested` : null,
+                    compliance.verificationRequiredControls
+                      ? `${compliance.verificationRequiredControls} awaiting verification`
+                      : null,
+                    compliance.notApplicableControls
+                      ? `${compliance.notApplicableControls} not applicable`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')
+                : 'No active controls configured'
+            }
           />
           <TierMetric
             label="Applications with compliant policies"

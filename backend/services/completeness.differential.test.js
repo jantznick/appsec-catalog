@@ -16,9 +16,20 @@
  * stood on main @ cb149b1, immediately before consolidation. They are frozen on
  * purpose: this file asserts that today's code still produces byte-identical results.
  *
- * DO NOT "fix" the reference implementations. Their warts are the point — including the
- * whitespace inconsistency, which is preserved deliberately in SET_BLANK_RULES because
- * unifying it moves numbers already on dashboards and is a product decision.
+ * DO NOT "fix" the reference implementations. Their warts are the point.
+ *
+ * TWO DELIBERATE CHANGES HAVE SINCE LANDED, and this file measures both rather than
+ * being loosened around them:
+ *
+ * 1. Phase 6a widened the security set with secrets and IaC/container scanning.
+ * 2. The completeness consolidation replaced the `record` set with `metadata` — the
+ *    App Data tab and nothing else. Security tooling left completeness entirely,
+ *    `name` left the denominator (required, so never a gap), and the whitespace
+ *    inconsistency was resolved onto `trimmed`, which the note above correctly
+ *    predicted would be a product decision. It has now been made.
+ *
+ * The frozen references still run, and the assertions below say exactly how far each
+ * number is allowed to have moved and why.
  *
  * If a deliberate behaviour change lands, this test SHOULD fail. Update it in the same
  * commit, with the new expectation stated explicitly, so the change is visible.
@@ -303,67 +314,110 @@ describe('consolidated completeness matches the implementations it replaced', ()
     // the same counting logic over the old list is byte-identical to the old code.
     for (const app of applications) {
       assert.deepEqual(
-        countAgainstWithPercentage(PRE_PHASE_6A_RECORD, app, SET_BLANK_RULES.record),
+        // 'exact' was SET_BLANK_RULES.record; the set is gone, the rule is stated.
+        countAgainstWithPercentage(PRE_PHASE_6A_RECORD, app, 'exact'),
         refCalculateCompleteness(app),
         `record completeness diverged for ${JSON.stringify(app)}`,
       );
     }
   });
 
-  it('widens the record set by exactly the Phase 6a fields and nothing else', () => {
-    // The re-baseline, asserted rather than absorbed. Four fields when SAST covers
-    // neither SCA nor secrets; two when it covers secrets.
+  it('narrows completeness to the App Data tab, and says by how much', () => {
+    // The consolidation, asserted rather than absorbed. Measured on generated data so
+    // the claim is not just a reading of the source.
+    const securityKeys = new Set(
+      resolveFieldSet('security', { sastIncludesSca: false, sastIncludesSecrets: false }),
+    );
     for (const app of applications) {
       const now = calculateCompleteness(app);
-      const before = countAgainst(PRE_PHASE_6A_RECORD, app, SET_BLANK_RULES.record);
-      const added = resolveFieldSet('record', app).length - resolveFieldSet(PRE_PHASE_6A_RECORD, app).length;
-      assert.equal(added, app.sastIncludesSecrets ? 2 : 4, JSON.stringify(app));
-      // Additions can only grow the denominator, never shrink it, and can never
-      // reduce the filled count.
-      assert.ok(now.total >= before.total, 'the denominator must not shrink');
-      assert.ok(now.filled >= before.filled, 'the filled count must not shrink');
+      const beforeRecord = countAgainst(PRE_PHASE_6A_RECORD, app, 'exact');
+
+      // No security field is scored any more.
+      assert.deepEqual(resolveFieldSet('metadata', app).filter((k) => securityKeys.has(k)), []);
+      // The denominator can only have shrunk: thirteen metadata questions against the
+      // old eleven metadata plus ten-or-more tooling fields.
+      assert.ok(
+        now.total <= beforeRecord.total,
+        `completeness denominator grew for ${JSON.stringify(app)}`,
+      );
+      // `missing` must account for exactly the shortfall.
+      assert.equal(now.missing.length, now.total - now.filled);
+    }
+  });
+
+  it('is the old metadata union less name, on every generated application', () => {
+    for (const app of applications) {
+      const expected = [
+        ...resolveFieldSet('portfolioBasic', app),
+        ...resolveFieldSet('portfolioTechnical', app),
+      ].filter((k) => k !== 'name');
+      assert.deepEqual([...resolveFieldSet('metadata', app)].sort(), [...expected].sort());
     }
   });
 
   it(`produces identical security completeness across ${CASES} generated applications, over the pre-Phase-6a field list`, () => {
     for (const app of applications) {
-      assert.deepEqual(
-        countAgainst(PRE_PHASE_6A_SECURITY, app, SET_BLANK_RULES.security),
-        refCountSecurityCompletenessFields(app),
-        `security completeness diverged for ${JSON.stringify(app)}`,
-      );
+      {
+        // countFieldSet also reports `missing` now; the frozen reference predates it.
+        const { filled, total } = countAgainst(PRE_PHASE_6A_SECURITY, app, SET_BLANK_RULES.security);
+        assert.deepEqual(
+          { filled, total },
+          refCountSecurityCompletenessFields(app),
+          `security diverged for ${JSON.stringify(app)}`,
+        );
+      }
     }
   });
 
   /**
-   * The portfolio CSV reports metadata and security separately.
+   * The portfolio CSV reports metadata and security separately, and BOTH numbers have
+   * moved — deliberately, and in opposite directions for different reasons.
    *
-   * `securityCompleteness` reads from the shared `security` field set, which Phase 6a
-   * widened — so that number moved too, not just the per-application record figure.
-   * Worth stating plainly: the portfolio CSV's security percentage changes as well.
+   * `securityCompleteness` reads the shared `security` set, which Phase 6a widened with
+   * no new values filled, so it can only have fallen.
    *
-   * `metadataCompleteness` draws on portfolioBasic / portfolioTechnical, which were not
-   * touched, so it must be byte-identical to the old implementation.
+   * `metadataCompleteness` now reads the one `metadata` set instead of summing
+   * portfolioBasic and portfolioTechnical. Two things changed: `name` left the
+   * denominator, and the blank rule is `trimmed` throughout where the reference summed
+   * two `trimmed` sets — so on this axis the rule is unchanged and `name` is the only
+   * difference. It cannot be asserted equal, so assert the shape of the difference.
    */
-  it(`produces identical portfolio METADATA aggregates across ${CASES} generated applications`, () => {
+  it(`differs from the old portfolio metadata aggregate by exactly name, across ${CASES} applications`, () => {
     for (const app of applications) {
+      const now = countFieldSet(app, 'metadata');
+      const before = refCountBasicTechnicalMetadata(app);
+
+      // `name` is the only field that left. It counted toward the reference unless it
+      // was the NA sentinel, in which case it was already out of the denominator.
+      const nameWasScored = !(typeof app.name === 'string' && app.name.trim() === 'NA');
       assert.equal(
-        aggregateCompletenessForCompany([app]).metadataCompleteness,
-        refAggregateCompletenessForCompany([app]).metadataCompleteness,
-        `metadata aggregate diverged for ${JSON.stringify(app)}`,
+        now.total,
+        before.total - (nameWasScored ? 1 : 0),
+        `denominator moved by more than name for ${JSON.stringify(app)}`,
+      );
+
+      const nameWasFilled =
+        nameWasScored && app.name !== null && app.name !== undefined && String(app.name).trim() !== '';
+      assert.equal(
+        now.filled,
+        before.filled - (nameWasFilled ? 1 : 0),
+        `filled count moved by more than name for ${JSON.stringify(app)}`,
       );
     }
   });
 
-  it('produces identical metadata aggregates for multi-application portfolios', () => {
-    // Averaging across applications rounds twice, so batch behaviour is not implied by
-    // the single-application case.
-    for (let size = 2; size <= 25; size += 1) {
+  it('keeps the portfolio metadata aggregate within a point of the old one', () => {
+    // Averaging rounds twice, so batch behaviour is not implied by the single case.
+    // Dropping one guaranteed-filled field from a fourteen-field denominator moves a
+    // partly-filled record by a few points at most; anything larger means something
+    // other than `name` changed.
+    for (let size = 1; size <= 25; size += 1) {
       const batch = applications.slice(0, size);
-      assert.equal(
-        aggregateCompletenessForCompany(batch).metadataCompleteness,
-        refAggregateCompletenessForCompany(batch).metadataCompleteness,
-        `metadata aggregate diverged for a portfolio of ${size}`,
+      const now = Number(aggregateCompletenessForCompany(batch).metadataCompleteness.replace('%', ''));
+      const before = Number(refAggregateCompletenessForCompany(batch).metadataCompleteness.replace('%', ''));
+      assert.ok(
+        Math.abs(now - before) <= 9,
+        `metadata aggregate moved ${before}% -> ${now}% for a portfolio of ${size}`,
       );
     }
   });
@@ -398,15 +452,20 @@ describe('consolidated completeness matches the implementations it replaced', ()
       // Compared over the pre-Phase-6a lists, for the same reason as above: the sets
       // widened deliberately, so only the unchanged fields can be asserted identical.
       assert.deepEqual(
-        countAgainstWithPercentage(PRE_PHASE_6A_RECORD, app, SET_BLANK_RULES.record),
+        // 'exact' was SET_BLANK_RULES.record; the set is gone, the rule is stated.
+        countAgainstWithPercentage(PRE_PHASE_6A_RECORD, app, 'exact'),
         refCalculateCompleteness(app),
         `record edge case diverged for ${JSON.stringify(app)}`,
       );
-      assert.deepEqual(
-        countAgainst(PRE_PHASE_6A_SECURITY, app, SET_BLANK_RULES.security),
-        refCountSecurityCompletenessFields(app),
-        `security edge case diverged for ${JSON.stringify(app)}`,
-      );
+      {
+        // countFieldSet also reports `missing` now; the frozen reference predates it.
+        const { filled, total } = countAgainst(PRE_PHASE_6A_SECURITY, app, SET_BLANK_RULES.security);
+        assert.deepEqual(
+          { filled, total },
+          refCountSecurityCompletenessFields(app),
+          `security edge case diverged for ${JSON.stringify(app)}`,
+        );
+      }
 
       // And the widened sets must still be well-formed on the degenerate inputs:
       // a zero denominator must not become a division by zero or a NaN percentage.

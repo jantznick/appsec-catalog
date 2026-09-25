@@ -9,6 +9,14 @@ import { toast } from '../ui/Toast.jsx';
 import { api } from '../../lib/api.js';
 import { checkPermission } from '../../lib/permissions.js';
 import useAuthStore from '../../store/authStore.js';
+import { describeRequirement, describeEvaluationLogic } from '../../lib/policyDisplay.js';
+
+/** Local date+time, or an em dash when the value is missing or unparseable. */
+function formatDateTime(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+}
 
 export function PolicyComplianceView({ applicationId, companyId, compliance, loading, onLoad, onRefresh }) {
   const { isAdmin, permissions } = useAuthStore();
@@ -23,9 +31,40 @@ export function PolicyComplianceView({ applicationId, companyId, compliance, loa
   // { control, mode: 'attest' | 'withdraw', statement }
   const [attestModal, setAttestModal] = useState(null);
   const [savingAttestation, setSavingAttestation] = useState(false);
+  // Every attestation row for this application, including withdrawn and expired ones.
+  const [attestations, setAttestations] = useState([]);
+  const [loadingAttestations, setLoadingAttestations] = useState(false);
 
   // Rendering only — attestation.write is enforced on the server for every action.
   const canAttest = checkPermission(permissions, 'attestation.write', companyId);
+
+  /**
+   * The attestation record, which is not the same thing as the compliance view above.
+   *
+   * `evaluateControl` only ever reports the attestation that currently counts, so a
+   * withdrawn or expired one simply stops appearing and the control silently reverts
+   * to not meeting. The rows are kept on purpose — `DELETE` sets `revokedAt` instead
+   * of deleting — precisely so "who signed for this, and when did they take it back"
+   * survives. Without this list nothing in the UI could answer that.
+   */
+  const loadAttestations = async () => {
+    if (!applicationId) return;
+    try {
+      setLoadingAttestations(true);
+      const data = await api.getApplicationAttestations(applicationId);
+      setAttestations(Array.isArray(data?.attestations) ? data.attestations : []);
+    } catch (error) {
+      // Non-fatal: the compliance view above is the primary content and still renders.
+      console.error('Failed to load attestations:', error);
+    } finally {
+      setLoadingAttestations(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAttestations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applicationId]);
 
   const handleAttest = async () => {
     if (!attestModal) return;
@@ -40,7 +79,7 @@ export function PolicyComplianceView({ applicationId, companyId, compliance, loa
         toast.success(`Attested to ${control.controlId}`);
       }
       setAttestModal(null);
-      await onRefresh();
+      await Promise.all([onRefresh(), loadAttestations()]);
     } catch (error) {
       toast.error(error.message || 'Failed to save attestation');
     } finally {
@@ -287,6 +326,11 @@ export function PolicyComplianceView({ applicationId, companyId, compliance, loa
             <div className="text-center p-4 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-gray-800">{summary?.total || 0}</div>
               <div className="text-sm text-gray-600 mt-1">Total Controls</div>
+              {/* The Compliance Rate divides by applicable, not total. Say so where the
+                  two differ, so the rate is not read against the number next to it. */}
+              {summary?.applicable !== undefined && summary.applicable !== summary.total && (
+                <div className="text-xs text-gray-500 mt-1">{summary.applicable} applicable</div>
+              )}
             </div>
             <div className="text-center p-4 bg-green-50 rounded-lg">
               <div className="text-2xl font-bold text-green-700">{summary?.meeting || 0}</div>
@@ -311,7 +355,14 @@ export function PolicyComplianceView({ applicationId, companyId, compliance, loa
             {/* Compliance counts attested controls; the measured figure below it
                 counts only what Orbit verified, so self-reporting stays visible. */}
             <div className="text-center p-4 bg-indigo-50 rounded-lg">
-              <div className="text-2xl font-bold text-indigo-700">{summary?.compliance_percentage || 0}%</div>
+              {/* null means nothing was applicable, i.e. unassessed. `|| 0` would have
+                  turned that into a confident 0%, and the old backend default turned it
+                  into a confident 100%. Neither is true. */}
+              <div className="text-2xl font-bold text-indigo-700">
+                {summary?.compliance_percentage === null || summary?.compliance_percentage === undefined
+                  ? '—'
+                  : `${summary.compliance_percentage}%`}
+              </div>
               <div className="text-sm text-indigo-600 mt-1">Compliance Rate</div>
               {summary?.measured_compliance_percentage !== undefined &&
                 summary.measured_compliance_percentage !== summary.compliance_percentage && (
@@ -321,7 +372,9 @@ export function PolicyComplianceView({ applicationId, companyId, compliance, loa
                 )}
             </div>
           </div>
-          {summary?.total_policies && (
+          {/* `> 0`, not a truthiness check: `{0 && ...}` renders a literal 0, which is
+              exactly what appeared under Compliance Rate when no policy applied. */}
+          {summary?.total_policies > 0 && (
             <div className="mt-4 pt-4 border-t border-gray-200">
               <div className="text-sm text-gray-600">
                 <span className="font-medium">{summary.total_policies}</span> polic{summary.total_policies !== 1 ? 'ies' : 'y'} applicable
@@ -358,21 +411,47 @@ export function PolicyComplianceView({ applicationId, companyId, compliance, loa
                           <div className="text-sm text-gray-500 mt-1">
                             {policyEntry.reason || `Scope: ${policyEntry.policy.scope}`}
                           </div>
+                          {/* Numerator and denominator have to match the percentage
+                              beside them. This read `meeting of total`, so a policy
+                              with one attested and one scoped-out control showed
+                              "3 of 5 controls meeting (100%)" — two numbers that
+                              disagree with the third. The percentage is
+                              (meeting + attested) / (total - not_applicable). */}
                           <div className="text-xs text-gray-400 mt-1">
-                            {policyEntry.summary.meeting} of {policyEntry.summary.total} controls meeting ({policyEntry.summary.compliance_percentage}%)
+                            {policyEntry.summary.compliance_percentage === null ? (
+                              <>No controls apply to this application</>
+                            ) : (
+                              <>
+                                {policyEntry.summary.meeting + (policyEntry.summary.attested || 0)} of{' '}
+                                {policyEntry.summary.applicable ?? policyEntry.summary.total} applicable
+                                controls met ({policyEntry.summary.compliance_percentage}%)
+                                {policyEntry.summary.attested
+                                  ? `, ${policyEntry.summary.attested} by attestation`
+                                  : ''}
+                                {policyEntry.summary.not_applicable
+                                  ? `; ${policyEntry.summary.not_applicable} not applicable`
+                                  : ''}
+                              </>
+                            )}
                           </div>
                         </div>
                       </button>
                     </div>
+                    {/* A fourth state: nothing applicable is "not assessed", which is
+                        neither compliant nor a failure. */}
                     <span className={`px-3 py-1 text-sm font-semibold rounded ${
-                      policyEntry.summary.compliance_percentage === 100
+                      policyEntry.summary.compliance_percentage === null
+                        ? 'bg-gray-100 text-gray-700'
+                        : policyEntry.summary.compliance_percentage === 100
                         ? 'bg-green-100 text-green-800'
                         : policyEntry.summary.compliance_percentage === 0
                         ? 'bg-red-100 text-red-800'
                         : 'bg-yellow-100 text-yellow-800'
                     }`}>
-                      {policyEntry.summary.compliance_percentage === 100 
-                        ? 'Compliant' 
+                      {policyEntry.summary.compliance_percentage === null
+                        ? 'Not Applicable'
+                        : policyEntry.summary.compliance_percentage === 100
+                        ? 'Compliant'
                         : policyEntry.summary.compliance_percentage === 0
                         ? 'Not Compliant'
                         : 'Partial'}
@@ -523,30 +602,9 @@ export function PolicyComplianceView({ applicationId, companyId, compliance, loa
                                                 </div>
                                               )}
                                               <div>
-                                                <span className="font-medium">Requirement:</span> {fieldResult.operator === 'exists' 
-                                                  ? 'Field must exist'
-                                                  : fieldResult.operator === 'not_exists'
-                                                  ? 'Field must not exist'
-                                                  : fieldResult.operator === 'equals'
-                                                  ? `Must equal "${String(fieldResult.value)}"`
-                                                  : fieldResult.operator === 'not_equals'
-                                                  ? `Must not equal "${String(fieldResult.value)}"`
-                                                  : fieldResult.operator === 'gte'
-                                                  ? `Must be ≥ ${String(fieldResult.value)}`
-                                                  : fieldResult.operator === 'gt'
-                                                  ? `Must be > ${String(fieldResult.value)}`
-                                                  : fieldResult.operator === 'lte'
-                                                  ? `Must be ≤ ${String(fieldResult.value)}`
-                                                  : fieldResult.operator === 'lt'
-                                                  ? `Must be < ${String(fieldResult.value)}`
-                                                  : fieldResult.operator === 'contains'
-                                                  ? `Must contain "${String(fieldResult.value)}"`
-                                                  : fieldResult.operator === 'in'
-                                                  ? `Must be one of: ${Array.isArray(fieldResult.value) ? fieldResult.value.join(', ') : String(fieldResult.value)}`
-                                                  : fieldResult.operator === 'not_in'
-                                                  ? `Must not be one of: ${Array.isArray(fieldResult.value) ? fieldResult.value.join(', ') : String(fieldResult.value)}`
-                                                  : `${fieldResult.operator} ${fieldResult.value !== null && fieldResult.value !== undefined ? String(fieldResult.value) : ''}`
-                                                }
+                                                <span className="font-medium">Requirement:</span>{' '}
+                                                {describeRequirement(fieldResult.operator, fieldResult.value)}
+                                              
                                               </div>
                                             </div>
                                           </div>
@@ -556,7 +614,8 @@ export function PolicyComplianceView({ applicationId, companyId, compliance, loa
                                   })}
                                   {details.evaluationLogic && details.fieldResults.length > 1 && (
                                     <div className="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200">
-                                      <span className="font-medium">Evaluation Logic:</span> All fields must {details.evaluationLogic === 'AND' ? 'pass' : 'at least one must pass'} for this control to be met
+                                      <span className="font-medium">Evaluation Logic:</span>{' '}
+                                      {describeEvaluationLogic(details.evaluationLogic)}
                                     </div>
                                   )}
                                 </div>
@@ -713,6 +772,69 @@ export function PolicyComplianceView({ applicationId, companyId, compliance, loa
         <Card>
           <CardContent className="py-8 text-center text-gray-500">
             No policy controls configured
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Attestation record. Rendered whenever there is history, even if nothing is
+          live right now — an expired attestation is the case worth seeing. */}
+      {(loadingAttestations || attestations.length > 0) && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Attestation Record</CardTitle>
+            <p className="text-sm text-gray-500 mt-1">
+              Self-reported compliance. Withdrawn and expired attestations are kept so the
+              record of who asserted what, and when, is not lost.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {loadingAttestations ? (
+              <p className="text-sm text-gray-500">Loading attestations...</p>
+            ) : (
+              <div className="space-y-3">
+                {attestations.map((a) => {
+                  const state = a.revokedAt
+                    ? { label: 'Withdrawn', cls: 'bg-gray-100 text-gray-700' }
+                    : a.isActive
+                      ? { label: 'Active', cls: 'bg-blue-100 text-blue-800' }
+                      : { label: 'Expired', cls: 'bg-amber-100 text-amber-800' };
+                  return (
+                    <div key={a.id} className="border border-gray-200 rounded-lg p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-gray-900">
+                              {a.control?.controlId ? `${a.control.controlId} — ` : ''}
+                              {a.control?.name || 'Control removed'}
+                            </span>
+                            <span className={`px-2 py-0.5 text-xs font-semibold rounded ${state.cls}`}>
+                              {state.label}
+                            </span>
+                            {/* A control can stop accepting attestation after one was
+                                given. The row still counts for nothing, so say why. */}
+                            {a.control && !a.control.allowsAttestation && (
+                              <span className="px-2 py-0.5 text-xs rounded bg-red-100 text-red-800">
+                                Control no longer accepts attestation
+                              </span>
+                            )}
+                          </div>
+                          {a.statement && (
+                            <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{a.statement}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-2">
+                        Attested by {a.user?.email || 'an authorised user'} on {formatDateTime(a.attestedAt)}
+                        {' • '}
+                        {a.revokedAt
+                          ? `withdrawn ${formatDateTime(a.revokedAt)}`
+                          : `${a.isActive ? 'expires' : 'expired'} ${formatDateTime(a.expiresAt)}`}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

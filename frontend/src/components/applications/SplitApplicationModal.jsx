@@ -6,9 +6,22 @@ import { Checkbox } from '../ui/Checkbox.jsx';
 import { RadioGroup, Radio } from '../ui/Radio.jsx';
 import { toast } from '../ui/Toast.jsx';
 import { api } from '../../lib/api.js';
+import {
+  loadApplicationFieldRegistry,
+  getCachedRegistry,
+  getFieldLabel,
+} from '../../lib/applicationFields.js';
 
-// Metadata that a split can carry over to the new application. Mirrors
-// backend/utils/applicationSplitFields.js — keep the two in sync.
+/**
+ * Metadata a split can carry to the new application, grouped for presentation.
+ *
+ * The grouping is curated — the registry's own `group` values do not map cleanly onto
+ * the headings a user wants to see here — but the LIST is no longer authoritative.
+ * `withRegistryFields` below appends any splittable field the registry knows and these
+ * groups do not, so adding a field to the registry can never silently drop it from a
+ * split. That is what happened to the Phase 6a fields: splittable in the registry,
+ * invisible here.
+ */
 const SPLIT_FIELD_GROUPS = [
   {
     title: 'Basic Information',
@@ -69,7 +82,34 @@ const SPLIT_FIELD_GROUPS = [
   },
 ];
 
-const ALL_SPLIT_FIELDS = SPLIT_FIELD_GROUPS.flatMap((group) => group.fields.map((f) => f.key));
+/**
+ * The curated groups, plus anything splittable the registry knows that they omit.
+ *
+ * A field appearing under "Other metadata" is a signal that the curation is out of date,
+ * not an error — it still splits correctly, it is just grouped generically until someone
+ * files it. The alternative, which is what existed before, is that it does not appear at
+ * all and quietly fails to carry over.
+ */
+function withRegistryFields(groups) {
+  const registry = getCachedRegistry();
+  const splittable = registry?.splittable;
+  if (!splittable?.length) return groups;
+
+  const known = new Set(groups.flatMap((g) => g.fields.map((f) => f.key)));
+  const missing = splittable.filter((key) => !known.has(key));
+  if (missing.length === 0) return groups;
+
+  return [
+    ...groups,
+    {
+      title: 'Other metadata',
+      fields: missing.map((key) => ({ key, label: getFieldLabel(key) })),
+    },
+  ];
+}
+
+// Deliberately NOT a module constant: it is computed at import time, before the registry
+// could ever have been fetched, so it would always miss the registry-only fields.
 
 // A field is worth pre-selecting only if the source application actually has a value
 // for it — copying blanks is a no-op.
@@ -81,6 +121,28 @@ function hasValue(value) {
 }
 
 export function SplitApplicationModal({ isOpen, onClose, application, onSplit }) {
+  // Bumped once the registry resolves, so the memos below recompute with it.
+  const [registryVersion, setRegistryVersion] = useState(0);
+  const fieldGroups = useMemo(
+    () => withRegistryFields(SPLIT_FIELD_GROUPS),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [registryVersion],
+  );
+  const allSplitFields = useMemo(
+    () => fieldGroups.flatMap((group) => group.fields.map((f) => f.key)),
+    [fieldGroups],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    loadApplicationFieldRegistry().then(() => {
+      if (!cancelled) setRegistryVersion((v) => v + 1);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [originalName, setOriginalName] = useState('');
   const [newName, setNewName] = useState('');
   const [metadataMode, setMetadataMode] = useState('all');
@@ -89,7 +151,7 @@ export function SplitApplicationModal({ isOpen, onClose, application, onSplit })
 
   const populatedFields = useMemo(() => {
     if (!application) return [];
-    return ALL_SPLIT_FIELDS.filter((field) => hasValue(application[field]));
+    return allSplitFields.filter((field) => hasValue(application[field]));
   }, [application]);
 
   // Reset the form each time the modal opens so a cancelled split leaves nothing behind
@@ -219,7 +281,7 @@ export function SplitApplicationModal({ isOpen, onClose, application, onSplit })
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-gray-700">
-                {selectedFields.length} of {ALL_SPLIT_FIELDS.length} fields selected
+                {selectedFields.length} of {allSplitFields.length} fields selected
               </span>
               <div className="flex items-center gap-2">
                 <Button
@@ -230,7 +292,7 @@ export function SplitApplicationModal({ isOpen, onClose, application, onSplit })
                 >
                   Select filled-in
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => setSelectedFields(ALL_SPLIT_FIELDS)}>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedFields(allSplitFields)}>
                   Select all
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setSelectedFields([])}>
@@ -240,7 +302,7 @@ export function SplitApplicationModal({ isOpen, onClose, application, onSplit })
             </div>
 
             <div className="max-h-72 overflow-y-auto pr-1 space-y-4">
-              {SPLIT_FIELD_GROUPS.map((group) => (
+              {fieldGroups.map((group) => (
                 <div key={group.title}>
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
                     {group.title}

@@ -273,7 +273,12 @@ export function ProgramOperationsDashboard() {
           <Metric
             label="Policy adherence"
             value={pct(governance.compliancePercentage)}
-            detail={governance.totalControls ? `${governance.meetingControls} of ${governance.totalControls} controls meeting` : 'No active controls configured'}
+            detail={
+              governance.applicableControls
+                ? `${(governance.meetingControls ?? 0) + (governance.attestedControls ?? 0)} of ${governance.applicableControls} applicable controls met` +
+                  (governance.attestedControls ? ` (${governance.attestedControls} attested)` : '')
+                : 'No active controls configured'
+            }
           />
           <Metric
             label="Policy exceptions"

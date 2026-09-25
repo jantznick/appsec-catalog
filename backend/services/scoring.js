@@ -2,7 +2,10 @@ import {
   getIntegrationLevelsConfig,
   getRiskFactorsConfig,
   getToolQualityConfig,
+  TOOL_CATEGORIES,
 } from './scoringConfig.js';
+import { FIELD_SETS, calculateCompleteness } from './completeness.js';
+import { APPLICATION_METADATA_FIELDS } from './applicationFields.js';
 
 /**
  * Prisma `include` covering every relation `calculateApplicationScore` reads.
@@ -39,17 +42,38 @@ function getToolQualityWeight(toolQuality, tool, category) {
   return toolQuality.other ?? 0.8;
 }
 
-/** The eight text metadata fields that contribute to knowledge-sharing completeness. */
-export const KNOWLEDGE_SCORING_FIELDS = [
-  { key: 'description', label: 'Description' },
-  { key: 'devTeamContact', label: 'Development Team Contact' },
-  { key: 'repoUrl', label: 'Repository URL' },
-  { key: 'language', label: 'Language' },
-  { key: 'framework', label: 'Framework' },
-  { key: 'serverEnvironment', label: 'Server Environment' },
-  { key: 'authProfiles', label: 'Authentication Profiles' },
-  { key: 'dataTypes', label: 'Data Types' },
-];
+/**
+ * The categories the tool score grades.
+ *
+ * Derived from TOOL_CATEGORIES rather than restated, because a category that the
+ * quality config cannot assign is a category every tool scores zero in. The two lists
+ * drifting apart is not a visible failure — the score just quietly stops rewarding a
+ * field the forms still collect, which is exactly what happened to secrets and
+ * IaC/container scanning between Phase 6a and now.
+ *
+ * `apiSecurity` is appended because it is graded from the uploaded API schema rather
+ * than from a named tool, so it has no place in the quality config.
+ */
+export const SCORED_TOOL_CATEGORIES = Object.freeze([...TOOL_CATEGORIES, 'apiSecurity']);
+
+/** Human label for a metadata field key, falling back to the key itself. */
+function getMetadataFieldLabel(key) {
+  return APPLICATION_METADATA_FIELDS.find((f) => f.key === key)?.label || key;
+}
+
+/**
+ * The metadata fields that contribute to knowledge-sharing completeness.
+ *
+ * Derived from the one completeness set rather than restated. This was a hand-typed
+ * list of eight of the App Data tab's thirteen questions, so the 40-point completeness
+ * component of the 0-100 score disagreed with the completeness percentage shown beside
+ * it: an application could read 100% complete and still be missing five answers the
+ * form had asked for. Exported because the API reports the breakdown.
+ */
+export const KNOWLEDGE_SCORING_FIELDS = FIELD_SETS.metadata.map((key) => ({
+  key,
+  label: getMetadataFieldLabel(key),
+}));
 
 /**
  * If a metadata field is exactly the text "NA" (after trim), it is excluded from scoring for that field.
@@ -63,42 +87,21 @@ export function isMetadataValueNA(value) {
   return value.trim() === 'NA';
 }
 
-/**
- * A knowledge field is counted as "filled" for the 40pt completeness if it has real content; empty and "NA" are not filled.
- * @param {unknown} value
- * @returns {boolean}
- */
-export function isKnowledgeFieldFilledForScore(value) {
-  if (value === null || value === undefined) return false;
-  if (typeof value === 'string') {
-    const t = value.trim();
-    if (t === '' || t === 'NA') return false;
-    return true;
-  }
-  return Boolean(value);
-}
 
 /**
  * @param {Object} app
  * @returns {{ totalScorable: number, fieldsFilled: number, missingFields: string[] }}
  */
 export function getKnowledgeSharingFieldBreakdown(app) {
-  let totalScorable = 0;
-  let fieldsFilled = 0;
-  const missingFields = [];
-  for (const { key, label } of KNOWLEDGE_SCORING_FIELDS) {
-    const v = app[key];
-    if (isMetadataValueNA(v)) {
-      continue;
-    }
-    totalScorable += 1;
-    if (isKnowledgeFieldFilledForScore(v)) {
-      fieldsFilled += 1;
-    } else {
-      missingFields.push(label);
-    }
-  }
-  return { totalScorable, fieldsFilled, missingFields };
+  // One implementation. This was its own loop over its own field list with its own
+  // blank rule, which is how the score and the completeness percentage drifted apart.
+  // `missing` comes back as field keys; the labels are the registry's.
+  const { filled, total, missing } = calculateCompleteness(app);
+  return {
+    totalScorable: total,
+    fieldsFilled: filled,
+    missingFields: missing.map(getMetadataFieldLabel),
+  };
 }
 
 /** Canonical facing values; `facing` is a free String column, so compare case-insensitively. */
@@ -159,10 +162,19 @@ export function detectDataClassifications(app) {
 }
 
 /**
- * Security tool category is excluded from integration/scan scoring (receives full category credit):
- * API Security "N/A" boolean, or the tool name is exactly "NA" (see isMetadataValueNA).
+ * Is this security tool category out of scope for this application?
+ *
+ * A category that is not applicable leaves the denominator entirely, so its points
+ * redistribute across the categories that do apply — an application with no API and no
+ * containers is scored on what it actually has, rather than being marked down for
+ * tooling it could never need.
+ *
+ * Three ways to be out of scope: a dedicated N/A declaration, the "NA" sentinel in the
+ * tool name, or (for categories a SAST tool can cover) nothing — those stay in scope
+ * and are scored from the SAST tool instead. See resolveCategoryToolInputs.
+ *
  * @param {Object} app
- * @param {string} category - sast | dast | sca | appFirewall | apiSecurity
+ * @param {string} category - sast | dast | sca | secretsScan | iacContainerScan | appFirewall | apiSecurity
  * @returns {boolean}
  */
 export function isSecurityToolCategoryNotApplicable(app, category) {
@@ -172,13 +184,23 @@ export function isSecurityToolCategoryNotApplicable(app, category) {
   if (category === 'appFirewall' && app.appFirewallNA) {
     return true;
   }
+  // "We have no infrastructure-as-code or container images" is a complete answer, not
+  // a gap. Note this is only true when explicitly declared: null means unanswered, so
+  // the category stays in the denominator and scores zero, as it should.
+  if (category === 'iacContainerScan' && app.iacContainerScanNA === true) {
+    return true;
+  }
   if (category === 'sast' || category === 'dast') {
     return false;
   }
+  // Covered by SAST: in scope and scored, from the SAST tool.
   if (category === 'sca' && app.sastIncludesSca) {
     return false;
   }
-  if (category === 'sca' && !app.sastIncludesSca) {
+  if (category === 'secretsScan' && app.sastIncludesSecrets) {
+    return false;
+  }
+  if (category === 'sca') {
     return isMetadataValueNA(app.scaTool);
   }
   const tool = app[`${category}Tool`];
@@ -190,27 +212,44 @@ export function isSecurityToolCategoryNotApplicable(app, category) {
  * When SAST includes SCA, the SCA category reuses SAST's tool, level, and lastSast scan date.
  * @param {Object} app
  * @param {string} category
- * @returns {{ tool: unknown, level: unknown, scanField: string|null, mirrorFromSast: boolean }}
+ * @returns {{ tool: unknown, level: unknown, scanField: string|null, mirrorFromSast: boolean,
+ *   qualityCategory: string }} `qualityCategory` is the category the tool-quality
+ *   config is consulted under, which differs from `category` only when mirroring.
  */
 export function resolveCategoryToolInputs(app, category) {
-  if (category === 'sca' && app.sastIncludesSca) {
+  // A SAST tool that also covers the category scores it: the team was correctly told
+  // to leave the standalone fields blank, so reading them would score zero for work
+  // that is being done. Same shape for SCA and secrets.
+  const mirrorsSast =
+    (category === 'sca' && app.sastIncludesSca) ||
+    (category === 'secretsScan' && app.sastIncludesSecrets);
+  if (mirrorsSast) {
     return {
       tool: app.sastTool,
       level: app.sastIntegrationLevel,
       scanField: 'lastSastScanDate',
       mirrorFromSast: true,
+      // Judge the tool as a SAST tool, because that is what it is. Asking whether it is
+      // approved *as a secrets scanner* is the wrong question when the team's answer is
+      // "our SAST tool covers this" — and getToolQualityWeight returns 0, not the 0.8
+      // fallback, for a managed tool that does not list the category. So ticking the
+      // box scored zero: strictly worse than leaving it unticked.
+      qualityCategory: 'sast',
     };
   }
   const scanByCategory = {
     sast: 'lastSastScanDate',
     dast: 'lastDastScanDate',
     sca: 'lastScaScanDate',
+    secretsScan: 'lastSecretsScanDate',
+    iacContainerScan: 'lastIacContainerScanDate',
   };
   return {
     tool: app[`${category}Tool`],
     level: app[`${category}IntegrationLevel`],
     scanField: scanByCategory[category] || null,
     mirrorFromSast: false,
+    qualityCategory: category,
   };
 }
 
@@ -482,7 +521,7 @@ export function calculateToolUsageScore(app) {
   const riskFactors = getRiskFactorsConfig();
   const toolQuality = getToolQualityConfig();
 
-  const toolCategories = ['sast', 'dast', 'sca', 'appFirewall', 'apiSecurity'];
+  const toolCategories = SCORED_TOOL_CATEGORIES;
   const MAX_TOOL_SCORE = 50;
   const BASE_POINTS_PER_CATEGORY = MAX_TOOL_SCORE / toolCategories.length; // 10
 
@@ -548,7 +587,7 @@ export function calculateToolUsageScore(app) {
     }
 
     // 4. Calculate achieved points based on implementation
-    const { tool, level, scanField } = resolveCategoryToolInputs(app, category);
+    const { tool, level, scanField, qualityCategory } = resolveCategoryToolInputs(app, category);
 
     if (!tool || level === null || level === undefined) {
       continue; // No tool, so 0 achieved points for this category
@@ -559,7 +598,7 @@ export function calculateToolUsageScore(app) {
     const integrationWeight = integrationLevels[levelKey]?.weight || 0;
 
     // Get tool quality weight
-    const toolWeight = getToolQualityWeight(toolQuality, tool, category);
+    const toolWeight = getToolQualityWeight(toolQuality, tool, qualityCategory);
 
     // Check scan date freshness (SAST, DAST, SCA / SCA-via-SAST) relative to last deployment
     let scanDateWeight = 1.0; // Default: full points

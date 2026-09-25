@@ -2,6 +2,7 @@ import { prisma } from '../prisma/client.js';
 import {
   getFieldValue,
   evaluateFieldCheck,
+  evaluateScopeCheck,
   parseValue,
   formatDate,
   toTime,
@@ -151,7 +152,7 @@ export async function evaluateControl(control, application, override = null, att
         operator: fieldCheck.operator,
         value: fieldCheck.value,
         fieldValue,
-        result: evaluateFieldCheck(fieldCheck, fieldValue),
+        result: evaluateScopeCheck(fieldCheck, fieldValue),
       };
     });
 
@@ -804,10 +805,14 @@ export async function evaluateAllControls(application) {
     const { total, meeting, attested, not_applicable } = policyEntry.summary;
     const applicable = total - not_applicable;
     policyEntry.summary.applicable = applicable;
+    // null, not 100, when there is nothing to divide by. A policy with no applicable
+    // controls has not been assessed; reporting it as fully compliant is the most
+    // flattering possible reading of "we measured nothing", and it is what every
+    // application showed while both policies sat inactive.
     policyEntry.summary.compliance_percentage =
-      applicable > 0 ? Math.round(((meeting + attested) / applicable) * 100) : 100;
+      applicable > 0 ? Math.round(((meeting + attested) / applicable) * 100) : null;
     policyEntry.summary.measured_compliance_percentage =
-      applicable > 0 ? Math.round((meeting / applicable) * 100) : 100;
+      applicable > 0 ? Math.round((meeting / applicable) * 100) : null;
   });
 
   // Convert to array
@@ -822,13 +827,17 @@ export async function evaluateAllControls(application) {
   const notApplicable = allControls.filter(cr => cr.status === 'not_applicable').length;
   const attested = allControls.filter(cr => cr.status === 'attested').length;
   const applicable = total - notApplicable;
+  // See the note above: nothing applicable means unassessed, not compliant.
   const compliancePercentage =
-    applicable > 0 ? Math.round(((meeting + attested) / applicable) * 100) : 100;
+    applicable > 0 ? Math.round(((meeting + attested) / applicable) * 100) : null;
   const measuredCompliancePercentage =
-    applicable > 0 ? Math.round((meeting / applicable) * 100) : 100;
+    applicable > 0 ? Math.round((meeting / applicable) * 100) : null;
 
-  // Overall compliance: all policies must be 100% compliant
-  const allPoliciesCompliant = policies.every(p => p.summary.compliance_percentage === 100);
+  // "All policies compliant" requires at least one policy to have been assessed —
+  // `every` on an empty list is true, which would report a portfolio with no policies
+  // at all as fully compliant.
+  const allPoliciesCompliant =
+    policies.length > 0 && policies.every(p => p.summary.compliance_percentage === 100);
 
   return {
     policies,

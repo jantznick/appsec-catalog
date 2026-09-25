@@ -10,16 +10,20 @@ import { countFieldSet, toPercentage } from '../services/completeness.js';
 
 /**
  * Basic + Technical Information cards on the application detail page.
+ *
+ * This summed `portfolioBasic` and `portfolioTechnical`, two sets that between them
+ * described the App Data tab. They are now the one `metadata` set, so the CSV's
+ * metadata column reports the same number as the dashboard and the score.
+ *
+ * One consequence: `name` has left the denominator. It is required at create and can
+ * never be blank, so it contributed a guaranteed point to every application. Expect
+ * this column to move by roughly one field's worth on a partly-filled portfolio.
+ *
  * @param {Record<string, unknown>} app
  * @returns {{ filled: number, total: number }}
  */
 function countBasicTechnicalMetadata(app) {
-  const basic = countFieldSet(app, 'portfolioBasic');
-  const technical = countFieldSet(app, 'portfolioTechnical');
-  return {
-    filled: basic.filled + technical.filled,
-    total: basic.total + technical.total,
-  };
+  return countFieldSet(app, 'metadata');
 }
 
 /**

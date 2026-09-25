@@ -84,6 +84,12 @@ export const APPLICATION_METADATA_FIELDS = Object.freeze(
     { key: 'devTeamContact', label: 'Development Team Contact', group: 'business', type: 'string', versioned: true, approvable: true, splittable: true },
 
     // --- Security testing ---------------------------------------------------
+    // DEPRECATED — no form collects this any more. The structured tool fields
+    // replaced it: a paragraph saying "we run Snyk in CI" cannot be evaluated by a
+    // policy control, scored, or reported on, and it was being answered instead of the
+    // fields that can. Kept versioned and approvable so existing values survive in
+    // history, still appear in a diff, and an in-flight pending version can still be
+    // approved. The CSV importer excludes it (see NOT_IMPORTABLE).
     { key: 'securityTestingDescription', label: 'Security Testing Description', group: 'security', type: 'string', versioned: true, approvable: true, splittable: true },
     { key: 'additionalNotes', label: 'Additional Notes', group: 'freetext', type: 'string', versioned: true, approvable: true, splittable: true },
 
@@ -95,16 +101,18 @@ export const APPLICATION_METADATA_FIELDS = Object.freeze(
     { key: 'dastIntegrationLevel', label: 'DAST Integration Level', group: 'security', type: 'int', versioned: true, approvable: true, splittable: true },
     { key: 'scaTool', label: 'SCA Tool', group: 'security', type: 'string', versioned: true, approvable: true, splittable: true },
     { key: 'scaIntegrationLevel', label: 'SCA Integration Level', group: 'security', type: 'int', versioned: true, approvable: true, splittable: true },
-    // Secrets scanning. approvable:false because the technical onboarding form does not
-    // post these — only the App Data tab does, which writes through PUT /:id and never
-    // enters the approval path. Same reasoning as lastSastScanDate below.
-    { key: 'secretsScanTool', label: 'Secrets Scanning Tool', group: 'security', type: 'string', versioned: true, approvable: false, splittable: true },
-    { key: 'secretsScanIntegrationLevel', label: 'Secrets Scanning Integration Level', group: 'security', type: 'int', versioned: true, approvable: false, splittable: true },
-    { key: 'sastIncludesSecrets', label: 'SAST includes secrets scanning', group: 'security', type: 'boolean', versioned: true, approvable: false, splittable: true },
+    // Secrets scanning. approvable:true: the technical onboarding form collects these
+    // alongside SAST/DAST/SCA, so a pending version carries the submitter's answer and
+    // approval has to write it back. They were approvable:false while the form did not
+    // render them, which meant an approved submission silently dropped them.
+    { key: 'secretsScanTool', label: 'Secrets Scanning Tool', group: 'security', type: 'string', versioned: true, approvable: true, splittable: true },
+    { key: 'secretsScanIntegrationLevel', label: 'Secrets Scanning Integration Level', group: 'security', type: 'int', versioned: true, approvable: true, splittable: true },
+    { key: 'sastIncludesSecrets', label: 'SAST includes secrets scanning', group: 'security', type: 'boolean', versioned: true, approvable: true, splittable: true },
     // IaC and container share one field: most tools cover both, so separate entries
     // would always be set together.
-    { key: 'iacContainerScanTool', label: 'IaC / Container Scanning Tool', group: 'security', type: 'string', versioned: true, approvable: false, splittable: true },
-    { key: 'iacContainerScanIntegrationLevel', label: 'IaC / Container Integration Level', group: 'security', type: 'int', versioned: true, approvable: false, splittable: true },
+    { key: 'iacContainerScanTool', label: 'IaC / Container Scanning Tool', group: 'security', type: 'string', versioned: true, approvable: true, splittable: true },
+    { key: 'iacContainerScanIntegrationLevel', label: 'IaC / Container Integration Level', group: 'security', type: 'int', versioned: true, approvable: true, splittable: true },
+    { key: 'iacContainerScanNA', label: 'IaC / Container Not Applicable', group: 'security', type: 'boolean', versioned: true, approvable: true, splittable: true },
     { key: 'appFirewallTool', label: 'Application Firewall Tool', group: 'security', type: 'string', versioned: true, approvable: true, splittable: true },
     { key: 'appFirewallIntegrationLevel', label: 'Application Firewall Integration Level', group: 'security', type: 'int', versioned: true, approvable: true, splittable: true },
     // Superseded by the API schema upload; retained for existing data.
@@ -140,6 +148,9 @@ export const APPLICATION_METADATA_FIELDS = Object.freeze(
     // describes when the record was reviewed rather than being part of the record.
     // applicationFields.test.js pins that exclusion.
     { key: 'metadataLastReviewed', label: 'Metadata Last Reviewed', group: 'deployment', type: 'datetime', versioned: false, approvable: false, splittable: false },
+    // The two scan dates stay approvable:false with the other lastXScanDate fields: a
+    // pending version can only hold a copy taken at submit time, and writing it back
+    // would regress whatever a scanner integration recorded since.
     { key: 'lastSecretsScanDate', label: 'Last Secrets Scan Date', group: 'deployment', type: 'datetime', versioned: true, approvable: false, splittable: true },
     { key: 'lastIacContainerScanDate', label: 'Last IaC / Container Scan Date', group: 'deployment', type: 'datetime', versioned: true, approvable: false, splittable: true },
 

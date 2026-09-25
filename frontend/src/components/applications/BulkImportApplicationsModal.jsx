@@ -1,13 +1,25 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal.jsx';
 import { Button } from '../ui/Button.jsx';
 import { Input } from '../ui/Input.jsx';
 import { Select } from '../ui/Select.jsx';
 import { toast } from '../ui/Toast.jsx';
 import { api } from '../../lib/api.js';
+import { loadApplicationFieldRegistry } from '../../lib/applicationFields.js';
 
-// Application fields that can be imported
-const APPLICATION_FIELDS = [
+/**
+ * Fields the importer offers, used only when the registry fetch fails.
+ *
+ * The real list is derived from `GET /api/config/application-fields` by
+ * `deriveImportFields` below. This copy exists so a transient network failure degrades
+ * to the previous behaviour instead of showing an empty mapping screen — it is a
+ * safety net, not the definition, and it will drift.
+ *
+ * It drifted once already: the Phase 6a secrets and IaC fields were added to the
+ * registry, to the Application model and to `buildBulkImportRow`, but not here, so a
+ * CSV column holding them had nothing to map onto and the data was dropped at upload.
+ */
+const FALLBACK_APPLICATION_FIELDS = [
   { key: 'name', label: 'Application Name', required: true, dataType: 'string' },
   { key: 'description', label: 'Description', required: false, dataType: 'string' },
   { key: 'owner', label: 'Owner', required: false, dataType: 'string' },
@@ -23,7 +35,6 @@ const APPLICATION_FIELDS = [
   { key: 'devTeamContact', label: 'Dev Team Contact', required: false, dataType: 'string' },
   { key: 'businessCriticality', label: 'Business Criticality (1-5)', required: false, dataType: 'number' },
   { key: 'criticalAspects', label: 'Critical Aspects', required: false, dataType: 'string' },
-  { key: 'securityTestingDescription', label: 'Security Testing Description', required: false, dataType: 'string' },
   { key: 'additionalNotes', label: 'Additional Notes', required: false, dataType: 'string' },
   { key: 'sastTool', label: 'SAST Tool', required: false, dataType: 'string' },
   { key: 'sastIntegrationLevel', label: 'SAST Integration Level', required: false, dataType: 'number' },
@@ -34,9 +45,77 @@ const APPLICATION_FIELDS = [
   { key: 'scaIntegrationLevel', label: 'SCA Integration Level', required: false, dataType: 'number' },
   { key: 'appFirewallTool', label: 'App Firewall Tool', required: false, dataType: 'string' },
   { key: 'appFirewallIntegrationLevel', label: 'App Firewall Integration Level', required: false, dataType: 'number' },
+  { key: 'secretsScanTool', label: 'Secrets Scanning Tool', required: false, dataType: 'string' },
+  { key: 'secretsScanIntegrationLevel', label: 'Secrets Scanning Integration Level', required: false, dataType: 'number' },
+  { key: 'sastIncludesSecrets', label: 'SAST includes secrets scanning', required: false, dataType: 'boolean' },
+  { key: 'iacContainerScanTool', label: 'IaC / Container Scanning Tool', required: false, dataType: 'string' },
+  { key: 'iacContainerScanIntegrationLevel', label: 'IaC / Container Integration Level', required: false, dataType: 'number' },
+  { key: 'iacContainerScanNA', label: 'IaC / Container Not Applicable', required: false, dataType: 'boolean' },
   { key: 'apiSecurityNA', label: 'API Security N/A', required: false, dataType: 'boolean' },
   { key: 'appFirewallNA', label: 'App Firewall N/A', required: false, dataType: 'boolean' },
 ];
+
+/**
+ * Registry fields the importer must not offer, and why.
+ *
+ * `approvable: true` is otherwise the right filter: it means a form supplies the field
+ * and the value may be written to the application, which is exactly what an import row
+ * does. These two are approvable but still unsuitable for a CSV cell.
+ */
+const NOT_IMPORTABLE = new Set([
+  // The route sets status: 'onboarded' on every imported row and ignores the column.
+  'status',
+  // A JSON array of application ids. buildBulkImportRow stores a string cell verbatim,
+  // so a free-text column here writes malformed JSON into the interfaces column.
+  'interfaces',
+  // No longer collected anywhere: the structured tool fields replaced the free-text
+  // answer. Existing values are still shown and still version-controlled, but nothing
+  // should be creating new ones. Left approvable in the registry so an in-flight
+  // pending version can still be approved.
+  'securityTestingDescription',
+  // There is no such thing as an API security tool here. The apiSecurity score comes
+  // from the uploaded OpenAPI schema; these two are dead columns that no form renders
+  // and no scorer reads. VersionHistory and PendingApprovals already hide them by name
+  // (HIDDEN_VERSION_FIELDS) — deriving this list from `approvable` re-exposed them,
+  // which is the opposite of what the rest of the app decided.
+  'apiSecurityTool',
+  'apiSecurityIntegrationLevel',
+]);
+
+/** Registry types -> the three types this mapper knows how to convert. */
+const REGISTRY_TYPE_TO_DATA_TYPE = { int: 'number', boolean: 'boolean', json: 'string' };
+
+/**
+ * `hostingDomains` is not an Application column and so is not in the registry: the
+ * route parses the cell and creates Domain rows from it. It has to be appended by hand.
+ */
+const NON_REGISTRY_IMPORT_FIELDS = [
+  { key: 'hostingDomains', label: 'Hosting Domains', required: false, dataType: 'string' },
+];
+
+/**
+ * Turn the served registry into the importer's field list.
+ * @param {{fields: Array<{key: string, label: string, type: string}>, approvable: string[]}|null} registry
+ * @returns {Array<{key: string, label: string, required: boolean, dataType: string}>|null}
+ *   null when the registry is unusable, so the caller keeps its fallback.
+ */
+export function deriveImportFields(registry) {
+  if (!registry?.fields?.length || !registry?.approvable?.length) return null;
+
+  const approvable = new Set(registry.approvable);
+  const derived = registry.fields
+    .filter((f) => approvable.has(f.key) && !NOT_IMPORTABLE.has(f.key))
+    .map((f) => ({
+      key: f.key,
+      label: f.label,
+      // Only `name` is required; the route rejects a row without one.
+      required: f.key === 'name',
+      dataType: REGISTRY_TYPE_TO_DATA_TYPE[f.type] || 'string',
+    }));
+
+  if (!derived.some((f) => f.key === 'name')) return null;
+  return [...derived, ...NON_REGISTRY_IMPORT_FIELDS];
+}
 
 /** Lowercase and drop everything that is not a letter or digit, so "SAST Tool" === "sastTool". */
 const canonicalize = (value) => String(value).toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -53,9 +132,9 @@ const NAME_HEADERS = new Set(['name', 'applicationname', 'appname', 'application
  * a wrong mapping is invisible on the review screen in a way an unmapped column is not.
  * Anything ambiguous is left for the user to map.
  */
-const autoMapFields = (headers) => {
+const autoMapFields = (headers, applicationFields) => {
   const byCanonical = new Map();
-  for (const field of APPLICATION_FIELDS) {
+  for (const field of applicationFields) {
     byCanonical.set(canonicalize(field.key), field.key);
     byCanonical.set(canonicalize(field.label), field.key);
   }
@@ -135,8 +214,23 @@ export function BulkImportApplicationsModal({ isOpen, onClose, companies, onSucc
   const [csvData, setCsvData] = useState([]);
   const [fieldMapping, setFieldMapping] = useState({}); // Maps CSV header -> application field key
   const [csvDataTypes, setCsvDataTypes] = useState({}); // Maps CSV header -> inferred data type
+  // Derived from the served registry; seeded with the fallback so the first render and
+  // a failed fetch both have a usable list.
+  const [applicationFields, setApplicationFields] = useState(FALLBACK_APPLICATION_FIELDS);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    loadApplicationFieldRegistry().then((registry) => {
+      const derived = deriveImportFields(registry);
+      if (!cancelled && derived) setApplicationFields(derived);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
@@ -221,7 +315,7 @@ export function BulkImportApplicationsModal({ isOpen, onClose, companies, onSucc
       });
       setCsvDataTypes(inferredTypes);
       
-      setFieldMapping(autoMapFields(headers));
+      setFieldMapping(autoMapFields(headers, applicationFields));
 
       if (data.length > 0) {
         setStep(2);
@@ -240,7 +334,7 @@ export function BulkImportApplicationsModal({ isOpen, onClose, companies, onSucc
   };
 
   const validateMapping = () => {
-    const requiredFields = APPLICATION_FIELDS.filter(f => f.required);
+    const requiredFields = applicationFields.filter(f => f.required);
     const mappedFields = Object.values(fieldMapping).filter(v => v);
     
     for (const field of requiredFields) {
@@ -272,7 +366,7 @@ export function BulkImportApplicationsModal({ isOpen, onClose, companies, onSucc
           if (fieldKey && row[csvHeader]) {
             const value = row[csvHeader].trim();
             if (value) {
-              const field = APPLICATION_FIELDS.find(f => f.key === fieldKey);
+              const field = applicationFields.find(f => f.key === fieldKey);
               if (field) {
                 // Handle data type conversion
                 if (field.dataType === 'number') {
@@ -390,7 +484,7 @@ export function BulkImportApplicationsModal({ isOpen, onClose, companies, onSucc
             <div className="max-h-96 overflow-y-auto space-y-4">
               {csvHeaders.map(header => {
                 const mappedFieldKey = fieldMapping[header] || '';
-                const mappedField = APPLICATION_FIELDS.find(f => f.key === mappedFieldKey);
+                const mappedField = applicationFields.find(f => f.key === mappedFieldKey);
                 const csvDataType = csvDataTypes[header] || 'unknown';
                 const sampleValue = csvData.length > 0 && csvData[0][header] 
                   ? (csvData[0][header].length > 50 ? csvData[0][header].substring(0, 50) + '...' : csvData[0][header])
@@ -431,7 +525,7 @@ export function BulkImportApplicationsModal({ isOpen, onClose, companies, onSucc
                       onChange={(e) => handleMappingChange(header, e.target.value)}
                       options={[
                         { value: '', label: '-- Skip this column --' },
-                        ...APPLICATION_FIELDS.map(field => ({ 
+                        ...applicationFields.map(field => ({ 
                           value: field.key, 
                           label: `${field.label} (${getDataTypeLabel(field.dataType)})${field.required ? ' *' : ''}` 
                         })),
