@@ -30,13 +30,16 @@ export function Tabs({ children, defaultTab = 0, className = '' }) {
 
   return (
     <div className={className}>
-      {/* The strip scrolls, the page does not.
+      {/* The strip scrolls, the page does not, and neither scrollbar is drawn.
           Tabs are `whitespace-nowrap`, so with nine of them (the application detail
           page) the row simply ran past the viewport below about 1100px. Nothing
           constrained it, so the *document* gained a horizontal scrollbar and the last
           two tabs were unreachable without scrolling the whole page sideways.
-          overflow-x-auto keeps the overflow inside this strip. */}
-      <div className="border-b border-gray-200 overflow-x-auto overscroll-x-contain">
+          `.scroll-x-hidden-bar` contains the overflow here, pins overflow-y to hidden —
+          overflow-x alone makes overflow-y compute to auto, which drew a second,
+          pointless scrollbar — and suppresses the indicator, since a row of tabs
+          visibly cut off at the edge needs no chrome to say so. */}
+      <div className="border-b border-gray-200 scroll-x-hidden-bar overscroll-x-contain">
         <nav className="-mb-px flex space-x-8 min-w-max" aria-label="Tabs">
           {tabs}
         </nav>

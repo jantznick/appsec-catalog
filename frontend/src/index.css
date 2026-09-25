@@ -301,6 +301,32 @@ button:disabled,
   cursor: not-allowed;
 }
 
+/* A horizontally scrollable strip with no visible scrollbar.
+ *
+ * Used by the tab strip, which overflows on narrow viewports. Two things are going on:
+ *
+ * 1. overflow-y is pinned to hidden. Per the CSS overflow spec, setting overflow-x to
+ *    anything other than `visible` makes a `visible` overflow-y compute to `auto` — so
+ *    `overflow-x: auto` on its own quietly produces a VERTICAL scrollbar too, and the
+ *    tab strip's -mb-px is enough to trigger it.
+ * 2. The horizontal scrollbar itself is hidden. The strip's content is self-evidently
+ *    cut off at the edge and drags/swipes normally; a scrollbar under a row of tabs is
+ *    chrome for something the user can already see.
+ *
+ * Scrolling still works by wheel, trackpad, touch and keyboard — only the indicator is
+ * suppressed. This is NOT for regions where the overflow is not otherwise obvious.
+ */
+.scroll-x-hidden-bar {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;           /* Firefox */
+  -ms-overflow-style: none;        /* legacy Edge */
+}
+
+.scroll-x-hidden-bar::-webkit-scrollbar {
+  display: none;                   /* WebKit, Chromium */
+}
+
 /* Always visible scrollbar for note content */
 .note-content-scroll {
   scrollbar-gutter: stable;
