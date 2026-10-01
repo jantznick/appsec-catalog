@@ -218,6 +218,20 @@ export function Layout({ children }) {
                         </DropdownItem>
                         <DropdownItem
                           onClick={() => {
+                            navigate('/settings/roadmap');
+                          }}
+                        >
+                          Roadmap
+                        </DropdownItem>
+                        <DropdownItem
+                          onClick={() => {
+                            navigate('/settings/feature-requests');
+                          }}
+                        >
+                          Feature requests
+                        </DropdownItem>
+                        <DropdownItem
+                          onClick={() => {
                             navigate('/settings/program-content');
                           }}
                         >

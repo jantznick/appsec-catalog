@@ -87,4 +87,12 @@ Each row shows when the job started, its scope, the company it covers, its statu
 
 ## What's New
 
-A simple, read-only feed of published Orbit release notes and product updates — category, release label, title, publish date, a short summary, and the full write-up. Publishing to this feed is admin-only; as a regular user, this is just where you check what's changed recently in the platform.
+Three tabs covering what shipped, what's coming, and what you'd like to see next.
+
+**Updates** is the feed of published release notes, grouped by the month they went out — category, release label, title, publish date, a short summary, and the full write-up. Filter by category or search the text to find a specific change. Where an update was written against specific commits, "Show related changes" lists them.
+
+**Roadmap** shows what the Orbit team has committed to, in four columns: Exploring (being scoped, not committed to), Planned, In progress, and Shipped. Items in progress are grouped further by where they are in delivery — being built, in beta testing, in HTS testing, or scheduled for production release with the date. Select any card for the full write-up; a shipped card links through to its release note. Roadmap items are drafted privately and only appear here once an admin publishes them.
+
+**Request a feature** is a direct line to the Orbit admins. Describe what you're trying to do and what gets in the way; the request goes to the admins and nobody else. Your own requests stay listed beside the form with their current status — new, under review, planned, not planned, or shipped — along with any reply an admin writes back, and a note if the idea has made it onto the published roadmap.
+
+Publishing updates and roadmap items, and triaging requests, are admin-only. Admins work from **Settings → Product updates**, **Settings → Roadmap**, and **Settings → Feature requests**; from the request page, an idea can be promoted straight onto the roadmap as a draft.

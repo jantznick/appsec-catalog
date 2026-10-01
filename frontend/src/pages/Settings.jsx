@@ -118,8 +118,18 @@ const settingsSections = [
         to: '/settings/product-updates',
       },
       {
+        label: 'Roadmap',
+        description: 'Publish what Orbit is working on and what is coming next.',
+        to: '/settings/roadmap',
+      },
+      {
+        label: 'Feature requests',
+        description: 'Read what users have asked for, reply, and promote ideas to the roadmap.',
+        to: '/settings/feature-requests',
+      },
+      {
         label: 'What\'s New',
-        description: 'Preview the product update feed.',
+        description: 'Preview the updates, roadmap, and request form users see.',
         to: '/whats-new',
       },
     ],
