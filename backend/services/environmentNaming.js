@@ -145,39 +145,42 @@ export function parseEnvironmentAliases(raw) {
 
 
 /**
- * The canonical name for an environment of this kind.
+ * An environment's display label, and the canonical row in its name list.
+ *
+ * `name` NEVER DECIDES A MATCH. Every string an environment answers to is a row in
+ * EnvironmentName, and resolution is a lookup there - so this is a label and
+ * nothing more. It exists because a dozen places need one string: "Deployed to X",
+ * the CI sample payload, a dropdown entry.
  *
  * Orbit owns the word for the four named kinds, so every company's production
- * environment is called "production" however its pipelines spell it. That is what
- * makes cross-company screens readable - eighteen companies showing eighteen
- * different words for the same thing is worse than one word plus an alias list.
+ * environment reads as "production" however its pipelines spell it. Eighteen
+ * companies showing eighteen different words for the same thing is worse on a
+ * cross-company screen than one word plus a list.
  *
- * OTHER is the exception, and has to be: a company with a sandbox and a demo has
- * two OTHERs, and the typed name is the only thing telling them apart.
+ * OTHER has no word of ours to take, so it uses THE FIRST STRING IN ITS OWN LIST.
+ * A company adding a sandbox types the names its pipelines send and the first one
+ * becomes the label - there is no separate "name" to fill in, because for OTHER the
+ * two were always the same thing typed twice.
  *
  * @param {unknown} kind
- * @param {unknown} typedName used only when kind is OTHER
- * @returns {string | null} normalized, or null when OTHER was given no usable name
+ * @param {string[]} values the strings this environment answers to, in order
+ * @returns {string | null} normalized, or null when OTHER was given nothing
  */
-export function canonicalEnvironmentName(kind, typedName) {
+export function canonicalEnvironmentName(kind, values) {
   if (kind === REPEATABLE_ENVIRONMENT_KIND) {
-    return normalizeEnvironmentName(typedName);
+    const list = Array.isArray(values) ? values : parseEnvironmentAliases(values);
+    return normalizeEnvironmentName(list[0]) || null;
   }
   return isValidEnvironmentKind(kind) ? kind.toLowerCase() : null;
 }
 
 /**
- * Whether the company types this environment's name, or Orbit derives it.
- * @param {unknown} kind
- * @returns {boolean}
- */
-export function hasTypedName(kind) {
-  return kind === REPEATABLE_ENVIRONMENT_KIND;
-}
-
-/**
- * The full set of strings an environment should answer to: its canonical name plus
- * the extra spellings, normalized and de-duplicated, canonical first.
+ * The full set of strings an environment should answer to, canonical first,
+ * normalized and de-duplicated.
+ *
+ * For the four named kinds the canonical word is prepended to what the company
+ * typed. For OTHER it is already the first thing they typed, so this is a no-op
+ * beyond cleaning the list up.
  *
  * This is what routes/environments.js writes into EnvironmentName. It does NOT
  * decide uniqueness - the database does, via @@unique([companyId, value]).

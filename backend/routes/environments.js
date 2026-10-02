@@ -9,7 +9,6 @@ import {
   ENVIRONMENT_KINDS,
   canonicalEnvironmentName,
   environmentNameRows,
-  hasTypedName,
   inferEnvironmentKind,
   isSingleSlotKind,
   isValidEnvironmentKind,
@@ -176,6 +175,10 @@ router.post('/', requireAuth, async (req, res) => {
     // An explicit kind wins. The inferred one is only a convenience default for a
     // caller that did not send one - it is a SUGGESTION, never a live resolution
     // rule, and nothing downstream infers a kind from a name again.
+    // `name` is accepted for backwards compatibility but is no longer a separate
+    // concept: for OTHER the label IS the first string the company's pipelines send,
+    // so it is folded into the list rather than asked for twice.
+    const submitted = [name, aliases].filter((v) => v !== undefined && v !== null);
     const resolvedKind = kind ? kind : inferEnvironmentKind(name);
     if (!isValidEnvironmentKind(resolvedKind)) {
       return res.status(400).json({
@@ -184,12 +187,14 @@ router.post('/', requireAuth, async (req, res) => {
       });
     }
 
-    // Orbit owns the word for the four named kinds; only OTHER takes a typed name.
-    const canonical = canonicalEnvironmentName(resolvedKind, name);
+    // Orbit owns the word for the four named kinds; OTHER takes the first string in
+    // its own list, because that is the same thing a separate name field would have
+    // held.
+    const canonical = canonicalEnvironmentName(resolvedKind, submitted);
     if (!canonical) {
       return res.status(400).json({
-        error: 'Environment name is required',
-        message: 'An OTHER environment needs a name - it is the only thing telling it apart from your other ones.',
+        error: 'Name required',
+        message: 'An OTHER environment needs at least one name - that first one is what Orbit shows, and it is the only thing telling it apart from your other ones.',
       });
     }
 
@@ -200,7 +205,7 @@ router.post('/', requireAuth, async (req, res) => {
 
     // Canonical first, then the extra spellings. Written as rows so the database
     // enforces that no string resolves to two environments.
-    const values = environmentNameRows(canonical, aliases);
+    const values = environmentNameRows(canonical, submitted);
 
     const environment = await prisma.environment.create({
       data: {
@@ -211,10 +216,9 @@ router.post('/', requireAuth, async (req, res) => {
         displayOrder: Number.isInteger(displayOrder) ? displayOrder : 0,
         // Names are stored normalized, so keep what the caller actually typed when it
         // differed - the same reason the migration records a sourceLabel.
-        sourceLabel:
-          hasTypedName(resolvedKind) && typeof name === 'string' && name.trim() !== canonical
-            ? name.trim()
-            : null,
+        sourceLabel: typeof name === 'string' && name.trim() && name.trim() !== canonical
+          ? name.trim()
+          : null,
         names: {
           create: values.map((value) => ({
             companyId,
@@ -245,8 +249,11 @@ router.post('/', requireAuth, async (req, res) => {
         ? req.body?.companyId || getAuthContext(req)?.companyId
         : getAuthContext(req)?.companyId;
       const attempted = environmentNameRows(
-        canonicalEnvironmentName(req.body?.kind || inferEnvironmentKind(req.body?.name), req.body?.name) || '',
-        req.body?.aliases,
+        canonicalEnvironmentName(
+          req.body?.kind || inferEnvironmentKind(req.body?.name),
+          [req.body?.name, req.body?.aliases].filter(Boolean),
+        ) || '',
+        [req.body?.name, req.body?.aliases].filter(Boolean),
       );
       return res.status(409).json({
         error: 'Name or alias already in use',
@@ -286,17 +293,28 @@ router.put('/:id', requireAuth, async (req, res) => {
       data.kind = kind;
     }
 
-    // The canonical name follows the kind, so re-kinding renames the row on its own:
-    // a STAGING environment promoted to PRODUCTION becomes "production", not whatever
-    // it was called before. Only OTHER takes a typed name.
+    // The label follows the kind, so re-kinding relabels the row on its own: a
+    // STAGING environment promoted to PRODUCTION becomes "production", not whatever
+    // it was called before. An OTHER is labelled by the first string in its own
+    // list, which is why there is no separate name to send.
     const nextKind = data.kind ?? existing.kind;
-    if (name !== undefined || kind !== undefined) {
-      const typed = name !== undefined ? name : existing.name;
-      const canonical = canonicalEnvironmentName(nextKind, typed);
+    const existingExtras = existing.names.filter((n) => !n.isCanonical).map((n) => n.value);
+    const submitted =
+      aliases !== undefined
+        ? [name, aliases].filter((v) => v !== undefined && v !== null)
+        : [name, ...existingExtras].filter((v) => v !== undefined && v !== null);
+
+    if (name !== undefined || kind !== undefined || aliases !== undefined) {
+      const canonical = canonicalEnvironmentName(
+        nextKind,
+        // For OTHER, fall back to the current label when the caller sent no list at
+        // all - a status-only edit must not strip the environment of its name.
+        submitted.length ? submitted : [existing.name],
+      );
       if (!canonical) {
         return res.status(400).json({
-          error: 'Environment name cannot be empty',
-          message: 'An OTHER environment needs a name.',
+          error: 'Name required',
+          message: 'An OTHER environment needs at least one name.',
         });
       }
       data.name = canonical;
@@ -349,12 +367,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     const nextCanonical = data.name ?? existing.name;
     const nextValues =
       aliases !== undefined || data.name !== undefined
-        ? environmentNameRows(
-          nextCanonical,
-          aliases !== undefined
-            ? aliases
-            : existing.names.filter((n) => !n.isCanonical).map((n) => n.value),
-        )
+        ? environmentNameRows(nextCanonical, submitted.length ? submitted : existingExtras)
         : null;
 
     const environment = await prisma.$transaction(async (tx) => {
@@ -416,8 +429,11 @@ router.put('/:id', requireAuth, async (req, res) => {
     if (isUniqueViolation(error)) {
       const existing = await findEnvironmentWithCompany(req.params.id);
       const attempted = environmentNameRows(
-        canonicalEnvironmentName(req.body?.kind || existing?.kind, req.body?.name ?? existing?.name) || '',
-        req.body?.aliases,
+        canonicalEnvironmentName(req.body?.kind || existing?.kind, [
+          req.body?.name,
+          req.body?.aliases,
+        ].filter(Boolean)) || existing?.name || '',
+        [req.body?.name, req.body?.aliases].filter(Boolean),
       );
       return res.status(409).json({
         error: 'Name or alias already in use',

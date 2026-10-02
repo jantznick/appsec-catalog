@@ -7,6 +7,7 @@ import { Button } from '../ui/Button.jsx';
 import { Input } from '../ui/Input.jsx';
 import { Modal } from '../ui/Modal.jsx';
 import { Select } from '../ui/Select.jsx';
+import { environmentLabel } from '../../utils/environments.js';
 
 /**
  * Which of its company's environments this application runs in, and what is deployed
@@ -173,7 +174,7 @@ export function ApplicationEnvironments({ applicationId, companyId, canManage, o
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium text-gray-900">
-                          {instance.environment?.name || 'Unknown environment'}
+                          {environmentLabel(instance.environment) || 'Unknown environment'}
                         </span>
                         {instance.isPrimary && (
                           <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
@@ -260,10 +261,7 @@ export function ApplicationEnvironments({ applicationId, companyId, canManage, o
             onChange={(e) => setAddForm({ ...addForm, environmentId: e.target.value })}
             options={[
               { value: '', label: 'Select an environment' },
-              ...available.map((env) => ({
-                value: env.id,
-                label: `${env.name} (${env.kind.toLowerCase()})`,
-              })),
+              ...available.map((env) => ({ value: env.id, label: environmentLabel(env) })),
             ]}
             helperText="Only your company's environments appear here. Add a new one in settings."
           />
@@ -329,7 +327,7 @@ export function ApplicationEnvironments({ applicationId, companyId, canManage, o
         <div className="space-y-4">
           <p className="text-sm text-gray-700">
             This application will no longer be recorded as running in{' '}
-            &ldquo;{removeTarget?.environment?.name}&rdquo;, and the version and branch stored
+            &ldquo;{environmentLabel(removeTarget?.environment)}&rdquo;, and the version and branch stored
             for it are deleted. Deploy history is kept.
           </p>
           {(removeTarget?._count?.domains > 0 || removeTarget?._count?.toolLinks > 0) && (

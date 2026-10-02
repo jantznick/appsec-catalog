@@ -9,6 +9,13 @@ import { Modal } from '../components/ui/Modal.jsx';
 import { Select } from '../components/ui/Select.jsx';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table.jsx';
 import useAuthStore from '../store/authStore.js';
+import {
+  ENVIRONMENT_KIND_LABELS as KIND_LABELS,
+  REPEATABLE_ENVIRONMENT_KIND as REPEATABLE_KIND,
+  canonicalNameForKind as canonicalNameFor,
+  environmentOwnedNames as ownedNames,
+  environmentLabel,
+} from '../utils/environments.js';
 
 /**
  * Deployment Environments: the strings each company's pipelines send, mapped onto
@@ -30,13 +37,6 @@ import useAuthStore from '../store/authStore.js';
 /** Orbit's kinds, in importance order. Overridden by the server's list once loaded. */
 const FALLBACK_KINDS = ['PRODUCTION', 'STAGING', 'QA', 'DEVELOPMENT', 'OTHER'];
 
-const KIND_LABELS = {
-  PRODUCTION: 'Production',
-  STAGING: 'Staging',
-  QA: 'QA',
-  DEVELOPMENT: 'Development',
-  OTHER: 'Other',
-};
 
 const KIND_HINTS = {
   PRODUCTION: 'What customers use. Its version is the one reported as the application\'s current version.',
@@ -46,24 +46,9 @@ const KIND_HINTS = {
   OTHER: 'Anything else — sandbox, demo, a one-off region. Add as many as you need.',
 };
 
-const REPEATABLE_KIND = 'OTHER';
+const emptyForm = { kind: 'OTHER', aliases: '', description: '', status: 'active' };
 
-const emptyForm = { name: '', kind: 'OTHER', aliases: '', description: '', status: 'active' };
 
-/**
- * The strings a company's pipelines send for this environment, canonical excluded.
- *
- * The canonical name is Orbit's word for the kind (production, staging, qa,
- * development) and is not something a company types -- only OTHER has a typed name.
- * So the editable list is everything EXCEPT the canonical row.
- */
-function canonicalNameFor(kind) {
-  return kind === REPEATABLE_KIND ? '' : String(kind || '').toLowerCase();
-}
-
-function extraNames(env) {
-  return (env?.names || []).filter((n) => !n.isCanonical).map((n) => n.value);
-}
 
 export function SettingsEnvironments() {
   const { user, isAdmin } = useAuthStore();
@@ -151,9 +136,8 @@ export function SettingsEnvironments() {
   const openEdit = (env) => {
     setEditing(env);
     setForm({
-      name: env.name || '',
       kind: env.kind || REPEATABLE_KIND,
-      aliases: extraNames(env).join(', '),
+      aliases: ownedNames(env).join(', '),
       description: env.description || '',
       status: env.status || 'active',
     });
@@ -161,8 +145,8 @@ export function SettingsEnvironments() {
   };
 
   const handleSave = async () => {
-    if (form.kind === REPEATABLE_KIND && !form.name.trim()) {
-      toast.error('Give this environment a name — it is the only thing telling it apart from your other ones');
+    if (form.kind === REPEATABLE_KIND && !form.aliases.trim()) {
+      toast.error('Give this environment at least one name — the first is what Orbit shows it as');
       return;
     }
     try {
@@ -274,8 +258,7 @@ export function SettingsEnvironments() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Company</TableHead>
-                    <TableHead>Kind</TableHead>
-                    <TableHead>Name</TableHead>
+                    <TableHead>Environment</TableHead>
                     <TableHead>Names your pipelines send</TableHead>
                     <TableHead>Applications</TableHead>
                     <TableHead>Deployments</TableHead>
@@ -298,12 +281,18 @@ export function SettingsEnvironments() {
                             {env.company?.name || '—'}
                           </span>
                         </TableCell>
-                        <TableCell>{KIND_LABELS[env.kind] || env.kind}</TableCell>
-                        <TableCell>{env.name}</TableCell>
                         <TableCell>
-                          {extraNames(env).length ? (
+                          <span className="font-medium text-gray-900">
+                            {environmentLabel(env)}
+                          </span>
+                          {env.kind === REPEATABLE_KIND && (
+                            <span className="ml-2 text-xs text-gray-500">Other</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {ownedNames(env).length ? (
                             <span className="text-sm text-gray-700">
-                              {extraNames(env).join(', ')}
+                              {ownedNames(env).join(', ')}
                             </span>
                           ) : (
                             <span className="text-sm italic text-gray-400">
@@ -371,7 +360,7 @@ export function SettingsEnvironments() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Name</TableHead>
+                      {repeatable && <TableHead>Name</TableHead>}
                       <TableHead>Names your pipelines send</TableHead>
                       <TableHead>Applications</TableHead>
                       <TableHead>Deployments</TableHead>
@@ -382,19 +371,23 @@ export function SettingsEnvironments() {
                   <TableBody>
                     {rows.map((env) => (
                       <TableRow key={env.id}>
+                        {repeatable && (
+                          <TableCell>
+                            <span className="font-medium text-gray-900">{env.name}</span>
+                          </TableCell>
+                        )}
                         <TableCell>
-                          <span className="font-medium text-gray-900">{env.name}</span>
-                          {env.description && (
-                            <p className="text-xs text-gray-500">{env.description}</p>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {extraNames(env).length ? (
-                            <span className="text-sm text-gray-700">{extraNames(env).join(', ')}</span>
+                          {ownedNames(env).length ? (
+                            <span className="text-sm text-gray-700">{ownedNames(env).join(', ')}</span>
                           ) : (
                             <span className="text-sm italic text-gray-400">
                               just &ldquo;{env.name}&rdquo;
                             </span>
+                          )}
+                          {/* The description rides here rather than under the name,
+                              because the four named kinds have no name cell. */}
+                          {env.description && (
+                            <p className="mt-0.5 text-xs text-gray-500">{env.description}</p>
                           )}
                         </TableCell>
                         <TableCell>{env._count?.applications ?? '—'}</TableCell>
@@ -455,33 +448,16 @@ export function SettingsEnvironments() {
               .map((k) => ({ value: k, label: KIND_LABELS[k] || k }))}
             helperText="Orbit's bucket for this environment. Cross-company reporting counts by kind, never by name."
           />
-          {form.kind === REPEATABLE_KIND ? (
-            <Input
-              label="Name"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="e.g. sandbox, demo"
-              helperText="What Orbit calls this one. Only you can name it — the other four kinds take their name from the kind."
-            />
-          ) : (
-            <div>
-              <span className="block text-sm font-medium text-gray-700 mb-2">Name</span>
-              <p className="text-sm text-gray-900">
-                {canonicalNameFor(form.kind)}
-              </p>
-              <p className="mt-1 text-xs text-gray-500">
-                Orbit&rsquo;s word for this kind, so every company reads the same on a
-                cross-company screen. What your pipelines actually send goes below — you
-                do not have to change anything on your side.
-              </p>
-            </div>
-          )}
           <Input
             label="Names your pipelines send"
             value={form.aliases}
             onChange={(e) => setForm({ ...form, aliases: e.target.value })}
-            placeholder="prod, prod-us, prod-eu"
-            helperText="Comma-separated, and as many as you need. A deploy or a Wiz tag carrying any of these resolves here. Anything else lands in Unassigned rather than being guessed at."
+            placeholder={form.kind === REPEATABLE_KIND ? 'sandbox, sbx' : 'prod, prod-us, prod-eu'}
+            helperText={
+              form.kind === REPEATABLE_KIND
+                ? 'Comma-separated, as many as you need. The first one is what Orbit shows this environment as. A deploy or a Wiz tag carrying any of them resolves here; anything else lands in Unassigned rather than being guessed at.'
+                : `Comma-separated, as many as you need. A deploy or a Wiz tag carrying any of them resolves here; anything else lands in Unassigned rather than being guessed at. Orbit shows this one as "${canonicalNameFor(form.kind)}" whatever you send.`
+            }
           />
           <Input
             label="Description (optional)"

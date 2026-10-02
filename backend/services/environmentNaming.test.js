@@ -7,7 +7,6 @@ import {
   REPEATABLE_ENVIRONMENT_KIND,
   canonicalEnvironmentName,
   environmentNameRows,
-  hasTypedName,
   inferEnvironmentKind,
   isSingleSlotKind,
   normalizeEnvironmentName,
@@ -63,34 +62,31 @@ describe('canonicalEnvironmentName', () => {
     // Every company's production environment is called "production" in Orbit, however
     // its pipelines spell it. Eighteen companies showing eighteen different words for
     // the same thing is worse on a cross-company screen than one word plus aliases.
-    assert.equal(canonicalEnvironmentName('PRODUCTION', 'Super Important'), 'production');
+    assert.equal(canonicalEnvironmentName('PRODUCTION', ['Super Important']), 'production');
     assert.equal(canonicalEnvironmentName('STAGING', null), 'staging');
-    assert.equal(canonicalEnvironmentName('QA', 'uat'), 'qa');
+    assert.equal(canonicalEnvironmentName('QA', ['uat']), 'qa');
     assert.equal(canonicalEnvironmentName('DEVELOPMENT', ''), 'development');
   });
 
-  it('takes the typed name for OTHER, which is the only thing telling two apart', () => {
-    assert.equal(canonicalEnvironmentName('OTHER', '  Sandbox '), 'sandbox');
-    assert.equal(canonicalEnvironmentName('OTHER', 'demo'), 'demo');
+  it('takes the FIRST string in its own list for OTHER', () => {
+    // There is no separate name to type. `name` never decides a match - every match
+    // is an EnvironmentName row - so for OTHER the label and the first thing the
+    // company's pipelines send were always the same string asked for twice.
+    assert.equal(canonicalEnvironmentName('OTHER', ['  Sandbox ', 'sbx']), 'sandbox');
+    assert.equal(canonicalEnvironmentName('OTHER', 'demo, dem'), 'demo');
   });
 
-  it('returns null for an OTHER with no usable name', () => {
-    assert.equal(canonicalEnvironmentName('OTHER', '   '), null);
+  it('returns null for an OTHER with no usable names', () => {
+    assert.equal(canonicalEnvironmentName('OTHER', ['   ']), null);
     assert.equal(canonicalEnvironmentName('OTHER', null), null);
+    assert.equal(canonicalEnvironmentName('OTHER', []), null);
   });
 
   it('returns null for an unknown kind rather than inventing one', () => {
-    assert.equal(canonicalEnvironmentName('PROD', 'prod'), null);
+    assert.equal(canonicalEnvironmentName('PROD', ['prod']), null);
   });
 });
 
-describe('hasTypedName', () => {
-  it('is true only for OTHER', () => {
-    for (const kind of ENVIRONMENT_KINDS) {
-      assert.equal(hasTypedName(kind), kind === REPEATABLE_ENVIRONMENT_KIND, kind);
-    }
-  });
-});
 
 describe('environmentNameRows', () => {
   it('puts the canonical name first', () => {
