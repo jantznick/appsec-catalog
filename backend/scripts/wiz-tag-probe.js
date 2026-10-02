@@ -38,12 +38,13 @@
  *   node scripts/wiz-tag-probe.js --types VIRTUAL_MACHINE,CONTAINER,CONTAINER_IMAGE
  *   node scripts/wiz-tag-probe.js --raw 3                # dump 3 raw tag blobs
  *   node scripts/wiz-tag-probe.js --folders              # list folders, find an id
- *   node scripts/wiz-tag-probe.js --company <id> --folder <uuid>
+ *   node scripts/wiz-tag-probe.js --folder <uuid>       # a folder IS a company
  *
- * `--folders` is how you find the id for a company that has no Wiz link yet: the
- * credentials are enterprise-scoped, so one tenant's folder list covers every
- * company. `--folder` then probes that folder without having to save the link
- * first, which keeps an exploratory look read-only in the database too.
+ * A folder IS a company in this tenant, so --folder is the only argument that
+ * identifies what to look at. --folders lists the ids. --company is optional and
+ * is used only to pick credentials; with enterprise-scoped credentials, which is
+ * the normal case, you never need it. Probing by folder saves nothing to the
+ * database, so an exploratory look leaves no trace either side.
  */
 
 import { prisma } from '../prisma/client.js';
@@ -230,22 +231,20 @@ async function probeType({ url, token, folderId, type, pages, collector }) {
   return { entityCount, error: null };
 }
 
-async function probeCompany(company, args) {
+/**
+ * Probe one folder.
+ *
+ * A company IS a folder in this tenant, so the folder is the only thing that
+ * identifies what to look at. `companyId` is optional and is used for one thing
+ * only: resolving credentials. Enterprise-scoped credentials cover the whole
+ * tenant, so `--folder` on its own is the normal way to run this.
+ */
+async function probeFolder({ folderId, label, companyId }, args) {
   console.log(`\n${'='.repeat(72)}`);
-  console.log(`${company.name}  (${company.id})`);
+  console.log(label);
   console.log('='.repeat(72));
 
-  const link = await prisma.companyToolLink.findFirst({
-    where: { companyId: company.id, provider: PROVIDER_WIZ },
-    select: { filter: true },
-  });
-  const folderId = args.folderId || link?.filter?.folderId;
-  if (!folderId) {
-    console.log('  no Wiz folder configured — skipping');
-    return;
-  }
-
-  const creds = await resolveIntegrationForCompany(company.id, PROVIDER_WIZ);
+  const creds = await resolveIntegrationForCompany(companyId, PROVIDER_WIZ);
   if (!creds?.decrypted?.clientId || !creds?.decrypted?.clientSecret) {
     console.log('  no Wiz credentials resolvable — skipping');
     return;
@@ -301,21 +300,12 @@ async function probeCompany(company, args) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
-  const companies = args.companyId
-    ? await prisma.company.findMany({ where: { id: args.companyId }, select: { id: true, name: true } })
-    : await prisma.company.findMany({
-      where: { companyToolLinks: { some: { provider: PROVIDER_WIZ } } },
-      select: { id: true, name: true },
-      orderBy: { name: 'asc' },
-    });
-
   if (args.listFolders) {
-    // Enterprise-scoped credentials cover the whole tenant, so any company's
-    // credentials will list every folder - including ones no company is linked to.
-    const seed = args.companyId || companies[0]?.id || null;
-    const creds = await resolveIntegrationForCompany(seed, PROVIDER_WIZ);
+    // Enterprise-scoped credentials cover the whole tenant, so this lists every
+    // folder regardless of which company (if any) is named.
+    const creds = await resolveIntegrationForCompany(args.companyId, PROVIDER_WIZ);
     if (!creds?.decrypted?.clientId) {
-      console.log('No Wiz credentials resolvable. Pass --company <id> for one that has them.');
+      console.log('No Wiz credentials resolvable. Check an enterprise Wiz credential exists.');
       return;
     }
     const folders = await listWizFolders(creds.decrypted, creds.baseUrl || '');
@@ -323,22 +313,54 @@ async function main() {
     for (const folder of folders) {
       console.log(`  ${folder.id}  ${folder.name}`);
     }
-    console.log('\nProbe one with:  --company <companyId> --folder <folderId>');
+    console.log('\nProbe one with:  --folder <folderId>');
     return;
   }
 
-  if (!companies.length) {
-    console.log('No companies with a Wiz tool link. Pass --company <id> to probe a specific one.');
+  // A folder IS a company here, so --folder is all it takes. Everything else is a
+  // convenience for folders already linked to a company record.
+  let targets;
+  if (args.folderId) {
+    targets = [{ folderId: args.folderId, label: args.folderId, companyId: args.companyId }];
+  } else {
+    const companies = args.companyId
+      ? await prisma.company.findMany({ where: { id: args.companyId }, select: { id: true, name: true } })
+      : await prisma.company.findMany({
+        where: { companyToolLinks: { some: { provider: PROVIDER_WIZ } } },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      });
+
+    const links = await prisma.companyToolLink.findMany({
+      where: { provider: PROVIDER_WIZ, companyId: { in: companies.map((c) => c.id) } },
+      select: { companyId: true, filter: true },
+    });
+    const folderByCompany = new Map(links.map((l) => [l.companyId, l.filter?.folderId]));
+
+    targets = companies
+      .map((c) => ({
+        folderId: folderByCompany.get(c.id),
+        label: `${c.name}  (${c.id})`,
+        companyId: c.id,
+      }))
+      .filter((t) => {
+        if (!t.folderId) console.log(`Skipping ${t.label} — no Wiz folder configured`);
+        return Boolean(t.folderId);
+      });
+  }
+
+  if (!targets.length) {
+    console.log('Nothing to probe. Run with --folders to list folder ids, then --folder <id>.');
     return;
   }
 
-  console.log(`Probing ${companies.length} company/companies for types: ${args.types.join(', ')}`);
+  console.log(`Probing ${targets.length} folder(s) for types: ${args.types.join(', ')}`);
 
-  for (const company of companies) {
+  for (const target of targets) {
     try {
-      await probeCompany(company, args);
+      await probeFolder(target, args);
     } catch (error) {
-      console.error(`\n  ${company.name}: ${error?.message || error}`);
+      console.error(`\n  ${target.label}: ${error?.message || error}`);
     }
   }
 
