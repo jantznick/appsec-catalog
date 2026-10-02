@@ -380,14 +380,22 @@ async function main() {
       console.log(`  types: ${types.join(', ')}`);
       console.log('='.repeat(72));
 
-      const { resources, scanned, errors } = await listWizResourcesForFolder(
+      const { resources, scanned, errors, serverFiltered, whereRejected } = await listWizResourcesForFolder(
         creds.decrypted,
         creds.baseUrl || '',
         target.folderId,
         { productValue: args.product, applicationValue: args.application, types },
       );
 
-      console.log(`\n  ${resources.length} matched of ${scanned} scanned`);
+      console.log(
+        `\n  ${resources.length} matched of ${scanned} scanned`
+        + `   (${serverFiltered ? 'Wiz filtered server-side' : 'filtered locally'})`,
+      );
+      if (!serverFiltered && whereRejected) {
+        // Worth seeing: it names the predicate syntax this tenant rejected, which
+        // is the only way to learn the right one without guessing in production.
+        console.log(`  server-side tag filter rejected: ${whereRejected}`);
+      }
       for (const e of errors) console.log(`  type ${e.type} errored: ${e.message}`);
 
       for (const r of resources.slice(0, 40)) {

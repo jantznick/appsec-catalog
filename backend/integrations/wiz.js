@@ -506,6 +506,37 @@ export function readWizTag(tags, key) {
 }
 
 /**
+ * Candidate `where` shapes for filtering on a tag inside Wiz, most specific first.
+ *
+ * WHY A LADDER AND NOT ONE SHAPE
+ *
+ * Pushing the tag filter into Wiz is the difference between asking for the handful
+ * of resources an application runs on and pulling every virtual machine in the
+ * folder to sift locally. It is obviously right - but GraphEntityQueryInput's
+ * predicate syntax for tags is not something this codebase has ever exercised, and
+ * getting it wrong means Wiz rejects the whole query rather than returning a few
+ * extra rows.
+ *
+ * So each shape is tried once per tenant and the first one Wiz accepts is reused.
+ * If none are accepted the caller falls back to filtering locally, which is slower
+ * and chattier but correct. `serverFiltered` in the result says which happened, so
+ * nobody has to guess whether the fast path is live.
+ *
+ * @param {Record<string,string>} pairs tag key -> required value
+ * @returns {Array<object>} candidate `where` clauses
+ */
+function wizTagWhereCandidates(pairs) {
+  const entries = Object.entries(pairs).filter(([, v]) => v);
+  if (!entries.length) return [];
+
+  return [
+    { tags: { EQUALS: entries.map(([key, value]) => ({ key, value })) } },
+    { tags: entries.map(([key, value]) => ({ key, value })) },
+    Object.fromEntries(entries.map(([key, value]) => [`tags.${key}`, { EQUALS: value }])),
+  ];
+}
+
+/**
  * The resources in a folder that match a product and/or application tag value.
  *
  * THE FOLDER IS REQUIRED and is the company. No folder, no call - a tenant-wide
@@ -534,7 +565,10 @@ export function readWizTag(tags, key) {
  * @param {string[]} [options.types]
  * @param {Record<string,string>} [options.tagKeys] per-company key names
  * @param {number} [options.maxPages]
- * @returns {Promise<{ resources: Array<object>, scanned: number, errors: Array<{type: string, message: string}> }>}
+ * @returns {Promise<{ resources: Array<object>, scanned: number, errors: Array<{type: string, message: string}>, serverFiltered: boolean, whereRejected: string|null }>}
+ *   `serverFiltered` is false when Wiz rejected every tag predicate and the
+ *   narrowing happened locally - correct, but it means `scanned` is the whole
+ *   folder rather than a slice of it.
  */
 export async function listWizResourcesForFolder(decrypted, graphqlUrl, folderId, options = {}) {
   const started = Date.now();
@@ -567,18 +601,51 @@ export async function listWizResourcesForFolder(decrypted, graphqlUrl, folderId,
   const errors = [];
   let scanned = 0;
 
+  // Ask Wiz to do the filtering. Only the product tag is pushed down: resources
+  // carrying the product and NO application tag are wanted too (the shared ones),
+  // and "has this tag OR does not have it" is not a predicate worth constructing.
+  // Narrowing to the product is most of the win anyway - it is the difference
+  // between a product's resources and the whole folder.
+  const whereCandidates = productValue
+    ? wizTagWhereCandidates({ [keys.product]: productValue })
+    : [];
+  let whereClause = null;
+  let serverFiltered = false;
+  let whereRejected = null;
+
   for (const type of types) {
     let after = null;
     let page = 0;
+    let candidateIndex = 0;
     try {
       while (page < maxPages) {
         page += 1;
-        const data = await wizGraphql(url, token, GRAPH_SEARCH_RESOURCES_QUERY, {
-          first: 50,
-          after,
-          projectId: folderId,
-          query: { select: true, type: [type] },
-        });
+
+        // Settle on a `where` the first time we query, then stop experimenting.
+        let data;
+        while (true) {
+          const attempt = whereClause
+            ?? (candidateIndex < whereCandidates.length ? whereCandidates[candidateIndex] : null);
+          try {
+            data = await wizGraphql(url, token, GRAPH_SEARCH_RESOURCES_QUERY, {
+              first: 50,
+              after,
+              projectId: folderId,
+              query: { select: true, type: [type], ...(attempt ? { where: attempt } : {}) },
+            });
+            if (attempt && !whereClause) {
+              whereClause = attempt;
+              serverFiltered = true;
+            }
+            break;
+          } catch (error) {
+            // A settled clause failing is a real error; a candidate failing just
+            // means try the next shape, then give up and filter locally.
+            if (whereClause || candidateIndex >= whereCandidates.length) throw error;
+            whereRejected = (error?.message || String(error)).slice(0, 200);
+            candidateIndex += 1;
+          }
+        }
 
         const connection = data?.graphSearch;
         if (!connection) throw new Error('Wiz graphSearch response was empty');
@@ -640,10 +707,11 @@ export async function listWizResourcesForFolder(decrypted, graphqlUrl, folderId,
     scanned,
     matched: resources.length,
     typeErrors: errors.length,
+    serverFiltered,
     durationMs: Date.now() - started,
   });
 
-  return { resources, scanned, errors };
+  return { resources, scanned, errors, serverFiltered, whereRejected };
 }
 
 export async function listWizTagsForFolder(decrypted, graphqlUrl, folderId) {
