@@ -190,7 +190,9 @@ export function FeatureRequestsAdmin() {
       const result = await api.promoteFeatureRequest(request.id);
       applyUpdated(result.request);
       toast.success('Added to the roadmap as a draft');
-      navigate('/settings/roadmap');
+      // Hand the new item's id over so the roadmap editor opens on it — the
+      // draft still needs wording and a stage before it can be published.
+      navigate(`/settings/roadmap?item=${encodeURIComponent(result.roadmapItem.id)}`);
     } catch (err) {
       toast.error(err?.message || 'Failed to add this to the roadmap');
     } finally {

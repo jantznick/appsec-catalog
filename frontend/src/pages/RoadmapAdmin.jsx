@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import useAuthStore from '../store/authStore.js';
 import { api } from '../lib/api.js';
 import { Button } from '../components/ui/Button.jsx';
@@ -70,6 +70,11 @@ function statusBadgeClasses(status) {
 
 export function RoadmapAdmin() {
   const { isAdmin } = useAuthStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // ?item=<id> — set when arriving from a promoted feature request, so the
+  // editor opens on the draft that was just created instead of making the
+  // admin hunt for it in the list.
+  const requestedId = searchParams.get('item');
   const [items, setItems] = useState([]);
   const [updates, setUpdates] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -106,6 +111,17 @@ export function RoadmapAdmin() {
   useEffect(() => {
     if (isAdmin()) loadData();
   }, []);
+
+  useEffect(() => {
+    if (!requestedId) return;
+    const match = items.find((item) => item.id === requestedId);
+    if (!match) return;
+    setSelectedId(match.id);
+    setForm(itemToForm(match));
+    // Drop the parameter once it has been honoured, so a later "New item"
+    // isn't pulled back to this draft by the next render.
+    setSearchParams({}, { replace: true });
+  }, [requestedId, items, setSearchParams]);
 
   if (!isAdmin()) {
     return <Navigate to="/dashboard" replace />;
