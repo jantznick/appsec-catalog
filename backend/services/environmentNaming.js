@@ -168,8 +168,13 @@ export function parseEnvironmentAliases(raw) {
  */
 export function canonicalEnvironmentName(kind, values) {
   if (kind === REPEATABLE_ENVIRONMENT_KIND) {
-    const list = Array.isArray(values) ? values : parseEnvironmentAliases(values);
-    return normalizeEnvironmentName(list[0]) || null;
+    // Always parse, array or not. An array element can itself be a comma-separated
+    // string - the route builds `["sandbox, dev"]` from one form field - and taking
+    // element [0] unparsed stored "sandbox, dev" as a single name, then
+    // environmentNameRows split the same input again and added "sandbox" and "dev"
+    // beside it. Three rows from two names.
+    const list = parseEnvironmentAliases(Array.isArray(values) ? values.join(',') : values);
+    return list[0] || null;
   }
   return isValidEnvironmentKind(kind) ? kind.toLowerCase() : null;
 }

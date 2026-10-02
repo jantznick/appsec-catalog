@@ -213,10 +213,10 @@ export function SettingsEnvironments() {
         <h1 className="text-2xl font-semibold text-gray-900">Deployment Environments</h1>
         <p className="mt-1 max-w-3xl text-sm text-gray-600">
           Orbit groups every environment into five kinds and names four of them for you —
-          production, staging, qa, development. List the strings <em>your</em> pipelines
-          actually send and we will match deploys and Wiz tags against them, so you never
-          have to change your tagging schema. A value we do not recognise is recorded as
-          Unassigned rather than guessed at.
+          production, staging, qa, development. List the strings <em>you</em> actually use
+          and we match them wherever an environment turns up: a CI deploy&rsquo;s
+          environment, and the Wiz <code>Environment</code> tag on your resources. One list,
+          both. Nothing we do not recognise is guessed at — it lands in Unassigned.
         </p>
         <p className="mt-2 max-w-3xl text-xs text-gray-500">
           This is not the same as a company&rsquo;s <strong>Server Environment</strong> (&ldquo;Cloud
@@ -259,9 +259,7 @@ export function SettingsEnvironments() {
                   <TableRow>
                     <TableHead>Company</TableHead>
                     <TableHead>Environment</TableHead>
-                    <TableHead>Names your pipelines send</TableHead>
-                    <TableHead>Applications</TableHead>
-                    <TableHead>Deployments</TableHead>
+                    <TableHead>Names that resolve here</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead />
                   </TableRow>
@@ -300,8 +298,6 @@ export function SettingsEnvironments() {
                             </span>
                           )}
                         </TableCell>
-                        <TableCell>{env._count?.applications ?? '—'}</TableCell>
-                        <TableCell>{env._count?.deployments ?? '—'}</TableCell>
                         <TableCell>
                           <span
                             className={
@@ -361,9 +357,7 @@ export function SettingsEnvironments() {
                   <TableHeader>
                     <TableRow>
                       {repeatable && <TableHead>Name</TableHead>}
-                      <TableHead>Names your pipelines send</TableHead>
-                      <TableHead>Applications</TableHead>
-                      <TableHead>Deployments</TableHead>
+                      <TableHead>Names that resolve here</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead />
                     </TableRow>
@@ -390,8 +384,6 @@ export function SettingsEnvironments() {
                             <p className="mt-0.5 text-xs text-gray-500">{env.description}</p>
                           )}
                         </TableCell>
-                        <TableCell>{env._count?.applications ?? '—'}</TableCell>
-                        <TableCell>{env._count?.deployments ?? '—'}</TableCell>
                         <TableCell>
                           <span
                             className={
@@ -449,14 +441,14 @@ export function SettingsEnvironments() {
             helperText="Orbit's bucket for this environment. Cross-company reporting counts by kind, never by name."
           />
           <Input
-            label="Names your pipelines send"
+            label="Names that resolve here"
             value={form.aliases}
             onChange={(e) => setForm({ ...form, aliases: e.target.value })}
             placeholder={form.kind === REPEATABLE_KIND ? 'sandbox, sbx' : 'prod, prod-us, prod-eu'}
             helperText={
               form.kind === REPEATABLE_KIND
-                ? 'Comma-separated, as many as you need. The first one is what Orbit shows this environment as. A deploy or a Wiz tag carrying any of them resolves here; anything else lands in Unassigned rather than being guessed at.'
-                : `Comma-separated, as many as you need. A deploy or a Wiz tag carrying any of them resolves here; anything else lands in Unassigned rather than being guessed at. Orbit shows this one as "${canonicalNameFor(form.kind)}" whatever you send.`
+                ? 'Comma-separated, as many as you need. Matched against a CI deploy\'s environment and against a Wiz Environment tag — same lookup, so one list serves both. The first is what Orbit shows this environment as. Anything not listed lands in Unassigned rather than being guessed at.'
+                : `Comma-separated, as many as you need. Matched against a CI deploy's environment and against a Wiz Environment tag — same lookup, so one list serves both. Anything not listed lands in Unassigned rather than being guessed at. Orbit shows this one as "${canonicalNameFor(form.kind)}" whatever you send.`
             }
           />
           <Input
@@ -483,14 +475,17 @@ export function SettingsEnvironments() {
         <div className="space-y-4">
           {retireTarget?.status === 'active' ? (
             <p className="text-sm text-gray-700">
-              &ldquo;{retireTarget?.name}&rdquo; will stop appearing in pickers, and the applications
-              in it will stop counting as running there. Its deploy history and its Wiz tag are kept
-              — a retired environment still describes what ran. Nothing is deleted.
+              &ldquo;{environmentLabel(retireTarget)}&rdquo; will stop appearing in pickers, and the{' '}
+              {retireTarget?._count?.applications || 0} application
+              {retireTarget?._count?.applications === 1 ? '' : 's'} in it will stop counting as
+              running there. Its {retireTarget?._count?.deployments || 0} deployment
+              {retireTarget?._count?.deployments === 1 ? '' : 's'} and its Wiz tag are kept — a
+              retired environment still describes what ran. Nothing is deleted.
             </p>
           ) : (
             <p className="text-sm text-gray-700">
-              &ldquo;{retireTarget?.name}&rdquo; will appear in pickers again and its applications
-              will count as running there.
+              &ldquo;{environmentLabel(retireTarget)}&rdquo; will appear in pickers again and its
+              applications will count as running there.
             </p>
           )}
           <div className="flex justify-end gap-2">

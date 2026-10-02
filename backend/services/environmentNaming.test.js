@@ -76,6 +76,26 @@ describe('canonicalEnvironmentName', () => {
     assert.equal(canonicalEnvironmentName('OTHER', 'demo, dem'), 'demo');
   });
 
+  it('parses a one-element array whose element is itself comma-separated', () => {
+    // REGRESSION. The route builds ["sandbox, dev"] from a single form field, and an
+    // Array.isArray short-circuit took element [0] unparsed - storing "sandbox, dev"
+    // as one name, which environmentNameRows then split again beside it. Three rows
+    // from two names, displayed as "sandbox, dev, dev, sandbox".
+    assert.equal(canonicalEnvironmentName('OTHER', ['sandbox, dev']), 'sandbox');
+    assert.deepEqual(
+      environmentNameRows(canonicalEnvironmentName('OTHER', ['sandbox, dev']), ['sandbox, dev']),
+      ['sandbox', 'dev'],
+    );
+  });
+
+  it('agrees however the same names arrive', () => {
+    const expected = ['sandbox', 'dev'];
+    for (const shape of [['sandbox, dev'], ['sandbox', 'dev'], 'sandbox, dev', [' Sandbox ', ' DEV ']]) {
+      const canonical = canonicalEnvironmentName('OTHER', shape);
+      assert.deepEqual(environmentNameRows(canonical, shape), expected, JSON.stringify(shape));
+    }
+  });
+
   it('returns null for an OTHER with no usable names', () => {
     assert.equal(canonicalEnvironmentName('OTHER', ['   ']), null);
     assert.equal(canonicalEnvironmentName('OTHER', null), null);

@@ -13,39 +13,49 @@ export const DEFAULT_PRODUCTION_ENVIRONMENT_NAME = canonicalEnvironmentName(PRIM
  * of a company's Environment rows, and keeping the matching ApplicationEnvironment
  * instance up to date.
  *
- * Both deployment write paths go through here so they cannot drift:
+ * Every write path goes through here so they cannot drift:
  *   - routes/deploymentTokens.js  (CI push)
  *   - routes/applications.js      (manual entry)
+ *   - integrations/* (Phase 4: the Wiz Environment tag, via resolveEnvironmentByName)
  */
 
 /**
- * Find the company's environment matching a submitted string.
+ * Resolve ANY environment string to one of a company's environments.
+ *
+ * SOURCE-AGNOSTIC ON PURPOSE. A CI deploy payload and a Wiz `Environment` resource
+ * tag are the same question - "which of this company's environments does this
+ * string mean?" - so they are the same lookup. Phase 4's tag triple calls this, not
+ * a second copy of it. A second copy is how two code paths come to disagree about
+ * what "prod" means, which is the failure this whole table exists to prevent.
  *
  * ONE INDEXED LOOKUP. Every string an environment answers to - its canonical name
  * and every extra spelling - is a row in EnvironmentName, unique per company, so
  * this is a primary-key hit rather than a scan-and-compare.
  *
  * NO INFERENCE, EVER. A string that matches no row does not fall back to a kind, a
- * fuzzy match or a nearest neighbour - it goes to Unassigned. "production" does not
- * quietly become "prod". That looks unhelpful and is the entire point: the mismatch
- * between what a pipeline sends and what the company configured is exactly the
- * misconfiguration this feature exists to surface, and absorbing it silently would
- * mean a company could never find out. The fix is to add the string as an alias -
- * one click from the Unassigned bucket - not to guess.
+ * fuzzy match or a nearest neighbour. "production" does not quietly become "prod".
+ * That looks unhelpful and is the entire point: the mismatch between what a pipeline
+ * or a tag says and what the company configured is exactly the misconfiguration this
+ * feature exists to surface, and absorbing it silently would mean a company could
+ * never find out. The fix is to add the string as another name - one click from the
+ * Unassigned bucket - not to guess.
  *
  * Deliberately does NOT create a missing environment either. One typo in a pipeline
- * yaml would otherwise invent an environment that then appears in the environment
- * selector and the Wiz tag picker as though it were real.
+ * yaml, or one mistyped cloud tag, would otherwise invent an environment that then
+ * appears in the environment selector and the Wiz tag picker as though it were real.
  *
- * Retired environments still resolve. The deploy really happened, and refusing to
- * record where would lose more than it protects.
+ * Retired environments still resolve. The deploy really happened and the tagged
+ * resource really exists; refusing to say where would lose more than it protects.
  *
  * @param {string} companyId
- * @param {unknown} rawEnvironment value as submitted
+ * @param {unknown} rawValue the string as submitted, from anywhere
  * @returns {Promise<{ normalizedName: string | null, environment: { id: string, name: string, kind: string } | null, matchedAlias: boolean }>}
+ *   `matchedAlias` is true when the string was one of the extra spellings rather
+ *   than the environment's own label - worth surfacing, because a company whose
+ *   tags never use the canonical name may want to know.
  */
-export async function resolveEnvironmentForDeployment(companyId, rawEnvironment) {
-  const normalizedName = normalizeEnvironmentName(rawEnvironment);
+export async function resolveEnvironmentByName(companyId, rawValue) {
+  const normalizedName = normalizeEnvironmentName(rawValue);
   if (!companyId || !normalizedName) {
     return { normalizedName, environment: null, matchedAlias: false };
   }
@@ -67,6 +77,17 @@ export async function resolveEnvironmentForDeployment(companyId, rawEnvironment)
     environment: match.environment,
     matchedAlias: !match.isCanonical,
   };
+}
+
+/**
+ * The deployment-flavoured name for the same lookup, kept so the deploy write paths
+ * read plainly. Delegates - it is not a second implementation.
+ *
+ * @param {string} companyId
+ * @param {unknown} rawEnvironment
+ */
+export async function resolveEnvironmentForDeployment(companyId, rawEnvironment) {
+  return resolveEnvironmentByName(companyId, rawEnvironment);
 }
 
 /**
