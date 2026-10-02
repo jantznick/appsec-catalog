@@ -1,7 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { WIZ_RESOURCE_TYPES, WIZ_TAG_KEYS, readWizTag, wizTagsToObject } from './wiz.js';
+import {
+  WIZ_RESOURCE_TYPES,
+  WIZ_TAG_KEYS,
+  readWizTag,
+  wizResourceMatchReason,
+  wizTagsToObject,
+} from './wiz.js';
 
 /**
  * The tag plumbing under the Wiz filter, tested without a tenant.
@@ -85,5 +91,93 @@ describe('the defaults are a starting point, not a decision', () => {
       environment: 'Environment',
       role: 'Role',
     });
+  });
+});
+
+describe('wizResourceMatchReason', () => {
+  const viewing = { applicationValue: 'backend', productValue: 'Orbit' };
+
+  it('matches the application exactly', () => {
+    assert.equal(
+      wizResourceMatchReason({ ...viewing, resourceApplication: 'backend' }),
+      'application',
+    );
+  });
+
+  it('ignores case and padding, because a tag value is typed by a human', () => {
+    assert.equal(
+      wizResourceMatchReason({ ...viewing, resourceApplication: '  BackEnd ' }),
+      'application',
+    );
+  });
+
+  it('treats _shared as shared', () => {
+    // The convention: a resource holds one value per tag key, so a host serving
+    // several applications cannot name one without being wrong for the rest.
+    assert.equal(
+      wizResourceMatchReason({ ...viewing, resourceApplication: '_shared' }),
+      'shared',
+    );
+  });
+
+  it('treats a missing application tag as shared too', () => {
+    // Untagged says the same thing by accident that _shared says on purpose.
+    for (const value of [null, undefined, '', '   ']) {
+      assert.equal(
+        wizResourceMatchReason({ ...viewing, resourceApplication: value }),
+        'shared',
+        JSON.stringify(value),
+      );
+    }
+  });
+
+  it('excludes another application in the same product', () => {
+    assert.equal(
+      wizResourceMatchReason({ ...viewing, resourceApplication: 'frontend' }),
+      null,
+    );
+  });
+
+  it('does not call anything shared when no product was asked for', () => {
+    // Shared means "serves THIS product". Without a product there is no scope for
+    // it to be shared within, and returning every untagged resource in the folder
+    // would be the whole estate.
+    assert.equal(
+      wizResourceMatchReason({
+        applicationValue: 'backend',
+        productValue: null,
+        resourceApplication: null,
+      }),
+      null,
+    );
+  });
+
+  it('honours includeUnassigned: false', () => {
+    assert.equal(
+      wizResourceMatchReason({ ...viewing, resourceApplication: '_shared', includeUnassigned: false }),
+      null,
+    );
+  });
+
+  it('matches everything when no filter is asked for', () => {
+    assert.equal(
+      wizResourceMatchReason({
+        applicationValue: null,
+        productValue: null,
+        resourceApplication: 'anything',
+      }),
+      'all',
+    );
+  });
+
+  it('still finds shared resources when only a product is given', () => {
+    assert.equal(
+      wizResourceMatchReason({
+        applicationValue: null,
+        productValue: 'Orbit',
+        resourceApplication: '_shared',
+      }),
+      'shared',
+    );
   });
 });

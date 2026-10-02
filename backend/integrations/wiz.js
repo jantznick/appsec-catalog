@@ -429,6 +429,20 @@ export const WIZ_RESOURCE_TYPES = Object.freeze(['VIRTUAL_MACHINE', 'CONTAINER']
  * Tag keys Orbit reads. Company-configurable later; the point of naming them here
  * is that nothing else in the codebase should hard-code a key string.
  */
+/**
+ * The Application tag value meaning "serves the product, not one named
+ * application" - a host, a database, a reverse proxy.
+ *
+ * A resource carries one value per tag key, so a shared host cannot name one
+ * application without being wrong for every other workload on it. Tagging it
+ * `_shared` says so deliberately; leaving the Application tag off says the same
+ * thing by accident. Both are treated the same way, because for the purpose of
+ * "what powers this application" they mean the same thing.
+ *
+ * Reserved: Orbit refuses an application of this name.
+ */
+export const WIZ_SHARED_APPLICATION_VALUE = '_shared';
+
 export const WIZ_TAG_KEYS = Object.freeze({
   product: 'Product',
   application: 'Application',
@@ -505,6 +519,51 @@ export function readWizTag(tags, key) {
   return null;
 }
 
+/** Case- and whitespace-insensitive tag value comparison. */
+function sameTagValue(a, b) {
+  return (
+    typeof a === 'string'
+    && typeof b === 'string'
+    && a.trim().toLowerCase() === b.trim().toLowerCase()
+  );
+}
+
+/**
+ * Why a resource belongs on an application's list, or null if it does not.
+ *
+ * Extracted from the paging loop so the rule can be tested without a tenant - the
+ * decision is the part worth being sure about, and the part around it is HTTP.
+ *
+ *   'application' - carries exactly this application's tag
+ *   'shared'      - carries the product and is shared: tagged _shared on purpose,
+ *                   or carrying no application tag at all. One value per tag key
+ *                   means a host serving several applications cannot name one of
+ *                   them without being wrong for the rest.
+ *   'all'         - no filter was asked for
+ *
+ * @param {object} args
+ * @param {unknown} args.resourceApplication the resource's Application tag
+ * @param {string|null} args.applicationValue the application being viewed
+ * @param {string|null} args.productValue
+ * @param {boolean} [args.includeUnassigned]
+ * @returns {'application'|'shared'|'all'|null}
+ */
+export function wizResourceMatchReason({
+  resourceApplication,
+  applicationValue,
+  productValue,
+  includeUnassigned = true,
+}) {
+  const applicationText = resourceApplication ? String(resourceApplication).trim() : '';
+  const isShared =
+    !applicationText || sameTagValue(applicationText, WIZ_SHARED_APPLICATION_VALUE);
+
+  if (applicationValue && sameTagValue(applicationText, applicationValue)) return 'application';
+  if (isShared && includeUnassigned && productValue) return 'shared';
+  if (!applicationValue && !productValue) return 'all';
+  return null;
+}
+
 /**
  * Candidate `where` shapes for filtering on a tag inside Wiz, most specific first.
  *
@@ -547,10 +606,11 @@ function wizTagWhereCandidates(pairs) {
  * `productValue` narrows further and is optional, because an application need not
  * belong to a product.
  *
- * `includeUnassigned` also returns resources that carry the product tag but NO
- * application tag. Those are the shared ones - a host serving the product rather
- * than one named application - and leaving them out is how an application page
- * ends up claiming nothing runs its database.
+ * `includeUnassigned` also returns the product's SHARED resources: those tagged
+ * `Application=_shared` on purpose, and those carrying no application tag at all.
+ * A resource holds one value per tag key, so a host serving several applications
+ * cannot name one of them without being wrong for the rest. Leaving these out is
+ * how an application page ends up claiming nothing runs its database.
  *
  * Environment and Role are read and returned, never filtered on. They are context
  * on a resource, not part of deciding which resources these are.
@@ -592,9 +652,6 @@ export async function listWizResourcesForFolder(decrypted, graphqlUrl, folderId,
   const productValue = options.productValue ? String(options.productValue).trim() : null;
   const applicationValue = options.applicationValue ? String(options.applicationValue).trim() : null;
   const includeUnassigned = options.includeUnassigned !== false;
-
-  const sameValue = (a, b) =>
-    typeof a === 'string' && typeof b === 'string' && a.trim().toLowerCase() === b.trim().toLowerCase();
 
   const token = await fetchWizAccessToken(decrypted.clientId, decrypted.clientSecret);
   const resources = [];
@@ -658,18 +715,14 @@ export async function listWizResourcesForFolder(decrypted, graphqlUrl, folderId,
             const resourceProduct = readWizTag(tags, keys.product);
             const resourceApplication = readWizTag(tags, keys.application);
 
-            if (productValue && !sameValue(resourceProduct, productValue)) continue;
+            if (productValue && !sameTagValue(resourceProduct, productValue)) continue;
 
-            const hasApplication = Boolean(resourceApplication && String(resourceApplication).trim());
-            let match = null;
-            if (applicationValue && sameValue(resourceApplication, applicationValue)) {
-              match = 'application';
-            } else if (!hasApplication && includeUnassigned && productValue) {
-              // Carries the product but names no application: shared infrastructure.
-              match = 'shared';
-            } else if (!applicationValue && !productValue) {
-              match = 'all';
-            }
+            const match = wizResourceMatchReason({
+              resourceApplication,
+              applicationValue,
+              productValue,
+              includeUnassigned,
+            });
             if (!match) continue;
 
             resources.push({
