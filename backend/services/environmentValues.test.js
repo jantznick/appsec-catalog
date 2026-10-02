@@ -1,8 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import {
   ENVIRONMENT_SOURCED_FIELDS,
+  ENVIRONMENT_SUMMARY_SELECT,
   ENVIRONMENT_VALUE_INCLUDE,
   activeInstances,
   assertEnvironmentsLoaded,
@@ -207,5 +211,60 @@ describe('completeness catches a row that skipped the resolver', () => {
   it('counts a resolved-but-empty version as a real gap', () => {
     const flat = withEnvironmentValues(app([]));
     assert.ok(calculateCompleteness(flat).missing.includes('currentVersion'));
+  });
+});
+
+/**
+ * Read a model's scalar field names straight out of schema.prisma.
+ *
+ * No database and no generated client needed - this is a text file, and that is
+ * the point: it makes a select list checkable at `npm test` rather than at the
+ * moment a user loads a page.
+ */
+function schemaFields(modelName) {
+  const schemaPath = fileURLToPath(new URL('../prisma/schema.prisma', import.meta.url));
+  const schema = readFileSync(schemaPath, 'utf8');
+  const match = schema.match(new RegExp(`\\nmodel ${modelName} \\{([\\s\\S]*?)\\n\\}`));
+  if (!match) throw new Error(`model ${modelName} not found in schema.prisma`);
+  return new Set(
+    match[1]
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('//') && !line.startsWith('///') && !line.startsWith('@@'))
+      .map((line) => line.split(/\s+/)[0]),
+  );
+}
+
+describe('the shared environment select matches the schema', () => {
+  // REGRESSION. A hand-written copy of this select kept asking for `aliases` after
+  // that column became the EnvironmentName table. Prisma only complains at query
+  // time, so it shipped, and the first anyone knew was a 500 on the application
+  // page. There is no type checking here and no test that reaches a database, so
+  // this is the guard: one shared constant, checked against the schema text.
+  it('selects only fields Environment actually has', () => {
+    const fields = schemaFields('Environment');
+    for (const key of Object.keys(ENVIRONMENT_SUMMARY_SELECT)) {
+      assert.ok(fields.has(key), `Environment has no field "${key}" — stale select`);
+    }
+  });
+
+  it('selects the fields the display and primary rules need', () => {
+    for (const key of ['id', 'name', 'kind', 'status']) {
+      assert.equal(ENVIRONMENT_SUMMARY_SELECT[key], true, `${key} is load-bearing`);
+    }
+  });
+
+  it('is what ENVIRONMENT_VALUE_INCLUDE uses, so the two cannot drift', () => {
+    assert.equal(
+      ENVIRONMENT_VALUE_INCLUDE.environments.include.environment.select,
+      ENVIRONMENT_SUMMARY_SELECT,
+    );
+  });
+
+  it('only asks ApplicationEnvironment for fields it has', () => {
+    const fields = schemaFields('ApplicationEnvironment');
+    for (const key of [...ENVIRONMENT_SOURCED_FIELDS, 'status']) {
+      assert.ok(fields.has(key), `ApplicationEnvironment has no field "${key}"`);
+    }
   });
 });

@@ -10,7 +10,10 @@ import {
 import { generateSlug, ensureUniqueSlug } from '../utils/slug.js';
 import { buildIntegrationSummaryForCompanyId } from '../integrations/summaryForCompany.js';
 import { aggregateCompletenessForCompany } from '../utils/portfolioCompleteness.js';
-import { withEnvironmentValuesAll } from '../services/environmentValues.js';
+import {
+  ENVIRONMENT_SUMMARY_SELECT,
+  withEnvironmentValuesAll,
+} from '../services/environmentValues.js';
 import { buildCompanySecurityCoverage } from '../utils/companySecurityCoverage.js';
 import { getAuthContext, resolveChangeSource } from '../middleware/authContext.js';
 import { recordChange } from '../utils/changeHistory.js';
@@ -295,9 +298,7 @@ router.post('/export-portfolio', requireAuth, async (req, res) => {
                 status: true,
                 currentVersion: true,
                 gitBranch: true,
-                environment: {
-                  select: { id: true, name: true, kind: true, status: true, displayOrder: true },
-                },
+                environment: { select: ENVIRONMENT_SUMMARY_SELECT },
               },
             },
             facing: true,

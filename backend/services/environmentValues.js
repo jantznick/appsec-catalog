@@ -39,12 +39,27 @@ import { PRIMARY_ENVIRONMENT_KIND } from './environmentNaming.js';
  * for the same reason SCORING_INCLUDE is: a call site with its own copy will
  * disagree with every other call site, and the disagreement is silent.
  */
+/**
+ * The environment fields anything displaying or resolving one needs.
+ *
+ * ONE DEFINITION. Hand-written copies of this select have now drifted twice - once
+ * still asking for `aliases` after that column became the EnvironmentName table,
+ * which fails at query time with a Prisma validation error rather than at build
+ * time. There is no type checking to catch it and no test that hits a database, so
+ * the only real defence is that there is exactly one list.
+ */
+export const ENVIRONMENT_SUMMARY_SELECT = Object.freeze({
+  id: true,
+  name: true,
+  kind: true,
+  status: true,
+  displayOrder: true,
+});
+
 export const ENVIRONMENT_VALUE_INCLUDE = Object.freeze({
   environments: {
     include: {
-      environment: {
-        select: { id: true, name: true, kind: true, status: true, displayOrder: true },
-      },
+      environment: { select: ENVIRONMENT_SUMMARY_SELECT },
     },
   },
 });

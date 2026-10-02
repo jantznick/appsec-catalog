@@ -5,9 +5,11 @@
  * ORBIT OWNS THE TAXONOMY, COMPANIES OWN THE WORDS
  *
  * `kind` is ours and is what cross-company reporting counts. `name` is whatever the
- * company actually tags and deploys with, and `aliases` are the other strings their
- * pipelines send for the same place. A company has at most one row of each kind
- * except OTHER - see the partial unique index Environment_companyId_kind_key.
+ * company's pipelines and cloud tags actually use. Every one of those strings is an
+ * EnvironmentName row; `name` is only the label.
+ *
+ * A company has at most one row of each kind except OTHER - see the partial unique
+ * index Environment_companyId_kind_key.
  *
  * NOTHING HERE INFERS AT RESOLVE TIME
  *

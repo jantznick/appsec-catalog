@@ -5,6 +5,7 @@ import { requirePermission, companyFrom } from '../middleware/rbac.js';
 import { getAuthContext } from '../middleware/authContext.js';
 import { recordChange } from '../utils/changeHistory.js';
 import { PRIMARY_ENVIRONMENT_KIND } from '../services/environmentNaming.js';
+import { ENVIRONMENT_SUMMARY_SELECT } from '../services/environmentValues.js';
 
 /**
  * An application's environment INSTANCES: "Orbit Backend runs in production".
@@ -44,7 +45,7 @@ const INSTANCE_SELECT = {
   createdAt: true,
   updatedAt: true,
   environment: {
-    select: { id: true, name: true, kind: true, status: true, displayOrder: true, aliases: true },
+    select: ENVIRONMENT_SUMMARY_SELECT,
   },
   _count: { select: { domains: true, toolLinks: true } },
 };
