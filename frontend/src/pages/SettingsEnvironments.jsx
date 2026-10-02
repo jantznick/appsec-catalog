@@ -90,10 +90,13 @@ export function SettingsEnvironments() {
   }, [companyId]);
 
   /**
-   * The settings screen is a map of Orbit's kinds, not a flat list of rows. Showing
-   * the empty slots is the point: a company that has never named its staging
-   * environment should see that gap rather than an absence of evidence.
+   * Slots only mean anything within ONE company — "one production per company" is
+   * the rule. An admin looking at every company at once is looking at 18 production
+   * environments that are all correct, so the slot layout is the wrong shape for
+   * that view and is replaced by a flat table with a Company column.
    */
+  const scopedToOneCompany = Boolean(companyId);
+
   const slots = useMemo(() => {
     const byKind = new Map();
     for (const kind of kinds) byKind.set(kind, []);
@@ -104,10 +107,24 @@ export function SettingsEnvironments() {
     return [...byKind.entries()].map(([kind, rows]) => ({ kind, rows }));
   }, [environments, kinds]);
 
-  const takenSingleSlots = useMemo(
-    () => new Set(environments.filter((e) => e.kind !== REPEATABLE_KIND).map((e) => e.kind)),
-    [environments],
-  );
+  /**
+   * Which single-slot kinds are already taken, for a given company.
+   *
+   * Scoped by company deliberately. Computing it across the whole list would mean
+   * one company owning a STAGING row hid the "name your staging" action from every
+   * other company, and would disable the kind in the edit modal for all of them.
+   */
+  const takenSingleSlotsFor = useMemo(() => {
+    const byCompany = new Map();
+    for (const env of environments) {
+      if (env.kind === REPEATABLE_KIND) continue;
+      if (!byCompany.has(env.companyId)) byCompany.set(env.companyId, new Set());
+      byCompany.get(env.companyId).add(env.kind);
+    }
+    return (id) => byCompany.get(id) || new Set();
+  }, [environments]);
+
+  const takenSingleSlots = takenSingleSlotsFor(companyId);
 
   const openCreate = (kind) => {
     setEditing(null);
@@ -147,6 +164,14 @@ export function SettingsEnvironments() {
           toast.success('Environment updated');
         }
       } else {
+        // An admin's company comes from the filter above. The Add actions only render
+        // inside the per-company layout, so this should be unreachable - but the API
+        // rejects a create with no company and there is nowhere in this modal to type
+        // one, so fail with something that says what to do.
+        if (isAdminUser && !companyId) {
+          toast.error('Pick a company above before adding an environment');
+          return;
+        }
         const payload = { ...form };
         if (isAdminUser && companyId) payload.companyId = companyId;
         await api.createEnvironment(payload);
@@ -214,7 +239,92 @@ export function SettingsEnvironments() {
         </Card>
       )}
 
-      {slots.map(({ kind, rows }) => {
+      {!scopedToOneCompany && (
+        <Card>
+          <CardHeader>
+            <CardTitle>All environments</CardTitle>
+            <p className="mt-1 text-sm text-gray-600">
+              Every company&rsquo;s environments in one list. &ldquo;One per kind&rdquo; is a rule
+              within a company, so several companies each having a production environment is
+              correct and expected. Pick a company above to set one up or re-organise.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {environments.length === 0 ? (
+              <p className="text-sm italic text-gray-500">No environments yet.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Kind</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Also accepts</TableHead>
+                    <TableHead>Applications</TableHead>
+                    <TableHead>Deployments</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[...environments]
+                    .sort(
+                      (a, b) =>
+                        (a.company?.name || '').localeCompare(b.company?.name || '') ||
+                        kinds.indexOf(a.kind) - kinds.indexOf(b.kind) ||
+                        a.name.localeCompare(b.name),
+                    )
+                    .map((env) => (
+                      <TableRow key={env.id}>
+                        <TableCell>
+                          <span className="font-medium text-gray-900">
+                            {env.company?.name || '—'}
+                          </span>
+                        </TableCell>
+                        <TableCell>{KIND_LABELS[env.kind] || env.kind}</TableCell>
+                        <TableCell>{env.name}</TableCell>
+                        <TableCell>
+                          {env.aliases ? (
+                            <span className="text-sm text-gray-700">
+                              {env.aliases.split(',').join(', ')}
+                            </span>
+                          ) : (
+                            <span className="text-sm italic text-gray-400">just the name</span>
+                          )}
+                        </TableCell>
+                        <TableCell>{env._count?.applications ?? '—'}</TableCell>
+                        <TableCell>{env._count?.deployments ?? '—'}</TableCell>
+                        <TableCell>
+                          <span
+                            className={
+                              env.status === 'active'
+                                ? 'text-sm text-gray-700'
+                                : 'text-sm text-gray-400'
+                            }
+                          >
+                            {env.status === 'active' ? 'Active' : 'Retired'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="ghost" onClick={() => openEdit(env)}>
+                              Edit
+                            </Button>
+                            <Button variant="ghost" onClick={() => setRetireTarget(env)}>
+                              {env.status === 'active' ? 'Retire' : 'Reactivate'}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {scopedToOneCompany && slots.map(({ kind, rows }) => {
         const repeatable = kind === REPEATABLE_KIND;
         const slotTaken = !repeatable && takenSingleSlots.has(kind);
         return (
@@ -313,12 +423,14 @@ export function SettingsEnvironments() {
             // `disabled` flag to its options, so a greyed-out entry would still be
             // selectable and the save would fail with a 409 instead.
             options={kinds
-              .filter(
-                (k) =>
-                  k === REPEATABLE_KIND ||
-                  !takenSingleSlots.has(k) ||
-                  (editing && editing.kind === k),
-              )
+              .filter((k) => {
+                if (k === REPEATABLE_KIND) return true;
+                // Which slots are free depends on the row's OWN company, which is
+                // not necessarily the one the page is filtered to - an admin can
+                // edit a row from the all-companies list.
+                const taken = takenSingleSlotsFor(editing ? editing.companyId : companyId);
+                return !taken.has(k) || (editing && editing.kind === k);
+              })
               .map((k) => ({ value: k, label: KIND_LABELS[k] || k }))}
             helperText="Orbit's bucket for this environment. Cross-company reporting counts by kind, never by name."
           />
