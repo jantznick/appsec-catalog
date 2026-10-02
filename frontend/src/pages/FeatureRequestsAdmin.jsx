@@ -8,6 +8,7 @@ import { Modal } from '../components/ui/Modal.jsx';
 import { Select } from '../components/ui/Select.jsx';
 import { Textarea } from '../components/ui/Textarea.jsx';
 import { toast } from '../components/ui/Toast.jsx';
+import { usePendingApprovals } from '../contexts/PendingApprovalsContext.jsx';
 import {
   REQUEST_STATUSES,
   categoryBadgeClass,
@@ -111,6 +112,9 @@ function RequestCard({ request, busy, onStatusChange, onReply, onPromote, onDele
 export function FeatureRequestsAdmin() {
   const { isAdmin } = useAuthStore();
   const navigate = useNavigate();
+  // Triaging a request changes the waiting count, so the badges are refreshed
+  // straight away rather than waiting out the 30-second poll.
+  const { refresh: refreshBadges } = usePendingApprovals();
 
   const [filter, setFilter] = useState('all');
   const [requests, setRequests] = useState([]);
@@ -158,6 +162,7 @@ export function FeatureRequestsAdmin() {
     try {
       setBusyId(request.id);
       applyUpdated(await api.updateFeatureRequest(request.id, { status }));
+      refreshBadges();
     } catch (err) {
       toast.error(err?.message || 'Failed to update the request');
     } finally {
@@ -189,6 +194,7 @@ export function FeatureRequestsAdmin() {
       setBusyId(request.id);
       const result = await api.promoteFeatureRequest(request.id);
       applyUpdated(result.request);
+      refreshBadges();
       toast.success('Added to the roadmap as a draft');
       // Hand the new item's id over so the roadmap editor opens on it — the
       // draft still needs wording and a stage before it can be published.
@@ -207,6 +213,7 @@ export function FeatureRequestsAdmin() {
       await api.deleteFeatureRequest(confirmDelete.id);
       setRequests((current) => current.filter((request) => request.id !== confirmDelete.id));
       setConfirmDelete(null);
+      refreshBadges();
       toast.success('Request deleted');
     } catch (err) {
       toast.error(err?.message || 'Failed to delete the request');

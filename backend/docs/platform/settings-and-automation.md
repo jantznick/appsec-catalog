@@ -95,4 +95,6 @@ Three tabs covering what shipped, what's coming, and what you'd like to see next
 
 **Request a feature** is a direct line to the Orbit admins. Describe what you're trying to do and what gets in the way; the request goes to the admins and nobody else. Your own requests stay listed beside the form with their current status — new, under review, planned, not planned, or shipped — along with any reply an admin writes back, and a note if the idea has made it onto the published roadmap.
 
-Publishing updates and roadmap items, and triaging requests, are admin-only. Admins work from **Settings → Product updates**, **Settings → Roadmap**, and **Settings → Feature requests**; from the request page, an idea can be promoted straight onto the roadmap as a draft.
+Publishing updates and roadmap items, and triaging requests, are admin-only. Admins work from **Settings → Product updates**, **Settings → Roadmap**, and **Settings → Feature requests**; from the request page, an idea can be promoted straight onto the roadmap as a draft, and the roadmap editor opens on that draft so it can be worded and published.
+
+A new feature request raises the same in-app notification as a submitted application change or an information request: the count beside your email in the header goes up, and clicking it names what's waiting and opens the first queue. The Settings tiles for those three queues carry their own counts, so you can see which one needs attention. Counts cover untriaged items only — moving a request off "New" clears it.

@@ -19,11 +19,17 @@ function DropdownSectionLabel({ children }) {
   );
 }
 
+/** "a", "a and b", "a, b and c" — so the attention toast reads as a sentence. */
+function joinList(parts) {
+  if (parts.length < 2) return parts.join('');
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
 export function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, isAdmin, isAuthenticated, loading } = useAuthStore();
-  const { globalPendingCount, infoRequestCount } = usePendingApprovals();
+  const { globalPendingCount, infoRequestCount, featureRequestCount } = usePendingApprovals();
   const { mode: scopeMode, label: scopeLabel, clearScope } = useScopeStore();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login');
@@ -108,19 +114,26 @@ export function Layout({ children }) {
     }`;
   };
 
-  // Everything an admin needs to look at, combined into one number. Drives the
-  // attention pill next to the account email, which is now the only place a
-  // queue count appears — the menu lists Settings and nothing else.
-  const adminAttentionCount = isAdmin() ? globalPendingCount + infoRequestCount : 0;
+  // The admin queues that feed the attention pill beside the account email,
+  // listed in the order they get triaged. The pill shows the total, the toast
+  // names each queue with something in it, and clicking opens the first.
+  // Per-queue numbers also appear on the Settings tiles, which is where an
+  // admin goes next.
+  const adminQueues = (
+    isAdmin()
+      ? [
+          { count: globalPendingCount, noun: 'application change', to: '/pending-approvals' },
+          { count: infoRequestCount, noun: 'information request', to: '/settings/program-requests' },
+          { count: featureRequestCount, noun: 'feature request', to: '/settings/feature-requests' },
+        ]
+      : []
+  ).filter((queue) => queue.count > 0);
 
-  const attentionSummary = [
-    globalPendingCount > 0 &&
-      `${globalPendingCount} application change${globalPendingCount !== 1 ? 's' : ''}`,
-    infoRequestCount > 0 &&
-      `${infoRequestCount} information request${infoRequestCount !== 1 ? 's' : ''}`,
-  ]
-    .filter(Boolean)
-    .join(' and ');
+  const adminAttentionCount = adminQueues.reduce((total, queue) => total + queue.count, 0);
+
+  const attentionSummary = joinList(
+    adminQueues.map((queue) => `${queue.count} ${queue.noun}${queue.count !== 1 ? 's' : ''}`),
+  );
 
   return (
     <div className="min-h-screen">
@@ -295,9 +308,7 @@ export function Layout({ children }) {
                             persistent: true,
                             clickable: true,
                             onClick: () => {
-                              navigate(
-                                globalPendingCount > 0 ? '/pending-approvals' : '/settings/program-requests'
-                              );
+                              navigate(adminQueues[0]?.to || '/settings');
                               removeToast(toastId);
                             },
                           });

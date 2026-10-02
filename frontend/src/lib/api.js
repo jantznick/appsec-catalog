@@ -1168,6 +1168,7 @@ export const api = {
   submitFeatureRequest: (body) =>
     apiRequest('/api/feature-requests', { method: 'POST', body: JSON.stringify(body) }),
   listMyFeatureRequests: () => apiRequest('/api/feature-requests/mine'),
+  getFeatureRequestCount: () => apiRequest('/api/feature-requests/count'),
   listFeatureRequests: (status = 'all') =>
     apiRequest(`/api/feature-requests?status=${encodeURIComponent(status)}`),
   updateFeatureRequest: (id, body) =>

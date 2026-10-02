@@ -152,6 +152,21 @@ router.get('/mine', requireAuth, async (req, res) => {
 // Everything below is admin-only triage.
 router.use(requireAuth, requireAdmin);
 
+/**
+ * GET /api/feature-requests/count — untriaged requests, for the admin
+ * attention indicator. NEW is the only status that counts as waiting; moving a
+ * request anywhere else means someone has looked at it.
+ */
+router.get('/count', async (req, res) => {
+  try {
+    const count = await prisma.featureRequest.count({ where: { status: 'NEW' } });
+    res.json({ count });
+  } catch (error) {
+    console.error('Error counting feature requests:', error);
+    res.status(500).json({ error: 'Failed to count feature requests' });
+  }
+});
+
 /** GET /api/feature-requests?status=NEW|...|all */
 router.get('/', async (req, res) => {
   try {
