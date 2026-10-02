@@ -18,8 +18,8 @@ import {
 } from '../utils/environments.js';
 
 /**
- * Deployment Environments: the strings each company's pipelines send, mapped onto
- * Orbit's five environment kinds.
+ * Environments: the strings a company uses for each of Orbit's five environment
+ * kinds.
  *
  * Orbit owns the taxonomy — PRODUCTION, STAGING, QA, DEVELOPMENT, plus as many OTHERs
  * as a company wants. The company owns the words. Nobody has to change their tagging
@@ -210,7 +210,7 @@ export function SettingsEnvironments() {
         <Link to="/settings" className="mb-2 inline-block text-sm text-blue-600 hover:text-blue-700">
           ← Settings
         </Link>
-        <h1 className="text-2xl font-semibold text-gray-900">Deployment Environments</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">Environments</h1>
         <p className="mt-1 max-w-3xl text-sm text-gray-600">
           Orbit groups every environment into five kinds and names four of them for you —
           production, staging, qa, development. List the strings <em>you</em> actually use

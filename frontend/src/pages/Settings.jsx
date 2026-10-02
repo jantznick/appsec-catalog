@@ -56,11 +56,11 @@ const settingsSections = [
     ],
   },
   {
-    title: 'Deployment environments',
+    title: 'Environments',
     description: 'Tell Orbit what you call each of your environments.',
     items: [
       {
-        label: 'Deployment environments',
+        label: 'Environments',
         description:
           'Map your own environment names onto production, staging, QA and development, so deploys and Wiz tags resolve without you changing your tagging schema.',
         to: '/settings/environments',

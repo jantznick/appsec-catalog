@@ -37,12 +37,20 @@
  *   node scripts/wiz-tag-probe.js --company <companyId>
  *   node scripts/wiz-tag-probe.js --types VIRTUAL_MACHINE,CONTAINER,CONTAINER_IMAGE
  *   node scripts/wiz-tag-probe.js --raw 3                # dump 3 raw tag blobs
+ *   node scripts/wiz-tag-probe.js --folders              # list folders, find an id
+ *   node scripts/wiz-tag-probe.js --company <id> --folder <uuid>
+ *
+ * `--folders` is how you find the id for a company that has no Wiz link yet: the
+ * credentials are enterprise-scoped, so one tenant's folder list covers every
+ * company. `--folder` then probes that folder without having to save the link
+ * first, which keeps an exploratory look read-only in the database too.
  */
 
 import { prisma } from '../prisma/client.js';
 import { resolveIntegrationForCompany } from '../integrations/resolve.js';
 import {
   fetchWizAccessToken,
+  listWizFolders,
   normalizeWizGraphqlUrl,
   wizGraphql,
 } from '../integrations/wiz.js';
@@ -69,13 +77,15 @@ const DEFAULT_TYPES = [
 ];
 
 function parseArgs(argv) {
-  const args = { companyId: null, types: DEFAULT_TYPES, raw: 1, pages: 1 };
+  const args = { companyId: null, types: DEFAULT_TYPES, raw: 1, pages: 1, listFolders: false, folderId: null };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     if (flag === '--company') args.companyId = argv[++i];
     else if (flag === '--types') args.types = argv[++i].split(',').map((t) => t.trim()).filter(Boolean);
     else if (flag === '--raw') args.raw = Number(argv[++i]) || 0;
     else if (flag === '--pages') args.pages = Math.max(1, Number(argv[++i]) || 1);
+    else if (flag === '--folders') args.listFolders = true;
+    else if (flag === '--folder') args.folderId = argv[++i];
   }
   return args;
 }
@@ -229,7 +239,7 @@ async function probeCompany(company, args) {
     where: { companyId: company.id, provider: PROVIDER_WIZ },
     select: { filter: true },
   });
-  const folderId = link?.filter?.folderId;
+  const folderId = args.folderId || link?.filter?.folderId;
   if (!folderId) {
     console.log('  no Wiz folder configured — skipping');
     return;
@@ -298,6 +308,24 @@ async function main() {
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });
+
+  if (args.listFolders) {
+    // Enterprise-scoped credentials cover the whole tenant, so any company's
+    // credentials will list every folder - including ones no company is linked to.
+    const seed = args.companyId || companies[0]?.id || null;
+    const creds = await resolveIntegrationForCompany(seed, PROVIDER_WIZ);
+    if (!creds?.decrypted?.clientId) {
+      console.log('No Wiz credentials resolvable. Pass --company <id> for one that has them.');
+      return;
+    }
+    const folders = await listWizFolders(creds.decrypted, creds.baseUrl || '');
+    console.log(`\n${folders.length} folder(s) visible to these credentials (${creds.scope}):\n`);
+    for (const folder of folders) {
+      console.log(`  ${folder.id}  ${folder.name}`);
+    }
+    console.log('\nProbe one with:  --company <companyId> --folder <folderId>');
+    return;
+  }
 
   if (!companies.length) {
     console.log('No companies with a Wiz tool link. Pass --company <id> to probe a specific one.');

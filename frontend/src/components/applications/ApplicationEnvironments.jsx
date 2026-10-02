@@ -244,7 +244,7 @@ export function ApplicationEnvironments({ applicationId, companyId, canManage, o
                 <>
                   Name your production environment in{' '}
                   <Link to="/settings/environments" className="underline">
-                    Deployment Environments
+                    Environments
                   </Link>{' '}
                   first.
                 </>
