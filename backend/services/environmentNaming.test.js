@@ -5,13 +5,13 @@ import {
   ENVIRONMENT_KINDS,
   PRIMARY_ENVIRONMENT_KIND,
   REPEATABLE_ENVIRONMENT_KIND,
-  environmentMatchNames,
-  findEnvironmentNameConflicts,
+  canonicalEnvironmentName,
+  environmentNameRows,
+  hasTypedName,
   inferEnvironmentKind,
   isSingleSlotKind,
   normalizeEnvironmentName,
   parseEnvironmentAliases,
-  serializeEnvironmentAliases,
 } from './environmentNaming.js';
 
 describe('kind cardinality', () => {
@@ -55,90 +55,67 @@ describe('parseEnvironmentAliases', () => {
   });
 });
 
-describe('serializeEnvironmentAliases', () => {
-  it('round-trips through the stored column', () => {
-    assert.equal(serializeEnvironmentAliases(' Prod , Live '), 'prod,live');
+
+
+
+describe('canonicalEnvironmentName', () => {
+  it('takes the kind\'s word for the four named kinds, whatever was typed', () => {
+    // Every company's production environment is called "production" in Orbit, however
+    // its pipelines spell it. Eighteen companies showing eighteen different words for
+    // the same thing is worse on a cross-company screen than one word plus aliases.
+    assert.equal(canonicalEnvironmentName('PRODUCTION', 'Super Important'), 'production');
+    assert.equal(canonicalEnvironmentName('STAGING', null), 'staging');
+    assert.equal(canonicalEnvironmentName('QA', 'uat'), 'qa');
+    assert.equal(canonicalEnvironmentName('DEVELOPMENT', ''), 'development');
   });
 
-  it('accepts an array, which is what a JSON body will send', () => {
-    assert.equal(serializeEnvironmentAliases(['Prod', 'live']), 'prod,live');
+  it('takes the typed name for OTHER, which is the only thing telling two apart', () => {
+    assert.equal(canonicalEnvironmentName('OTHER', '  Sandbox '), 'sandbox');
+    assert.equal(canonicalEnvironmentName('OTHER', 'demo'), 'demo');
   });
 
-  it('stores null rather than an empty string, so "none" is one value not two', () => {
-    assert.equal(serializeEnvironmentAliases(''), null);
-    assert.equal(serializeEnvironmentAliases([]), null);
-    assert.equal(serializeEnvironmentAliases(null), null);
-  });
-});
-
-describe('environmentMatchNames', () => {
-  it('includes the name implicitly, so callers never check both', () => {
-    assert.deepEqual(
-      environmentMatchNames({ name: 'production', aliases: 'prod,live' }),
-      ['production', 'prod', 'live'],
-    );
+  it('returns null for an OTHER with no usable name', () => {
+    assert.equal(canonicalEnvironmentName('OTHER', '   '), null);
+    assert.equal(canonicalEnvironmentName('OTHER', null), null);
   });
 
-  it('does not repeat the name when it is also listed as an alias', () => {
-    assert.deepEqual(
-      environmentMatchNames({ name: 'prod', aliases: 'prod,live' }),
-      ['prod', 'live'],
-    );
-  });
-
-  it('works with no aliases at all', () => {
-    assert.deepEqual(environmentMatchNames({ name: 'prod' }), ['prod']);
-    assert.deepEqual(environmentMatchNames({ name: 'prod', aliases: null }), ['prod']);
+  it('returns null for an unknown kind rather than inventing one', () => {
+    assert.equal(canonicalEnvironmentName('PROD', 'prod'), null);
   });
 });
 
-describe('findEnvironmentNameConflicts', () => {
-  // The only guard on alias uniqueness. These live comma-packed in one column, so
-  // this cannot be a database index - and without it `prod` could belong to two
-  // environments and a deploy would resolve to whichever row the query reached first.
-  const staging = { id: 'stg', name: 'staging', aliases: 'stage,preprod' };
+describe('hasTypedName', () => {
+  it('is true only for OTHER', () => {
+    for (const kind of ENVIRONMENT_KINDS) {
+      assert.equal(hasTypedName(kind), kind === REPEATABLE_ENVIRONMENT_KIND, kind);
+    }
+  });
+});
 
-  it('passes a clean candidate', () => {
-    assert.deepEqual(
-      findEnvironmentNameConflicts({ name: 'production', aliases: 'prod' }, [staging]),
-      [],
-    );
+describe('environmentNameRows', () => {
+  it('puts the canonical name first', () => {
+    assert.deepEqual(environmentNameRows('production', 'prod,prod-us'), [
+      'production',
+      'prod',
+      'prod-us',
+    ]);
   });
 
-  it('catches a name that another environment already uses', () => {
-    const conflicts = findEnvironmentNameConflicts({ name: 'staging' }, [staging]);
-    assert.deepEqual(conflicts, [{ value: 'staging', conflictsWith: 'staging' }]);
+  it('does not repeat the canonical name when it is also listed', () => {
+    assert.deepEqual(environmentNameRows('production', 'production,prod'), ['production', 'prod']);
   });
 
-  it('catches a name colliding with another environment ALIAS', () => {
-    // The case a plain @@unique([companyId, name]) cannot see.
-    const conflicts = findEnvironmentNameConflicts({ name: 'preprod' }, [staging]);
-    assert.deepEqual(conflicts, [{ value: 'preprod', conflictsWith: 'staging' }]);
+  it('accepts an array, which is what a JSON body sends', () => {
+    assert.deepEqual(environmentNameRows('qa', ['UAT', ' uat ']), ['qa', 'uat']);
   });
 
-  it('catches an alias colliding with another environment alias', () => {
-    const conflicts = findEnvironmentNameConflicts(
-      { name: 'production', aliases: 'stage' },
-      [staging],
-    );
-    assert.deepEqual(conflicts, [{ value: 'stage', conflictsWith: 'staging' }]);
+  it('is just the canonical name when there are no extras', () => {
+    assert.deepEqual(environmentNameRows('staging', null), ['staging']);
+    assert.deepEqual(environmentNameRows('staging', ''), ['staging']);
   });
 
-  it('skips the candidate\'s own row, so an edit does not conflict with itself', () => {
-    assert.deepEqual(findEnvironmentNameConflicts({ ...staging }, [staging]), []);
-  });
-
-  it('reports every colliding value, not just the first', () => {
-    const conflicts = findEnvironmentNameConflicts(
-      { name: 'stage', aliases: 'preprod' },
-      [staging],
-    );
-    assert.deepEqual(conflicts.map((c) => c.value), ['stage', 'preprod']);
-  });
-
-  it('compares after normalizing, so case and padding cannot sneak a duplicate past', () => {
-    const conflicts = findEnvironmentNameConflicts({ name: '  STAGE  ' }, [staging]);
-    assert.deepEqual(conflicts, [{ value: 'stage', conflictsWith: 'staging' }]);
+  it('normalizes everything, so case and padding cannot smuggle a duplicate row past the index', () => {
+    assert.deepEqual(environmentNameRows('production', ' PROD , prod '), ['production', 'prod']);
   });
 });
 

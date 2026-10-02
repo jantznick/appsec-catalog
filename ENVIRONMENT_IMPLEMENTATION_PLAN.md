@@ -24,7 +24,9 @@ Read this before anything else. An earlier revision of this document described a
 
 The consequence that makes everything else simple: **"the company's production environment" is always exactly one row, or none.** No tie-break, no heuristic, no stored "which one is the real one" flag.
 
-Because real pipelines are inconsistent, a row accepts **aliases** — additional strings that resolve to it. A company whose pipelines variously say `prod`, `production` and `Prod-US` records two of them as aliases rather than renaming anything.
+**Orbit names four of the five kinds.** A company's production environment is called `production` in Orbit however its pipelines spell it, so cross-company screens read consistently instead of showing eighteen words for the same thing. Only `OTHER` takes a typed name, because it is the only thing telling a sandbox from a demo.
+
+What the company owns is the **match list**: every string its pipelines actually send. Those live one-per-row in `EnvironmentName`, canonical included, unique per company. A pipeline sending `prod-us` resolves in one indexed lookup. Nobody changes a tagging schema.
 
 ---
 
@@ -34,8 +36,8 @@ Phases 1 and 2 are **built and on main** (PR #33). **Phase 3 is built on this br
 
 ### Built in Phase 3 (this branch)
 
-- `Environment.aliases`, and the partial unique index on `(companyId, kind)` excluding `OTHER`
-- Alias resolution in `resolveEnvironmentForDeployment` — exact match on name or alias, no inference, no auto-create
+- `EnvironmentName`, one row per accepted string, with `@@unique([companyId, value])`; and the partial unique index on `(companyId, kind)` excluding `OTHER`
+- `resolveEnvironmentForDeployment` is one indexed lookup on `(companyId, value)` — no inference, no auto-create
 - Alias-union and single-slot validation in `routes/environments.js`, with change-history recording
 - `services/environmentValues.js` — the read resolver, which throws on an unloaded relation
 - `ENVIRONMENT_VALUE_INCLUDE` spread into `SCORING_INCLUDE` and the five other completeness call sites, plus the policy-compliance endpoint
@@ -109,8 +111,8 @@ Settled. Not open for re-litigation during build.
 2. **Two tables, not one.** A company-scoped `Environment` vocabulary plus an `ApplicationEnvironment` instance row. The vocabulary makes "production" mean one thing per company and gives Wiz tag values something to validate against; the instance holds the per-copy data.
 3. **Five kinds, one slot each, except `OTHER`.** `PRODUCTION | STAGING | QA | DEVELOPMENT | OTHER`. A company has at most one row of each of the first four and unlimited `OTHER` rows. Enforced by a partial unique index. This is what makes lookup-by-kind total.
 4. **Names are the company's, kinds are ours.** `name` is free text and is what the company actually tags and deploys with. `kind` is canonical and is what cross-company reporting counts.
-5. **A row accepts aliases.** Additional strings that resolve to the same environment, so a company with inconsistent pipelines does not have to fix every pipeline before the catalog works. `name` is implicitly an alias of itself.
-6. **No inference at resolve time, ever.** A submitted string matches a name or an alias, or it goes to Unassigned. `inferEnvironmentKind` survives only as a seed-time default and as a suggested value in the settings UI. It never attaches live data. A typo must surface, not be guessed at.
+5. **The canonical name comes from the kind; the match list comes from the company.** `Environment.name` is the lower-cased kind for the four named kinds and typed only for `OTHER`. Every string the environment answers to — canonical and extras alike — is a row in `EnvironmentName`, so a company with inconsistent pipelines never has to fix them all before the catalog works.
+6. **No inference at resolve time, ever.** A submitted string matches an `EnvironmentName` row, or it goes to Unassigned. `inferEnvironmentKind` survives only as a seed-time default and as a suggested value in the settings UI. It never attaches live data. A typo must surface, not be guessed at.
 7. **Unmatched strings do not auto-create environments.** They land in the "Unassigned" bucket. A phantom row from one typo'd pipeline yaml would otherwise appear in the environment selector and the Wiz tag picker as though it were real. Triage is how a real new string becomes an alias.
 8. **Environments have an active/retired status, at both levels.** A retired environment keeps its deploy history and its Wiz tag without cluttering pickers. **Active means the instance is active *and* its vocabulary row is active** — one rule, stated once, so retiring a company's whole UAT environment does not leave stale instances counting as live.
 9. **Domains attach to the environment, not the application.** `app.hearst.com` and `staging.app.hearst.com` are otherwise indistinguishable to the DNS and web-snapshot machinery.
@@ -173,14 +175,13 @@ model Environment {
   id           String                   @id @default(cuid())
   companyId    String
   company      Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  /// What THIS company calls this kind. Normalised (trim + lowercase). This is the
-  /// string Orbit displays and the string we tell them to tag resources with.
+  /// The canonical name: what Orbit displays and what the CI sample payload tells a
+  /// new pipeline to send. DERIVED from `kind` for the four named kinds, typed by
+  /// the company only for OTHER. Mirrored as the canonical row in `names`.
   name         String
   /// PRODUCTION | STAGING | QA | DEVELOPMENT | OTHER — ours, canonical.
   kind         String
-  /// Additional accepted strings, comma-separated and normalised. A submitted value
-  /// matching any of these resolves here. `name` is implicitly included.
-  aliases      String?
+  names        EnvironmentName[]
   description  String?
   status       String                   @default("active") // active | retired
   displayOrder Int                      @default(0)
@@ -206,9 +207,31 @@ CREATE UNIQUE INDEX "Environment_companyId_kind_key"
 
 Verified against dev before adding: no company currently has two rows of the same kind.
 
-**Alias uniqueness cannot be a database constraint** — the values live comma-packed in one column. It is validated in the route on save: *the union of every name and every alias must be unique across a company's environments.* Without that check, `prod` could belong to both PRODUCTION and STAGING and resolution becomes a coin flip. This is the one invariant in this model with no database backstop, so it needs a test.
-
 `sourceLabel` preserves whatever free text the row was migrated from, so a bad seed can be cleaned up later without losing what the data originally said.
+
+### `EnvironmentName` — every string that resolves
+
+```prisma
+model EnvironmentName {
+  id            String      @id @default(cuid())
+  companyId     String      // denormalised so uniqueness is company-wide
+  environmentId String
+  environment   Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  value         String      // normalised: trimmed, lower-cased
+  isCanonical   Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+
+  @@unique([companyId, value])
+  @@index([environmentId])
+  @@index([companyId])
+}
+```
+
+**Why a table and not a column.** These were briefly comma-packed into `Environment.aliases`, which a database cannot index into: `@@unique` on it would only have stopped two rows holding the byte-identical whole string, so `prod` could belong to two environments and nothing would complain. Uniqueness had to be a hand-written check in the route, and any writer that forgot to call it punched straight through to a value that resolved differently on different days. One row per value makes the constraint real.
+
+**Why the canonical name is in here too.** It closes the last gap. With names in one column and aliases in another, nothing stopped one environment's *name* equalling another's *alias* — those were two constraints over two columns. With everything in one table, one index covers the whole match space: naming an `OTHER` `production` when that is already the production environment's canonical name simply fails, in Postgres, with no application code involved.
+
+The cost is one denormalised `companyId` and keeping the canonical row in step with `Environment.name` on rename, both confined to `routes/environments.js`. In exchange, resolution is a single indexed lookup rather than fetching a company's environments and comparing in JS.
 
 ### `ApplicationEnvironment` — the instance
 
@@ -321,7 +344,7 @@ Steps 1–5 are **done and applied**:
 
 Remaining:
 
-6. **Add `Environment.aliases`** (nullable text) and the partial unique index on `(companyId, kind)`.
+6. **Add `EnvironmentName`** with `@@unique([companyId, value])`, backfill it from the names and the old comma column, move each canonical name onto its kind's word keeping the previous one as an alias, and add the partial unique index on `(companyId, kind)`.
 7. **Change `ApplicationDomain.applicationEnvironmentId` and `ApplicationToolLink.applicationEnvironmentId` to `onDelete: SetNull`.**
 8. **Drop `currentVersion`, `gitBranch` and `deploymentEnvironment`** from `Application` and from the `ApplicationVersion` snapshot.
 
@@ -337,7 +360,7 @@ The column drop is **one commit**. A half-done removal is the failure mode: a fi
 
 ### Acceptance criteria
 
-1. **`Environment.aliases` exists and resolves.** `resolveEnvironmentForDeployment` matches a normalised submitted string against `name` or any alias, for the company, and returns null otherwise. No inference, no kind fallback. Alias-union uniqueness is validated on save in `routes/environments.js` and covered by a test.
+1. **`EnvironmentName` exists and resolves.** `resolveEnvironmentForDeployment` is a single lookup on `(companyId, value)`, returning null otherwise. No inference, no kind fallback. Uniqueness is the database's job, not a route's.
 
 2. **A read resolver attaches per-environment values onto the application object under the same property names,** so dynamic dereferences (`app[scanField]` in `services/scoring.js`, and `routes/applications.js`) keep working.
    - `currentVersion` — from the **primary** environment, i.e. the active instance whose environment's `kind` is `PRODUCTION`. Null when there is none.
@@ -386,7 +409,7 @@ Entirely unstarted, and the original point of the exercise.
 - Rewrite `listWizTagsForFolder` (`integrations/wiz.js`), which filters to values starting with `Application:`, to return `{product, application, environment}` triples.
 - **Widen the resource types.** The query currently sends `type: ['VIRTUAL_MACHINE']`, but the premise is that containers and images carry the triple. The tag picker returns nothing useful until this changes. *The list of types is Nick's to supply.*
 - Extend `validateWizApplicationFilter` / `normalizeWizApplicationFilter` (`integrations/resolve.js`) to carry the triple and link against the `ApplicationEnvironment` rather than the `Application`.
-- The **environment half of the triple resolves through the same vocabulary** as a CI deploy: `Environment.name` or an alias, for that company. One settings screen serves both consumers.
+- The **environment half of the triple resolves through the same table** as a CI deploy: one lookup on `EnvironmentName`. One settings screen serves both consumers.
 - **All three tag keys are required**, plus a per-company config for what each key is *called* — some companies call a product a "solution". That config lands in `CompanyToolLink.filter` alongside the existing `folderId`. Note the layering: the key name is company config; the value is the `Environment` row's name.
 - Retired environments **keep** their Wiz tag links; the tag still describes what ran there.
 - `ApplicationToolLink`'s unique constraint becomes per-environment, moving the `applicationId_provider` upsert in the routes at the same time.
@@ -500,7 +523,7 @@ The CI sample payload on the deployment-token screen lists the company's real en
 
 ### Not built
 
-- **Environment settings UI.** The core of the new model: for each of Orbit's five kinds, what does this company call it, what aliases are accepted, what order, active or retired. A `+` button adds another `OTHER`. This is a new settings screen and handler, not a tweak to an existing one.
+- **Environment settings UI.** The core of the new model: for each of Orbit's five kinds, which strings this company's pipelines send, what order, active or retired. Only `OTHER` takes a typed name. A `+` button adds another `OTHER`. This is a new settings screen and handler, not a tweak to an existing one.
 - **The adopt/triage endpoint and UI.** The `environment.manage` permission description already promises it. Under the alias model its job is better than it was: *"`prod-us` is arriving from a pipeline — add it as an alias of your PRODUCTION environment,"* rather than creating a new row or forcing a rename.
 - **Per-application instance management.** Attach this application to an environment, edit its version/branch, retire it. Backend in Phase 3 AC 8; this is its UI.
 - **The per-application selector.** `deploymentEnvironmentFilter` in `ApplicationDetail.jsx` already filters deploy history by environment string; that becomes the real selector, picked once at the top and scoping both the metadata panel and the deploy history. Net reduction in UI. Hidden when the application has one environment.
@@ -535,7 +558,7 @@ Environment settings UI → per-application instance management → adopt/triage
 
 - A company maps its own environment vocabulary onto Orbit's five kinds in one settings screen, and both CI deploys and Wiz tags resolve through it.
 - A company has at most one `PRODUCTION`, `STAGING`, `QA` and `DEVELOPMENT` environment, and as many `OTHER`s as it wants.
-- A submitted string matches a name or an alias or it is Unassigned. Nothing is ever inferred, and nothing is auto-created.
+- A submitted string matches an `EnvironmentName` row or it is Unassigned. Nothing is ever inferred, and nothing is auto-created.
 - An application can hold several environments, each with its own domain(s), current version and git branch.
 - An application's primary environment is its `PRODUCTION` one, derived, never stored. An application without one has no primary and nothing is promoted in its place.
 - One application with one environment looks as it does today, bar the two already-shipped surfaces above.

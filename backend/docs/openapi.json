@@ -1490,7 +1490,7 @@
       "post": {
         "operationId": "createDeploymentViaToken",
         "summary": "Report a deployment (CI/CD ingestion, deployment-token authenticated)",
-        "description": "Public endpoint intended for CI/CD systems: no session or api-key header is required. Authentication is instead performed via the `token` field in the JSON request body, which is compared (via hash) against active deployment tokens. On success, records a new Deployment for the target application, updates the token's lastUsedAt, and resolves `environment` against the company's environment vocabulary (its name or any of its aliases, matched exactly after trimming and lower-casing). On a match the application's instance for that environment is created if needed and its version and branch are OVERWRITTEN - a deploy is authoritative for its own environment. A value matching nothing is still recorded, with a null environmentId, and surfaces as Unassigned; nothing is created and nothing is inferred.",
+        "description": "Public endpoint intended for CI/CD systems: no session or api-key header is required. Authentication is instead performed via the `token` field in the JSON request body, which is compared (via hash) against active deployment tokens. On success, records a new Deployment for the target application, updates the token's lastUsedAt, and resolves `environment` against the company's environment names (one indexed lookup on the EnvironmentName table, matched exactly after trimming and lower-casing). On a match the application's instance for that environment is created if needed and its version and branch are OVERWRITTEN - a deploy is authoritative for its own environment. A value matching nothing is still recorded, with a null environmentId, and surfaces as Unassigned; nothing is created and nothing is inferred.",
         "tags": [
           "Deployment Tokens"
         ],
@@ -7911,7 +7911,7 @@
       "post": {
         "operationId": "createApplicationDeployment",
         "summary": "Record a new deployment",
-        "description": "Records a deployment event for the application. `environment` is required (non-blank after trimming); all other fields are optional and are trimmed if provided. `deployedAt` defaults to the current time if omitted. `environment` is resolved against the company's environment vocabulary by name or alias, matched exactly after trimming and lower-casing; nothing is inferred and nothing is auto-created. On a match, the application's instance for that environment is created if needed and its version and branch are OVERWRITTEN. A value matching nothing is recorded with a null environmentId and surfaces as Unassigned. Caller must be an admin or a member of the application's company.",
+        "description": "Records a deployment event for the application. `environment` is required (non-blank after trimming); all other fields are optional and are trimmed if provided. `deployedAt` defaults to the current time if omitted. `environment` is resolved against the company's environment names by one indexed lookup, matched exactly after trimming and lower-casing; nothing is inferred and nothing is auto-created. On a match, the application's instance for that environment is created if needed and its version and branch are OVERWRITTEN. A value matching nothing is recorded with a null environmentId and surfaces as Unassigned. Caller must be an admin or a member of the application's company.",
         "tags": [
           "Application Deployments"
         ],
@@ -19556,7 +19556,7 @@
           "Environments"
         ],
         "summary": "List environment vocabulary",
-        "description": "A company's deployment environments: what it calls each of Orbit's five kinds. These names and aliases are what every CI deploy string and every Wiz `Environment` tag is matched against, so they are load-bearing rather than cosmetic. Admins may scope by company or division; everyone else sees their own company.",
+        "description": "A company's deployment environments. Orbit names four of the five kinds (production, staging, qa, development) and the company names its OTHERs; the `names` list on each row holds every string its pipelines actually send. Those are what every CI deploy string and every Wiz `Environment` tag is matched against - exactly, with nothing inferred - so they are load-bearing rather than cosmetic. Admins may scope by company or division; everyone else sees their own company.",
         "parameters": [
           {
             "name": "companyId",
@@ -19602,7 +19602,7 @@
                       },
                       "name": {
                         "type": "string",
-                        "description": "What this company calls this environment, normalized to lower case and trimmed. This is the string its pipelines and its Wiz `Environment` tag send."
+                        "description": "The canonical name: what Orbit displays and what the CI sample payload tells a new pipeline to send. DERIVED from `kind` for PRODUCTION / STAGING / QA / DEVELOPMENT - every company's production environment is called \"production\" - and typed by the company only for OTHER, where it is the only thing distinguishing a sandbox from a demo."
                       },
                       "kind": {
                         "type": "string",
@@ -19614,11 +19614,6 @@
                           "OTHER"
                         ],
                         "description": "Orbit's canonical bucket. A company holds at most one row of each kind except OTHER, enforced by a partial unique index. Cross-company reporting counts by kind, never by name."
-                      },
-                      "aliases": {
-                        "type": "string",
-                        "nullable": true,
-                        "description": "Additional accepted strings, comma-separated and normalized. A submitted value matching any of these resolves to this environment; the name is implicitly included. Use it when pipelines disagree with each other rather than renaming anything."
                       },
                       "description": {
                         "type": "string",
@@ -19638,6 +19633,21 @@
                         "type": "string",
                         "nullable": true,
                         "description": "The original free text this row was seeded or adopted from."
+                      },
+                      "names": {
+                        "type": "array",
+                        "description": "Every string that resolves to this environment, canonical first. Unique per company, enforced by the database.",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "type": "string"
+                            },
+                            "isCanonical": {
+                              "type": "boolean"
+                            }
+                          }
+                        }
                       }
                     }
                   }
@@ -19652,7 +19662,7 @@
           "Environments"
         ],
         "summary": "Add an environment",
-        "description": "Requires `environment.manage`. `kind` defaults to a guess from the name when omitted, which is a convenience for the caller only - nothing infers a kind at resolve time. Rejected with 409 when the kind is single-slot and already taken, or when the name or any alias is already claimed by another of the company's environments (that collision cannot be a database constraint, because aliases are comma-packed in one column).",
+        "description": "Requires `environment.manage`. `kind` defaults to a guess from the name when omitted, which is a convenience for the caller only - nothing infers a kind at resolve time. The canonical name is derived from the kind for the four named kinds, so `name` is only read for OTHER. Rejected with 409 when the kind is single-slot and already taken, or when any name the environment would answer to already resolves to another of the company's environments - that one is a real database constraint, @@unique([companyId, value]) over every canonical name and alias in one table.",
         "requestBody": {
           "required": true,
           "content": {
@@ -19664,7 +19674,8 @@
                 ],
                 "properties": {
                   "name": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "The canonical name: what Orbit displays and what the CI sample payload tells a new pipeline to send. DERIVED from `kind` for PRODUCTION / STAGING / QA / DEVELOPMENT - every company's production environment is called \"production\" - and typed by the company only for OTHER, where it is the only thing distinguishing a sandbox from a demo."
                   },
                   "kind": {
                     "type": "string",
@@ -19688,7 +19699,7 @@
                         }
                       }
                     ],
-                    "description": "Comma-separated string or array."
+                    "description": "Extra strings this environment should also answer to, comma-separated or an array. Replaces the whole set on update. The canonical name is always included automatically and does not need listing. Rejected with 409 when any value already resolves to another of the company's environments."
                   },
                   "description": {
                     "type": "string"
@@ -19721,7 +19732,7 @@
                     },
                     "name": {
                       "type": "string",
-                      "description": "What this company calls this environment, normalized to lower case and trimmed. This is the string its pipelines and its Wiz `Environment` tag send."
+                      "description": "The canonical name: what Orbit displays and what the CI sample payload tells a new pipeline to send. DERIVED from `kind` for PRODUCTION / STAGING / QA / DEVELOPMENT - every company's production environment is called \"production\" - and typed by the company only for OTHER, where it is the only thing distinguishing a sandbox from a demo."
                     },
                     "kind": {
                       "type": "string",
@@ -19733,11 +19744,6 @@
                         "OTHER"
                       ],
                       "description": "Orbit's canonical bucket. A company holds at most one row of each kind except OTHER, enforced by a partial unique index. Cross-company reporting counts by kind, never by name."
-                    },
-                    "aliases": {
-                      "type": "string",
-                      "nullable": true,
-                      "description": "Additional accepted strings, comma-separated and normalized. A submitted value matching any of these resolves to this environment; the name is implicitly included. Use it when pipelines disagree with each other rather than renaming anything."
                     },
                     "description": {
                       "type": "string",
@@ -19757,6 +19763,21 @@
                       "type": "string",
                       "nullable": true,
                       "description": "The original free text this row was seeded or adopted from."
+                    },
+                    "names": {
+                      "type": "array",
+                      "description": "Every string that resolves to this environment, canonical first. Unique per company, enforced by the database.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "value": {
+                            "type": "string"
+                          },
+                          "isCanonical": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
                     }
                   }
                 }
@@ -19829,7 +19850,8 @@
                 "type": "object",
                 "properties": {
                   "name": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "The canonical name: what Orbit displays and what the CI sample payload tells a new pipeline to send. DERIVED from `kind` for PRODUCTION / STAGING / QA / DEVELOPMENT - every company's production environment is called \"production\" - and typed by the company only for OTHER, where it is the only thing distinguishing a sandbox from a demo."
                   },
                   "kind": {
                     "type": "string",
@@ -19852,7 +19874,8 @@
                           "type": "string"
                         }
                       }
-                    ]
+                    ],
+                    "description": "Extra strings this environment should also answer to, comma-separated or an array. Replaces the whole set on update. The canonical name is always included automatically and does not need listing. Rejected with 409 when any value already resolves to another of the company's environments."
                   },
                   "description": {
                     "type": "string"
@@ -19890,7 +19913,7 @@
                         },
                         "name": {
                           "type": "string",
-                          "description": "What this company calls this environment, normalized to lower case and trimmed. This is the string its pipelines and its Wiz `Environment` tag send."
+                          "description": "The canonical name: what Orbit displays and what the CI sample payload tells a new pipeline to send. DERIVED from `kind` for PRODUCTION / STAGING / QA / DEVELOPMENT - every company's production environment is called \"production\" - and typed by the company only for OTHER, where it is the only thing distinguishing a sandbox from a demo."
                         },
                         "kind": {
                           "type": "string",
@@ -19902,11 +19925,6 @@
                             "OTHER"
                           ],
                           "description": "Orbit's canonical bucket. A company holds at most one row of each kind except OTHER, enforced by a partial unique index. Cross-company reporting counts by kind, never by name."
-                        },
-                        "aliases": {
-                          "type": "string",
-                          "nullable": true,
-                          "description": "Additional accepted strings, comma-separated and normalized. A submitted value matching any of these resolves to this environment; the name is implicitly included. Use it when pipelines disagree with each other rather than renaming anything."
                         },
                         "description": {
                           "type": "string",
@@ -19926,6 +19944,21 @@
                           "type": "string",
                           "nullable": true,
                           "description": "The original free text this row was seeded or adopted from."
+                        },
+                        "names": {
+                          "type": "array",
+                          "description": "Every string that resolves to this environment, canonical first. Unique per company, enforced by the database.",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "isCanonical": {
+                                "type": "boolean"
+                              }
+                            }
+                          }
                         }
                       }
                     },
@@ -20073,7 +20106,7 @@
                           },
                           "name": {
                             "type": "string",
-                            "description": "What this company calls this environment, normalized to lower case and trimmed. This is the string its pipelines and its Wiz `Environment` tag send."
+                            "description": "The canonical name: what Orbit displays and what the CI sample payload tells a new pipeline to send. DERIVED from `kind` for PRODUCTION / STAGING / QA / DEVELOPMENT - every company's production environment is called \"production\" - and typed by the company only for OTHER, where it is the only thing distinguishing a sandbox from a demo."
                           },
                           "kind": {
                             "type": "string",
@@ -20085,11 +20118,6 @@
                               "OTHER"
                             ],
                             "description": "Orbit's canonical bucket. A company holds at most one row of each kind except OTHER, enforced by a partial unique index. Cross-company reporting counts by kind, never by name."
-                          },
-                          "aliases": {
-                            "type": "string",
-                            "nullable": true,
-                            "description": "Additional accepted strings, comma-separated and normalized. A submitted value matching any of these resolves to this environment; the name is implicitly included. Use it when pipelines disagree with each other rather than renaming anything."
                           },
                           "description": {
                             "type": "string",
@@ -20109,6 +20137,21 @@
                             "type": "string",
                             "nullable": true,
                             "description": "The original free text this row was seeded or adopted from."
+                          },
+                          "names": {
+                            "type": "array",
+                            "description": "Every string that resolves to this environment, canonical first. Unique per company, enforced by the database.",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "value": {
+                                  "type": "string"
+                                },
+                                "isCanonical": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
                           }
                         }
                       }
@@ -20215,7 +20258,7 @@
                         },
                         "name": {
                           "type": "string",
-                          "description": "What this company calls this environment, normalized to lower case and trimmed. This is the string its pipelines and its Wiz `Environment` tag send."
+                          "description": "The canonical name: what Orbit displays and what the CI sample payload tells a new pipeline to send. DERIVED from `kind` for PRODUCTION / STAGING / QA / DEVELOPMENT - every company's production environment is called \"production\" - and typed by the company only for OTHER, where it is the only thing distinguishing a sandbox from a demo."
                         },
                         "kind": {
                           "type": "string",
@@ -20227,11 +20270,6 @@
                             "OTHER"
                           ],
                           "description": "Orbit's canonical bucket. A company holds at most one row of each kind except OTHER, enforced by a partial unique index. Cross-company reporting counts by kind, never by name."
-                        },
-                        "aliases": {
-                          "type": "string",
-                          "nullable": true,
-                          "description": "Additional accepted strings, comma-separated and normalized. A submitted value matching any of these resolves to this environment; the name is implicitly included. Use it when pipelines disagree with each other rather than renaming anything."
                         },
                         "description": {
                           "type": "string",
@@ -20251,6 +20289,21 @@
                           "type": "string",
                           "nullable": true,
                           "description": "The original free text this row was seeded or adopted from."
+                        },
+                        "names": {
+                          "type": "array",
+                          "description": "Every string that resolves to this environment, canonical first. Unique per company, enforced by the database.",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "isCanonical": {
+                                "type": "boolean"
+                              }
+                            }
+                          }
                         }
                       }
                     }
@@ -20374,7 +20427,7 @@
                         },
                         "name": {
                           "type": "string",
-                          "description": "What this company calls this environment, normalized to lower case and trimmed. This is the string its pipelines and its Wiz `Environment` tag send."
+                          "description": "The canonical name: what Orbit displays and what the CI sample payload tells a new pipeline to send. DERIVED from `kind` for PRODUCTION / STAGING / QA / DEVELOPMENT - every company's production environment is called \"production\" - and typed by the company only for OTHER, where it is the only thing distinguishing a sandbox from a demo."
                         },
                         "kind": {
                           "type": "string",
@@ -20386,11 +20439,6 @@
                             "OTHER"
                           ],
                           "description": "Orbit's canonical bucket. A company holds at most one row of each kind except OTHER, enforced by a partial unique index. Cross-company reporting counts by kind, never by name."
-                        },
-                        "aliases": {
-                          "type": "string",
-                          "nullable": true,
-                          "description": "Additional accepted strings, comma-separated and normalized. A submitted value matching any of these resolves to this environment; the name is implicitly included. Use it when pipelines disagree with each other rather than renaming anything."
                         },
                         "description": {
                           "type": "string",
@@ -20410,6 +20458,21 @@
                           "type": "string",
                           "nullable": true,
                           "description": "The original free text this row was seeded or adopted from."
+                        },
+                        "names": {
+                          "type": "array",
+                          "description": "Every string that resolves to this environment, canonical first. Unique per company, enforced by the database.",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "isCanonical": {
+                                "type": "boolean"
+                              }
+                            }
+                          }
                         }
                       }
                     }

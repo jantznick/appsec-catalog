@@ -828,22 +828,21 @@ model Environment {
   id           String                   @id @default(cuid())
   companyId    String
   company      Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name         String // what the company calls it: "prod", "uat", "staging"
-  kind         String // PRODUCTION | STAGING | DEVELOPMENT | QA | OTHER
-  /// Other strings that resolve here, comma-separated and normalized. Real pipelines
-  /// are inconsistent - one sends "prod", another "production" - and recording the
-  /// extras is cheaper than making a company change its tagging schema. The name is
-  /// implicitly an alias of itself; see environmentMatchNames().
+  /// The canonical name: what Orbit displays, and what the CI sample payload tells a
+  /// new pipeline to send. DERIVED FROM `kind` for the four named kinds - every
+  /// company's production environment is called "production" - and typed by the
+  /// company only for OTHER, where it is the only thing distinguishing a sandbox
+  /// from a demo. See canonicalEnvironmentName() in services/environmentNaming.js.
   ///
-  /// Uniqueness of the name+alias union across a company CANNOT be an index, because
-  /// these are comma-packed in one column. It is validated in routes/environments.js
-  /// by findEnvironmentNameConflicts(), and that check is the only thing standing
-  /// between us and a string that resolves two ways.
-  aliases      String?
+  /// Mirrored as the canonical row in `names`, which is where uniqueness is actually
+  /// enforced. This column is the convenient read.
+  name         String
+  kind         String // PRODUCTION | STAGING | DEVELOPMENT | QA | OTHER
   description  String?
   status       String                   @default("active") // active | retired
   displayOrder Int                      @default(0)
   sourceLabel  String? // original free-text value this row was seeded/adopted from
+  names        EnvironmentName[]
   applications ApplicationEnvironment[]
   deployments  Deployment[]
   createdAt    DateTime                 @default(now())
@@ -853,6 +852,45 @@ model Environment {
   @@index([companyId])
   @@index([companyId, kind])
   @@index([status])
+}
+
+/// Every string that resolves to an environment, one row each.
+///
+/// WHY A TABLE AND NOT A COLUMN
+///
+/// Real pipelines disagree with each other: one sends "prod", another "prod-us", a
+/// third "production". Recording the extras is cheaper than making a company change
+/// its tagging schema, and far safer than inferring.
+///
+/// These were briefly a comma-packed string on Environment, which a database cannot
+/// index into: `prod` could belong to two environments and nothing would complain,
+/// so a hand-written check in routes/environments.js was the only thing standing
+/// between us and a deploy resolving differently on different days. One row per
+/// value makes @@unique([companyId, value]) a real constraint, enforced by Postgres
+/// rather than by a function someone might forget to call.
+///
+/// The CANONICAL name is in here too. That is what closes the last gap: without it
+/// nothing would stop one environment's name equalling another's alias, since those
+/// would be two separate constraints over two separate columns. With everything in
+/// one table, one index covers the whole match space - naming an OTHER "production"
+/// when that is already the production environment's canonical name simply fails.
+model EnvironmentName {
+  id            String      @id @default(cuid())
+  /// Denormalized from the environment so uniqueness can be company-wide rather
+  /// than per environment. Kept in step by routes/environments.js.
+  companyId     String
+  environmentId String
+  environment   Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  /// Normalized on write: trimmed and lower-cased, like every other environment
+  /// string. Matched exactly - nothing is ever inferred.
+  value         String
+  /// True for the one row mirroring Environment.name.
+  isCanonical   Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+
+  @@unique([companyId, value])
+  @@index([environmentId])
+  @@index([companyId])
 }
 
 /// One running instance of an application: "Orbit Backend in production".

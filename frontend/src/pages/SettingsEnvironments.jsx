@@ -11,7 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import useAuthStore from '../store/authStore.js';
 
 /**
- * Deployment Environments: what THIS company calls each of Orbit's environment kinds.
+ * Deployment Environments: the strings each company's pipelines send, mapped onto
+ * Orbit's five environment kinds.
  *
  * Orbit owns the taxonomy — PRODUCTION, STAGING, QA, DEVELOPMENT, plus as many OTHERs
  * as a company wants. The company owns the words. Nobody has to change their tagging
@@ -48,6 +49,21 @@ const KIND_HINTS = {
 const REPEATABLE_KIND = 'OTHER';
 
 const emptyForm = { name: '', kind: 'OTHER', aliases: '', description: '', status: 'active' };
+
+/**
+ * The strings a company's pipelines send for this environment, canonical excluded.
+ *
+ * The canonical name is Orbit's word for the kind (production, staging, qa,
+ * development) and is not something a company types -- only OTHER has a typed name.
+ * So the editable list is everything EXCEPT the canonical row.
+ */
+function canonicalNameFor(kind) {
+  return kind === REPEATABLE_KIND ? '' : String(kind || '').toLowerCase();
+}
+
+function extraNames(env) {
+  return (env?.names || []).filter((n) => !n.isCanonical).map((n) => n.value);
+}
 
 export function SettingsEnvironments() {
   const { user, isAdmin } = useAuthStore();
@@ -137,7 +153,7 @@ export function SettingsEnvironments() {
     setForm({
       name: env.name || '',
       kind: env.kind || REPEATABLE_KIND,
-      aliases: env.aliases || '',
+      aliases: extraNames(env).join(', '),
       description: env.description || '',
       status: env.status || 'active',
     });
@@ -145,8 +161,8 @@ export function SettingsEnvironments() {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim()) {
-      toast.error('Give the environment the name your pipelines actually send');
+    if (form.kind === REPEATABLE_KIND && !form.name.trim()) {
+      toast.error('Give this environment a name — it is the only thing telling it apart from your other ones');
       return;
     }
     try {
@@ -212,10 +228,11 @@ export function SettingsEnvironments() {
         </Link>
         <h1 className="text-2xl font-semibold text-gray-900">Deployment Environments</h1>
         <p className="mt-1 max-w-3xl text-sm text-gray-600">
-          Orbit groups every environment into five kinds. Tell us what you call each one and we
-          will match your deploys and your Wiz tags against your names — you do not need to change
-          your tagging schema. A value we do not recognise is recorded as Unassigned rather than
-          guessed at.
+          Orbit groups every environment into five kinds and names four of them for you —
+          production, staging, qa, development. List the strings <em>your</em> pipelines
+          actually send and we will match deploys and Wiz tags against them, so you never
+          have to change your tagging schema. A value we do not recognise is recorded as
+          Unassigned rather than guessed at.
         </p>
         <p className="mt-2 max-w-3xl text-xs text-gray-500">
           This is not the same as a company&rsquo;s <strong>Server Environment</strong> (&ldquo;Cloud
@@ -259,7 +276,7 @@ export function SettingsEnvironments() {
                     <TableHead>Company</TableHead>
                     <TableHead>Kind</TableHead>
                     <TableHead>Name</TableHead>
-                    <TableHead>Also accepts</TableHead>
+                    <TableHead>Names your pipelines send</TableHead>
                     <TableHead>Applications</TableHead>
                     <TableHead>Deployments</TableHead>
                     <TableHead>Status</TableHead>
@@ -284,12 +301,14 @@ export function SettingsEnvironments() {
                         <TableCell>{KIND_LABELS[env.kind] || env.kind}</TableCell>
                         <TableCell>{env.name}</TableCell>
                         <TableCell>
-                          {env.aliases ? (
+                          {extraNames(env).length ? (
                             <span className="text-sm text-gray-700">
-                              {env.aliases.split(',').join(', ')}
+                              {extraNames(env).join(', ')}
                             </span>
                           ) : (
-                            <span className="text-sm italic text-gray-400">just the name</span>
+                            <span className="text-sm italic text-gray-400">
+                              just &ldquo;{env.name}&rdquo;
+                            </span>
                           )}
                         </TableCell>
                         <TableCell>{env._count?.applications ?? '—'}</TableCell>
@@ -353,7 +372,7 @@ export function SettingsEnvironments() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
-                      <TableHead>Also accepts</TableHead>
+                      <TableHead>Names your pipelines send</TableHead>
                       <TableHead>Applications</TableHead>
                       <TableHead>Deployments</TableHead>
                       <TableHead>Status</TableHead>
@@ -370,10 +389,12 @@ export function SettingsEnvironments() {
                           )}
                         </TableCell>
                         <TableCell>
-                          {env.aliases ? (
-                            <span className="text-sm text-gray-700">{env.aliases.split(',').join(', ')}</span>
+                          {extraNames(env).length ? (
+                            <span className="text-sm text-gray-700">{extraNames(env).join(', ')}</span>
                           ) : (
-                            <span className="text-sm italic text-gray-400">just the name</span>
+                            <span className="text-sm italic text-gray-400">
+                              just &ldquo;{env.name}&rdquo;
+                            </span>
                           )}
                         </TableCell>
                         <TableCell>{env._count?.applications ?? '—'}</TableCell>
@@ -434,19 +455,33 @@ export function SettingsEnvironments() {
               .map((k) => ({ value: k, label: KIND_LABELS[k] || k }))}
             helperText="Orbit's bucket for this environment. Cross-company reporting counts by kind, never by name."
           />
+          {form.kind === REPEATABLE_KIND ? (
+            <Input
+              label="Name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. sandbox, demo"
+              helperText="What Orbit calls this one. Only you can name it — the other four kinds take their name from the kind."
+            />
+          ) : (
+            <div>
+              <span className="block text-sm font-medium text-gray-700 mb-2">Name</span>
+              <p className="text-sm text-gray-900">
+                {canonicalNameFor(form.kind)}
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                Orbit&rsquo;s word for this kind, so every company reads the same on a
+                cross-company screen. What your pipelines actually send goes below — you
+                do not have to change anything on your side.
+              </p>
+            </div>
+          )}
           <Input
-            label="Name"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="e.g. prod, production, Super Important"
-            helperText="Exactly what your pipelines and your Wiz Environment tag send. Case and padding do not matter."
-          />
-          <Input
-            label="Also accepts (optional)"
+            label="Names your pipelines send"
             value={form.aliases}
             onChange={(e) => setForm({ ...form, aliases: e.target.value })}
-            placeholder="prod, prd, production"
-            helperText="Comma-separated. Use this when pipelines disagree with each other — all of these resolve to this environment."
+            placeholder="prod, prod-us, prod-eu"
+            helperText="Comma-separated, and as many as you need. A deploy or a Wiz tag carrying any of these resolves here. Anything else lands in Unassigned rather than being guessed at."
           />
           <Input
             label="Description (optional)"

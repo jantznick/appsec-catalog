@@ -26,7 +26,12 @@ export const TRACKED_FIELDS = {
   // reporting counts and `name`/`aliases` are what every CI push and Wiz tag is
   // matched against, so a quiet edit here changes numbers and silently stops
   // pipelines resolving. None of it was tracked before.
-  Environment: ['name', 'kind', 'aliases', 'description', 'status', 'displayOrder'],
+  // `aliases` is not here because it is not a column any more - every accepted
+  // string is an EnvironmentName row. Those are diffed as their own entity below.
+  Environment: ['name', 'kind', 'description', 'status', 'displayOrder'],
+  // The strings a company's pipelines send. Adding or removing one silently changes
+  // which deploys resolve, so it is worth a trail of its own.
+  EnvironmentName: ['value', 'isCanonical', 'environmentId'],
   // The instance. currentVersion and gitBranch moved here off Application, where they
   // were tracked; without this they would lose the coverage they had.
   ApplicationEnvironment: ['environmentId', 'status', 'currentVersion', 'gitBranch'],

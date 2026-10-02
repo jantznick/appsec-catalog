@@ -7,13 +7,12 @@ import { applyCompanyScope } from '../utils/scope.js';
 import { recordChange } from '../utils/changeHistory.js';
 import {
   ENVIRONMENT_KINDS,
-  findEnvironmentNameConflicts,
+  canonicalEnvironmentName,
+  environmentNameRows,
+  hasTypedName,
   inferEnvironmentKind,
   isSingleSlotKind,
   isValidEnvironmentKind,
-  normalizeEnvironmentName,
-  parseEnvironmentAliases,
-  serializeEnvironmentAliases,
 } from '../services/environmentNaming.js';
 
 /**
@@ -42,7 +41,14 @@ const STATUSES = new Set(['active', 'retired']);
 async function findEnvironmentWithCompany(id) {
   return prisma.environment.findUnique({
     where: { id },
-    select: { id: true, companyId: true, name: true, kind: true, aliases: true, status: true },
+    select: {
+      id: true,
+      companyId: true,
+      name: true,
+      kind: true,
+      status: true,
+      names: { select: { id: true, value: true, isCanonical: true } },
+    },
   });
 }
 
@@ -52,29 +58,28 @@ function isUniqueViolation(error) {
 }
 
 /**
- * Reject a name or alias that another of this company's environments already claims.
+ * Turn a unique-violation on EnvironmentName into a message that names the culprit.
  *
- * This is the only guard on alias uniqueness. The values live comma-packed in one
- * column, so it cannot be a database index - and without it a string like "prod"
- * could belong to two environments and resolveEnvironmentForDeployment would return
- * whichever row the query happened to reach first, differently on different days.
+ * Uniqueness of every string a company's environments answer to is a real database
+ * constraint now - @@unique([companyId, value]) over every canonical name AND every
+ * alias, in one table. It used to be a hand-written check over a comma-packed
+ * column, which meant any writer that forgot to call it punched straight through.
+ * This only decorates the failure; it does not decide it.
  *
- * @param {{ id?: string, companyId: string, name: unknown, aliases: unknown }} candidate
- * @returns {Promise<string | null>} an error message, or null when clear
+ * @param {string} companyId
+ * @param {string[]} values the strings we were trying to claim
+ * @returns {Promise<string>}
  */
-async function findNameConflictMessage(candidate) {
-  const existing = await prisma.environment.findMany({
-    where: { companyId: candidate.companyId },
-    select: { id: true, name: true, aliases: true },
+async function describeNameCollision(companyId, values) {
+  const clashes = await prisma.environmentName.findMany({
+    where: { companyId, value: { in: values } },
+    select: { value: true, environment: { select: { name: true, kind: true } } },
   });
-
-  const conflicts = findEnvironmentNameConflicts(candidate, existing);
-  if (!conflicts.length) {
-    return null;
+  if (!clashes.length) {
+    return 'One of those names or aliases is already in use by another environment.';
   }
-
-  return conflicts
-    .map(({ value, conflictsWith }) => `"${value}" is already used by "${conflictsWith}"`)
+  return clashes
+    .map((c) => `"${c.value}" already belongs to ${c.environment?.name || 'another environment'}`)
     .join('; ');
 }
 
@@ -138,6 +143,7 @@ router.get('/', requireAuth, async (req, res) => {
       orderBy: [{ companyId: 'asc' }, { displayOrder: 'asc' }, { name: 'asc' }],
       include: {
         company: { select: { id: true, name: true } },
+        names: { select: { value: true, isCanonical: true }, orderBy: { isCanonical: 'desc' } },
         _count: { select: { applications: true, deployments: true } },
       },
     });
@@ -167,15 +173,10 @@ router.post('/', requireAuth, async (req, res) => {
       });
     }
 
-    const normalizedName = normalizeEnvironmentName(name);
-    if (!normalizedName) {
-      return res.status(400).json({ error: 'Environment name is required' });
-    }
-
     // An explicit kind wins. The inferred one is only a convenience default for a
     // caller that did not send one - it is a SUGGESTION, never a live resolution
     // rule, and nothing downstream infers a kind from a name again.
-    const resolvedKind = kind ? kind : inferEnvironmentKind(normalizedName);
+    const resolvedKind = kind ? kind : inferEnvironmentKind(name);
     if (!isValidEnvironmentKind(resolvedKind)) {
       return res.status(400).json({
         error: 'Invalid kind',
@@ -183,34 +184,46 @@ router.post('/', requireAuth, async (req, res) => {
       });
     }
 
-    const normalizedAliases = serializeEnvironmentAliases(aliases);
+    // Orbit owns the word for the four named kinds; only OTHER takes a typed name.
+    const canonical = canonicalEnvironmentName(resolvedKind, name);
+    if (!canonical) {
+      return res.status(400).json({
+        error: 'Environment name is required',
+        message: 'An OTHER environment needs a name - it is the only thing telling it apart from your other ones.',
+      });
+    }
 
     const slotMessage = await findKindSlotMessage({ companyId, kind: resolvedKind });
     if (slotMessage) {
       return res.status(409).json({ error: 'Kind already in use', message: slotMessage });
     }
 
-    const conflictMessage = await findNameConflictMessage({
-      companyId,
-      name: normalizedName,
-      aliases: normalizedAliases,
-    });
-    if (conflictMessage) {
-      return res.status(409).json({ error: 'Name or alias already in use', message: conflictMessage });
-    }
+    // Canonical first, then the extra spellings. Written as rows so the database
+    // enforces that no string resolves to two environments.
+    const values = environmentNameRows(canonical, aliases);
 
     const environment = await prisma.environment.create({
       data: {
         companyId,
-        name: normalizedName,
+        name: canonical,
         kind: resolvedKind,
-        aliases: normalizedAliases,
         description: typeof description === 'string' ? description.trim() || null : null,
         displayOrder: Number.isInteger(displayOrder) ? displayOrder : 0,
         // Names are stored normalized, so keep what the caller actually typed when it
         // differed - the same reason the migration records a sourceLabel.
-        sourceLabel: typeof name === 'string' && name.trim() !== normalizedName ? name.trim() : null,
+        sourceLabel:
+          hasTypedName(resolvedKind) && typeof name === 'string' && name.trim() !== canonical
+            ? name.trim()
+            : null,
+        names: {
+          create: values.map((value) => ({
+            companyId,
+            value,
+            isCanonical: value === canonical,
+          })),
+        },
       },
+      include: { names: { select: { value: true, isCanonical: true } } },
     });
 
     // `kind` is what cross-company production reporting counts, and name/aliases are
@@ -228,9 +241,16 @@ router.post('/', requireAuth, async (req, res) => {
     res.status(201).json(environment);
   } catch (error) {
     if (isUniqueViolation(error)) {
+      const companyId = getAuthContext(req)?.isAdmin
+        ? req.body?.companyId || getAuthContext(req)?.companyId
+        : getAuthContext(req)?.companyId;
+      const attempted = environmentNameRows(
+        canonicalEnvironmentName(req.body?.kind || inferEnvironmentKind(req.body?.name), req.body?.name) || '',
+        req.body?.aliases,
+      );
       return res.status(409).json({
-        error: 'Environment already exists',
-        message: 'This company already has an environment with that name.',
+        error: 'Name or alias already in use',
+        message: await describeNameCollision(companyId, attempted),
       });
     }
     console.error('Error creating environment:', error);
@@ -256,14 +276,6 @@ router.put('/:id', requireAuth, async (req, res) => {
     const { name, kind, description, status, displayOrder, aliases } = req.body || {};
     const data = {};
 
-    if (name !== undefined) {
-      const normalizedName = normalizeEnvironmentName(name);
-      if (!normalizedName) {
-        return res.status(400).json({ error: 'Environment name cannot be empty' });
-      }
-      data.name = normalizedName;
-    }
-
     if (kind !== undefined) {
       if (!isValidEnvironmentKind(kind)) {
         return res.status(400).json({
@@ -274,8 +286,20 @@ router.put('/:id', requireAuth, async (req, res) => {
       data.kind = kind;
     }
 
-    if (aliases !== undefined) {
-      data.aliases = serializeEnvironmentAliases(aliases);
+    // The canonical name follows the kind, so re-kinding renames the row on its own:
+    // a STAGING environment promoted to PRODUCTION becomes "production", not whatever
+    // it was called before. Only OTHER takes a typed name.
+    const nextKind = data.kind ?? existing.kind;
+    if (name !== undefined || kind !== undefined) {
+      const typed = name !== undefined ? name : existing.name;
+      const canonical = canonicalEnvironmentName(nextKind, typed);
+      if (!canonical) {
+        return res.status(400).json({
+          error: 'Environment name cannot be empty',
+          message: 'An OTHER environment needs a name.',
+        });
+      }
+      data.name = canonical;
     }
 
     if (status !== undefined) {
@@ -303,28 +327,53 @@ router.put('/:id', requireAuth, async (req, res) => {
     // Validate against the row as it WILL be, not as it is: changing the kind and the
     // name in one request has to be checked together, or a legal end state can be
     // rejected because an intermediate one was not.
-    const next = {
+    const slotMessage = await findKindSlotMessage({
       id: existing.id,
       companyId: existing.companyId,
-      kind: data.kind ?? existing.kind,
-      name: data.name ?? existing.name,
-      aliases: data.aliases !== undefined ? data.aliases : existing.aliases,
-    };
-
-    const slotMessage = await findKindSlotMessage(next);
+      kind: nextKind,
+    });
     if (slotMessage) {
       return res.status(409).json({ error: 'Kind already in use', message: slotMessage });
     }
 
-    const conflictMessage = await findNameConflictMessage(next);
-    if (conflictMessage) {
-      return res.status(409).json({ error: 'Name or alias already in use', message: conflictMessage });
-    }
-
-    const before = await prisma.environment.findUnique({ where: { id: existing.id } });
-    const environment = await prisma.environment.update({
+    const before = await prisma.environment.findUnique({
       where: { id: existing.id },
-      data,
+      include: { names: { select: { value: true, isCanonical: true } } },
+    });
+
+    // The name rows are replaced wholesale rather than diffed. They are a set, the
+    // set is small, and the alternative is three code paths (added, removed, became
+    // canonical) that all have to agree with the unique index. Deleting first inside
+    // the transaction means a rename that reuses another of this environment's own
+    // values does not collide with itself.
+    const nextCanonical = data.name ?? existing.name;
+    const nextValues =
+      aliases !== undefined || data.name !== undefined
+        ? environmentNameRows(
+          nextCanonical,
+          aliases !== undefined
+            ? aliases
+            : existing.names.filter((n) => !n.isCanonical).map((n) => n.value),
+        )
+        : null;
+
+    const environment = await prisma.$transaction(async (tx) => {
+      if (nextValues) {
+        await tx.environmentName.deleteMany({ where: { environmentId: existing.id } });
+        await tx.environmentName.createMany({
+          data: nextValues.map((value) => ({
+            companyId: existing.companyId,
+            environmentId: existing.id,
+            value,
+            isCanonical: value === nextCanonical,
+          })),
+        });
+      }
+      return tx.environment.update({
+        where: { id: existing.id },
+        data,
+        include: { names: { select: { value: true, isCanonical: true } } },
+      });
     });
 
     await recordChange({
@@ -354,7 +403,7 @@ router.put('/:id', requireAuth, async (req, res) => {
       })
       : 0;
     const canKeepOldNameAsAlias = Boolean(
-      renamedFrom && !parseEnvironmentAliases(environment.aliases).includes(renamedFrom),
+      renamedFrom && !environment.names.some((n) => n.value === renamedFrom),
     );
 
     res.json({
@@ -365,9 +414,14 @@ router.put('/:id', requireAuth, async (req, res) => {
     });
   } catch (error) {
     if (isUniqueViolation(error)) {
+      const existing = await findEnvironmentWithCompany(req.params.id);
+      const attempted = environmentNameRows(
+        canonicalEnvironmentName(req.body?.kind || existing?.kind, req.body?.name ?? existing?.name) || '',
+        req.body?.aliases,
+      );
       return res.status(409).json({
-        error: 'Environment already exists',
-        message: 'This company already has an environment with that name.',
+        error: 'Name or alias already in use',
+        message: await describeNameCollision(existing?.companyId, attempted),
       });
     }
     console.error('Error updating environment:', error);

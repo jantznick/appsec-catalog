@@ -1,12 +1,12 @@
 import { prisma } from '../prisma/client.js';
 import {
   PRIMARY_ENVIRONMENT_KIND,
-  environmentMatchNames,
+  canonicalEnvironmentName,
   normalizeEnvironmentName,
 } from './environmentNaming.js';
 
 /** What a company's production environment is called until someone renames it. */
-export const DEFAULT_PRODUCTION_ENVIRONMENT_NAME = 'production';
+export const DEFAULT_PRODUCTION_ENVIRONMENT_NAME = canonicalEnvironmentName(PRIMARY_ENVIRONMENT_KIND, null);
 
 /**
  * Resolving a submitted environment string (from CI or the deployment form) to one
@@ -21,16 +21,17 @@ export const DEFAULT_PRODUCTION_ENVIRONMENT_NAME = 'production';
 /**
  * Find the company's environment matching a submitted string.
  *
- * Matches the environment's `name` OR any of its `aliases`, exactly, after trimming
- * and lower-casing. Nothing else.
+ * ONE INDEXED LOOKUP. Every string an environment answers to - its canonical name
+ * and every extra spelling - is a row in EnvironmentName, unique per company, so
+ * this is a primary-key hit rather than a scan-and-compare.
  *
- * NO INFERENCE, EVER. A string that matches neither does not fall back to a kind,
- * a fuzzy match or a nearest neighbour - it goes to Unassigned. "production" does
- * not quietly become "prod". That looks unhelpful and is the entire point: the
- * mismatch between what a pipeline sends and what the company configured is exactly
- * the misconfiguration this feature exists to surface, and absorbing it silently
- * would mean a company could never find out. The fix is to add the string as an
- * alias (one click from the Unassigned bucket), not to guess.
+ * NO INFERENCE, EVER. A string that matches no row does not fall back to a kind, a
+ * fuzzy match or a nearest neighbour - it goes to Unassigned. "production" does not
+ * quietly become "prod". That looks unhelpful and is the entire point: the mismatch
+ * between what a pipeline sends and what the company configured is exactly the
+ * misconfiguration this feature exists to surface, and absorbing it silently would
+ * mean a company could never find out. The fix is to add the string as an alias -
+ * one click from the Unassigned bucket - not to guess.
  *
  * Deliberately does NOT create a missing environment either. One typo in a pipeline
  * yaml would otherwise invent an environment that then appears in the environment
@@ -49,28 +50,23 @@ export async function resolveEnvironmentForDeployment(companyId, rawEnvironment)
     return { normalizedName, environment: null, matchedAlias: false };
   }
 
-  // A company holds at most four single-slot kinds plus however many OTHERs it has
-  // added, so this is a handful of rows. Fetching them and matching in JS keeps the
-  // name/alias rule in one pure, testable function (environmentMatchNames) rather
-  // than splitting it between here and a SQL expression that would have to parse the
-  // comma-packed alias column.
-  const candidates = await prisma.environment.findMany({
-    where: { companyId },
-    select: { id: true, name: true, kind: true, aliases: true },
+  const match = await prisma.environmentName.findUnique({
+    where: { companyId_value: { companyId, value: normalizedName } },
+    select: {
+      isCanonical: true,
+      environment: { select: { id: true, name: true, kind: true } },
+    },
   });
 
-  for (const candidate of candidates) {
-    const names = environmentMatchNames(candidate);
-    if (names.includes(normalizedName)) {
-      return {
-        normalizedName,
-        environment: { id: candidate.id, name: candidate.name, kind: candidate.kind },
-        matchedAlias: normalizedName !== normalizeEnvironmentName(candidate.name),
-      };
-    }
+  if (!match?.environment) {
+    return { normalizedName, environment: null, matchedAlias: false };
   }
 
-  return { normalizedName, environment: null, matchedAlias: false };
+  return {
+    normalizedName,
+    environment: match.environment,
+    matchedAlias: !match.isCanonical,
+  };
 }
 
 /**
@@ -188,7 +184,12 @@ export async function listActiveEnvironments(companyId) {
   }
   return prisma.environment.findMany({
     where: { companyId, status: 'active' },
-    select: { id: true, name: true, kind: true, aliases: true },
+    select: {
+      id: true,
+      name: true,
+      kind: true,
+      names: { select: { value: true, isCanonical: true }, orderBy: { isCanonical: 'desc' } },
+    },
     orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
   });
 }
@@ -236,7 +237,12 @@ export async function ensureDefaultEnvironmentInstance({ applicationId, companyI
         companyId,
         name: DEFAULT_PRODUCTION_ENVIRONMENT_NAME,
         kind: PRIMARY_ENVIRONMENT_KIND,
-        description: 'Created automatically so every application has a production environment. Rename it to whatever this company actually calls theirs.',
+        description: 'Created automatically so every application has a production environment. Add the names your pipelines actually send to it in settings.',
+        // The canonical name has to exist as a row too, or nothing resolves to this
+        // environment and a later OTHER could claim "production" for itself.
+        names: {
+          create: [{ companyId, value: DEFAULT_PRODUCTION_ENVIRONMENT_NAME, isCanonical: true }],
+        },
       },
       select: { id: true },
     });

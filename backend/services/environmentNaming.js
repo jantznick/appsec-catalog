@@ -142,80 +142,62 @@ export function parseEnvironmentAliases(raw) {
   return out;
 }
 
+
+
 /**
- * Serialise aliases back to the stored column. Returns null rather than an empty
- * string so "no aliases" is one value in the database, not two.
+ * The canonical name for an environment of this kind.
  *
- * @param {unknown} value a comma-separated string, or an array of strings
- * @returns {string | null}
+ * Orbit owns the word for the four named kinds, so every company's production
+ * environment is called "production" however its pipelines spell it. That is what
+ * makes cross-company screens readable - eighteen companies showing eighteen
+ * different words for the same thing is worse than one word plus an alias list.
+ *
+ * OTHER is the exception, and has to be: a company with a sandbox and a demo has
+ * two OTHERs, and the typed name is the only thing telling them apart.
+ *
+ * @param {unknown} kind
+ * @param {unknown} typedName used only when kind is OTHER
+ * @returns {string | null} normalized, or null when OTHER was given no usable name
  */
-export function serializeEnvironmentAliases(value) {
-  const list = Array.isArray(value)
-    ? parseEnvironmentAliases(value.join(','))
-    : parseEnvironmentAliases(value);
-  return list.length ? list.join(',') : null;
+export function canonicalEnvironmentName(kind, typedName) {
+  if (kind === REPEATABLE_ENVIRONMENT_KIND) {
+    return normalizeEnvironmentName(typedName);
+  }
+  return isValidEnvironmentKind(kind) ? kind.toLowerCase() : null;
 }
 
 /**
- * Every string that resolves to this environment: its name plus its aliases.
+ * Whether the company types this environment's name, or Orbit derives it.
+ * @param {unknown} kind
+ * @returns {boolean}
+ */
+export function hasTypedName(kind) {
+  return kind === REPEATABLE_ENVIRONMENT_KIND;
+}
+
+/**
+ * The full set of strings an environment should answer to: its canonical name plus
+ * the extra spellings, normalized and de-duplicated, canonical first.
  *
- * The name is implicitly an alias of itself, so callers never have to remember to
- * check both.
+ * This is what routes/environments.js writes into EnvironmentName. It does NOT
+ * decide uniqueness - the database does, via @@unique([companyId, value]).
  *
- * @param {{ name?: unknown, aliases?: unknown }} environment
+ * @param {string} canonical
+ * @param {unknown} extras comma-separated string, or an array
  * @returns {string[]}
  */
-export function environmentMatchNames(environment) {
-  const name = normalizeEnvironmentName(environment?.name);
-  const aliases = parseEnvironmentAliases(environment?.aliases);
+export function environmentNameRows(canonical, extras) {
+  const list = Array.isArray(extras)
+    ? parseEnvironmentAliases(extras.join(','))
+    : parseEnvironmentAliases(extras);
   const seen = new Set();
   const out = [];
-  for (const candidate of name ? [name, ...aliases] : aliases) {
-    if (!seen.has(candidate)) {
-      seen.add(candidate);
-      out.push(candidate);
+  for (const value of [canonical, ...list]) {
+    const normalized = normalizeEnvironmentName(value);
+    if (normalized && !seen.has(normalized)) {
+      seen.add(normalized);
+      out.push(normalized);
     }
   }
   return out;
-}
-
-/**
- * Strings the candidate environment would claim that another already owns.
- *
- * This is the one invariant in the environment model with no database backstop:
- * aliases live comma-packed in a single column, so uniqueness across a company
- * cannot be an index. Without this check `prod` could belong to both PRODUCTION and
- * STAGING and `resolveEnvironmentForDeployment` would return whichever row the
- * query happened to reach first.
- *
- * @param {{ id?: string, name?: unknown, aliases?: unknown }} candidate
- * @param {Array<{ id?: string, name?: unknown, aliases?: unknown }>} existing
- *   the company's other environments; the candidate's own row is skipped by id
- * @returns {Array<{ value: string, conflictsWith: string }>}
- */
-export function findEnvironmentNameConflicts(candidate, existing) {
-  const claimed = environmentMatchNames(candidate);
-  if (!claimed.length) {
-    return [];
-  }
-
-  const owners = new Map();
-  for (const other of existing || []) {
-    if (candidate?.id && other?.id === candidate.id) continue;
-    const ownerName = normalizeEnvironmentName(other?.name) || other?.id || 'another environment';
-    for (const value of environmentMatchNames(other)) {
-      if (!owners.has(value)) {
-        owners.set(value, ownerName);
-      }
-    }
-  }
-
-  const conflicts = [];
-  for (const value of claimed) {
-    const conflictsWith = owners.get(value);
-    if (conflictsWith) {
-      conflicts.push({ value, conflictsWith });
-    }
-  }
-  return conflicts;
 }
