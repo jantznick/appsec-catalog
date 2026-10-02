@@ -196,10 +196,12 @@ enum RoadmapProgressState {
   SCHEDULED_RELEASE
 }
 
-/// A publicly visible roadmap entry, maintained by admins alongside the
-/// What's New feed. Items start as drafts and only reach the roadmap tab once
-/// published, so an admin can line up a quarter's worth of work before anyone
-/// sees it.
+/// A roadmap entry shown on the What's New page, maintained by admins.
+///
+/// "Published" means visible to every signed-in user — the page is behind
+/// auth, so this never reaches the public documentation site. Items start as
+/// drafts so an admin can line up a quarter's worth of work before anyone
+/// else sees it.
 model RoadmapItem {
   id                 String                @id @default(cuid())
   title              String
