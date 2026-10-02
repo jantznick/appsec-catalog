@@ -6,6 +6,7 @@ import {
   WIZ_TAG_KEYS,
   readWizTag,
   wizResourceMatchReason,
+  wizTagWhereCandidates,
   wizTagsToObject,
 } from './wiz.js';
 
@@ -216,5 +217,36 @@ describe('wizResourceMatchReason', () => {
       }),
       'product',
     );
+  });
+});
+
+describe('wizTagWhereCandidates', () => {
+  it('sends the common casings, because Wiz EQUALS is case-sensitive', () => {
+    // REGRESSION. A product tagged "OptimiseRx" was invisible when the assigned
+    // value read "OptimiseRX": the server predicate matched exactly and returned
+    // an empty page, while Orbit's own comparison would have matched. Same input,
+    // different answer depending on which path ran.
+    const [first] = wizTagWhereCandidates({ Product: 'OptimiseRX' });
+    const values = first.tags.EQUALS.map((e) => e.value);
+    assert.ok(values.includes('OptimiseRX'), 'as assigned');
+    assert.ok(values.includes('optimiserx'), 'lower');
+    assert.ok(values.includes('OPTIMISERX'), 'upper');
+    assert.ok(values.includes('Optimiserx'), 'title');
+  });
+
+  it('does not repeat a casing when the value is already lower case', () => {
+    const [first] = wizTagWhereCandidates({ Product: 'orbit' });
+    const values = first.tags.EQUALS.map((e) => e.value);
+    assert.equal(new Set(values).size, values.length);
+  });
+
+  it('keeps every candidate on the same tag key', () => {
+    const [first] = wizTagWhereCandidates({ Product: 'Orbit' });
+    assert.ok(first.tags.EQUALS.every((e) => e.key === 'Product'));
+  });
+
+  it('is empty when there is nothing to filter on', () => {
+    assert.deepEqual(wizTagWhereCandidates({}), []);
+    assert.deepEqual(wizTagWhereCandidates({ Product: '' }), []);
   });
 });

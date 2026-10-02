@@ -599,6 +599,32 @@ export function wizResourceMatchReason({
 }
 
 /**
+ * Is this error Wiz saying "I do not know one of those types", or is it the
+ * network having a bad day?
+ *
+ * The per-type fallback exists for the first case: an unknown type makes Wiz
+ * reject the whole query, and asking one at a time makes the bad one name
+ * itself. It is actively harmful for the second - a 504 on a heavy query became
+ * forty-eight sequential retries of the same heavy query, which is slower than
+ * the thing that just timed out and no more likely to work.
+ *
+ * Validation failures come back as 4xx or as a GraphQL error naming the type.
+ * Timeouts and gateway errors are 5xx and get no retry.
+ *
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+function looksLikeTypeRejection(error) {
+  const status = /** @type {{ statusCode?: number }} */ (error)?.statusCode;
+  if (typeof status === 'number' && status >= 500) return false;
+  if (typeof status === 'number' && status >= 400) return true;
+  // No status at all: a GraphQL-level error. Only worth splitting up if it
+  // mentions the thing we would be splitting.
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('type') || message.includes('enum') || message.includes('invalid');
+}
+
+/**
  * Candidate `where` shapes for filtering on a tag inside Wiz, most specific first.
  *
  * WHY A LADDER AND NOT ONE SHAPE
@@ -618,13 +644,37 @@ export function wizResourceMatchReason({
  * @param {Record<string,string>} pairs tag key -> required value
  * @returns {Array<object>} candidate `where` clauses
  */
-function wizTagWhereCandidates(pairs) {
+export function wizTagWhereCandidates(pairs) {
   const entries = Object.entries(pairs).filter(([, v]) => v);
   if (!entries.length) return [];
 
+  // Wiz's EQUALS is CASE-SENSITIVE. Orbit's own comparison is not, which means
+  // the same assigned value behaved differently depending on whether the server
+  // predicate ran - "OptimiseRX" found nothing while "OptimiseRx" found
+  // everything, and locally both would have matched.
+  //
+  // EQUALS takes an array, which behaves as OR, so the common casings go in
+  // together. That covers what people actually type - as-assigned, lower, upper,
+  // and Title - and the authoritative comparison is still the case-insensitive
+  // one done on the rows that come back, so nothing extra slips through.
+  //
+  // It does NOT cover arbitrary casing ("OpTiMiSe"). A resource tagged that way
+  // is invisible to the fast path, which is why the result carries
+  // `serverFiltered` - a company whose tags are inconsistent enough to hit this
+  // should be told rather than quietly under-counted.
+  const withCasings = ([key, value]) => {
+    const variants = new Set([
+      value,
+      value.toLowerCase(),
+      value.toUpperCase(),
+      value.charAt(0).toUpperCase() + value.slice(1).toLowerCase(),
+    ]);
+    return [...variants].map((v) => ({ key, value: v }));
+  };
+
   return [
-    { tags: { EQUALS: entries.map(([key, value]) => ({ key, value })) } },
-    { tags: entries.map(([key, value]) => ({ key, value })) },
+    { tags: { EQUALS: entries.flatMap(withCasings) } },
+    { tags: entries.flatMap(withCasings) },
     Object.fromEntries(entries.map(([key, value]) => [`tags.${key}`, { EQUALS: value }])),
   ];
 }
@@ -789,10 +839,17 @@ export async function listWizResourcesForFolder(decrypted, graphqlUrl, folderId,
   try {
     await collect([...types]);
   } catch (error) {
+    if (!looksLikeTypeRejection(error)) {
+      // A timeout or a gateway error is the query being too heavy, not a bad type
+      // name. Retrying it forty-eight times is slower than the thing that just
+      // timed out and no more likely to succeed.
+      throw error;
+    }
+
     // An unknown type makes Wiz reject the WHOLE query rather than skip the bad
     // entry, so one wrong name in a configurable list would return nothing at all.
-    // Falling back to one type at a time makes the bad one report itself while the
-    // others still return their resources.
+    // Asking one at a time makes the bad one report itself while the others still
+    // return their resources.
     perTypeFallback = true;
     resources.length = 0;
     scanned = 0;

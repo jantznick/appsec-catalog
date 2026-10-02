@@ -1,12 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../../lib/api.js';
-import { toast } from '../ui/Toast.jsx';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card.jsx';
-import { Button } from '../ui/Button.jsx';
 import useAuthStore from '../../store/authStore.js';
 import { integrationProviderLabel } from '../../lib/integrationLabels.js';
-import { IntegrationTagPickerModal } from './IntegrationTagPickerModal.jsx';
 import { ApplicationScmBlock } from './ApplicationScmBlock.jsx';
 
 const TOOL_LINK_PROVIDERS = new Set(['WIZ']);
@@ -23,12 +19,6 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
   const isAdminUser = isAdmin();
   const canViewThisCompany = isAdminUser || isMemberOfCompany;
 
-  const [tagModalOpen, setTagModalOpen] = useState(false);
-  const [tagModalProvider, setTagModalProvider] = useState(null);
-  const [tags, setTags] = useState([]);
-  const [loadingTags, setLoadingTags] = useState(false);
-  const [selectedId, setSelectedId] = useState('');
-  const [savingLink, setSavingLink] = useState(false);
 
   const summary = application?.integrationSummary || {};
   const links = application?.applicationToolLinks || [];
@@ -49,66 +39,8 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
     return Object.keys(summary).filter((p) => summary[p]?.enterprise?.configured);
   }, [summary]);
 
-  const canUseTagPicker = (provider) => {
-    const co = summary[provider]?.company;
-    const ent = summary[provider]?.enterprise;
-    return (
-      (co?.configured && (isAdminUser || isMemberOfCompany)) || (ent?.configured && canViewThisCompany)
-    );
-  };
 
-  const openTagModal = async (provider) => {
-    if (!canUseTagPicker(provider) || !applicationId) return;
-    setTagModalProvider(provider);
-    setTagModalOpen(true);
-    setSelectedId('');
-    setLoadingTags(true);
-    const filter = links.find((l) => l.provider === provider)?.filter;
-    try {
-      const data = await api.getApplicationIntegrationTags(applicationId, provider);
-      setTags(Array.isArray(data.tags) ? data.tags : []);
-      if (provider === 'WIZ') {
-        if (filter?.tagValue) setSelectedId(filter.tagValue);
-      } else if (filter?.tagUuid) {
-        setSelectedId(filter.tagUuid);
-      }
-    } catch (e) {
-      toast.error(e.message || 'Failed to load tags');
-      setTagModalOpen(false);
-    } finally {
-      setLoadingTags(false);
-    }
-  };
 
-  const saveTagLink = async () => {
-    if (!tagModalProvider || !selectedId || !applicationId) {
-      toast.error('Select a tag');
-      return;
-    }
-    const tag = tags.find((t) => t.uuid === selectedId);
-    setSavingLink(true);
-    try {
-      if (tagModalProvider === 'WIZ') {
-        await api.putApplicationIntegrationLink(applicationId, tagModalProvider, {
-          tagValue: selectedId,
-          tagName: tag?.value || null,
-        });
-      } else {
-        await api.putApplicationIntegrationLink(applicationId, tagModalProvider, {
-          tagUuid: selectedId,
-          tagName: tag?.display_label || tag?.value || null,
-          categoryUuid: tag?.category_uuid || null,
-        });
-      }
-      toast.success('Link saved');
-      setTagModalOpen(false);
-      await onRefresh();
-    } catch (e) {
-      toast.error(e.message || 'Failed to save link');
-    } finally {
-      setSavingLink(false);
-    }
-  };
 
   const showGlobalEmpty =
     catalogWideProviders.length === 0 && appScopedProviders.length === 0;
@@ -207,54 +139,23 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
                         </div>
                         {TOOL_LINK_PROVIDERS.has(provider) && (
                           <div className="px-4 py-4 border-t border-gray-100 bg-slate-50/70">
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                              <div className="min-w-0">
-                                <p className="text-xs font-medium text-gray-500">
-                                  Tag link
-                                </p>
-                                {provider === 'WIZ' ? (
-                                  filter?.tagValue || filter?.tagName ? (
-                                    <p className="text-sm text-gray-800">
-                                      <span className="font-medium">{filter?.tagName || filter?.tagValue || '-'}</span>
-                                      {filter?.folderId ? (
-                                        <span className="block text-xs font-mono text-gray-500">
-                                          Scoped to folder {filter.folderId}
-                                        </span>
-                                      ) : null}
-                                    </p>
-                                  ) : (
-                                    <p className="text-sm text-gray-600">No Wiz tag linked yet.</p>
-                                  )
-                                ) : filter?.tagUuid || filter?.tagName ? (
-                                  <p className="text-sm text-gray-800">
-                                    <span className="font-medium">{filter?.tagName || '-'}</span>
-                                    {filter?.tagUuid ? (
-                                      <span className="block text-xs font-mono text-gray-500">
-                                        {filter.tagUuid}
-                                      </span>
-                                    ) : null}
-                                  </p>
-                                ) : (
-                                  <p className="text-sm text-gray-600">No tag linked yet.</p>
-                                )}
-                              </div>
-                              {canUseTagPicker(provider) && (
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => openTagModal(provider)}
-                                  className="shrink-0"
-                                >
-                                  {provider === 'WIZ'
-                                    ? filter?.tagValue
-                                      ? 'Change tag…'
-                                      : 'Link tag…'
-                                    : filter?.tagUuid
-                                      ? 'Change tag…'
-                                      : 'Link tag…'}
-                                </Button>
-                              )}
-                            </div>
+                            <p className="text-xs font-medium text-gray-500">Tag link</p>
+                            <p className="mt-1 text-sm text-gray-600">
+                              {/* The picker that used to live here chose from tags
+                                  discovered in the folder, which meant a value had to
+                                  already exist on a resource before it could be
+                                  linked - no good for a company writing its tagging
+                                  standard alongside the catalog. The value is assigned
+                                  on the record itself now. */}
+                              Assign this application&rsquo;s Wiz tag value on its{' '}
+                              <span className="font-medium">Cloud resources</span> card, under
+                              the Deployments tab.
+                              {filter?.tagValue ? (
+                                <span className="block text-xs text-gray-500">
+                                  Currently <span className="font-mono">{filter.tagValue}</span>
+                                </span>
+                              ) : null}
+                            </p>
                           </div>
                         )}
                       </li>
@@ -267,25 +168,6 @@ export function ApplicationIntegrationsSection({ application, onRefresh }) {
         </CardContent>
       </Card>
 
-      <IntegrationTagPickerModal
-        isOpen={tagModalOpen}
-        onClose={() => !savingLink && setTagModalOpen(false)}
-        title={
-          tagModalProvider
-            ? tagModalProvider === 'WIZ'
-              ? `Select tag - ${integrationProviderLabel(tagModalProvider)}`
-              : `Select tag - ${integrationProviderLabel(tagModalProvider)}`
-            : 'Select'
-        }
-        // The company picker selects a Wiz folder; this application picker selects a tag.
-        isWiz={false}
-        tags={tags}
-        loading={loadingTags}
-        selectedUuid={selectedId}
-        onSelectUuid={setSelectedId}
-        onSave={saveTagLink}
-        saving={savingLink}
-      />
     </>
   );
 }
