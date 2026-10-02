@@ -4,7 +4,7 @@
 
 Environments were implied by three unrelated free-text fields (`Application.serverEnvironment`, `Application.deploymentEnvironment`, `Deployment.environment`) with nothing tying them together. This plan makes an environment a first-class entity sitting between `Application` and `Domain`, so a deployed instance — "Orbit Backend in production" — is a thing the catalog can name, attach a domain to, and point a Wiz tag at.
 
-The driver is Wiz tagging. Containers and images are tagged with three keys — `Product`, `Environment`, `Application` — and that triple is the natural key of an application/environment pair inside a company's Wiz folder. The catalog had nowhere to put the `Environment` half.
+The driver is Wiz tagging. Resources are tagged with `Product`, `Application`, `Environment` and `Role`, and the catalog had nowhere to put the `Environment` half — no way to say which deployed copy a domain, a version or a tagged resource belonged to. (Those four were once planned as a composite key; Phase 4 explains why they became a filter instead.)
 
 **This document is the specification.** Work not described here does not get done, and context not recorded here is not available to whoever picks this up.
 
@@ -153,7 +153,7 @@ Settled. Not open for re-litigation during build.
 
 - An application can have several environments, each with its own domain(s), current version, git branch, and Wiz tag.
 - A company maps its own environment vocabulary onto Orbit's five kinds once, in settings, and both CI deploys and Wiz tags resolve through it.
-- A Wiz `Product`/`Application`/`Environment` tag triple resolves to exactly one catalog row.
+- An application page shows the Wiz resources powering it — its own and the shared ones — filtered by the company's folder and the tag values assigned to its product and itself.
 - CI pipelines are told the valid environment names up front, and a mismatch is visible rather than silent.
 - Scoring and completeness keep working, with no behavioural change at all.
 
@@ -403,62 +403,94 @@ Both deployment write paths currently backfill `currentVersion` / `gitBranch` on
 
 ---
 
-## Phase 4 — Wiz Tag Triple
+## Phase 4 — Wiz Resources on an Application
 
-Entirely unstarted, and the original point of the exercise.
+### What changed from the triple
 
-- Rewrite `normalizeWizTagValues` (`integrations/wiz.js`) to return per-resource tag **objects** rather than flattened `key:value` strings. The current flattening cannot correlate `Product`, `Environment` and `Application` read off the same resource.
-- Rewrite `listWizTagsForFolder` (`integrations/wiz.js`), which filters to values starting with `Application:`, to return `{product, application, environment}` triples.
-- **Widen the resource types.** The query currently sends `type: ['VIRTUAL_MACHINE']`, but the premise is that containers and images carry the triple. The tag picker returns nothing useful until this changes. *The list of types is Nick's to supply.*
-- Extend `validateWizApplicationFilter` / `normalizeWizApplicationFilter` (`integrations/resolve.js`) to carry the triple and link against the `ApplicationEnvironment` rather than the `Application`.
-- The **environment half of the triple calls `resolveEnvironmentByName`** — the same function a CI deploy uses, not a second copy of it. A CI payload and a Wiz `Environment` tag ask the identical question ("which of this company's environments is this string?"), so they are one lookup on `EnvironmentName`, and one settings screen serves both. A second implementation is how two code paths come to disagree about what `prod` means.
-- **All three tag keys are required**, plus a per-company config for what each key is *called* — some companies call a product a "solution". That config lands in `CompanyToolLink.filter` alongside the existing `folderId`. Note the layering: the key name is company config; the value is the `Environment` row's name.
-- Retired environments **keep** their Wiz tag links; the tag still describes what ran there.
-- `ApplicationToolLink`'s unique constraint becomes per-environment, moving the `applicationId_provider` upsert in the routes at the same time.
+This section used to describe a `Product`/`Environment`/`Application` **triple as a natural key**, resolving to exactly one `ApplicationEnvironment`. That is not the design any more.
+
+**It is a filter, not a key.** An application page composes:
+
+| | | |
+|---|---|---|
+| **Company → Wiz folder** | required | No folder on the application's company, **no call is made at all** |
+| **Product → tag value** | optional | Omitted when the application has no product, or belongs to several |
+| **Application → tag value** | required | |
+
+**Environment and Role are context, not filters.** They are read off each resource and displayed. They take no part in deciding which resources these are, which means a tag triple no longer resolves to an `ApplicationEnvironment` and nothing in this phase depends on the environment vocabulary.
+
+That drops the old Definition-of-Done line about a triple resolving to one instance. It also means the environment names work from Phase 3 serves *display* for Wiz — showing and grouping by environment — rather than identity.
+
+### Tag values are assigned, not matched
+
+A company's tag values will not equal Orbit's record names, and expecting them to would make the feature depend on a naming convention nobody has agreed to. So **each Product and each Application in Orbit is assigned its Wiz tag value**, once, and the filter is composed from those assignments.
+
+Free text with discovered values offered as suggestions: a company writing its tagging standard alongside the tool has to be able to assign a value before any resource carries it.
+
+Storage mirrors the pattern already in place — `CompanyToolLink.filter.folderId`, `ApplicationToolLink.filter.tagValue` — with a new `ProductToolLink` completing the set. One new model, no new concept.
+
+### Multi-product applications
+
+`ProductApplication` is many-to-many. When an application belongs to **more than one** product, the product filter is **omitted** and the query runs on folder + application alone.
+
+Less specific beats wrong. An application's resources all have to come back, and losing one because the wrong product was guessed is the worse failure. It does mean naming has to stay consistent across products.
+
+### Built
+
+- `listWizResourcesForFolder` (`integrations/wiz.js`) — per-resource tag objects, folder-first, product and application filters, Environment and Role carried through.
+- `wizTagsToObject` keeps tags attached to the resource they came from. `normalizeWizTagValues` flattens a whole folder into `key:value` strings and cannot answer "does *this* resource carry both", which is the only question the filter asks. It stays for now because the old tag picker still uses it.
+- **Server-side filtering.** The product tag goes into the query as a `where` predicate, so Wiz returns a slice rather than the folder. Three candidate predicate shapes are tried once per tenant and the first accepted is reused; if none are, narrowing happens locally and `serverFiltered: false` says so. Verified against a real tenant: `{ tags: { EQUALS: [{key, value}] } }` is accepted, and a query that scanned a whole folder now scans four resources.
+- Only the **product** is pushed down. Shared resources are wanted too, and "has this tag or does not have it" is not a predicate worth constructing.
+- `scripts/wiz-tag-probe.js` — read-only. Surveys what a folder returns, or with `--product`/`--application` runs the real filter, so the query is provable against a tenant before any UI exists.
+
+### Not built
+
+- `ProductToolLink`, and the assigned tag value on products and applications.
+- `GET /api/applications/:id/wiz-resources`, composing the filter from those assignments.
+- The panel on the application page.
+- **Per-company tag key names.** `Product`, `Application`, `Environment` and `Role` are constants in `WIZ_TAG_KEYS` today. Companies will pick **one** key name per concept, in a settings screen much like Environments, stored in `CompanyToolLink.filter`. Note the asymmetry: Environment needs the key name *and* the value list configurable; Product and Application need only the key, because their values are assigned per record.
+- **Resource types.** Two constants (`VIRTUAL_MACHINE`, `CONTAINER`) in `WIZ_RESOURCE_TYPES`, deliberately one edit to widen. Becomes config — in code or the admin UI — once the shape is proven. Each type is queried separately so an unknown one reports itself instead of losing every other type's results.
 
 ### Shared resources: the `_shared` convention
 
-A resource can carry only one value per tag key, so a VM hosting several applications cannot name one of them without being wrong for the rest. Settled convention:
+A resource carries one value per tag key, so a host serving several applications cannot name one of them without being wrong for the rest.
 
 - A resource serving the product rather than one named application is tagged **`Application=_shared`**, with `Product` and `Environment` as normal.
-- `_shared` is **reserved** — Orbit must refuse an application of that name, and must not treat a `_shared` tag as an unmatched-tag warning.
-- A comma-separated list in the `Application` value was considered and rejected: it turns the tag into an unvalidated parsing contract, hits the ~256-character cloud tag value ceiling, and is not even legal on GCP labels.
-- Orbit's own stack is tagged this way already — see the header comment in `docker-compose.yml`. Images carry `Product` + `Application` and deliberately no `Environment` (one image runs everywhere); containers carry all three; shared resources carry `_shared` plus a documentary `Role` label that nothing parses.
+- **A missing `Application` tag means the same thing.** One says it deliberately, the other by accident; for "what powers this application" they are the same answer, and treating them differently is how a database disappears off the page that needs it.
+- `_shared` is **reserved** — Orbit must refuse an application of that name, and must not treat the tag as an unmatched-tag warning.
+- A comma-separated list in the `Application` value was considered and rejected: it turns the tag into an unvalidated parsing contract, hits the ~256-character cloud tag value ceiling, and is not legal on GCP labels at all.
+- Orbit's own stack is tagged this way — see the header comment in `docker-compose.yml`. Images carry `Product` + `Application` and deliberately no `Environment` (one image runs everywhere); containers carry all three; shared resources carry `_shared` plus a documentary `Role` label that nothing parses.
 
 **`Role` is a candidate fourth dimension, kept open on purpose.** Today it exists only to keep "which shared thing is this" readable in the cloud console — `_shared` alone does not say database from reverse proxy — and nothing parses it.
 
-Promoting it to a quad is on the table and worth deciding in Phase 4 rather than being assumed away. The trade:
+Promoting it to a quad is on the table and worth deciding in this phase rather than being assumed away. The trade:
 
 - **It earns its place** if `_shared` turns out to be too coarse to act on — "the database serving this product in production" is a different conversation with a different owner than "the reverse proxy", and a `Product`/`Environment`/`Application`/`Role` quad says that directly.
-- **The cost is the natural key.** `Role` would have to be optional, since a dedicated application resource has no role, which means the key is a triple for some resources and a quad for others. That asymmetry has to be deliberate: resolution still has to land on exactly one `ApplicationEnvironment`, and `Role` only ever narrows within `_shared`.
+- **The cost is the natural key.** `Role` would have to be optional, since a dedicated application resource has no role, which means the key is a triple for some resources and a quad for others. That asymmetry has to be deliberate, and `Role` only ever narrows within `_shared`.
 
-So the likely shape is a required key on `_shared` resources and absent elsewhere, used for grouping rather than for identity. Decide it with the resource-type list, when there is real tagged data to look at.
+So the likely shape is a required key on `_shared` resources and absent elsewhere, used for grouping rather than for identity.
 
 ### Expectation to manage
 
-The moment the picker demands three keys, people will expect findings to split by environment. They will not — `wizFor` filters by folder and ignores `tagValue` entirely. Say so in the UI.
+Picking tag values does not make findings split by application. `wizFor` in `services/securityFindingsExportService.js` filters by folder and ignores `tagValue` entirely. Say so in the UI.
 
 ---
 
-## Phase 5 — Resource Inventory on the Application Page
+## Phase 5 — The Resource Panel
 
-Previously folded into Phase 4; split out so Phase 4 stays "the triple resolves" and does not quietly become "and also build a resource browser."
+Split from Phase 4 so that phase stays "the query returns the right resources" rather than quietly becoming "and also build a resource browser".
 
 **Requirement:** an application page shows the resources powering it, including shared ones.
 
-**Mechanism:** two queries, unioned.
+**Mechanism:** one call to `listWizResourcesForFolder` with the application's assigned tag value and, when unambiguous, its product's. Resources come back labelled with why they matched — `application` for its own, `shared` for the product's shared infrastructure — so the panel can group them without a second query.
 
-- Dedicated — `Product=<product>, Environment=<env>, Application=<app name>`
-- Shared — `Product=<product>, Environment=<env>, Application=_shared`
-
-`_shared` is a scope, not a wildcard: *this resource serves the product in this environment, not one named application.* The triple invariant survives, because `_shared` never resolves to an `ApplicationEnvironment`.
-
-**Known imprecision:** every `_shared` resource in a product/environment appears on every application page in that product/environment. That is over-inclusion, not omission, which is the right direction to fail for a security catalog. The escape hatch, if and when it is needed, is a documentary `Hosts: frontend,backend` tag used **only** to narrow the display — never for identity, never for resolution — so a missing, stale or malformed value degrades to showing the resource anyway.
+**Known imprecision:** every shared resource in a product appears on every application page in that product. That is over-inclusion, not omission, which is the right direction to fail for a security catalog. The escape hatch, if it is ever needed, is a documentary `Hosts:` tag used **only** to narrow the display — never for identity — so a missing, stale or malformed value degrades to showing the resource anyway.
 
 **Open questions for this phase:**
 
 - Live query against Wiz on page load, or a pre-filtered deep link into Wiz? The deep link is nearly free and honest about who owns the data; the live query is nicer and costs caching, rate limits and a loading state on a page that already does a lot.
-- `ProductApplication` is many-to-many, so an application in two products sees both products' shared infrastructure. Probably correct, occasionally surprising — group the panel by product rather than presenting one flat list.
+- An application in two products sees both products' shared infrastructure. Group the panel by product rather than presenting one flat list.
+- The `where` predicate narrows by **product**, so a large product still pages through all its resources to pick out one application's. Fine at current scale; revisit if a product ever has thousands.
 
 ---
 
@@ -572,4 +604,4 @@ Environment settings UI → per-application instance management → adopt/triage
 - `currentVersion` is still pickable in the policy control editor, still saves, and still evaluates.
 - `lastDastScanDate` is exactly where it was, editable exactly as it was.
 - No derived or mirrored per-environment column exists on `Application`.
-- A Wiz `Product`/`Environment`/`Application` triple resolves to exactly one `ApplicationEnvironment`, and `_shared` resolves to a product/environment scope instead.
+- An application page lists its Wiz resources: those carrying its assigned Application tag value, plus the product's shared ones (`_shared`, or no Application tag). No folder on the company means no call is made. Environment and Role are shown as context on each resource and filter nothing.
