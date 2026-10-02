@@ -1191,7 +1191,7 @@ router.get('/:id/wiz-resources', requireAuth, async (req, res) => {
       types: WIZ_RESOURCE_TYPES,
     });
 
-    res.json({ ...result, tagValue, productName: product.name });
+    res.json({ ...result, tagValue, productName: product.name, companyId: product.companyId });
   } catch (error) {
     console.error('Error listing product Wiz resources:', error);
     res.status(502).json({

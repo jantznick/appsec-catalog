@@ -90,11 +90,17 @@ export function CloudResourcesPanel({
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
             {data.missing === 'folder' && (
               <>
-                This company has no Wiz folder, so no resources can be looked up. Set one in{' '}
-                <Link to="/settings/integrations" className="underline">
-                  integration settings
-                </Link>
-                .
+                This company has no Wiz folder, so no resources can be looked up. Set one on the
+                company&rsquo;s{' '}
+                {data.companyId ? (
+                  <Link to={`/companies/${data.companyId}`} className="underline">
+                    Tools &amp; connections tab
+                  </Link>
+                ) : (
+                  'Tools & connections tab'
+                )}
+                . The catalog-wide integration settings hold the credentials; the folder is
+                per company.
               </>
             )}
             {data.missing === 'credentials' && 'No Wiz credentials are available for this company.'}

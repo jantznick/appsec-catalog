@@ -761,6 +761,15 @@ export const api = {
   getProductWizResources: (productId) =>
     apiRequest(`/api/products/${productId}/wiz-resources`),
 
+  getApplicationWizTag: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/wiz-tag`),
+
+  setApplicationWizTag: (applicationId, tagValue) =>
+    apiRequest(`/api/applications/${applicationId}/wiz-tag`, {
+      method: 'PUT',
+      body: JSON.stringify({ tagValue }),
+    }),
+
   getApplicationWizResources: (applicationId) =>
     apiRequest(`/api/applications/${applicationId}/wiz-resources`),
 

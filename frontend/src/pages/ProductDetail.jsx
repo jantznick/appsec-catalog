@@ -10,7 +10,7 @@ import { ProductDetailHeader } from '../components/product-detail/ProductDetailH
 import { ProductDetailModals } from '../components/product-detail/ProductDetailModals.jsx';
 import { ProductDetailStickyBar } from '../components/product-detail/ProductDetailStickyBar.jsx';
 import { ProductMetadataCard } from '../components/product-detail/ProductMetadataCard.jsx';
-import { ProductCloudResourcesCard } from '../components/product-detail/ProductCloudResourcesCard.jsx';
+import { CloudResourcesCard } from '../components/integrations/CloudResourcesCard.jsx';
 
 const OTHER_COMPONENT_VALUE = '__other__';
 const INGRESS_LIKE_TYPE_MATCHERS = ['frontend', 'gateway', 'mobile'];
@@ -901,7 +901,16 @@ export function ProductDetail() {
           canDelete={canDelete()}
         />
 
-        <ProductCloudResourcesCard productId={id} canEdit={canEdit()} />
+        <CloudResourcesCard
+          tagKeyLabel="Product"
+          canEdit={canEdit()}
+          placeholder="e.g. Orbit"
+          getTag={() => api.getProductWizTag(id)}
+          setTag={(value) => api.setProductWizTag(id, value)}
+          getResources={() => api.getProductWizResources(id)}
+          emptyHint="Assign the Wiz Product tag value this product's resources carry, and they will appear here."
+          clearedHint="Leave it empty to unassign. The product's resources are then unknown, and an application in it will not show shared infrastructure."
+        />
       </div>
 
       {isEditing && (

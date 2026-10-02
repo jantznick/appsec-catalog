@@ -418,12 +418,38 @@ function normalizeWizTagValues(rawTags) {
 /**
  * Resource types the resource listing asks for.
  *
- * Two to start. Widening this is the expected next step and is deliberately a
- * single constant rather than a decision spread across call sites - it becomes
- * company config once the shape is proven. Each type is asked for separately,
- * because an unknown type makes Wiz reject the whole query.
+ * One constant rather than a decision spread across call sites; it becomes
+ * company config once the shape is proven.
+ *
+ * ASKED FOR IN ONE QUERY, THEN ONE AT A TIME. Wiz takes an array of types, and
+ * forty-eight separate round trips per page load is not a page load. So all of
+ * them go in one query first - and because an unknown type makes Wiz reject that
+ * whole query rather than skip the bad entry, a rejection falls back to querying
+ * each type alone, where the bad one reports itself and the other forty-seven
+ * still return their resources.
  */
-export const WIZ_RESOURCE_TYPES = Object.freeze(['VIRTUAL_MACHINE', 'CONTAINER']);
+export const WIZ_RESOURCE_TYPES = Object.freeze([
+  // Compute
+  'VIRTUAL_MACHINE', 'CONTAINER', 'CONTAINER_IMAGE', 'SERVERLESS', 'SERVERLESS_PACKAGE',
+  // Network edge
+  'LOAD_BALANCER', 'API_GATEWAY', 'FIREWALL', 'FIREWALL_CONFIGURATION',
+  'KUBERNETES_INGRESS', 'KUBERNETES_SERVICE', 'ENDPOINT', 'API_ENDPOINT',
+  // Build and supply chain
+  'REPOSITORY', 'REPOSITORY_BRANCH', 'CI_WORKFLOW', 'CICD_SERVICE',
+  'ARTIFACT_REGISTRY', 'ARTIFACT_REPOSITORY', 'CONTAINER_REGISTRY', 'CONTAINER_REPOSITORY',
+  // Secrets and identity
+  'SECRET', 'SECRET_INSTANCE', 'CERTIFICATE', 'MANAGED_CERTIFICATE', 'ENCRYPTION_KEY',
+  'ACCESS_KEY', 'SERVICE_ACCOUNT', 'ACCESS_ROLE', 'ACCESS_ROLE_BINDING',
+  'AUTHENTICATION_CONFIGURATION', 'AUTHENTICATION_POLICY',
+  // Application and data
+  'HOSTED_APPLICATION', 'HOSTED_TECHNOLOGY', 'WEB_SERVICE', 'APPLICATION',
+  'DATABASE', 'BUCKET',
+  // Kubernetes
+  'KUBERNETES_CLUSTER', 'KUBERNETES_POD_TEMPLATE', 'KUBERNETES_NETWORK_POLICY',
+  'NAMESPACE', 'DAEMON_SET', 'DEPLOYMENT', 'STATEFUL_SET',
+  // Findings
+  'SAST_FINDING', 'ATTACK_SURFACE_FINDING', 'VULNERABILITY',
+]);
 
 /**
  * Tag keys Orbit reads. Company-configurable later; the point of naming them here
@@ -674,93 +700,110 @@ export async function listWizResourcesForFolder(decrypted, graphqlUrl, folderId,
   // Ask Wiz to do the filtering. Only the product tag is pushed down: resources
   // carrying the product and NO application tag are wanted too (the shared ones),
   // and "has this tag OR does not have it" is not a predicate worth constructing.
-  // Narrowing to the product is most of the win anyway - it is the difference
-  // between a product's resources and the whole folder.
+  // Narrowing to the product is most of the win anyway.
   const whereCandidates = productValue
     ? wizTagWhereCandidates({ [keys.product]: productValue })
     : [];
   let whereClause = null;
   let serverFiltered = false;
   let whereRejected = null;
+  let candidateIndex = 0;
 
-  for (const type of types) {
+  /** One page, settling on a `where` shape the first time it succeeds. */
+  async function fetchPage(typeList, after) {
+    for (;;) {
+      const attempt = whereClause
+        ?? (candidateIndex < whereCandidates.length ? whereCandidates[candidateIndex] : null);
+      try {
+        const data = await wizGraphql(url, token, GRAPH_SEARCH_RESOURCES_QUERY, {
+          first: 50,
+          after,
+          projectId: folderId,
+          query: { select: true, type: typeList, ...(attempt ? { where: attempt } : {}) },
+        });
+        if (attempt && !whereClause) {
+          whereClause = attempt;
+          serverFiltered = true;
+        }
+        return data;
+      } catch (error) {
+        // A settled clause failing is a real error. A candidate failing just means
+        // try the next shape, then give up and filter locally.
+        if (whereClause || candidateIndex >= whereCandidates.length) throw error;
+        whereRejected = (error?.message || String(error)).slice(0, 200);
+        candidateIndex += 1;
+      }
+    }
+  }
+
+  /** Page through one query, collecting matches. */
+  async function collect(typeList) {
     let after = null;
     let page = 0;
-    let candidateIndex = 0;
-    try {
-      while (page < maxPages) {
-        page += 1;
+    while (page < maxPages) {
+      page += 1;
+      const data = await fetchPage(typeList, after);
+      const connection = data?.graphSearch;
+      if (!connection) throw new Error('Wiz graphSearch response was empty');
 
-        // Settle on a `where` the first time we query, then stop experimenting.
-        let data;
-        while (true) {
-          const attempt = whereClause
-            ?? (candidateIndex < whereCandidates.length ? whereCandidates[candidateIndex] : null);
-          try {
-            data = await wizGraphql(url, token, GRAPH_SEARCH_RESOURCES_QUERY, {
-              first: 50,
-              after,
-              projectId: folderId,
-              query: { select: true, type: [type], ...(attempt ? { where: attempt } : {}) },
-            });
-            if (attempt && !whereClause) {
-              whereClause = attempt;
-              serverFiltered = true;
-            }
-            break;
-          } catch (error) {
-            // A settled clause failing is a real error; a candidate failing just
-            // means try the next shape, then give up and filter locally.
-            if (whereClause || candidateIndex >= whereCandidates.length) throw error;
-            whereRejected = (error?.message || String(error)).slice(0, 200);
-            candidateIndex += 1;
-          }
+      for (const node of connection.nodes || []) {
+        for (const entity of node?.entities || []) {
+          scanned += 1;
+          const tags = wizTagsToObject(parseWizProperties(entity?.properties)?.tags);
+
+          const resourceProduct = readWizTag(tags, keys.product);
+          const resourceApplication = readWizTag(tags, keys.application);
+
+          if (productValue && !sameTagValue(resourceProduct, productValue)) continue;
+
+          const match = wizResourceMatchReason({
+            resourceApplication,
+            applicationValue,
+            productValue,
+            includeUnassigned,
+          });
+          if (!match) continue;
+
+          resources.push({
+            id: entity?.id || null,
+            name: entity?.name || null,
+            type: entity?.type || (typeList.length === 1 ? typeList[0] : null),
+            match,
+            product: resourceProduct || null,
+            application: resourceApplication || null,
+            environment: readWizTag(tags, keys.environment) || null,
+            role: readWizTag(tags, keys.role) || null,
+            tags,
+          });
         }
-
-        const connection = data?.graphSearch;
-        if (!connection) throw new Error('Wiz graphSearch response was empty');
-
-        for (const node of connection.nodes || []) {
-          for (const entity of node?.entities || []) {
-            scanned += 1;
-            const tags = wizTagsToObject(parseWizProperties(entity?.properties)?.tags);
-
-            const resourceProduct = readWizTag(tags, keys.product);
-            const resourceApplication = readWizTag(tags, keys.application);
-
-            if (productValue && !sameTagValue(resourceProduct, productValue)) continue;
-
-            const match = wizResourceMatchReason({
-              resourceApplication,
-              applicationValue,
-              productValue,
-              includeUnassigned,
-            });
-            if (!match) continue;
-
-            resources.push({
-              id: entity?.id || null,
-              name: entity?.name || null,
-              type: entity?.type || type,
-              match,
-              product: resourceProduct || null,
-              application: resourceApplication || null,
-              environment: readWizTag(tags, keys.environment) || null,
-              role: readWizTag(tags, keys.role) || null,
-              tags,
-            });
-          }
-        }
-
-        if (!connection.pageInfo?.hasNextPage) break;
-        after = connection.pageInfo.endCursor || null;
       }
-    } catch (error) {
-      // One bad type must not lose the resources the others found. An unknown type
-      // makes Wiz reject that query outright, and the type list is going to become
-      // company config, so a wrong entry there is a thing to report rather than a
-      // reason to return nothing.
-      errors.push({ type, message: (error?.message || String(error)).slice(0, 300) });
+
+      if (!connection.pageInfo?.hasNextPage) break;
+      after = connection.pageInfo.endCursor || null;
+    }
+  }
+
+  // All types in one query. Forty-eight round trips per page load is not a page
+  // load, and Wiz takes an array.
+  let perTypeFallback = false;
+  try {
+    await collect([...types]);
+  } catch (error) {
+    // An unknown type makes Wiz reject the WHOLE query rather than skip the bad
+    // entry, so one wrong name in a configurable list would return nothing at all.
+    // Falling back to one type at a time makes the bad one report itself while the
+    // others still return their resources.
+    perTypeFallback = true;
+    resources.length = 0;
+    scanned = 0;
+    errors.push({ type: '(all types)', message: (error?.message || String(error)).slice(0, 300) });
+
+    for (const type of types) {
+      try {
+        await collect([type]);
+      } catch (typeError) {
+        errors.push({ type, message: (typeError?.message || String(typeError)).slice(0, 300) });
+      }
     }
   }
 
@@ -769,7 +812,8 @@ export async function listWizResourcesForFolder(decrypted, graphqlUrl, folderId,
     op: 'list_resources_for_folder',
     graphqlHost,
     folderId,
-    types: types.join(','),
+    typeCount: types.length,
+    perTypeFallback,
     scanned,
     matched: resources.length,
     typeErrors: errors.length,
@@ -777,7 +821,7 @@ export async function listWizResourcesForFolder(decrypted, graphqlUrl, folderId,
     durationMs: Date.now() - started,
   });
 
-  return { resources, scanned, errors, serverFiltered, whereRejected };
+  return { resources, scanned, errors, serverFiltered, whereRejected, perTypeFallback };
 }
 
 export async function listWizTagsForFolder(decrypted, graphqlUrl, folderId) {

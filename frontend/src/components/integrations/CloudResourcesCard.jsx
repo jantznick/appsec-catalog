@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../../lib/api.js';
 import { toast } from '../ui/Toast.jsx';
 import { Button } from '../ui/Button.jsx';
 import { Input } from '../ui/Input.jsx';
 import { Modal } from '../ui/Modal.jsx';
-import { CloudResourcesPanel } from '../integrations/CloudResourcesPanel.jsx';
+import { CloudResourcesPanel } from './CloudResourcesPanel.jsx';
 
 /**
- * A product's cloud resources, plus the tag value they are found by.
+ * A record's cloud resources, plus the tag value they are found by.
+ *
+ * One card for a product and for an application: both assign a Wiz tag value and
+ * both show what carries it, so writing it twice would mean two screens drifting
+ * apart about how assignment works.
  *
  * The tag value is ASSIGNED here rather than matched against the product's name.
  * A company's tag values will not equal Orbit's record names, and depending on
@@ -15,7 +18,16 @@ import { CloudResourcesPanel } from '../integrations/CloudResourcesPanel.jsx';
  * to. It is free text, because a company writing its tagging standard alongside
  * the catalog has to be able to assign a value before any resource carries it.
  */
-export function ProductCloudResourcesCard({ productId, canEdit }) {
+export function CloudResourcesCard({
+  tagKeyLabel,
+  getTag,
+  setTag,
+  getResources,
+  canEdit,
+  emptyHint,
+  placeholder,
+  clearedHint,
+}) {
   const [tagValue, setTagValue] = useState(null);
   const [showEdit, setShowEdit] = useState(false);
   const [draft, setDraft] = useState('');
@@ -25,21 +37,22 @@ export function ProductCloudResourcesCard({ productId, canEdit }) {
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .getProductWizTag(productId)
+    getTag()
       .then((r) => !cancelled && setTagValue(r.tagValue))
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [productId, reloadKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadKey]);
 
-  const load = useCallback(() => api.getProductWizResources(productId), [productId, reloadKey]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const load = useCallback(() => getResources(), [reloadKey]);
 
   const handleSave = async () => {
     try {
       setSaving(true);
-      const result = await api.setProductWizTag(productId, draft);
+      const result = await setTag(draft);
       setTagValue(result.tagValue);
       setShowEdit(false);
       setReloadKey((k) => k + 1);
@@ -55,7 +68,7 @@ export function ProductCloudResourcesCard({ productId, canEdit }) {
     <>
       Resources in this company&rsquo;s Wiz folder tagged{' '}
       {tagValue ? (
-        <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">Product: {tagValue}</code>
+        <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">{tagKeyLabel}: {tagValue}</code>
       ) : (
         <span className="italic">no value assigned yet</span>
       )}
@@ -82,22 +95,19 @@ export function ProductCloudResourcesCard({ productId, canEdit }) {
         title="Cloud resources"
         description={description}
         load={load}
-        emptyHint="Assign the Wiz Product tag value this product's resources carry, and they will appear here."
+        emptyHint={emptyHint}
       />
 
-      <Modal isOpen={showEdit} onClose={() => setShowEdit(false)} title="Wiz Product tag value">
+      <Modal isOpen={showEdit} onClose={() => setShowEdit(false)} title={`Wiz ${tagKeyLabel} tag value`}>
         <div className="space-y-4">
           <Input
             label="Tag value"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="e.g. Orbit"
-            helperText="Exactly the value your resources carry in their Wiz Product tag. Not validated against existing tags — you can assign it before anything is tagged."
+            placeholder={placeholder}
+            helperText={`Exactly the value your resources carry in their Wiz ${tagKeyLabel} tag. Case matters: Wiz filters server-side and its match is exact. Not validated against existing tags — you can assign it before anything is tagged.`}
           />
-          <p className="text-xs text-gray-500">
-            Leave it empty to unassign. The product&rsquo;s resources are then unknown, and an
-            application in it will not show shared infrastructure.
-          </p>
+          <p className="text-xs text-gray-500">{clearedHint}</p>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setShowEdit(false)} disabled={saving}>
               Cancel
@@ -112,4 +122,4 @@ export function ProductCloudResourcesCard({ productId, canEdit }) {
   );
 }
 
-export default ProductCloudResourcesCard;
+export default CloudResourcesCard;

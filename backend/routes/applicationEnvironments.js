@@ -268,6 +268,64 @@ router.delete(
 );
 
 
+// The Wiz tag value this application answers to. Assigned, like a product's -
+// free text, because a company writing its tagging standard alongside the
+// catalog has to be able to assign a value before anything carries it.
+router.get(
+  '/:id/wiz-tag',
+  requireAuth,
+  requirePermission('application.read', companyFrom.application('id')),
+  async (req, res) => {
+    try {
+      res.json({ tagValue: await wizTagForApplication(req.params.id) });
+    } catch (error) {
+      console.error('Error reading application Wiz tag:', error);
+      res.status(500).json({ error: 'Failed to read the Wiz tag value' });
+    }
+  },
+);
+
+router.put(
+  '/:id/wiz-tag',
+  requireAuth,
+  requirePermission('application.edit', companyFrom.application('id')),
+  async (req, res) => {
+    try {
+      const raw = req.body?.tagValue;
+      const tagValue = typeof raw === 'string' ? raw.trim() : '';
+
+      if (!tagValue) {
+        // Clearing drops the whole link rather than storing an empty filter: an
+        // ApplicationToolLink with no tagValue reads as configured-but-broken to
+        // everything that checks for one.
+        await prisma.applicationToolLink.deleteMany({
+          where: { applicationId: req.params.id, provider: 'WIZ' },
+        });
+        return res.json({ tagValue: null });
+      }
+
+      const existing = await prisma.applicationToolLink.findUnique({
+        where: { applicationId_provider: { applicationId: req.params.id, provider: 'WIZ' } },
+        select: { filter: true },
+      });
+
+      await prisma.applicationToolLink.upsert({
+        where: { applicationId_provider: { applicationId: req.params.id, provider: 'WIZ' } },
+        // Merge rather than replace: the filter may carry a folderId written by
+        // the older picker, and throwing it away would change what the findings
+        // export sees.
+        create: { applicationId: req.params.id, provider: 'WIZ', filter: { tagValue } },
+        update: { filter: { ...(existing?.filter || {}), tagValue } },
+      });
+
+      res.json({ tagValue });
+    } catch (error) {
+      console.error('Error saving application Wiz tag:', error);
+      res.status(500).json({ error: 'Failed to save the Wiz tag value' });
+    }
+  },
+);
+
 // ---------------------------------------------------------------------------
 // Cloud resources
 //
@@ -313,6 +371,7 @@ router.get(
         // rather than leaving someone wondering why the list is broad.
         productFilterReason: product.reason,
         productName: product.productName,
+        companyId: application.companyId,
       });
     } catch (error) {
       console.error('Error listing application Wiz resources:', error);

@@ -373,7 +373,9 @@ async function main() {
         console.log(`\n${target.label}: no Wiz credentials resolvable`);
         continue;
       }
-      const types = args.types === DEFAULT_TYPES ? WIZ_RESOURCE_TYPES : args.types;
+      // The survey default is a short hand-picked list; the filter runs against
+      // the configured estate unless the caller named types explicitly.
+      const types = args.types === DEFAULT_TYPES ? [...WIZ_RESOURCE_TYPES] : args.types;
       console.log(`\n${'='.repeat(72)}`);
       console.log(`${target.label}`);
       console.log(`  product=${args.product || '(any)'}  application=${args.application || '(any)'}`);
@@ -406,6 +408,46 @@ async function main() {
         console.log(`    [${r.match}] ${r.type.padEnd(18)} ${r.name || r.id || '(unnamed)'}   ${context}`);
       }
       if (resources.length > 40) console.log(`    … and ${resources.length - 40} more`);
+
+      // Nothing found is ambiguous: wrong resource types, wrong tag value, wrong
+      // folder, or genuinely nothing. Server-side filtering hides which, because
+      // Wiz returns an empty page either way. So ask again without the filter and
+      // report what IS there - that turns "it returned nothing" into an answer.
+      if (resources.length === 0) {
+        console.log('\n  Nothing matched. Looking at what is in the folder…');
+        const unfiltered = await listWizResourcesForFolder(
+          creds.decrypted,
+          creds.baseUrl || '',
+          target.folderId,
+          { types, maxPages: 2 },
+        );
+
+        if (unfiltered.scanned === 0) {
+          console.log(`    The folder returned NO resources at all for these ${types.length} types.`);
+          console.log('    So this is the folder or the type list, not the tag value.');
+          for (const e of unfiltered.errors) console.log(`    ${e.type}: ${e.message}`);
+        } else {
+          const products = new Map();
+          const applications = new Map();
+          for (const r of unfiltered.resources) {
+            if (r.product) products.set(r.product, (products.get(r.product) || 0) + 1);
+            if (r.application) applications.set(r.application, (applications.get(r.application) || 0) + 1);
+          }
+          console.log(`    ${unfiltered.scanned} resources exist across these types.`);
+          const show = (label, map) => {
+            console.log(`    ${label}:`);
+            if (!map.size) return console.log('      (none carry that tag)');
+            for (const [value, count] of [...map].sort((a, b) => b[1] - a[1]).slice(0, 15)) {
+              console.log(`      ${count.toString().padStart(4)}  ${JSON.stringify(value)}`);
+            }
+          };
+          show('Product tag values actually present', products);
+          show('Application tag values actually present', applications);
+          console.log('\n    Compare those to what you asked for. Note the server-side');
+          console.log('    predicate is likely CASE-SENSITIVE, so "OptimiseRX" and');
+          console.log('    "OptimiseRx" are different questions to Wiz.');
+        }
+      }
     }
     console.log('\nDone. Nothing was written.');
     return;

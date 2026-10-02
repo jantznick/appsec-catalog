@@ -80,8 +80,23 @@ describe('readWizTag', () => {
 });
 
 describe('the defaults are a starting point, not a decision', () => {
-  it('ships two resource types for the POC', () => {
-    assert.deepEqual([...WIZ_RESOURCE_TYPES], ['VIRTUAL_MACHINE', 'CONTAINER']);
+  it('lists resource types once, with no duplicates', () => {
+    // Wiz takes the whole array in one query, so a duplicate is a wasted page of
+    // results rather than an error - invisible, and the kind of thing that creeps
+    // in when a list this long is edited by hand.
+    assert.equal(new Set(WIZ_RESOURCE_TYPES).size, WIZ_RESOURCE_TYPES.length);
+    assert.ok(WIZ_RESOURCE_TYPES.length > 10, 'the list is the configured estate, not a sample');
+    assert.ok(WIZ_RESOURCE_TYPES.includes('VIRTUAL_MACHINE'));
+    assert.ok(WIZ_RESOURCE_TYPES.includes('CONTAINER'));
+  });
+
+  it('uses only names Wiz could accept', () => {
+    // One unknown type makes Wiz reject the whole query, which is survivable
+    // (there is a per-type fallback) but slow and loud. A typo caught here is
+    // cheaper than a typo caught by a page load.
+    for (const type of WIZ_RESOURCE_TYPES) {
+      assert.match(type, /^[A-Z][A-Z0-9_]*$/, `${type} is not a Wiz type name`);
+    }
   });
 
   it('names every tag key in one place', () => {
