@@ -415,6 +415,237 @@ function normalizeWizTagValues(rawTags) {
  * @param {string} folderId
  * @returns {Promise<Array<{ uuid: string, value: string, display_label: string }>>}
  */
+/**
+ * Resource types the resource listing asks for.
+ *
+ * Two to start. Widening this is the expected next step and is deliberately a
+ * single constant rather than a decision spread across call sites - it becomes
+ * company config once the shape is proven. Each type is asked for separately,
+ * because an unknown type makes Wiz reject the whole query.
+ */
+export const WIZ_RESOURCE_TYPES = Object.freeze(['VIRTUAL_MACHINE', 'CONTAINER']);
+
+/**
+ * Tag keys Orbit reads. Company-configurable later; the point of naming them here
+ * is that nothing else in the codebase should hard-code a key string.
+ */
+export const WIZ_TAG_KEYS = Object.freeze({
+  product: 'Product',
+  application: 'Application',
+  environment: 'Environment',
+  role: 'Role',
+});
+
+const GRAPH_SEARCH_RESOURCES_QUERY = `
+  query WizResourcesForFolder(
+    $query: GraphEntityQueryInput
+    $projectId: String!
+    $first: Int
+    $after: String
+  ) {
+    graphSearch(query: $query, projectId: $projectId, first: $first, after: $after, quick: false) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        entities { id name type properties }
+      }
+    }
+  }
+`;
+
+/**
+ * A resource's tags as an OBJECT, keyed by tag name.
+ *
+ * normalizeWizTagValues flattens every tag in a folder into one list of
+ * "key:value" strings, which cannot answer "does THIS resource carry both
+ * Product=X and Application=Y" - the question the whole filter rests on. This
+ * keeps tags attached to the resource they came from.
+ *
+ * Keys are trimmed. A tag key with a trailing space is a real thing that happens
+ * in cloud estates, and `"SupportTeam "` silently not matching `"SupportTeam"`
+ * is the kind of fault nobody finds.
+ *
+ * @param {unknown} rawTags
+ * @returns {Record<string, string>}
+ */
+export function wizTagsToObject(rawTags) {
+  const out = {};
+  if (!rawTags) return out;
+
+  const put = (key, value) => {
+    const k = typeof key === 'string' ? key.trim() : String(key ?? '').trim();
+    if (k) out[k] = value == null ? '' : String(value);
+  };
+
+  if (Array.isArray(rawTags)) {
+    for (const tag of rawTags) {
+      if (typeof tag === 'string') {
+        const idx = tag.indexOf(':');
+        if (idx > 0) put(tag.slice(0, idx), tag.slice(idx + 1).trim());
+      } else if (tag && typeof tag === 'object') {
+        put(tag.key ?? tag.name, tag.value);
+      }
+    }
+    return out;
+  }
+
+  if (typeof rawTags === 'object') {
+    for (const [key, value] of Object.entries(rawTags)) put(key, value);
+  }
+  return out;
+}
+
+/** Case-insensitive tag read, because a tag key's case is not ours to rely on. */
+export function readWizTag(tags, key) {
+  if (!tags || !key) return null;
+  if (Object.prototype.hasOwnProperty.call(tags, key)) return tags[key];
+  const lower = String(key).toLowerCase();
+  for (const [k, v] of Object.entries(tags)) {
+    if (k.toLowerCase() === lower) return v;
+  }
+  return null;
+}
+
+/**
+ * The resources in a folder that match a product and/or application tag value.
+ *
+ * THE FOLDER IS REQUIRED and is the company. No folder, no call - a tenant-wide
+ * query is never issued, so one company can never see another's resources through
+ * a missing filter.
+ *
+ * `applicationValue` narrows to resources carrying that Application tag.
+ * `productValue` narrows further and is optional, because an application need not
+ * belong to a product.
+ *
+ * `includeUnassigned` also returns resources that carry the product tag but NO
+ * application tag. Those are the shared ones - a host serving the product rather
+ * than one named application - and leaving them out is how an application page
+ * ends up claiming nothing runs its database.
+ *
+ * Environment and Role are read and returned, never filtered on. They are context
+ * on a resource, not part of deciding which resources these are.
+ *
+ * @param {{ clientId: string, clientSecret: string }} decrypted
+ * @param {string | null | undefined} graphqlUrl
+ * @param {string} folderId
+ * @param {object} options
+ * @param {string | null} [options.productValue]
+ * @param {string | null} [options.applicationValue]
+ * @param {boolean} [options.includeUnassigned]
+ * @param {string[]} [options.types]
+ * @param {Record<string,string>} [options.tagKeys] per-company key names
+ * @param {number} [options.maxPages]
+ * @returns {Promise<{ resources: Array<object>, scanned: number, errors: Array<{type: string, message: string}> }>}
+ */
+export async function listWizResourcesForFolder(decrypted, graphqlUrl, folderId, options = {}) {
+  const started = Date.now();
+  const url = normalizeWizGraphqlUrl(graphqlUrl || '');
+  const graphqlHost = safeUrlHost(url);
+
+  if (!folderId || typeof folderId !== 'string') {
+    const err = new Error('Wiz folder id is required before listing resources');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!decrypted?.clientId || !decrypted?.clientSecret) {
+    const err = new Error('Wiz credentials missing clientId or clientSecret');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const keys = { ...WIZ_TAG_KEYS, ...(options.tagKeys || {}) };
+  const types = options.types?.length ? options.types : WIZ_RESOURCE_TYPES;
+  const maxPages = options.maxPages ?? 20;
+  const productValue = options.productValue ? String(options.productValue).trim() : null;
+  const applicationValue = options.applicationValue ? String(options.applicationValue).trim() : null;
+  const includeUnassigned = options.includeUnassigned !== false;
+
+  const sameValue = (a, b) =>
+    typeof a === 'string' && typeof b === 'string' && a.trim().toLowerCase() === b.trim().toLowerCase();
+
+  const token = await fetchWizAccessToken(decrypted.clientId, decrypted.clientSecret);
+  const resources = [];
+  const errors = [];
+  let scanned = 0;
+
+  for (const type of types) {
+    let after = null;
+    let page = 0;
+    try {
+      while (page < maxPages) {
+        page += 1;
+        const data = await wizGraphql(url, token, GRAPH_SEARCH_RESOURCES_QUERY, {
+          first: 50,
+          after,
+          projectId: folderId,
+          query: { select: true, type: [type] },
+        });
+
+        const connection = data?.graphSearch;
+        if (!connection) throw new Error('Wiz graphSearch response was empty');
+
+        for (const node of connection.nodes || []) {
+          for (const entity of node?.entities || []) {
+            scanned += 1;
+            const tags = wizTagsToObject(parseWizProperties(entity?.properties)?.tags);
+
+            const resourceProduct = readWizTag(tags, keys.product);
+            const resourceApplication = readWizTag(tags, keys.application);
+
+            if (productValue && !sameValue(resourceProduct, productValue)) continue;
+
+            const hasApplication = Boolean(resourceApplication && String(resourceApplication).trim());
+            let match = null;
+            if (applicationValue && sameValue(resourceApplication, applicationValue)) {
+              match = 'application';
+            } else if (!hasApplication && includeUnassigned && productValue) {
+              // Carries the product but names no application: shared infrastructure.
+              match = 'shared';
+            } else if (!applicationValue && !productValue) {
+              match = 'all';
+            }
+            if (!match) continue;
+
+            resources.push({
+              id: entity?.id || null,
+              name: entity?.name || null,
+              type: entity?.type || type,
+              match,
+              product: resourceProduct || null,
+              application: resourceApplication || null,
+              environment: readWizTag(tags, keys.environment) || null,
+              role: readWizTag(tags, keys.role) || null,
+              tags,
+            });
+          }
+        }
+
+        if (!connection.pageInfo?.hasNextPage) break;
+        after = connection.pageInfo.endCursor || null;
+      }
+    } catch (error) {
+      // One bad type must not lose the resources the others found. An unknown type
+      // makes Wiz reject that query outright, and the type list is going to become
+      // company config, so a wrong entry there is a thing to report rather than a
+      // reason to return nothing.
+      errors.push({ type, message: (error?.message || String(error)).slice(0, 300) });
+    }
+  }
+
+  integrationLog('info', {
+    provider: 'WIZ',
+    op: 'list_resources_for_folder',
+    graphqlHost,
+    folderId,
+    types: types.join(','),
+    scanned,
+    matched: resources.length,
+    typeErrors: errors.length,
+    durationMs: Date.now() - started,
+  });
+
+  return { resources, scanned, errors };
+}
+
 export async function listWizTagsForFolder(decrypted, graphqlUrl, folderId) {
   const started = Date.now();
   const url = normalizeWizGraphqlUrl(graphqlUrl || '');

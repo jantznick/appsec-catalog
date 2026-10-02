@@ -9,7 +9,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:push": "prisma db push",
-    "test": "node --test services utils"
+    "test": "node --test services utils integrations"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",

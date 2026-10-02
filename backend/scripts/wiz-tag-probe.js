@@ -39,6 +39,12 @@
  *   node scripts/wiz-tag-probe.js --raw 3                # dump 3 raw tag blobs
  *   node scripts/wiz-tag-probe.js --folders              # list folders, find an id
  *   node scripts/wiz-tag-probe.js --folder <uuid>       # a folder IS a company
+ *   node scripts/wiz-tag-probe.js --folder <uuid> --product Orbit --application backend
+ *
+ * With --product and/or --application it stops surveying and runs the REAL filter
+ * the application page will run - folder, then product tag, then application tag -
+ * so the query can be proven against a tenant before any UI exists. Resources
+ * carrying the product but no application come back as `shared`.
  *
  * A folder IS a company in this tenant, so --folder is the only argument that
  * identifies what to look at. --folders lists the ids. --company is optional and
@@ -50,8 +56,10 @@
 import { prisma } from '../prisma/client.js';
 import { resolveIntegrationForCompany } from '../integrations/resolve.js';
 import {
+  WIZ_RESOURCE_TYPES,
   fetchWizAccessToken,
   listWizFolders,
+  listWizResourcesForFolder,
   normalizeWizGraphqlUrl,
   wizGraphql,
 } from '../integrations/wiz.js';
@@ -78,7 +86,7 @@ const DEFAULT_TYPES = [
 ];
 
 function parseArgs(argv) {
-  const args = { companyId: null, types: DEFAULT_TYPES, raw: 1, pages: 1, listFolders: false, folderId: null };
+  const args = { companyId: null, types: DEFAULT_TYPES, raw: 1, pages: 1, listFolders: false, folderId: null, product: null, application: null };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     if (flag === '--company') args.companyId = argv[++i];
@@ -87,6 +95,8 @@ function parseArgs(argv) {
     else if (flag === '--pages') args.pages = Math.max(1, Number(argv[++i]) || 1);
     else if (flag === '--folders') args.listFolders = true;
     else if (flag === '--folder') args.folderId = argv[++i];
+    else if (flag === '--product') args.product = argv[++i];
+    else if (flag === '--application') args.application = argv[++i];
   }
   return args;
 }
@@ -351,6 +361,45 @@ async function main() {
 
   if (!targets.length) {
     console.log('Nothing to probe. Run with --folders to list folder ids, then --folder <id>.');
+    return;
+  }
+
+  // Filter mode: exercise the query the application page will issue, rather than
+  // surveying what tags exist.
+  if (args.product || args.application) {
+    for (const target of targets) {
+      const creds = await resolveIntegrationForCompany(target.companyId, PROVIDER_WIZ);
+      if (!creds?.decrypted?.clientId) {
+        console.log(`\n${target.label}: no Wiz credentials resolvable`);
+        continue;
+      }
+      const types = args.types === DEFAULT_TYPES ? WIZ_RESOURCE_TYPES : args.types;
+      console.log(`\n${'='.repeat(72)}`);
+      console.log(`${target.label}`);
+      console.log(`  product=${args.product || '(any)'}  application=${args.application || '(any)'}`);
+      console.log(`  types: ${types.join(', ')}`);
+      console.log('='.repeat(72));
+
+      const { resources, scanned, errors } = await listWizResourcesForFolder(
+        creds.decrypted,
+        creds.baseUrl || '',
+        target.folderId,
+        { productValue: args.product, applicationValue: args.application, types },
+      );
+
+      console.log(`\n  ${resources.length} matched of ${scanned} scanned`);
+      for (const e of errors) console.log(`  type ${e.type} errored: ${e.message}`);
+
+      for (const r of resources.slice(0, 40)) {
+        const context = [
+          r.environment ? `env=${r.environment}` : null,
+          r.role ? `role=${r.role}` : null,
+        ].filter(Boolean).join('  ');
+        console.log(`    [${r.match}] ${r.type.padEnd(18)} ${r.name || r.id || '(unnamed)'}   ${context}`);
+      }
+      if (resources.length > 40) console.log(`    … and ${resources.length - 40} more`);
+    }
+    console.log('\nDone. Nothing was written.');
     return;
   }
 
