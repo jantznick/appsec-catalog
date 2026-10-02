@@ -761,6 +761,17 @@ export const api = {
   getProductWizResources: (productId) =>
     apiRequest(`/api/products/${productId}/wiz-resources`),
 
+  // Unassigned deployment triage. The adopt call takes an explicit list of
+  // deployment ids: there is no "attach everything" shortcut, by design.
+  getUnassignedDeployments: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/unassigned-deployments`),
+
+  adoptEnvironmentName: (environmentId, { value, deploymentIds }) =>
+    apiRequest(`/api/environments/${environmentId}/names`, {
+      method: 'POST',
+      body: JSON.stringify({ value, deploymentIds }),
+    }),
+
   getApplicationWizTag: (applicationId) =>
     apiRequest(`/api/applications/${applicationId}/wiz-tag`),
 

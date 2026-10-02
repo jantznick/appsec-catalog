@@ -27,6 +27,7 @@ import { ThreatModelTab } from '../components/threat-model/ThreatModelTab.jsx';
 import { SplitApplicationModal } from '../components/applications/SplitApplicationModal.jsx';
 import { ApplicationEnvironments } from '../components/applications/ApplicationEnvironments.jsx';
 import { CloudResourcesCard } from '../components/integrations/CloudResourcesCard.jsx';
+import { UnassignedDeploymentsModal } from '../components/applications/UnassignedDeploymentsModal.jsx';
 
 /**
  * Sentinel for the deployment environment filter. Not a real environment name, and
@@ -135,6 +136,7 @@ export function ApplicationDetail() {
   const [deploymentPage, setDeploymentPage] = useState(1);
   const deploymentsPerPage = 5;
   const [deploymentEnvironmentFilter, setDeploymentEnvironmentFilter] = useState('');
+  const [showTriage, setShowTriage] = useState(false);
   const [deleteDeploymentId, setDeleteDeploymentId] = useState(null);
   const [deletingDeployment, setDeletingDeployment] = useState(false);
   const [deploymentTokens, setDeploymentTokens] = useState([]);
@@ -2139,6 +2141,16 @@ export function ApplicationDetail() {
                       Add Deployment
                     </Button>
                   )}
+                  {unassignedDeploymentCount > 0 && canEdit() && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowTriage(true)}
+                      title="Match these deployment strings to an environment"
+                    >
+                      Triage {unassignedDeploymentCount}
+                    </Button>
+                  )}
                   {(availableEnvironments.length > 0 || unassignedDeploymentCount > 0) && (
                     <select
                       value={deploymentEnvironmentFilter}
@@ -3304,6 +3316,20 @@ export function ApplicationDetail() {
           </div>
         </div>
       )}
+
+      {/* Triage: adopt a deployment string Orbit did not recognise. */}
+      <UnassignedDeploymentsModal
+        isOpen={showTriage}
+        onClose={() => setShowTriage(false)}
+        applicationId={id}
+        companyId={application?.companyId}
+        onAdopted={() => {
+          // Adopting changes which deployments resolve, so the history and the
+          // environment list on this page are both out of date.
+          loadApplication();
+          loadDeployments();
+        }}
+      />
 
       {/* Split Application Modal — rendered after the sticky edit bar so it stacks above it */}
       <SplitApplicationModal

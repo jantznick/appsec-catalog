@@ -268,6 +268,54 @@ router.delete(
 );
 
 
+// ---------------------------------------------------------------------------
+// Unassigned deployments
+//
+// A deploy whose environment string matched no EnvironmentName row is recorded
+// with a null environmentId rather than guessed at. That is only defensible if
+// Unassigned is somewhere you can act from, which is what this and the adopt
+// endpoint on routes/environments.js are for.
+// ---------------------------------------------------------------------------
+router.get(
+  '/:id/unassigned-deployments',
+  requireAuth,
+  requirePermission('application.read', companyFrom.application('id')),
+  async (req, res) => {
+    try {
+      const deployments = await prisma.deployment.findMany({
+        where: { applicationId: req.params.id, environmentId: null },
+        select: { id: true, environment: true, version: true, deployedAt: true, deployedBy: true },
+        orderBy: { deployedAt: 'desc' },
+      });
+
+      // Grouped by the EXACT raw string. Two strings differing only by case are
+      // still two groups here, because adopting one is not a decision about the
+      // other and merging them would be Orbit deciding they meant the same thing.
+      const groups = new Map();
+      for (const d of deployments) {
+        const key = d.environment ?? '';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(d);
+      }
+
+      res.json({
+        total: deployments.length,
+        groups: [...groups.entries()]
+          .map(([value, rows]) => ({
+            value,
+            count: rows.length,
+            lastSeenAt: rows[0]?.deployedAt ?? null,
+            deployments: rows,
+          }))
+          .sort((a, b) => b.count - a.count),
+      });
+    } catch (error) {
+      console.error('Error listing unassigned deployments:', error);
+      res.status(500).json({ error: 'Failed to list unassigned deployments' });
+    }
+  },
+);
+
 // The Wiz tag value this application answers to. Assigned, like a product's -
 // free text, because a company writing its tagging standard alongside the
 // catalog has to be able to assign a value before anything carries it.

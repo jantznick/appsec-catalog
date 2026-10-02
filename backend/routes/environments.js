@@ -12,6 +12,7 @@ import {
   inferEnvironmentKind,
   isSingleSlotKind,
   isValidEnvironmentKind,
+  normalizeEnvironmentName,
 } from '../services/environmentNaming.js';
 
 /**
@@ -442,6 +443,111 @@ router.put('/:id', requireAuth, async (req, res) => {
     }
     console.error('Error updating environment:', error);
     res.status(500).json({ error: 'Failed to update environment' });
+  }
+});
+
+// Adopt a string that has been arriving unmatched: make it a name of this
+// environment, and attach the deployments the caller has selected.
+//
+// NOTHING HERE IS INFERRED, INCLUDING SCOPE.
+//
+// The environment is chosen by a human - a suggestion may be shown in the UI but
+// never arrives here pre-applied. The string is taken literally. And the
+// deployments to attach come as an explicit list of ids: there is deliberately no
+// "attach everything with this string" shortcut on the server, because that would
+// be Orbit deciding how far an adoption reaches. The UI offers select-all; the
+// selection travels with the request.
+//
+// A deployment is only attached if its own raw string still normalises to the
+// value being adopted and it belongs to this company. That is not second-guessing
+// the caller - it is refusing to attach a row to an environment it never named,
+// whatever id was posted.
+router.post('/:id/names', requireAuth, async (req, res) => {
+  try {
+    const existing = await findEnvironmentWithCompany(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Environment not found' });
+    }
+
+    if (!(await can(req, 'environment.manage', existing.companyId))) {
+      return res.status(403).json({
+        error: 'Permission denied',
+        message: 'You cannot manage environments for this company',
+      });
+    }
+
+    const value = normalizeEnvironmentName(req.body?.value);
+    if (!value) {
+      return res.status(400).json({ error: 'A name is required' });
+    }
+
+    const deploymentIds = Array.isArray(req.body?.deploymentIds)
+      ? req.body.deploymentIds.filter((id) => typeof id === 'string' && id)
+      : [];
+
+    const attachable = deploymentIds.length
+      ? await prisma.deployment.findMany({
+        where: {
+          id: { in: deploymentIds },
+          environmentId: null,
+          application: { companyId: existing.companyId },
+        },
+        select: { id: true, environment: true },
+      })
+      : [];
+
+    // Only rows that actually carry this string. A posted id for a deployment
+    // that said something else is dropped rather than quietly re-homed.
+    const matching = attachable.filter(
+      (d) => normalizeEnvironmentName(d.environment) === value,
+    );
+    const rejected = deploymentIds.length - matching.length;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const name = await tx.environmentName.create({
+        data: { companyId: existing.companyId, environmentId: existing.id, value },
+        select: { id: true, value: true },
+      });
+
+      const attached = matching.length
+        ? await tx.deployment.updateMany({
+          where: { id: { in: matching.map((d) => d.id) } },
+          data: { environmentId: existing.id },
+        })
+        : { count: 0 };
+
+      return { name, attached: attached.count };
+    });
+
+    await recordChange({
+      entityType: 'EnvironmentName',
+      entityId: result.name.id,
+      action: 'create',
+      userId: getAuthContext(req)?.userId || null,
+      companyId: existing.companyId,
+      after: { value, isCanonical: false, environmentId: existing.id },
+    });
+
+    res.status(201).json({
+      value: result.name.value,
+      environmentId: existing.id,
+      attachedDeployments: result.attached,
+      // Say so rather than silently attaching fewer than were asked for.
+      rejectedDeployments: rejected,
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      const existing = await findEnvironmentWithCompany(req.params.id);
+      return res.status(409).json({
+        error: 'Name already in use',
+        message: await describeNameCollision(
+          existing?.companyId,
+          [normalizeEnvironmentName(req.body?.value)].filter(Boolean),
+        ),
+      });
+    }
+    console.error('Error adopting environment name:', error);
+    res.status(500).json({ error: 'Failed to adopt that name' });
   }
 });
 
