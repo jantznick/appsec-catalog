@@ -747,6 +747,23 @@ export const api = {
   // There is no "set primary" call. An application's primary environment is the one
   // whose kind is PRODUCTION, derived at read time, so changing it means changing a
   // kind in the vocabulary.
+  // Cloud resources. The company's Wiz folder is required; a product or
+  // application with no assigned tag value comes back configured: false rather
+  // than as an error, because it is a thing nobody has set up yet.
+  getProductWizTag: (productId) => apiRequest(`/api/products/${productId}/wiz-tag`),
+
+  setProductWizTag: (productId, tagValue) =>
+    apiRequest(`/api/products/${productId}/wiz-tag`, {
+      method: 'PUT',
+      body: JSON.stringify({ tagValue }),
+    }),
+
+  getProductWizResources: (productId) =>
+    apiRequest(`/api/products/${productId}/wiz-resources`),
+
+  getApplicationWizResources: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/wiz-resources`),
+
   getApplicationEnvironments: (applicationId) =>
     apiRequest(`/api/applications/${applicationId}/environments`),
 

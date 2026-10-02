@@ -26,6 +26,7 @@ import { useRepoLinkFlow } from '../hooks/useRepoLinkFlow.jsx';
 import { ThreatModelTab } from '../components/threat-model/ThreatModelTab.jsx';
 import { SplitApplicationModal } from '../components/applications/SplitApplicationModal.jsx';
 import { ApplicationEnvironments } from '../components/applications/ApplicationEnvironments.jsx';
+import { CloudResourcesPanel } from '../components/integrations/CloudResourcesPanel.jsx';
 
 /**
  * Sentinel for the deployment environment filter. Not a real environment name, and
@@ -2107,6 +2108,16 @@ export function ApplicationDetail() {
               companyId={application?.companyId}
               canManage={canEdit()}
               onChanged={loadApplication}
+            />
+          </div>
+          {/* What actually runs this, from Wiz: its own resources plus the
+              product's shared ones. A live read - Wiz owns resources, not us. */}
+          <div className="mb-6">
+            <CloudResourcesPanel
+              title="Cloud resources"
+              description="Resources in this company's Wiz folder carrying this application's tag value, plus the shared infrastructure of its product."
+              load={() => api.getApplicationWizResources(id)}
+              emptyHint="No Wiz tag value has been assigned to this application yet."
             />
           </div>
           <Card>

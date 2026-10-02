@@ -7,6 +7,8 @@ import { evaluateAllControls } from '../services/policy.js';
 import { getAuthContext, resolveChangeSource } from '../middleware/authContext.js';
 import { applyCompanyScope } from '../utils/scope.js';
 import { recordChange } from '../utils/changeHistory.js';
+import { WIZ_RESOURCE_TYPES } from '../integrations/wiz.js';
+import { fetchWizResources, wizTagForProduct } from '../services/wizResources.js';
 
 const router = express.Router();
 
@@ -1113,6 +1115,89 @@ router.delete('/:id/data-flows/:flowId', requireAuth, requireAdmin, async (req, 
   } catch (error) {
     console.error('Error deleting product data flow:', error);
     return res.status(500).json({ error: 'Failed to delete product data flow' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Cloud resources
+//
+// A product's resources are the ones in its company's Wiz folder carrying the
+// product's assigned tag value. The folder is required and comes from the
+// company: no folder, no call is made at all, so a tenant-wide query can never
+// be issued by omission.
+// ---------------------------------------------------------------------------
+
+// The Wiz tag value this product answers to.
+router.get('/:id/wiz-tag', requireAuth, async (req, res) => {
+  try {
+    const product = await getProductForUser(req.params.id, getAuthContext(req));
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+    if (product === 'forbidden') {
+      return res.status(403).json({ error: 'Permission denied' });
+    }
+    res.json({ tagValue: await wizTagForProduct(req.params.id) });
+  } catch (error) {
+    console.error('Error reading product Wiz tag:', error);
+    res.status(500).json({ error: 'Failed to read the Wiz tag value' });
+  }
+});
+
+// Assign the Wiz tag value. Free text on purpose: a company writing its tagging
+// standard alongside the catalog has to be able to assign a value before any
+// resource carries it, so this does not validate against discovered tags.
+router.put('/:id/wiz-tag', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const product = await getProductForUser(req.params.id, getAuthContext(req));
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+    if (product === 'forbidden') {
+      return res.status(403).json({ error: 'Permission denied' });
+    }
+
+    const raw = req.body?.tagValue;
+    const tagValue = typeof raw === 'string' ? raw.trim() : '';
+
+    if (!tagValue) {
+      await prisma.productToolLink.deleteMany({
+        where: { productId: req.params.id, provider: 'WIZ' },
+      });
+      return res.json({ tagValue: null });
+    }
+
+    await prisma.productToolLink.upsert({
+      where: { productId_provider: { productId: req.params.id, provider: 'WIZ' } },
+      create: { productId: req.params.id, provider: 'WIZ', filter: { tagValue } },
+      update: { filter: { tagValue } },
+    });
+
+    res.json({ tagValue });
+  } catch (error) {
+    console.error('Error saving product Wiz tag:', error);
+    res.status(500).json({ error: 'Failed to save the Wiz tag value' });
+  }
+});
+
+router.get('/:id/wiz-resources', requireAuth, async (req, res) => {
+  try {
+    const product = await getProductForUser(req.params.id, getAuthContext(req));
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+    if (product === 'forbidden') {
+      return res.status(403).json({ error: 'Permission denied' });
+    }
+
+    const tagValue = await wizTagForProduct(req.params.id);
+    const result = await fetchWizResources({
+      companyId: product.companyId,
+      productValue: tagValue,
+      types: WIZ_RESOURCE_TYPES,
+    });
+
+    res.json({ ...result, tagValue, productName: product.name });
+  } catch (error) {
+    console.error('Error listing product Wiz resources:', error);
+    res.status(502).json({
+      error: 'Could not reach Wiz',
+      message: (error?.message || String(error)).slice(0, 300),
+    });
   }
 });
 

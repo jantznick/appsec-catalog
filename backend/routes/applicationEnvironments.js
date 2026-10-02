@@ -6,6 +6,12 @@ import { getAuthContext } from '../middleware/authContext.js';
 import { recordChange } from '../utils/changeHistory.js';
 import { PRIMARY_ENVIRONMENT_KIND } from '../services/environmentNaming.js';
 import { ENVIRONMENT_SUMMARY_SELECT } from '../services/environmentValues.js';
+import { WIZ_RESOURCE_TYPES } from '../integrations/wiz.js';
+import {
+  fetchWizResources,
+  productTagForApplication,
+  wizTagForApplication,
+} from '../services/wizResources.js';
 
 /**
  * An application's environment INSTANCES: "Orbit Backend runs in production".
@@ -257,6 +263,63 @@ router.delete(
     } catch (error) {
       console.error('Error deleting application environment:', error);
       res.status(500).json({ error: 'Failed to remove this environment' });
+    }
+  },
+);
+
+
+// ---------------------------------------------------------------------------
+// Cloud resources
+//
+// The filter, in order: the company's Wiz folder (required - no folder, no call),
+// the product's assigned tag value when unambiguous, and this application's.
+// Environment and Role are read off each resource and returned as context; they
+// decide nothing.
+// ---------------------------------------------------------------------------
+router.get(
+  '/:id/wiz-resources',
+  requireAuth,
+  requirePermission('application.read', companyFrom.application('id')),
+  async (req, res) => {
+    try {
+      const application = await prisma.application.findUnique({
+        where: { id: req.params.id },
+        select: {
+          id: true,
+          name: true,
+          companyId: true,
+          productApplications: {
+            select: { product: { select: { id: true, name: true } } },
+          },
+        },
+      });
+      if (!application) return res.status(404).json({ error: 'Application not found' });
+
+      const applicationValue = await wizTagForApplication(application.id);
+      const product = await productTagForApplication(application.productApplications);
+
+      const result = await fetchWizResources({
+        companyId: application.companyId,
+        productValue: product.value,
+        applicationValue,
+        types: WIZ_RESOURCE_TYPES,
+      });
+
+      res.json({
+        ...result,
+        applicationTagValue: applicationValue,
+        productTagValue: product.value,
+        // Why the product filter is or is not applied, so the page can say so
+        // rather than leaving someone wondering why the list is broad.
+        productFilterReason: product.reason,
+        productName: product.productName,
+      });
+    } catch (error) {
+      console.error('Error listing application Wiz resources:', error);
+      res.status(502).json({
+        error: 'Could not reach Wiz',
+        message: (error?.message || String(error)).slice(0, 300),
+      });
     }
   },
 );

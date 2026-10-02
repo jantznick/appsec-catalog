@@ -10,6 +10,7 @@ import { ProductDetailHeader } from '../components/product-detail/ProductDetailH
 import { ProductDetailModals } from '../components/product-detail/ProductDetailModals.jsx';
 import { ProductDetailStickyBar } from '../components/product-detail/ProductDetailStickyBar.jsx';
 import { ProductMetadataCard } from '../components/product-detail/ProductMetadataCard.jsx';
+import { ProductCloudResourcesCard } from '../components/product-detail/ProductCloudResourcesCard.jsx';
 
 const OTHER_COMPONENT_VALUE = '__other__';
 const INGRESS_LIKE_TYPE_MATCHERS = ['frontend', 'gateway', 'mobile'];
@@ -899,6 +900,8 @@ export function ProductDetail() {
           openEditFlowModal={openEditFlowModal}
           canDelete={canDelete()}
         />
+
+        <ProductCloudResourcesCard productId={id} canEdit={canEdit()} />
       </div>
 
       {isEditing && (

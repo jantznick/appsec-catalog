@@ -505,6 +505,7 @@ model Product {
   ingressPoints       ProductIngressPoint[]
   dataFlows           ProductDataFlow[]
   scores              ProductScore[]
+  toolLinks           ProductToolLink[]
   updatedById         String? // User ID who last updated this product
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
@@ -1444,6 +1445,29 @@ model CompanyToolLink {
   updatedAt DateTime @updatedAt
 
   @@unique([companyId, provider])
+  @@index([provider])
+}
+
+/// The Wiz tag value a product answers to.
+///
+/// Mirrors CompanyToolLink (which holds the folder) and ApplicationToolLink
+/// (which holds the application's tag value), completing the set. A product page
+/// filters its cloud resources by folder + this value; an application page adds
+/// its own value on top.
+///
+/// Assigned, not matched. A company's tag values will not equal Orbit's record
+/// names, and depending on that would make the feature rest on a naming
+/// convention nobody agreed to.
+model ProductToolLink {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  provider  String
+  filter    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, provider])
   @@index([provider])
 }
 
