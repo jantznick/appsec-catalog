@@ -400,7 +400,14 @@ A resource can carry only one value per tag key, so a VM hosting several applica
 - A comma-separated list in the `Application` value was considered and rejected: it turns the tag into an unvalidated parsing contract, hits the ~256-character cloud tag value ceiling, and is not even legal on GCP labels.
 - Orbit's own stack is tagged this way already — see the header comment in `docker-compose.yml`. Images carry `Product` + `Application` and deliberately no `Environment` (one image runs everywhere); containers carry all three; shared resources carry `_shared` plus a documentary `Role` label that nothing parses.
 
-**`Role` is a candidate dimension, not a settled one.** It currently exists only to keep "which shared thing is this" readable in the cloud console. Promoting it into the triple would make it a quad and change the natural key, which is probably not what we want; more likely it becomes an attribute used to group and label shared resources in the UI. Revisit after Phase 5.
+**`Role` is a candidate fourth dimension, kept open on purpose.** Today it exists only to keep "which shared thing is this" readable in the cloud console — `_shared` alone does not say database from reverse proxy — and nothing parses it.
+
+Promoting it to a quad is on the table and worth deciding in Phase 4 rather than being assumed away. The trade:
+
+- **It earns its place** if `_shared` turns out to be too coarse to act on — "the database serving this product in production" is a different conversation with a different owner than "the reverse proxy", and a `Product`/`Environment`/`Application`/`Role` quad says that directly.
+- **The cost is the natural key.** `Role` would have to be optional, since a dedicated application resource has no role, which means the key is a triple for some resources and a quad for others. That asymmetry has to be deliberate: resolution still has to land on exactly one `ApplicationEnvironment`, and `Role` only ever narrows within `_shared`.
+
+So the likely shape is a required key on `_shared` resources and absent elsewhere, used for grouping rather than for identity. Decide it with the resource-type list, when there is real tagged data to look at.
 
 ### Expectation to manage
 
