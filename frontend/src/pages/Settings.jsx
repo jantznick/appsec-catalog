@@ -87,7 +87,8 @@ const settingsSections = [
   },
   {
     title: 'Review workflow',
-    description: 'Review submitted changes and security export activity.',
+    description:
+      'Work through the queues the header indicator counts, plus security export activity.',
     items: [
       {
         label: 'Pending approvals',
@@ -99,6 +100,12 @@ const settingsSections = [
         label: 'Information requests',
         description: 'Follow up with people who asked about the program.',
         to: '/settings/program-requests',
+        adminOnly: true,
+      },
+      {
+        label: 'Feature requests',
+        description: 'Read what users have asked for, reply, and promote ideas to the roadmap.',
+        to: '/settings/feature-requests',
         adminOnly: true,
       },
       {
@@ -122,11 +129,6 @@ const settingsSections = [
         label: 'Roadmap',
         description: 'Publish what Orbit is working on and what is coming next.',
         to: '/settings/roadmap',
-      },
-      {
-        label: 'Feature requests',
-        description: 'Read what users have asked for, reply, and promote ideas to the roadmap.',
-        to: '/settings/feature-requests',
       },
       {
         label: 'What\'s New',
