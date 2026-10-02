@@ -2,28 +2,15 @@ import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { getAuthContext } from '../middleware/authContext.js';
+import { normalizeCategory } from '../utils/productCommunication.js';
 
 const router = express.Router();
 
 const VALID_STATUSES = new Set(['draft', 'published']);
-const VALID_CATEGORIES = new Set([
-  'Feature',
-  'Improvement',
-  'Fix',
-  'Security',
-  'Admin',
-  'Integration',
-  'Deployment',
-]);
 
 function normalizeStatus(status) {
   const normalized = String(status || 'draft').trim().toLowerCase();
   return VALID_STATUSES.has(normalized) ? normalized : 'draft';
-}
-
-function normalizeCategory(category) {
-  const normalized = String(category || 'Improvement').trim();
-  return VALID_CATEGORIES.has(normalized) ? normalized : 'Improvement';
 }
 
 function normalizeRelatedCommits(relatedCommits) {

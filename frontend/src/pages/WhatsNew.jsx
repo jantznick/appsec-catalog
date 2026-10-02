@@ -1,109 +1,180 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { Card, CardContent } from '../components/ui/Card.jsx';
+import { UpdatesFeed } from '../components/whatsnew/UpdatesFeed.jsx';
+import { RoadmapBoard } from '../components/whatsnew/RoadmapBoard.jsx';
+import { FeatureRequestPanel } from '../components/whatsnew/FeatureRequestPanel.jsx';
 
-function formatDate(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+const TABS = [
+  { key: 'updates', label: 'Updates' },
+  { key: 'roadmap', label: 'Roadmap' },
+  { key: 'requests', label: 'Request a feature' },
+];
+
+/**
+ * Tab strip styled to match the shared Tabs component. It isn't that component
+ * because the selection lives in the URL — a roadmap card linking to its
+ * release note has to be able to switch tabs, and `/whats-new?tab=roadmap`
+ * being shareable is worth the handful of lines.
+ */
+function TabStrip({ active, counts, onSelect }) {
+  return (
+    <div className="border-b border-gray-200 scroll-x-hidden-bar overscroll-x-contain">
+      <nav className="-mb-px flex min-w-max space-x-8" aria-label="What's New sections">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={active === tab.key}
+            onClick={() => onSelect(tab.key)}
+            className={`whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors ${
+              active === tab.key
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              {tab.label}
+              {counts[tab.key] > 0 && (
+                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                  {counts[tab.key]}
+                </span>
+              )}
+            </span>
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
 }
 
-function renderBody(body) {
-  if (!body) return null;
-  return String(body)
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean)
-    .map((paragraph, index) => (
-      <p key={`${paragraph.slice(0, 20)}-${index}`} className="text-sm text-gray-700 leading-6">
-        {paragraph}
-      </p>
-    ));
+function ErrorCard({ message }) {
+  return (
+    <Card>
+      <CardContent>
+        <p className="text-sm text-red-600">{message}</p>
+      </CardContent>
+    </Card>
+  );
 }
 
 export function WhatsNew() {
-  const [updates, setUpdates] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = TABS.some((tab) => tab.key === searchParams.get('tab'))
+    ? searchParams.get('tab')
+    : 'updates';
+  const highlightId = searchParams.get('update');
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadUpdates() {
-      try {
-        setLoading(true);
-        setError('');
-        const data = await api.getPublishedProductUpdates(50);
-        if (!cancelled) {
-          setUpdates(data.updates || []);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err?.message || 'Failed to load product updates');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
+  const [updates, setUpdates] = useState([]);
+  const [roadmap, setRoadmap] = useState({ items: [], stages: [] });
+  const [myRequests, setMyRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  // Each section carries its own error: a roadmap query that fails shouldn't
+  // take the release notes down with it.
+  const [errors, setErrors] = useState({ updates: '', roadmap: '', requests: '' });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [updateResult, roadmapResult, mineResult] = await Promise.allSettled([
+      api.getPublishedProductUpdates(100),
+      api.getRoadmap(),
+      api.listMyFeatureRequests(),
+    ]);
+
+    const nextErrors = { updates: '', roadmap: '', requests: '' };
+
+    if (updateResult.status === 'fulfilled') {
+      setUpdates(updateResult.value.updates || []);
+    } else {
+      nextErrors.updates = updateResult.reason?.message || 'Failed to load product updates';
     }
 
-    loadUpdates();
-    return () => {
-      cancelled = true;
-    };
+    if (roadmapResult.status === 'fulfilled') {
+      setRoadmap({
+        items: roadmapResult.value.items || [],
+        stages: roadmapResult.value.stages || [],
+      });
+    } else {
+      nextErrors.roadmap = roadmapResult.reason?.message || 'Failed to load the roadmap';
+    }
+
+    if (mineResult.status === 'fulfilled') {
+      setMyRequests(mineResult.value.requests || []);
+    } else {
+      nextErrors.requests = mineResult.reason?.message || 'Failed to load your feature requests';
+    }
+
+    setErrors(nextErrors);
+    setLoading(false);
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const selectTab = (key) => {
+    setSearchParams(key === 'updates' ? {} : { tab: key }, { replace: true });
+  };
+
+  /** Jump from a shipped roadmap card to its release note. */
+  const viewUpdate = (updateId) => {
+    setSearchParams({ tab: 'updates', update: updateId }, { replace: true });
+  };
+
+  // Scroll to the linked note once the updates tab has actually rendered it —
+  // the jump above only changes the URL, and the card doesn't exist until the
+  // feed is on screen.
+  useEffect(() => {
+    if (loading || activeTab !== 'updates' || !highlightId) return;
+    document.getElementById(`update-${highlightId}`)?.scrollIntoView({ block: 'center' });
+  }, [loading, activeTab, highlightId]);
+
+  const counts = useMemo(
+    () => ({
+      updates: updates.length,
+      roadmap: roadmap.items.length,
+      requests: myRequests.length,
+    }),
+    [updates, roadmap.items, myRequests],
+  );
+
+  const addRequest = (request) => {
+    if (request) setMyRequests((current) => [request, ...current]);
+  };
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">What&apos;s New</h1>
-        <p className="text-sm text-gray-600 mt-1">Recent Orbit improvements and release notes.</p>
+        <p className="mt-1 text-sm text-gray-600">
+          What shipped recently, what&apos;s coming next, and a direct line to ask for what you need.
+        </p>
       </div>
+
+      <TabStrip active={activeTab} counts={counts} onSelect={selectTab} />
 
       {loading ? (
         <p className="text-sm text-gray-500">Loading...</p>
-      ) : error ? (
-        <Card>
-          <CardContent>
-            <p className="text-sm text-red-600">{error}</p>
-          </CardContent>
-        </Card>
-      ) : updates.length === 0 ? (
-        <Card>
-          <CardContent>
-            <p className="text-sm text-gray-500">No product updates have been published yet.</p>
-          </CardContent>
-        </Card>
+      ) : activeTab === 'updates' ? (
+        errors.updates ? (
+          <ErrorCard message={errors.updates} />
+        ) : (
+          <UpdatesFeed updates={updates} highlightId={highlightId} />
+        )
+      ) : activeTab === 'roadmap' ? (
+        errors.roadmap ? (
+          <ErrorCard message={errors.roadmap} />
+        ) : (
+          <RoadmapBoard items={roadmap.items} stages={roadmap.stages} onViewUpdate={viewUpdate} />
+        )
       ) : (
-        <div className="space-y-4">
-          {updates.map((update) => (
-            <Card key={update.id}>
-              <CardContent className="space-y-3">
-                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2 py-1 rounded bg-blue-100 text-blue-800 text-xs font-medium">
-                        {update.category}
-                      </span>
-                      {update.releaseLabel && (
-                        <span className="text-xs font-medium text-gray-500">{update.releaseLabel}</span>
-                      )}
-                    </div>
-                    <h2 className="text-xl font-semibold text-gray-900 mt-2">{update.title}</h2>
-                  </div>
-                  <p className="text-sm text-gray-500 shrink-0">{formatDate(update.publishedAt)}</p>
-                </div>
-                <p className="text-base text-gray-800 leading-7">{update.summary}</p>
-                <div className="space-y-3">{renderBody(update.body)}</div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <FeatureRequestPanel
+          myRequests={myRequests}
+          error={errors.requests}
+          onSubmitted={addRequest}
+        />
       )}
     </div>
   );

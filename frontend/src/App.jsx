@@ -36,6 +36,8 @@ import { SettingsDeploy } from './pages/SettingsDeploy.jsx';
 import { SettingsApiTokens } from './pages/SettingsApiTokens.jsx';
 import { SettingsRoles } from './pages/SettingsRoles.jsx';
 import { ProductUpdatesAdmin } from './pages/ProductUpdatesAdmin.jsx';
+import { RoadmapAdmin } from './pages/RoadmapAdmin.jsx';
+import { FeatureRequestsAdmin } from './pages/FeatureRequestsAdmin.jsx';
 import { WhatsNew } from './pages/WhatsNew.jsx';
 import { ScoringSettings } from './pages/ScoringSettings.jsx';
 import { AiSettings } from './pages/AiSettings.jsx';
@@ -243,6 +245,26 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <ProductUpdatesAdmin />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/roadmap"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <RoadmapAdmin />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/feature-requests"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <FeatureRequestsAdmin />
               </Layout>
             </ProtectedRoute>
           }

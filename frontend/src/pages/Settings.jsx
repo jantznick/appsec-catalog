@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import useAuthStore from '../store/authStore.js';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card.jsx';
+import { usePendingApprovals } from '../contexts/PendingApprovalsContext.jsx';
 
 const settingsSections = [
   {
@@ -86,7 +87,8 @@ const settingsSections = [
   },
   {
     title: 'Review workflow',
-    description: 'Review submitted changes and security export activity.',
+    description:
+      'Work through the queues the header indicator counts, plus security export activity.',
     items: [
       {
         label: 'Pending approvals',
@@ -98,6 +100,12 @@ const settingsSections = [
         label: 'Information requests',
         description: 'Follow up with people who asked about the program.',
         to: '/settings/program-requests',
+        adminOnly: true,
+      },
+      {
+        label: 'Feature requests',
+        description: 'Read what users have asked for, reply, and promote ideas to the roadmap.',
+        to: '/settings/feature-requests',
         adminOnly: true,
       },
       {
@@ -118,8 +126,13 @@ const settingsSections = [
         to: '/settings/product-updates',
       },
       {
+        label: 'Roadmap',
+        description: 'Publish what Orbit is working on and what is coming next.',
+        to: '/settings/roadmap',
+      },
+      {
         label: 'What\'s New',
-        description: 'Preview the product update feed.',
+        description: 'Preview the updates, roadmap, and request form users see.',
         to: '/whats-new',
       },
     ],
@@ -145,7 +158,16 @@ const settingsSections = [
 
 export function Settings() {
   const { isAdmin, canAnywhere } = useAuthStore();
+  const { globalPendingCount, infoRequestCount, featureRequestCount } = usePendingApprovals();
   const canAdmin = isAdmin();
+
+  // The header pill says something is waiting; these say which queue. Keyed by
+  // destination so a tile doesn't need to know a count exists for it.
+  const queueCounts = {
+    '/pending-approvals': globalPendingCount,
+    '/settings/program-requests': infoRequestCount,
+    '/settings/feature-requests': featureRequestCount,
+  };
 
   // An item may be gated on the admin flag, on holding a permission in at
   // least one company, or on neither.
@@ -189,7 +211,14 @@ export function Settings() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">{item.label}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-gray-900">{item.label}</p>
+                          {queueCounts[item.to] > 0 && (
+                            <span className="inline-flex items-center justify-center rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold leading-none text-white">
+                              {queueCounts[item.to] > 99 ? '99+' : queueCounts[item.to]}
+                            </span>
+                          )}
+                        </div>
                         <p className="mt-1 text-sm text-gray-600">{item.description}</p>
                       </div>
                       <span className="mt-0.5 text-sm text-gray-400">Open</span>

@@ -8,6 +8,7 @@ import { LoadingPage } from '../components/ui/Loading.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
 import { Textarea } from '../components/ui/Textarea.jsx';
 import { Checkbox } from '../components/ui/Checkbox.jsx';
+import { usePendingApprovals } from '../contexts/PendingApprovalsContext.jsx';
 import {
   loadApplicationFieldRegistry,
   getFieldLabel as registryFieldLabel,
@@ -20,6 +21,12 @@ const visibleVersionFields = (fields = []) => fields.filter((field) => !HIDDEN_V
 
 export function PendingApprovals() {
   const navigate = useNavigate();
+  // Approving or rejecting changes what the header indicator should say, so the
+  // count is refetched straight away instead of waiting out the 30-second poll.
+  // A partial approval can legitimately leave the version pending, which is
+  // exactly why the number comes from the server rather than being decremented
+  // here.
+  const { refresh: refreshBadges } = usePendingApprovals();
   const [pendingVersions, setPendingVersions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedVersion, setSelectedVersion] = useState(null);
@@ -181,6 +188,7 @@ export function PendingApprovals() {
       setSelectedFields([]);
       setSelectedVersion(null);
       await loadPendingVersions();
+      refreshBadges();
     } catch (error) {
       toast.error(error.message || 'Failed to approve version');
     } finally {
@@ -205,6 +213,7 @@ export function PendingApprovals() {
       setRejectionReason('');
       setSelectedVersion(null);
       await loadPendingVersions();
+      refreshBadges();
     } catch (error) {
       toast.error(error.message || 'Failed to reject version');
     } finally {

@@ -1135,6 +1135,51 @@ export const api = {
     }),
   getPublishedProductUpdates: (limit = 50) =>
     apiRequest(`/api/product-updates/published?limit=${encodeURIComponent(limit)}`),
+  // Roadmap — read for any signed-in user, authored by admins.
+  getRoadmap: () => apiRequest('/api/roadmap'),
+  getAdminRoadmap: (status) => {
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    const query = params.toString();
+    return apiRequest(`/api/roadmap/admin${query ? `?${query}` : ''}`);
+  },
+  createRoadmapItem: (body) =>
+    apiRequest('/api/roadmap/admin', { method: 'POST', body: JSON.stringify(body) }),
+  updateRoadmapItem: (id, body) =>
+    apiRequest(`/api/roadmap/admin/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  /** Partial move — any subset of { stage, status, sortOrder }. */
+  patchRoadmapItem: (id, body) =>
+    apiRequest(`/api/roadmap/admin/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  reorderRoadmapItems: (orderedIds) =>
+    apiRequest('/api/roadmap/admin/reorder', {
+      method: 'POST',
+      body: JSON.stringify({ orderedIds }),
+    }),
+  deleteRoadmapItem: (id) =>
+    apiRequest(`/api/roadmap/admin/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  // Feature requests — submitted in-app, triaged by admins only.
+  submitFeatureRequest: (body) =>
+    apiRequest('/api/feature-requests', { method: 'POST', body: JSON.stringify(body) }),
+  listMyFeatureRequests: () => apiRequest('/api/feature-requests/mine'),
+  getFeatureRequestCount: () => apiRequest('/api/feature-requests/count'),
+  listFeatureRequests: (status = 'all') =>
+    apiRequest(`/api/feature-requests?status=${encodeURIComponent(status)}`),
+  updateFeatureRequest: (id, body) =>
+    apiRequest(`/api/feature-requests/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  promoteFeatureRequest: (id) =>
+    apiRequest(`/api/feature-requests/${encodeURIComponent(id)}/promote`, { method: 'POST' }),
+  deleteFeatureRequest: (id) =>
+    apiRequest(`/api/feature-requests/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   getPlatformDocsIndex: () => apiRequest('/api/platform-docs'),
   getPlatformDoc: (slug) => apiRequest(`/api/platform-docs/${encodeURIComponent(slug)}`),
   // "Request more information" from the public docs site. Options + submit are

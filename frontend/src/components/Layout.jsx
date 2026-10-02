@@ -19,11 +19,17 @@ function DropdownSectionLabel({ children }) {
   );
 }
 
+/** "a", "a and b", "a, b and c" — so the attention toast reads as a sentence. */
+function joinList(parts) {
+  if (parts.length < 2) return parts.join('');
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
 export function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, isAdmin, isAuthenticated, loading } = useAuthStore();
-  const { globalPendingCount, infoRequestCount } = usePendingApprovals();
+  const { globalPendingCount, infoRequestCount, featureRequestCount } = usePendingApprovals();
   const { mode: scopeMode, label: scopeLabel, clearScope } = useScopeStore();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login');
@@ -108,19 +114,26 @@ export function Layout({ children }) {
     }`;
   };
 
-  // Everything an admin needs to look at, combined into one number. Drives the
-  // single header indicator next to the account email; the dropdown items carry
-  // their own per-queue badges once the menu is open.
-  const adminAttentionCount = isAdmin() ? globalPendingCount + infoRequestCount : 0;
+  // The admin queues that feed the attention pill beside the account email,
+  // listed in the order they get triaged. The pill shows the total, the toast
+  // names each queue with something in it, and clicking opens the first.
+  // Per-queue numbers also appear on the Settings tiles, which is where an
+  // admin goes next.
+  const adminQueues = (
+    isAdmin()
+      ? [
+          { count: globalPendingCount, noun: 'application change', to: '/pending-approvals' },
+          { count: infoRequestCount, noun: 'information request', to: '/settings/program-requests' },
+          { count: featureRequestCount, noun: 'feature request', to: '/settings/feature-requests' },
+        ]
+      : []
+  ).filter((queue) => queue.count > 0);
 
-  const attentionSummary = [
-    globalPendingCount > 0 &&
-      `${globalPendingCount} application change${globalPendingCount !== 1 ? 's' : ''}`,
-    infoRequestCount > 0 &&
-      `${infoRequestCount} information request${infoRequestCount !== 1 ? 's' : ''}`,
-  ]
-    .filter(Boolean)
-    .join(' and ');
+  const adminAttentionCount = adminQueues.reduce((total, queue) => total + queue.count, 0);
+
+  const attentionSummary = joinList(
+    adminQueues.map((queue) => `${queue.count} ${queue.noun}${queue.count !== 1 ? 's' : ''}`),
+  );
 
   return (
     <div className="min-h-screen">
@@ -195,6 +208,12 @@ export function Layout({ children }) {
                       </>
                     ) : isAdmin() ? (
                       <>
+                        {/* One way in, on purpose: everything an admin can reach
+                            is a tile on the Settings page, so listing those
+                            destinations here as well only made the menu longer.
+                            The per-queue counts live on the attention pill next
+                            to the account email, which still routes straight to
+                            whichever queue is waiting. */}
                         <DropdownSectionLabel>Admin</DropdownSectionLabel>
                         <DropdownItem
                           onClick={() => {
@@ -202,39 +221,6 @@ export function Layout({ children }) {
                           }}
                         >
                           Settings
-                        </DropdownItem>
-                        <DropdownItem
-                          onClick={() => {
-                            navigate('/pending-approvals');
-                          }}
-                          className="relative"
-                        >
-                          <span>Pending approvals</span>
-                          {globalPendingCount > 0 && (
-                            <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
-                              {globalPendingCount > 99 ? '99+' : globalPendingCount}
-                            </span>
-                          )}
-                        </DropdownItem>
-                        <DropdownItem
-                          onClick={() => {
-                            navigate('/settings/program-content');
-                          }}
-                        >
-                          Program content
-                        </DropdownItem>
-                        <DropdownItem
-                          onClick={() => {
-                            navigate('/settings/program-requests');
-                          }}
-                          className="relative"
-                        >
-                          <span>Information requests</span>
-                          {infoRequestCount > 0 && (
-                            <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
-                              {infoRequestCount > 99 ? '99+' : infoRequestCount}
-                            </span>
-                          )}
                         </DropdownItem>
                       </>
                     ) : null}
@@ -322,9 +308,7 @@ export function Layout({ children }) {
                             persistent: true,
                             clickable: true,
                             onClick: () => {
-                              navigate(
-                                globalPendingCount > 0 ? '/pending-approvals' : '/settings/program-requests'
-                              );
+                              navigate(adminQueues[0]?.to || '/settings');
                               removeToast(toastId);
                             },
                           });

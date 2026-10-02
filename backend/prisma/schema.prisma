@@ -36,6 +36,9 @@ model User {
   aiRequests             AiRequest[]
   aiAccessRules          AiAccessRule[]
   handledProgramInfoRequests ProgramInfoRequest[] @relation("ProgramInfoRequestHandler")
+  roadmapItemsAuthored   RoadmapItem[]        @relation("RoadmapItemAuthor")
+  featureRequests        FeatureRequest[]     @relation("FeatureRequestSubmitter")
+  handledFeatureRequests FeatureRequest[]     @relation("FeatureRequestHandler")
   changeHistoryEntries   ChangeHistory[]
   ascoeSessionsAuthored  AscoeSession[]     @relation("AscoeSessionAuthor")
   championsPackagesAuthored ChampionsPackage[] @relation("ChampionsPackageAuthor")
@@ -167,10 +170,105 @@ model ProductUpdate {
   publishedAt    DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+  /// Roadmap items that shipped as part of this update.
+  roadmapItems   RoadmapItem[] @relation("RoadmapItemRelease")
 
   @@index([status, publishedAt])
   @@index([createdBy])
   @@index([createdAt])
+}
+
+/// Where a roadmap item sits on the way to shipping.
+enum RoadmapStage {
+  EXPLORING
+  PLANNED
+  IN_PROGRESS
+  SHIPPED
+}
+
+/// How far through delivery an IN_PROGRESS item is. Null means "being built";
+/// the named states are the testing and release milestones people actually ask
+/// about. Only meaningful while the item is IN_PROGRESS — moving to any other
+/// stage clears it.
+enum RoadmapProgressState {
+  BETA_TESTING
+  HTS_TESTING
+  SCHEDULED_RELEASE
+}
+
+/// A roadmap entry shown on the What's New page, maintained by admins.
+///
+/// "Published" means visible to every signed-in user — the page is behind
+/// auth, so this never reaches the public documentation site. Items start as
+/// drafts so an admin can line up a quarter's worth of work before anyone
+/// else sees it.
+model RoadmapItem {
+  id                 String                @id @default(cuid())
+  title              String
+  summary            String                @db.Text
+  body               String?               @db.Text
+  category           String                @default("Improvement")
+  stage              RoadmapStage          @default(EXPLORING)
+  /// Free-text delivery target shown on the card, e.g. "Q1 2026". Deliberately
+  /// not a date: most items are only ever committed to a quarter.
+  targetLabel        String?
+  /// Delivery milestone within IN_PROGRESS (beta, HTS testing, scheduled).
+  progressState      RoadmapProgressState?
+  /// The production release date promised by SCHEDULED_RELEASE. Cleared
+  /// whenever the item leaves that progress state, so a stale date can't sit
+  /// on a card that no longer has a plan behind it.
+  scheduledReleaseAt DateTime?
+  /// Manual ordering within a stage column. Lower sorts first; ties fall back
+  /// to most-recently-updated.
+  sortOrder          Int                   @default(0)
+  status             String                @default("draft") // draft | published
+  /// Set when the item reaches SHIPPED, so the card can say when.
+  shippedAt          DateTime?
+  /// Optional link to the release note that shipped this item.
+  linkedUpdateId     String?
+  linkedUpdate       ProductUpdate?        @relation("RoadmapItemRelease", fields: [linkedUpdateId], references: [id], onDelete: SetNull)
+  createdBy          String?
+  author             User?                 @relation("RoadmapItemAuthor", fields: [createdBy], references: [id], onDelete: SetNull)
+  /// Feature requests promoted into this item.
+  featureRequests    FeatureRequest[]      @relation("FeatureRequestRoadmapItem")
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@index([status, stage, sortOrder])
+  @@index([linkedUpdateId])
+  @@index([createdBy])
+}
+
+/// A feature idea submitted by a signed-in user from the What's New page.
+///
+/// Private by design: only admins see the queue (the same shape as
+/// ProgramInfoRequest), and the submitter sees only their own requests plus
+/// whatever reply an admin writes back in `adminNote`.
+model FeatureRequest {
+  id             String       @id @default(cuid())
+  title          String
+  details        String       @db.Text
+  category       String       @default("Improvement")
+  status         String       @default("NEW") // NEW | UNDER_REVIEW | PLANNED | DECLINED | SHIPPED
+  submittedById  String?
+  submittedBy    User?        @relation("FeatureRequestSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  /// Email captured at submission time, so the request survives the account
+  /// being deleted and admins always have someone to reply to.
+  submitterEmail String
+  /// Admin reply, shown back to the submitter on their own request.
+  adminNote      String?      @db.Text
+  /// Set when an admin promotes the request onto the roadmap.
+  roadmapItemId  String?
+  roadmapItem    RoadmapItem? @relation("FeatureRequestRoadmapItem", fields: [roadmapItemId], references: [id], onDelete: SetNull)
+  handledAt      DateTime?
+  handledById    String?
+  handledBy      User?        @relation("FeatureRequestHandler", fields: [handledById], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([status, createdAt])
+  @@index([submittedById])
+  @@index([roadmapItemId])
 }
 
 /// User-created API tokens (Personal Access Tokens). Secret is only shown once; we store only a hash.
