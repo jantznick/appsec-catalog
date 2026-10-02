@@ -56,6 +56,20 @@ const settingsSections = [
     ],
   },
   {
+    title: 'Deployment environments',
+    description: 'Tell Orbit what you call each of your environments.',
+    items: [
+      {
+        label: 'Deployment environments',
+        description:
+          'Map your own environment names onto production, staging, QA and development, so deploys and Wiz tags resolve without you changing your tagging schema.',
+        to: '/settings/environments',
+        // Company editors manage their own vocabulary; this is not admin-only.
+        permission: 'environment.manage',
+      },
+    ],
+  },
+  {
     title: 'Security program',
     description: 'Configure scoring, policies, and security tool integrations.',
     items: [

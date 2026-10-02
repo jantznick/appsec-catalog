@@ -31,7 +31,7 @@
  * Dependency-free, like services/applicationFields.js. Keep it that way.
  */
 
-import { isMetadataField } from './applicationFields.js';
+import { isMetadataField, metadataFieldSource } from './applicationFields.js';
 
 /**
  * Fields that are not columns on `Application` and so are not in the field registry.
@@ -246,6 +246,39 @@ const NON_NULL_COUNTS_AS_FILLED = new Set([
 ]);
 
 /**
+ * Catch a Prisma row that loaded the environments relation but was never passed
+ * through `withEnvironmentValues`.
+ *
+ * `currentVersion` lives on `ApplicationEnvironment` now, so on a raw Prisma row it
+ * is `undefined` - and an unfilled field is also absent. Those two look identical
+ * here, and the wrong one of them silently costs every application a completeness
+ * point on whichever endpoint forgot the resolver. That is finding E5 exactly: one
+ * call site out of several omitting an include and quietly scoring differently from
+ * the rest, for months, with no error anywhere.
+ *
+ * The two ARE distinguishable, though. A row that came from Prisma with the relation
+ * included carries `environments` as an array; once flattened, the field is a string
+ * or null, never undefined. A plain object in a test or a CSV import row has no
+ * `environments` key at all and is left alone.
+ *
+ * Deliberately not a silent default. The point is to fail on the developer's machine
+ * rather than to produce a plausible wrong number in production.
+ */
+function assertEnvironmentFieldResolved(application, field, value) {
+  if (value !== undefined) return;
+  if (metadataFieldSource(field) !== 'environment') return;
+  if (!Array.isArray(application?.environments)) return;
+
+  throw new Error(
+    `completeness: "${field}" is stored on ApplicationEnvironment and this application ` +
+      '(id ' + (application.id || 'unknown') + ') still has it unresolved. The `environments` ' +
+      'relation was loaded but the row was not passed through withEnvironmentValues() from ' +
+      'services/environmentValues.js. Counting it as empty would make this endpoint disagree ' +
+      'with every other one.',
+  );
+}
+
+/**
  * Count filled and scorable fields for one field set.
  *
  * The single implementation every caller shares.
@@ -274,6 +307,8 @@ export function countFieldSet(application, set, blankRule) {
 
   for (const field of fields) {
     const value = application?.[field];
+
+    assertEnvironmentFieldResolved(application, field, value);
 
     // "NA" opts the field out entirely: it leaves the denominator rather than counting
     // as a gap.

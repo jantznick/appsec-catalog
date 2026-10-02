@@ -8,6 +8,19 @@ version: '3.8'
 # our cloud resource tags. Product is constant (Orbit); Application identifies
 # the component.
 #
+# Application=_shared marks a resource that serves the product rather than one
+# named application: the host VM, the database, the reverse proxy. A resource
+# can only carry one Application value, so a shared host tagged with any single
+# application would be wrong for every other workload on it, and a comma-
+# separated list would turn the tag into a parsing contract with no validation
+# and a 256-character ceiling. Instead an application page shows its own
+# resources (Application=<its name>) UNION the shared ones for the same
+# Product + Environment, so shared infrastructure appears on every page it
+# genuinely powers. _shared is reserved: do not name an application that.
+#
+# Role is documentary only - it keeps "which shared thing is this" readable in
+# the cloud console now that Application no longer says. Nothing parses it.
+#
 # Environment is taken straight from NODE_ENV - the SAME variable that decides
 # how the app actually behaves (backend/server.js requires SESSION_SECRET and
 # enforces secure cookies only when NODE_ENV === 'production'). That coupling is
@@ -42,7 +55,8 @@ services:
     container_name: appsec-catalog-db
     labels:
       Product: Orbit
-      Application: database
+      Application: _shared
+      Role: database
       Environment: ${NODE_ENV:-production}
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-appsec}
@@ -138,7 +152,8 @@ services:
     container_name: appsec-catalog-caddy
     labels:
       Product: Orbit
-      Application: reverse-proxy
+      Application: _shared
+      Role: reverse-proxy
       Environment: ${NODE_ENV:-production}
     restart: unless-stopped
     ports:

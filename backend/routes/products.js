@@ -2,6 +2,7 @@ import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { SCORING_INCLUDE, calculateApplicationScore } from '../services/scoring.js';
+import { withEnvironmentValuesAll } from '../services/environmentValues.js';
 import { evaluateAllControls } from '../services/policy.js';
 import { getAuthContext, resolveChangeSource } from '../middleware/authContext.js';
 import { applyCompanyScope } from '../utils/scope.js';
@@ -385,7 +386,9 @@ router.get('/:id/score', requireAuth, async (req, res) => {
       },
     });
 
-    const byId = new Map(apps.map((a) => [a.id, a]));
+    // SCORING_INCLUDE brings the environments relation; this is the half that puts
+    // currentVersion back where the scorer and the policy engine look for it.
+    const byId = new Map(withEnvironmentValuesAll(apps).map((a) => [a.id, a]));
     const orderedApps = applicationIds.map((id) => byId.get(id)).filter(Boolean);
 
     const complianceResults = await Promise.all(

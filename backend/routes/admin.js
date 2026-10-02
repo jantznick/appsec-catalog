@@ -1,5 +1,9 @@
 import express from 'express';
 import { calculateCompleteness } from '../services/completeness.js';
+import {
+  ENVIRONMENT_VALUE_INCLUDE,
+  withEnvironmentValuesAll,
+} from '../services/environmentValues.js';
 import { prisma } from '../prisma/client.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import {
@@ -137,9 +141,11 @@ router.get('/applications', async (req, res) => {
       ];
     }
 
-    const applications = await prisma.application.findMany({
+    const rows = await prisma.application.findMany({
       where: whereClause,
       include: {
+        // currentVersion counts toward completeness and lives on the instance now.
+        ...ENVIRONMENT_VALUE_INCLUDE,
         company: {
           select: {
             id: true,
@@ -158,6 +164,7 @@ router.get('/applications', async (req, res) => {
         name: 'asc',
       },
     });
+    const applications = withEnvironmentValuesAll(rows);
 
     // Completeness travels with the row, exactly as it does on GET /api/applications.
     //
@@ -284,13 +291,16 @@ router.get('/deployments', async (req, res) => {
       orderBy: { deployedAt: 'desc' },
       take: limit,
       include: {
+        // The deployment row carries its own version, branch and environment, which
+        // is what this admin list is actually showing. The application's
+        // currentVersion / gitBranch used to be selected here too and are now on
+        // ApplicationEnvironment; environmentRef gives the resolved environment,
+        // which is more useful here than the application's production one.
+        environmentRef: { select: { id: true, name: true, kind: true } },
         application: {
           select: {
             id: true,
             name: true,
-            currentVersion: true,
-            deploymentEnvironment: true,
-            gitBranch: true,
             company: {
               select: {
                 id: true,

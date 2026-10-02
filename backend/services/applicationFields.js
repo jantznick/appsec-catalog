@@ -41,6 +41,12 @@
  *   version. False for fields the system derives, so approving an old snapshot cannot
  *   overwrite a freshly derived value with a stale one.
  * @property {boolean} splittable A split may copy this to the new application.
+ * @property {'application'|'environment'} [source] Where the value is actually stored.
+ *   Defaults to 'application' (a column on `Application`). 'environment' means the
+ *   column lives on `ApplicationEnvironment` and services/environmentValues.js
+ *   flattens it onto the application object under this same key at read time. The
+ *   entry stays here so the field remains targetable by a policy control and
+ *   countable by completeness - see the note on the deployment metadata group below.
  */
 
 /**
@@ -122,23 +128,42 @@ export const APPLICATION_METADATA_FIELDS = Object.freeze(
     { key: 'appFirewallNA', label: 'Application Firewall Not Applicable', group: 'security', type: 'boolean', versioned: true, approvable: true, splittable: true },
 
     // --- Deployment metadata ------------------------------------------------
-    // These four describe a particular running copy rather than the application, and are
-    // written by the deployment paths. They are NOT approvable: no intake form posts
-    // them, so a pending version can only ever carry a stale copy taken at submit time,
-    // and applying it would revert whatever a deploy or an admin set since. They stay
-    // versioned so history still shows when they changed.
+    // currentVersion and gitBranch describe a particular running copy rather than the
+    // application, so they now live on ApplicationEnvironment and carry
+    // source: 'environment'. services/environmentValues.js flattens them back onto the
+    // application object under these same keys at read time, so every consumer -
+    // including dynamic dereferences like app[scanField] - is unchanged.
     //
-    // They are slated to move to a per-environment entity (deploymentEnvironment being
-    // deleted rather than relocated, since its only job is recording which environment a
-    // row describes). When that lands these entries leave this list entirely - which is
-    // the point of having one list.
+    // THEIR ENTRIES STAY HERE ON PURPOSE. Deleting an entry is not the same as dropping
+    // a column, and conflating the two breaks two things at once:
     //
-    // The SAST and SCA scan dates below stay on the application: they describe a commit
-    // and a dependency manifest, not a deployment. They are also not approvable, because
-    // they are derived from scanner integrations.
-    { key: 'currentVersion', label: 'Current Version', group: 'deployment', type: 'string', versioned: true, approvable: false, splittable: true },
-    { key: 'deploymentEnvironment', label: 'Deployment Environment', group: 'deployment', type: 'string', versioned: true, approvable: false, splittable: true },
-    { key: 'gitBranch', label: 'Git Branch', group: 'deployment', type: 'string', versioned: true, approvable: false, splittable: true },
+    //   - services/policyFields.js rejects any control fieldPath that is not a registry
+    //     field. Delete the entry and currentVersion either becomes a dropdown option
+    //     that fails on save (routes/config.js lists the picker separately) or vanishes
+    //     from the picker with no explanation. Either way nobody can write a policy
+    //     about it again, and nothing says why.
+    //   - findUnknownFieldsInSets() in services/completeness.js throws for any field in
+    //     FIELD_SETS that is not a registry field, and currentVersion is in
+    //     FIELD_SETS.metadata.
+    //
+    // versioned: false because the columns are gone from Application and
+    // ApplicationVersion, so pickVersionedMetadata would emit values with nowhere to
+    // land. splittable: false because a split clones the environment instances
+    // themselves rather than copying these across as scalars.
+    //
+    // deploymentEnvironment USED TO BE HERE and is deleted outright, not relocated: its
+    // only job was recording which environment a row described, and that is now the
+    // relation itself. Nothing resolves it, so leaving the entry would be a policy field
+    // that silently never matches. Checked before removing: no PolicyControlField
+    // referenced it.
+    //
+    // lastDastScanDate stays on Application for now - see "Deferred: where DAST lives"
+    // in ENVIRONMENT_IMPLEMENTATION_PLAN.md. The SAST and SCA scan dates stay too: they
+    // describe a commit and a dependency manifest, not a deployment. None of the three
+    // are approvable, because no intake form posts them and a pending version could only
+    // ever carry a stale copy taken at submit time.
+    { key: 'currentVersion', label: 'Current Version', group: 'deployment', type: 'string', versioned: false, approvable: false, splittable: false, source: 'environment' },
+    { key: 'gitBranch', label: 'Git Branch', group: 'deployment', type: 'string', versioned: false, approvable: false, splittable: false, source: 'environment' },
     { key: 'lastDastScanDate', label: 'Last DAST Scan Date', group: 'deployment', type: 'datetime', versioned: true, approvable: false, splittable: true },
     { key: 'lastSastScanDate', label: 'Last SAST Scan Date', group: 'deployment', type: 'datetime', versioned: true, approvable: false, splittable: true },
     { key: 'lastScaScanDate', label: 'Last SCA Scan Date', group: 'deployment', type: 'datetime', versioned: true, approvable: false, splittable: true },
@@ -194,6 +219,28 @@ export const APPROVABLE_METADATA_FIELDS = Object.freeze(
 export const SPLITTABLE_METADATA_FIELDS = Object.freeze(
   APPLICATION_METADATA_FIELDS.filter((f) => f.splittable).map((f) => f.key),
 );
+
+/**
+ * Fields whose value is stored on `ApplicationEnvironment` rather than on
+ * `Application`, and which services/environmentValues.js flattens onto the
+ * application object under these same keys at read time.
+ *
+ * Derived rather than restated so the resolver and the registry cannot drift: a
+ * field marked source: 'environment' here but not handled there would silently read
+ * as undefined everywhere, which is indistinguishable from empty.
+ */
+export const ENVIRONMENT_SOURCED_METADATA_FIELDS = Object.freeze(
+  APPLICATION_METADATA_FIELDS.filter((f) => f.source === 'environment').map((f) => f.key),
+);
+
+/**
+ * Where this field's value actually lives.
+ * @param {string} key
+ * @returns {'application'|'environment'}
+ */
+export function metadataFieldSource(key) {
+  return METADATA_FIELD_BY_KEY[key]?.source || 'application';
+}
 
 /**
  * Whether approving a version may write this field back to the application.

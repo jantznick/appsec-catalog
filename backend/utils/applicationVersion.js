@@ -121,9 +121,12 @@ export async function createVersionFromData(applicationId, versionData, userId =
         apiSecurityIntegrationLevel: versionData.apiSecurityIntegrationLevel ? parseInt(versionData.apiSecurityIntegrationLevel) : null,
         apiSecurityNA: versionData.apiSecurityNA || false,
         appFirewallNA: versionData.appFirewallNA || false,
-        currentVersion: versionData.currentVersion?.trim() || null,
-        deploymentEnvironment: versionData.deploymentEnvironment?.trim() || null,
-        gitBranch: versionData.gitBranch?.trim() || null,
+        // currentVersion, gitBranch and deploymentEnvironment are not here any more.
+        // The first two live on ApplicationEnvironment and are versioned:false; the
+        // third was deleted with its column. Writing them would throw on a column
+        // that no longer exists, and createApplicationVersion swallows that error and
+        // returns null — so version history and the pending-approval queue would stop
+        // working silently rather than loudly.
         lastDastScanDate: versionData.lastDastScanDate ? new Date(versionData.lastDastScanDate) : null,
         lastSastScanDate: versionData.lastSastScanDate ? new Date(versionData.lastSastScanDate) : null,
         lastScaScanDate: versionData.lastScaScanDate ? new Date(versionData.lastScaScanDate) : null,

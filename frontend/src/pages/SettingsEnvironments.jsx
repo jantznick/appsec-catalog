@@ -1,0 +1,387 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { api } from '../lib/api.js';
+import { toast } from '../components/ui/Toast.jsx';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card.jsx';
+import { Button } from '../components/ui/Button.jsx';
+import { Input } from '../components/ui/Input.jsx';
+import { Modal } from '../components/ui/Modal.jsx';
+import { Select } from '../components/ui/Select.jsx';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table.jsx';
+import useAuthStore from '../store/authStore.js';
+
+/**
+ * Deployment Environments: what THIS company calls each of Orbit's environment kinds.
+ *
+ * Orbit owns the taxonomy — PRODUCTION, STAGING, QA, DEVELOPMENT, plus as many OTHERs
+ * as a company wants. The company owns the words. Nobody has to change their tagging
+ * schema to suit us: if their pipelines deploy with `Environment: Super Important`,
+ * that becomes the name of their PRODUCTION row and everything resolves.
+ *
+ * The four named kinds are single-slot, which is what makes "the company's production
+ * environment" a lookup rather than a guess — and is why an application's primary
+ * environment needs no stored flag anywhere.
+ *
+ * Not to be confused with `Company.serverEnvironment` ("Cloud (AWS)"), which is a
+ * hosting platform. Different question, different field, deliberately labelled apart.
+ */
+
+/** Orbit's kinds, in importance order. Overridden by the server's list once loaded. */
+const FALLBACK_KINDS = ['PRODUCTION', 'STAGING', 'QA', 'DEVELOPMENT', 'OTHER'];
+
+const KIND_LABELS = {
+  PRODUCTION: 'Production',
+  STAGING: 'Staging',
+  QA: 'QA',
+  DEVELOPMENT: 'Development',
+  OTHER: 'Other',
+};
+
+const KIND_HINTS = {
+  PRODUCTION: 'What customers use. Its version is the one reported as the application\'s current version.',
+  STAGING: 'Pre-production. Release candidates go here first.',
+  QA: 'Testing and UAT.',
+  DEVELOPMENT: 'Day-to-day development deploys.',
+  OTHER: 'Anything else — sandbox, demo, a one-off region. Add as many as you need.',
+};
+
+const REPEATABLE_KIND = 'OTHER';
+
+const emptyForm = { name: '', kind: 'OTHER', aliases: '', description: '', status: 'active' };
+
+export function SettingsEnvironments() {
+  const { user, isAdmin } = useAuthStore();
+  const isAdminUser = isAdmin();
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [environments, setEnvironments] = useState([]);
+  const [kinds, setKinds] = useState(FALLBACK_KINDS);
+  const [companies, setCompanies] = useState([]);
+  const [companyId, setCompanyId] = useState(isAdminUser ? '' : user?.companyId || '');
+
+  const [editing, setEditing] = useState(null); // the row being edited, or null
+  const [form, setForm] = useState(emptyForm);
+  const [showModal, setShowModal] = useState(false);
+  const [retireTarget, setRetireTarget] = useState(null);
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      const [kindData, rows] = await Promise.all([
+        api.getEnvironmentKinds(),
+        api.getEnvironments(companyId ? { companyId } : {}),
+      ]);
+      setKinds(kindData?.kinds?.length ? kindData.kinds : FALLBACK_KINDS);
+      setEnvironments(rows || []);
+      if (isAdminUser && companies.length === 0) {
+        setCompanies(await api.getCompanies());
+      }
+    } catch (e) {
+      toast.error(e.message || 'Failed to load environments');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId]);
+
+  /**
+   * The settings screen is a map of Orbit's kinds, not a flat list of rows. Showing
+   * the empty slots is the point: a company that has never named its staging
+   * environment should see that gap rather than an absence of evidence.
+   */
+  const slots = useMemo(() => {
+    const byKind = new Map();
+    for (const kind of kinds) byKind.set(kind, []);
+    for (const env of environments) {
+      if (!byKind.has(env.kind)) byKind.set(env.kind, []);
+      byKind.get(env.kind).push(env);
+    }
+    return [...byKind.entries()].map(([kind, rows]) => ({ kind, rows }));
+  }, [environments, kinds]);
+
+  const takenSingleSlots = useMemo(
+    () => new Set(environments.filter((e) => e.kind !== REPEATABLE_KIND).map((e) => e.kind)),
+    [environments],
+  );
+
+  const openCreate = (kind) => {
+    setEditing(null);
+    setForm({ ...emptyForm, kind: kind || REPEATABLE_KIND });
+    setShowModal(true);
+  };
+
+  const openEdit = (env) => {
+    setEditing(env);
+    setForm({
+      name: env.name || '',
+      kind: env.kind || REPEATABLE_KIND,
+      aliases: env.aliases || '',
+      description: env.description || '',
+      status: env.status || 'active',
+    });
+    setShowModal(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.name.trim()) {
+      toast.error('Give the environment the name your pipelines actually send');
+      return;
+    }
+    try {
+      setSaving(true);
+      if (editing) {
+        const result = await api.updateEnvironment(editing.id, form);
+        // Renaming breaks every pipeline still sending the old name. Aliases make
+        // that recoverable, so offer it rather than just warning.
+        if (result?.renamedFrom && result?.canKeepOldNameAsAlias) {
+          const keep = result.renamedFrom;
+          toast.success(
+            `Renamed to "${result.name}". ${result.affectedDeployments} deployment(s) used "${keep}" — add it as an alias so existing pipelines keep resolving.`,
+          );
+        } else {
+          toast.success('Environment updated');
+        }
+      } else {
+        const payload = { ...form };
+        if (isAdminUser && companyId) payload.companyId = companyId;
+        await api.createEnvironment(payload);
+        toast.success('Environment added');
+      }
+      setShowModal(false);
+      await load();
+    } catch (e) {
+      toast.error(e.message || 'Failed to save environment');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRetireToggle = async (env) => {
+    try {
+      await api.updateEnvironment(env.id, {
+        status: env.status === 'active' ? 'retired' : 'active',
+      });
+      toast.success(env.status === 'active' ? 'Environment retired' : 'Environment reactivated');
+      await load();
+    } catch (e) {
+      toast.error(e.message || 'Failed to change status');
+    } finally {
+      setRetireTarget(null);
+    }
+  };
+
+  if (loading) {
+    return <div className="p-6 text-sm text-gray-500">Loading environments…</div>;
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      <div>
+        <Link to="/settings" className="mb-2 inline-block text-sm text-blue-600 hover:text-blue-700">
+          ← Settings
+        </Link>
+        <h1 className="text-2xl font-semibold text-gray-900">Deployment Environments</h1>
+        <p className="mt-1 max-w-3xl text-sm text-gray-600">
+          Orbit groups every environment into five kinds. Tell us what you call each one and we
+          will match your deploys and your Wiz tags against your names — you do not need to change
+          your tagging schema. A value we do not recognise is recorded as Unassigned rather than
+          guessed at.
+        </p>
+        <p className="mt-2 max-w-3xl text-xs text-gray-500">
+          This is not the same as a company&rsquo;s <strong>Server Environment</strong> (&ldquo;Cloud
+          (AWS)&rdquo;), which describes where it is hosted rather than which deployment it is.
+        </p>
+      </div>
+
+      {isAdminUser && (
+        <Card>
+          <CardContent className="py-4">
+            <Select
+              label="Company"
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+              options={[
+                { value: '', label: 'All companies' },
+                ...companies.map((c) => ({ value: c.id, label: c.name })),
+              ]}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {slots.map(({ kind, rows }) => {
+        const repeatable = kind === REPEATABLE_KIND;
+        const slotTaken = !repeatable && takenSingleSlots.has(kind);
+        return (
+          <Card key={kind}>
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <div>
+                <CardTitle>{KIND_LABELS[kind] || kind}</CardTitle>
+                <p className="mt-1 text-sm text-gray-600">{KIND_HINTS[kind] || ''}</p>
+                {!repeatable && (
+                  <p className="mt-1 text-xs text-gray-500">One per company.</p>
+                )}
+              </div>
+              {(repeatable || !slotTaken) && (
+                <Button variant="secondary" onClick={() => openCreate(kind)}>
+                  {repeatable ? 'Add another' : `Name your ${KIND_LABELS[kind]?.toLowerCase() || kind}`}
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {rows.length === 0 ? (
+                <p className="text-sm italic text-gray-500">
+                  Not set up. Deploys naming this environment will arrive as Unassigned until it is.
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Also accepts</TableHead>
+                      <TableHead>Applications</TableHead>
+                      <TableHead>Deployments</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.map((env) => (
+                      <TableRow key={env.id}>
+                        <TableCell>
+                          <span className="font-medium text-gray-900">{env.name}</span>
+                          {env.description && (
+                            <p className="text-xs text-gray-500">{env.description}</p>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {env.aliases ? (
+                            <span className="text-sm text-gray-700">{env.aliases.split(',').join(', ')}</span>
+                          ) : (
+                            <span className="text-sm italic text-gray-400">just the name</span>
+                          )}
+                        </TableCell>
+                        <TableCell>{env._count?.applications ?? '—'}</TableCell>
+                        <TableCell>{env._count?.deployments ?? '—'}</TableCell>
+                        <TableCell>
+                          <span
+                            className={
+                              env.status === 'active'
+                                ? 'text-sm text-gray-700'
+                                : 'text-sm text-gray-400'
+                            }
+                          >
+                            {env.status === 'active' ? 'Active' : 'Retired'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="ghost" onClick={() => openEdit(env)}>
+                              Edit
+                            </Button>
+                            <Button variant="ghost" onClick={() => setRetireTarget(env)}>
+                              {env.status === 'active' ? 'Retire' : 'Reactivate'}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title={editing ? `Edit "${editing.name}"` : 'Add an environment'}
+      >
+        <div className="space-y-4">
+          <Select
+            label="Kind"
+            value={form.kind}
+            onChange={(e) => setForm({ ...form, kind: e.target.value })}
+            // Filtered rather than disabled: the shared Select does not forward a
+            // `disabled` flag to its options, so a greyed-out entry would still be
+            // selectable and the save would fail with a 409 instead.
+            options={kinds
+              .filter(
+                (k) =>
+                  k === REPEATABLE_KIND ||
+                  !takenSingleSlots.has(k) ||
+                  (editing && editing.kind === k),
+              )
+              .map((k) => ({ value: k, label: KIND_LABELS[k] || k }))}
+            helperText="Orbit's bucket for this environment. Cross-company reporting counts by kind, never by name."
+          />
+          <Input
+            label="Name"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder="e.g. prod, production, Super Important"
+            helperText="Exactly what your pipelines and your Wiz Environment tag send. Case and padding do not matter."
+          />
+          <Input
+            label="Also accepts (optional)"
+            value={form.aliases}
+            onChange={(e) => setForm({ ...form, aliases: e.target.value })}
+            placeholder="prod, prd, production"
+            helperText="Comma-separated. Use this when pipelines disagree with each other — all of these resolve to this environment."
+          />
+          <Input
+            label="Description (optional)"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" onClick={() => setShowModal(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving…' : editing ? 'Save changes' : 'Add environment'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(retireTarget)}
+        onClose={() => setRetireTarget(null)}
+        title={retireTarget?.status === 'active' ? 'Retire this environment?' : 'Reactivate this environment?'}
+      >
+        <div className="space-y-4">
+          {retireTarget?.status === 'active' ? (
+            <p className="text-sm text-gray-700">
+              &ldquo;{retireTarget?.name}&rdquo; will stop appearing in pickers, and the applications
+              in it will stop counting as running there. Its deploy history and its Wiz tag are kept
+              — a retired environment still describes what ran. Nothing is deleted.
+            </p>
+          ) : (
+            <p className="text-sm text-gray-700">
+              &ldquo;{retireTarget?.name}&rdquo; will appear in pickers again and its applications
+              will count as running there.
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setRetireTarget(null)}>
+              Cancel
+            </Button>
+            <Button onClick={() => handleRetireToggle(retireTarget)}>
+              {retireTarget?.status === 'active' ? 'Retire' : 'Reactivate'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+export default SettingsEnvironments;

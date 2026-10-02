@@ -4,20 +4,31 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { can } from '../middleware/rbac.js';
 import { getAuthContext } from '../middleware/authContext.js';
 import { applyCompanyScope } from '../utils/scope.js';
+import { recordChange } from '../utils/changeHistory.js';
 import {
   ENVIRONMENT_KINDS,
+  findEnvironmentNameConflicts,
   inferEnvironmentKind,
+  isSingleSlotKind,
   isValidEnvironmentKind,
   normalizeEnvironmentName,
+  parseEnvironmentAliases,
+  serializeEnvironmentAliases,
 } from '../services/environmentNaming.js';
 
 /**
  * A company's deployment environment vocabulary.
  *
- * These rows are what a CI push's `environment` string is matched against, so the
- * names here are load-bearing rather than cosmetic: a name no pipeline sends will
- * never receive a deployment, and deployments naming something absent from this list
- * are recorded unassigned. See services/environmentResolver.js.
+ * Orbit owns the taxonomy, companies own the words. These rows map a company's own
+ * environment names onto Orbit's five kinds, and they are what a CI push's
+ * `environment` string and a Wiz `Environment` tag are both matched against - so the
+ * names and aliases here are load-bearing rather than cosmetic. A string that matches
+ * nothing is recorded unassigned rather than guessed at. See
+ * services/environmentResolver.js.
+ *
+ * A company holds at most one row of each kind except OTHER, which is what makes
+ * "the company's production environment" a lookup rather than a tie-break, and is why
+ * ApplicationEnvironment has no isPrimary column.
  */
 
 const router = express.Router();
@@ -31,13 +42,70 @@ const STATUSES = new Set(['active', 'retired']);
 async function findEnvironmentWithCompany(id) {
   return prisma.environment.findUnique({
     where: { id },
-    select: { id: true, companyId: true, name: true, status: true },
+    select: { id: true, companyId: true, name: true, kind: true, aliases: true, status: true },
   });
 }
 
 /** Shape a Prisma unique-constraint failure into a usable 409. */
 function isUniqueViolation(error) {
   return error?.code === 'P2002';
+}
+
+/**
+ * Reject a name or alias that another of this company's environments already claims.
+ *
+ * This is the only guard on alias uniqueness. The values live comma-packed in one
+ * column, so it cannot be a database index - and without it a string like "prod"
+ * could belong to two environments and resolveEnvironmentForDeployment would return
+ * whichever row the query happened to reach first, differently on different days.
+ *
+ * @param {{ id?: string, companyId: string, name: unknown, aliases: unknown }} candidate
+ * @returns {Promise<string | null>} an error message, or null when clear
+ */
+async function findNameConflictMessage(candidate) {
+  const existing = await prisma.environment.findMany({
+    where: { companyId: candidate.companyId },
+    select: { id: true, name: true, aliases: true },
+  });
+
+  const conflicts = findEnvironmentNameConflicts(candidate, existing);
+  if (!conflicts.length) {
+    return null;
+  }
+
+  return conflicts
+    .map(({ value, conflictsWith }) => `"${value}" is already used by "${conflictsWith}"`)
+    .join('; ');
+}
+
+/**
+ * Reject a second environment of a single-slot kind.
+ *
+ * The partial unique index enforces this too, but a raw index violation names
+ * neither the kind nor the environment already holding it.
+ *
+ * @param {{ id?: string, companyId: string, kind: string }} candidate
+ * @returns {Promise<string | null>}
+ */
+async function findKindSlotMessage(candidate) {
+  if (!isSingleSlotKind(candidate.kind)) {
+    return null;
+  }
+
+  const holder = await prisma.environment.findFirst({
+    where: {
+      companyId: candidate.companyId,
+      kind: candidate.kind,
+      ...(candidate.id ? { id: { not: candidate.id } } : {}),
+    },
+    select: { name: true },
+  });
+
+  if (!holder) {
+    return null;
+  }
+
+  return `This company's ${candidate.kind} environment is already "${holder.name}". Every kind except OTHER is single-slot - rename that one, or use OTHER.`;
 }
 
 // The kinds a client may choose from, so the UI does not hard-code its own copy.
@@ -85,7 +153,7 @@ router.get('/', requireAuth, async (req, res) => {
 router.post('/', requireAuth, async (req, res) => {
   try {
     const auth = getAuthContext(req);
-    const { name, kind, description, displayOrder } = req.body || {};
+    const { name, kind, description, displayOrder, aliases } = req.body || {};
 
     const companyId = auth.isAdmin ? req.body?.companyId || auth.companyId : auth.companyId;
     if (!companyId) {
@@ -104,8 +172,9 @@ router.post('/', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Environment name is required' });
     }
 
-    // An explicit kind wins; otherwise infer from the name, which gets the common
-    // cases right and falls back to OTHER rather than guessing PRODUCTION.
+    // An explicit kind wins. The inferred one is only a convenience default for a
+    // caller that did not send one - it is a SUGGESTION, never a live resolution
+    // rule, and nothing downstream infers a kind from a name again.
     const resolvedKind = kind ? kind : inferEnvironmentKind(normalizedName);
     if (!isValidEnvironmentKind(resolvedKind)) {
       return res.status(400).json({
@@ -114,17 +183,46 @@ router.post('/', requireAuth, async (req, res) => {
       });
     }
 
+    const normalizedAliases = serializeEnvironmentAliases(aliases);
+
+    const slotMessage = await findKindSlotMessage({ companyId, kind: resolvedKind });
+    if (slotMessage) {
+      return res.status(409).json({ error: 'Kind already in use', message: slotMessage });
+    }
+
+    const conflictMessage = await findNameConflictMessage({
+      companyId,
+      name: normalizedName,
+      aliases: normalizedAliases,
+    });
+    if (conflictMessage) {
+      return res.status(409).json({ error: 'Name or alias already in use', message: conflictMessage });
+    }
+
     const environment = await prisma.environment.create({
       data: {
         companyId,
         name: normalizedName,
         kind: resolvedKind,
+        aliases: normalizedAliases,
         description: typeof description === 'string' ? description.trim() || null : null,
         displayOrder: Number.isInteger(displayOrder) ? displayOrder : 0,
         // Names are stored normalized, so keep what the caller actually typed when it
         // differed - the same reason the migration records a sourceLabel.
         sourceLabel: typeof name === 'string' && name.trim() !== normalizedName ? name.trim() : null,
       },
+    });
+
+    // `kind` is what cross-company production reporting counts, and name/aliases are
+    // what every CI push and Wiz tag resolve against. A quiet edit to either changes
+    // numbers or silently stops pipelines matching, so both are tracked.
+    await recordChange({
+      entityType: 'Environment',
+      entityId: environment.id,
+      action: 'create',
+      userId: getAuthContext(req)?.userId || null,
+      companyId: environment.companyId,
+      after: environment,
     });
 
     res.status(201).json(environment);
@@ -155,7 +253,7 @@ router.put('/:id', requireAuth, async (req, res) => {
       });
     }
 
-    const { name, kind, description, status, displayOrder } = req.body || {};
+    const { name, kind, description, status, displayOrder, aliases } = req.body || {};
     const data = {};
 
     if (name !== undefined) {
@@ -174,6 +272,10 @@ router.put('/:id', requireAuth, async (req, res) => {
         });
       }
       data.kind = kind;
+    }
+
+    if (aliases !== undefined) {
+      data.aliases = serializeEnvironmentAliases(aliases);
     }
 
     if (status !== undefined) {
@@ -198,9 +300,41 @@ router.put('/:id', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'No changes supplied' });
     }
 
+    // Validate against the row as it WILL be, not as it is: changing the kind and the
+    // name in one request has to be checked together, or a legal end state can be
+    // rejected because an intermediate one was not.
+    const next = {
+      id: existing.id,
+      companyId: existing.companyId,
+      kind: data.kind ?? existing.kind,
+      name: data.name ?? existing.name,
+      aliases: data.aliases !== undefined ? data.aliases : existing.aliases,
+    };
+
+    const slotMessage = await findKindSlotMessage(next);
+    if (slotMessage) {
+      return res.status(409).json({ error: 'Kind already in use', message: slotMessage });
+    }
+
+    const conflictMessage = await findNameConflictMessage(next);
+    if (conflictMessage) {
+      return res.status(409).json({ error: 'Name or alias already in use', message: conflictMessage });
+    }
+
+    const before = await prisma.environment.findUnique({ where: { id: existing.id } });
     const environment = await prisma.environment.update({
       where: { id: existing.id },
       data,
+    });
+
+    await recordChange({
+      entityType: 'Environment',
+      entityId: environment.id,
+      action: 'update',
+      userId: getAuthContext(req)?.userId || null,
+      companyId: environment.companyId,
+      before,
+      after: environment,
     });
 
     // Past deployments keep their environmentId, so a rename never orphans history.
@@ -208,17 +342,26 @@ router.put('/:id', requireAuth, async (req, res) => {
     // will stop matching and its deployments will arrive unassigned. Report how many
     // deployments used the old name so the UI can warn before anyone renames a busy
     // environment.
+    //
+    // Aliases make this recoverable rather than merely visible: keeping the old name
+    // as an alias means every existing pipeline keeps resolving while the new name
+    // rolls out. `canKeepOldNameAsAlias` tells the UI it can offer that, which is the
+    // right default answer to "are you sure?".
     const renamedFrom = data.name && data.name !== existing.name ? existing.name : null;
     const affectedDeployments = renamedFrom
       ? await prisma.deployment.count({
         where: { environmentId: existing.id },
       })
       : 0;
+    const canKeepOldNameAsAlias = Boolean(
+      renamedFrom && !parseEnvironmentAliases(environment.aliases).includes(renamedFrom),
+    );
 
     res.json({
       ...environment,
       renamedFrom,
       affectedDeployments,
+      canKeepOldNameAsAlias,
     });
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -260,7 +403,18 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
       });
     }
 
+    const before = await prisma.environment.findUnique({ where: { id: existing.id } });
     await prisma.environment.delete({ where: { id: existing.id } });
+
+    await recordChange({
+      entityType: 'Environment',
+      entityId: existing.id,
+      action: 'delete',
+      userId: getAuthContext(req)?.userId || null,
+      companyId: before?.companyId || null,
+      before,
+    });
+
     res.json({ ok: true });
   } catch (error) {
     console.error('Error deleting environment:', error);

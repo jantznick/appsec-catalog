@@ -740,6 +740,33 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // An application's environment INSTANCES - which of the company's environments it
+  // actually runs in, and what is deployed to each. Distinct from the vocabulary
+  // above: these are per application, those are per company.
+  //
+  // There is no "set primary" call. An application's primary environment is the one
+  // whose kind is PRODUCTION, derived at read time, so changing it means changing a
+  // kind in the vocabulary.
+  getApplicationEnvironments: (applicationId) =>
+    apiRequest(`/api/applications/${applicationId}/environments`),
+
+  addApplicationEnvironment: (applicationId, data) =>
+    apiRequest(`/api/applications/${applicationId}/environments`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateApplicationEnvironment: (applicationId, instanceId, data) =>
+    apiRequest(`/api/applications/${applicationId}/environments/${instanceId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteApplicationEnvironment: (applicationId, instanceId) =>
+    apiRequest(`/api/applications/${applicationId}/environments/${instanceId}`, {
+      method: 'DELETE',
+    }),
+
   // Deployment token management
   createDeploymentToken: (applicationId, name) =>
     apiRequest(`/api/applications/${applicationId}/deployment-tokens`, {

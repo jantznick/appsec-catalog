@@ -60,20 +60,37 @@ async function main() {
       id: 'sx-app-1', name: 'Subscriber Portal', description: 'Customer subscription management portal',
       owner: 'Jordan Lee', language: 'TypeScript', framework: 'Next.js', facing: 'external',
       businessCriticality: 5, dataTypes: 'PII, Payment', sastTool: 'Semgrep', sastIntegrationLevel: 2,
-      dastTool: 'ZAP', dastIntegrationLevel: 1, currentVersion: '2.3.1', deploymentEnvironment: 'prod',
+      dastTool: 'ZAP', dastIntegrationLevel: 1,
+      // currentVersion / deploymentEnvironment moved to ApplicationEnvironment. The
+      // instance is seeded below so this app has a production version to show.
+      environment: { kind: 'PRODUCTION', name: 'prod', currentVersion: '2.3.1' },
     },
     {
       id: 'sx-app-2', name: 'Content CMS', description: 'Editorial content management system',
       owner: 'Priya Nair', language: 'TypeScript', framework: 'React', facing: 'internal',
       businessCriticality: 3, dataTypes: 'Internal', sastTool: 'CodeQL', sastIntegrationLevel: 3,
-      currentVersion: '1.0.0', deploymentEnvironment: 'staging',
+      environment: { kind: 'STAGING', name: 'staging', currentVersion: '1.0.0' },
     },
   ];
   for (const a of apps) {
+    const { environment, ...appData } = a;
     await prisma.application.upsert({
       where: { id: a.id },
       update: { name: a.name, companyId: 'sx-co-1' },
-      create: { ...a, companyId: 'sx-co-1', status: 'onboarded' },
+      create: { ...appData, companyId: 'sx-co-1', status: 'onboarded' },
+    });
+
+    // The company's environment vocabulary, then this application's instance in it.
+    // A company holds at most one row per kind (except OTHER), so upsert on the name.
+    const env = await prisma.environment.upsert({
+      where: { companyId_name: { companyId: 'sx-co-1', name: environment.name } },
+      update: {},
+      create: { companyId: 'sx-co-1', name: environment.name, kind: environment.kind },
+    });
+    await prisma.applicationEnvironment.upsert({
+      where: { applicationId_environmentId: { applicationId: a.id, environmentId: env.id } },
+      update: { currentVersion: environment.currentVersion },
+      create: { applicationId: a.id, environmentId: env.id, currentVersion: environment.currentVersion },
     });
     // One approved version snapshot per app so the version history renders.
     await prisma.applicationVersion.upsert({

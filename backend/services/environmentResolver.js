@@ -1,5 +1,12 @@
 import { prisma } from '../prisma/client.js';
-import { normalizeEnvironmentName } from './environmentNaming.js';
+import {
+  PRIMARY_ENVIRONMENT_KIND,
+  environmentMatchNames,
+  normalizeEnvironmentName,
+} from './environmentNaming.js';
+
+/** What a company's production environment is called until someone renames it. */
+export const DEFAULT_PRODUCTION_ENVIRONMENT_NAME = 'production';
 
 /**
  * Resolving a submitted environment string (from CI or the deployment form) to one
@@ -14,27 +21,56 @@ import { normalizeEnvironmentName } from './environmentNaming.js';
 /**
  * Find the company's environment matching a submitted string.
  *
- * Deliberately does NOT create a missing environment. One typo in a pipeline yaml
- * would otherwise invent an environment that then appears in the environment
- * selector and the Wiz tag picker as though it were real. Unmatched deployments are
- * recorded with a null environmentId and surface as "Unassigned" instead.
+ * Matches the environment's `name` OR any of its `aliases`, exactly, after trimming
+ * and lower-casing. Nothing else.
+ *
+ * NO INFERENCE, EVER. A string that matches neither does not fall back to a kind,
+ * a fuzzy match or a nearest neighbour - it goes to Unassigned. "production" does
+ * not quietly become "prod". That looks unhelpful and is the entire point: the
+ * mismatch between what a pipeline sends and what the company configured is exactly
+ * the misconfiguration this feature exists to surface, and absorbing it silently
+ * would mean a company could never find out. The fix is to add the string as an
+ * alias (one click from the Unassigned bucket), not to guess.
+ *
+ * Deliberately does NOT create a missing environment either. One typo in a pipeline
+ * yaml would otherwise invent an environment that then appears in the environment
+ * selector and the Wiz tag picker as though it were real.
+ *
+ * Retired environments still resolve. The deploy really happened, and refusing to
+ * record where would lose more than it protects.
  *
  * @param {string} companyId
  * @param {unknown} rawEnvironment value as submitted
- * @returns {Promise<{ normalizedName: string | null, environment: { id: string, name: string, kind: string } | null }>}
+ * @returns {Promise<{ normalizedName: string | null, environment: { id: string, name: string, kind: string } | null, matchedAlias: boolean }>}
  */
 export async function resolveEnvironmentForDeployment(companyId, rawEnvironment) {
   const normalizedName = normalizeEnvironmentName(rawEnvironment);
   if (!companyId || !normalizedName) {
-    return { normalizedName, environment: null };
+    return { normalizedName, environment: null, matchedAlias: false };
   }
 
-  const environment = await prisma.environment.findUnique({
-    where: { companyId_name: { companyId, name: normalizedName } },
-    select: { id: true, name: true, kind: true },
+  // A company holds at most four single-slot kinds plus however many OTHERs it has
+  // added, so this is a handful of rows. Fetching them and matching in JS keeps the
+  // name/alias rule in one pure, testable function (environmentMatchNames) rather
+  // than splitting it between here and a SQL expression that would have to parse the
+  // comma-packed alias column.
+  const candidates = await prisma.environment.findMany({
+    where: { companyId },
+    select: { id: true, name: true, kind: true, aliases: true },
   });
 
-  return { normalizedName, environment: environment || null };
+  for (const candidate of candidates) {
+    const names = environmentMatchNames(candidate);
+    if (names.includes(normalizedName)) {
+      return {
+        normalizedName,
+        environment: { id: candidate.id, name: candidate.name, kind: candidate.kind },
+        matchedAlias: normalizedName !== normalizeEnvironmentName(candidate.name),
+      };
+    }
+  }
+
+  return { normalizedName, environment: null, matchedAlias: false };
 }
 
 /**
@@ -108,7 +144,7 @@ export async function attachDeploymentToEnvironment({
   version = null,
   gitBranch = null,
 }) {
-  const { normalizedName, environment } = await resolveEnvironmentForDeployment(
+  const { normalizedName, environment, matchedAlias } = await resolveEnvironmentForDeployment(
     companyId,
     rawEnvironment,
   );
@@ -118,6 +154,7 @@ export async function attachDeploymentToEnvironment({
       environmentId: null,
       applicationEnvironmentId: null,
       matched: false,
+      matchedAlias: false,
       normalizedName,
     };
   }
@@ -133,6 +170,7 @@ export async function attachDeploymentToEnvironment({
     environmentId: environment.id,
     applicationEnvironmentId: instance?.id || null,
     matched: true,
+    matchedAlias,
     normalizedName,
   };
 }
@@ -150,7 +188,66 @@ export async function listActiveEnvironments(companyId) {
   }
   return prisma.environment.findMany({
     where: { companyId, status: 'active' },
-    select: { id: true, name: true, kind: true },
+    select: { id: true, name: true, kind: true, aliases: true },
     orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+  });
+}
+
+/**
+ * Give an application a production environment instance, creating the company's
+ * PRODUCTION vocabulary row first if it does not have one.
+ *
+ * Called when an application is created. Without it the "every application has at
+ * least one environment" invariant holds only for the 91 rows the migration seeded
+ * and decays from there: nothing else creates an instance except an actual deploy,
+ * so a freshly onboarded application would have no environments, no primary, and a
+ * null currentVersion that reads as a gap nobody can fill through the UI.
+ *
+ * The instance is created EMPTY. No version, no branch. The point is to have the
+ * structure in place, not to invent facts - "we know nothing about this
+ * application's environments" is the honest state and completeness reports it.
+ *
+ * Creating the vocabulary row here does not contradict the never-auto-create rule
+ * in resolveEnvironmentForDeployment. That rule is about not inventing environments
+ * from untrusted pipeline strings; this is a company that demonstrably has
+ * production and simply has not been asked to name it yet. The name defaults to
+ * "production" and the settings screen is where they change it to whatever they
+ * actually call it.
+ *
+ * @param {object} args
+ * @param {string} args.applicationId
+ * @param {string} args.companyId
+ * @param {import('@prisma/client').PrismaClient | object} [args.client] transaction client
+ * @returns {Promise<{ id: string } | null>}
+ */
+export async function ensureDefaultEnvironmentInstance({ applicationId, companyId, client = prisma }) {
+  if (!applicationId || !companyId) {
+    return null;
+  }
+
+  let environment = await client.environment.findFirst({
+    where: { companyId, kind: PRIMARY_ENVIRONMENT_KIND },
+    select: { id: true },
+  });
+
+  if (!environment) {
+    environment = await client.environment.create({
+      data: {
+        companyId,
+        name: DEFAULT_PRODUCTION_ENVIRONMENT_NAME,
+        kind: PRIMARY_ENVIRONMENT_KIND,
+        description: 'Created automatically so every application has a production environment. Rename it to whatever this company actually calls theirs.',
+      },
+      select: { id: true },
+    });
+  }
+
+  return client.applicationEnvironment.upsert({
+    where: {
+      applicationId_environmentId: { applicationId, environmentId: environment.id },
+    },
+    create: { applicationId, environmentId: environment.id },
+    update: {},
+    select: { id: true },
   });
 }

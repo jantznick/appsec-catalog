@@ -61,8 +61,12 @@ export function SettingsDeploy() {
 
   const latestDeployment = deploymentData.latest;
   const currentVersion = latestDeployment?.version || '';
-  const currentEnvironment = latestDeployment?.environment || latestDeployment?.application?.deploymentEnvironment || '';
-  const currentGitBranch = latestDeployment?.gitBranch || latestDeployment?.application?.gitBranch || '';
+  // The deployment row is the only source now. The application-level fallbacks that
+  // used to sit here read columns that moved to ApplicationEnvironment, and they were
+  // showing a different application's-eye view than the deployment beside them anyway.
+  const currentEnvironment =
+    latestDeployment?.environmentRef?.name || latestDeployment?.environment || '';
+  const currentGitBranch = latestDeployment?.gitBranch || '';
   const uniqueApplications = new Set(deploymentData.deployments.map((deployment) => deployment.applicationId)).size;
 
   const triggerDeploy = async () => {

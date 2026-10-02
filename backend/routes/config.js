@@ -228,26 +228,28 @@ router.get('/available-fields', requireAuth, async (req, res) => {
         allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
         valueType: 'text'
       },
-      { 
-        path: 'currentVersion', 
-        label: 'Current Version', 
-        category: 'Deployment', 
+      // currentVersion and gitBranch are stored on ApplicationEnvironment and
+      // flattened back onto the application by services/environmentValues.js before
+      // the policy engine sees it, so they are evaluated exactly as before. They
+      // describe the PRIMARY (production) environment specifically.
+      //
+      // deploymentEnvironment was removed with its column: the environment relation
+      // replaced it, and an entry here with no registry field behind it is a dropdown
+      // option whose save fails validation. policyFields.test.js pins this list
+      // against the registry for exactly that reason - if you add one here, add it
+      // there.
+      {
+        path: 'currentVersion',
+        label: 'Current Version (production)',
+        category: 'Deployment',
         fieldType: 'string',
         allowedOperators: ['exists', 'not_exists'],
         valueType: 'text'
       },
-      { 
-        path: 'deploymentEnvironment', 
-        label: 'Deployment Environment', 
-        category: 'Deployment', 
-        fieldType: 'string',
-        allowedOperators: ['exists', 'not_exists', 'equals', 'not_equals'],
-        valueType: 'text'
-      },
-      { 
-        path: 'gitBranch', 
-        label: 'Git Branch', 
-        category: 'Deployment', 
+      {
+        path: 'gitBranch',
+        label: 'Git Branch (production)',
+        category: 'Deployment',
         fieldType: 'string',
         allowedOperators: ['exists', 'not_exists'],
         valueType: 'text'

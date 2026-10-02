@@ -16,11 +16,25 @@ export const TRACKED_FIELDS = {
     'secretsScanTool', 'secretsScanIntegrationLevel', 'sastIncludesSecrets', 'lastSecretsScanDate',
     'iacContainerScanTool', 'iacContainerScanIntegrationLevel', 'iacContainerScanNA', 'lastIacContainerScanDate',
     'apiSecurityTool', 'apiSecurityIntegrationLevel', 'apiSecurityNA',
-    'currentVersion', 'deploymentEnvironment', 'gitBranch',
+    // currentVersion / gitBranch moved to ApplicationEnvironment and are tracked
+    // there; deploymentEnvironment was deleted with its column.
     'lastSastScanDate', 'lastDastScanDate', 'lastScaScanDate',
     'interfaces', 'businessCriticality', 'criticalAspects', 'devTeamContact',
     'securityTestingDescription', 'additionalNotes', 'metadataLastReviewed',
   ],
+  // The company's environment vocabulary. `kind` is what cross-company production
+  // reporting counts and `name`/`aliases` are what every CI push and Wiz tag is
+  // matched against, so a quiet edit here changes numbers and silently stops
+  // pipelines resolving. None of it was tracked before.
+  Environment: ['name', 'kind', 'aliases', 'description', 'status', 'displayOrder'],
+  // The instance. currentVersion and gitBranch moved here off Application, where they
+  // were tracked; without this they would lose the coverage they had.
+  ApplicationEnvironment: ['environmentId', 'status', 'currentVersion', 'gitBranch'],
+  // Deployments are append-only from CI, and the deploy paths do not call recordChange
+  // at all — provenance for a CI-written value comes from the row itself (deployedBy,
+  // version, gitBranch, deployedAt, resolved environmentId). Listed so a manual edit
+  // or a re-resolution is still diffable.
+  Deployment: ['environment', 'environmentId', 'version', 'gitBranch', 'deployedBy', 'notes'],
   Product: ['name', 'description', 'owner', 'facing', 'status', 'lifecycleStage', 'businessCriticality', 'dataSensitivity', 'complianceNotes'],
   Domain: ['name', 'description', 'owner', 'status', 'apexDomain'],
   Company: ['name', 'slug', 'domains', 'divisionId', 'engManager', 'language', 'framework', 'serverEnvironment', 'facing', 'deploymentType', 'authProfiles', 'dataTypes'],

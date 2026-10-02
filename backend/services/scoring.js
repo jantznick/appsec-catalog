@@ -6,6 +6,7 @@ import {
 } from './scoringConfig.js';
 import { FIELD_SETS, calculateCompleteness } from './completeness.js';
 import { APPLICATION_METADATA_FIELDS } from './applicationFields.js';
+import { ENVIRONMENT_VALUE_INCLUDE } from './environmentValues.js';
 
 /**
  * Prisma `include` covering every relation `calculateApplicationScore` reads.
@@ -14,6 +15,15 @@ import { APPLICATION_METADATA_FIELDS } from './applicationFields.js';
  * application loaded without `apiSchema` silently drops the whole API-security
  * category, so a call site with its own hand-written include will disagree with
  * every other call site.
+ *
+ * `ENVIRONMENT_VALUE_INCLUDE` is spread in because `currentVersion` moved to
+ * `ApplicationEnvironment` and still counts toward completeness, which is 40 of the
+ * 50 knowledge-score points. Loading the relation is only half of it - the row must
+ * also go through `withEnvironmentValues()` before it reaches the scorer. Nothing
+ * here can enforce that, but `countFieldSet` throws when it sees a row that loaded
+ * the relation and skipped the resolver.
+ *
+ * None of the scoring ARITHMETIC changed. The include widened; the maths did not.
  */
 export const SCORING_INCLUDE = {
   deployments: {
@@ -21,6 +31,7 @@ export const SCORING_INCLUDE = {
     take: 1, // Only the most recent deployment affects scan-date freshness.
   },
   apiSchema: { select: { id: true } },
+  ...ENVIRONMENT_VALUE_INCLUDE,
 };
 
 const MAX_SCORE_PER_CATEGORY = 50;

@@ -4,6 +4,10 @@ import { requireAuth } from '../middleware/auth.js';
 import { getAuthContext } from '../middleware/authContext.js';
 import { evaluateAllControls } from '../services/policy.js';
 import { calculateCompleteness } from '../services/completeness.js';
+import {
+  ENVIRONMENT_VALUE_INCLUDE,
+  withEnvironmentValuesAll,
+} from '../services/environmentValues.js';
 
 const router = express.Router();
 
@@ -29,9 +33,12 @@ function daysSince(date) {
  * derived booleans plus the raw applications (used for compliance evaluation).
  */
 async function loadScopedApplications(req) {
-  const applications = await prisma.application.findMany({
+  const applicationRows = await prisma.application.findMany({
     where: getScopeWhere(req),
     include: {
+      // currentVersion feeds completeness and gitBranch feeds branchWithSecurityData;
+      // both live on the production instance now.
+      ...ENVIRONMENT_VALUE_INCLUDE,
       company: { select: { id: true, name: true, divisionId: true } },
       applicationToolLinks: { where: { provider: 'WIZ' }, select: { filter: true } },
       apiSchema: { select: { id: true } },
@@ -53,6 +60,11 @@ async function loadScopedApplications(req) {
     },
     orderBy: { name: 'asc' },
   });
+
+  // Flatten before anything reads currentVersion or gitBranch off these rows - the
+  // compliance evaluation below is handed `applications` too, so this has to happen
+  // once, here, rather than per consumer.
+  const applications = withEnvironmentValuesAll(applicationRows);
 
   const applicationIds = applications.map((application) => application.id);
   const scores = applicationIds.length

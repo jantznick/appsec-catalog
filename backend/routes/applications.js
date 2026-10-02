@@ -13,6 +13,11 @@ import {
 } from '../services/scoring.js';
 import { evaluateAllControls } from '../services/policy.js';
 import { calculateCompleteness } from '../services/completeness.js';
+import {
+  ENVIRONMENT_VALUE_INCLUDE,
+  withEnvironmentValues,
+  withEnvironmentValuesAll,
+} from '../services/environmentValues.js';
 import { isValidDomain, normalizeDomain } from '../utils/domainValidation.js';
 import { getApexDomain } from '../utils/domainApex.js';
 import { generateDeploymentToken, hashDeploymentToken, verifyDeploymentToken } from '../utils/deploymentToken.js';
@@ -23,7 +28,10 @@ import {
   resolveApplicationNames,
 } from '../services/applicationNames.js';
 import { syncReciprocalInterfaces, parseInterfaceIds } from '../utils/applicationInterfaces.js';
-import { attachDeploymentToEnvironment } from '../services/environmentResolver.js';
+import {
+  attachDeploymentToEnvironment,
+  ensureDefaultEnvironmentInstance,
+} from '../services/environmentResolver.js';
 import {
   SPLITTABLE_METADATA_FIELDS,
   SPLITTABLE_METADATA_FIELD_SET,
@@ -405,6 +413,17 @@ router.post('/onboard/executive', async (req, res) => {
       })
     );
 
+    // Same production-environment seeding as the single-application create below.
+    // Sequential rather than parallel: the first one may have to create the company's
+    // PRODUCTION vocabulary row, and racing several of those would trip the
+    // (companyId, kind) unique index.
+    for (const created of createdApplications) {
+      await ensureDefaultEnvironmentInstance({
+        applicationId: created.id,
+        companyId: created.companyId,
+      });
+    }
+
     // Create automatic note for executive form submission
     try {
       const appNames = createdApplications.map(app => app.name).join(', ');
@@ -481,6 +500,8 @@ router.get('/', requireAuth, async (req, res) => {
           },
         },
         apiSchema: { select: { id: true } },
+        // currentVersion counts toward completeness and lives on the instance now.
+        ...ENVIRONMENT_VALUE_INCLUDE,
       },
       orderBy: {
         name: 'asc',
@@ -492,7 +513,7 @@ router.get('/', requireAuth, async (req, res) => {
     // ended up with a second definition that had to be kept in step by hand. One
     // implementation, one answer, served with the row.
     res.json(
-      applications.map((application) => ({
+      withEnvironmentValuesAll(applications).map((application) => ({
         ...application,
         completeness: calculateCompleteness(application),
       })),
@@ -798,9 +819,10 @@ router.put('/public/:id', async (req, res) => {
       lastIacContainerScanDate: lastIacContainerScanDate ? new Date(lastIacContainerScanDate) : existing.lastIacContainerScanDate,
       apiSecurityNA: submittedFlag(apiSecurityNA, existing.apiSecurityNA),
       appFirewallNA: submittedFlag(appFirewallNA, existing.appFirewallNA),
-      currentVersion: existing.currentVersion,
-      deploymentEnvironment: existing.deploymentEnvironment,
-      gitBranch: existing.gitBranch,
+      // currentVersion / gitBranch / deploymentEnvironment are not version fields
+      // any more - they live on ApplicationEnvironment, or in deploymentEnvironment's
+      // case nowhere at all. Carrying them here would write columns that no longer
+      // exist on ApplicationVersion.
       lastDastScanDate: existing.lastDastScanDate,
       lastSastScanDate: existing.lastSastScanDate,
       lastScaScanDate: existing.lastScaScanDate,
@@ -891,7 +913,7 @@ router.get('/:id/score', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const application = await prisma.application.findUnique({
+    const row = await prisma.application.findUnique({
       where: { id },
       include: {
         company: {
@@ -904,16 +926,21 @@ router.get('/:id/score', requireAuth, async (req, res) => {
       },
     });
 
-    if (!application) {
+    if (!row) {
       return res.status(404).json({ error: 'Application not found' });
     }
 
-    if (!(await can(req, 'application.read', application.companyId))) {
+    if (!(await can(req, 'application.read', row.companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access applications in your company',
       });
     }
+
+    // Flatten the per-environment values on immediately, so everything below this
+    // line reads `application.currentVersion` exactly as it always did.
+    // SCORING_INCLUDE loads the relation; this is the other half of it.
+    const application = withEnvironmentValues(row);
 
     // Calculate score. This endpoint deliberately does not write a Score row: the
     // score is derived from the application, so viewing one is not a change. Rows are
@@ -1084,9 +1111,14 @@ router.get('/:id/policy-compliance', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const application = await prisma.application.findUnique({
+    const row = await prisma.application.findUnique({
       where: { id },
       include: {
+        // A control may target currentVersion or gitBranch - the picker offers both.
+        // Without the relation getFieldValue reads undefined and the control
+        // silently never passes, here and only here, while the same control works on
+        // the dashboard. That divergence is the whole reason the resolver throws.
+        ...ENVIRONMENT_VALUE_INCLUDE,
         company: {
           select: {
             id: true,
@@ -1097,11 +1129,11 @@ router.get('/:id/policy-compliance', requireAuth, async (req, res) => {
       },
     });
 
-    if (!application) {
+    if (!row) {
       return res.status(404).json({ error: 'Application not found' });
     }
 
-    if (!(await can(req, 'application.read', application.companyId))) {
+    if (!(await can(req, 'application.read', row.companyId))) {
       return res.status(403).json({
         error: 'Permission denied',
         message: 'You can only access applications in your company',
@@ -1109,7 +1141,7 @@ router.get('/:id/policy-compliance', requireAuth, async (req, res) => {
     }
 
     // Evaluate all policy controls
-    const compliance = await evaluateAllControls(application);
+    const compliance = await evaluateAllControls(withEnvironmentValues(row));
 
     res.json(compliance);
   } catch (error) {
@@ -2140,7 +2172,13 @@ router.get('/:id', requireAuth, async (req, res) => {
         deployments: {
           orderBy: { deployedAt: 'desc' },
           take: 10, // Get last 10 deployments for the detail view
+          include: {
+            // So deploy history can label a row with the environment it resolved to
+            // rather than only the raw string the pipeline sent.
+            environmentRef: { select: { id: true, name: true, kind: true } },
+          },
         },
+        ...ENVIRONMENT_VALUE_INCLUDE,
         productApplications: {
           include: {
             product: {
@@ -2197,27 +2235,26 @@ router.get('/:id', requireAuth, async (req, res) => {
     );
     application.integrationSummary = integrationSummary;
 
-    // Auto-populate current deployment info from most recent deployment
-    if (application.deployments && application.deployments.length > 0) {
-      const latestDeployment = application.deployments[0]; // Already sorted by deployedAt desc
-      // Only override if the fields are not manually set (null/empty means use latest deployment)
-      if (!application.currentVersion && latestDeployment.version) {
-        application.currentVersion = latestDeployment.version;
-      }
-      if (!application.deploymentEnvironment && latestDeployment.environment) {
-        application.deploymentEnvironment = latestDeployment.environment;
-      }
-      if (!application.gitBranch && latestDeployment.gitBranch) {
-        application.gitBranch = latestDeployment.gitBranch;
-      }
-    }
+    // The read-time deployment fallback that used to sit here is GONE.
+    //
+    // It patched currentVersion / gitBranch / deploymentEnvironment onto the response
+    // from the latest deployment whenever the stored column was empty - without ever
+    // fixing the stored row. So this endpoint and every other one disagreed, which is
+    // why two screens could show different versions for the same application. It was
+    // a plaster over a stale mirror, and the mirror is gone: the deploy paths now
+    // write the instance directly and always overwrite, so the stored value IS the
+    // latest deployment's.
+    //
+    // Note the fallback also made a value "filled" for completeness that was not
+    // actually recorded anywhere. Removing it means an application whose production
+    // environment has no version now honestly reads as missing one.
+    const resolved = withEnvironmentValues(application);
 
     // Completeness, including WHICH fields are missing, so the App Data tab can mark
     // them. Without this the detail page knows the score says "9 of 12 fields filled"
     // and has no way to say which three — the reader had to infer it from the Quick
-    // Wins card. Computed after the deployment fallbacks above, so a value inherited
-    // from the latest deployment counts as filled, exactly as it does for the score.
-    res.json({ ...application, completeness: calculateCompleteness(application) });
+    // Wins card.
+    res.json({ ...resolved, completeness: calculateCompleteness(resolved) });
   } catch (error) {
     console.error('Error fetching application:', error);
     res.status(500).json({ error: 'Failed to fetch application' });
@@ -2258,7 +2295,7 @@ router.post('/:id/review', requireAuth, requireAdmin, async (req, res) => {
     });
 
     // Recalculate score
-    const scores = calculateApplicationScore(updated);
+    const scores = calculateApplicationScore(withEnvironmentValues(updated));
     await recordScoreIfChanged(updated.id, scores);
 
     // Create review log entry
@@ -2343,9 +2380,6 @@ router.post('/', requireAuth, async (req, res) => {
       lastIacContainerScanDate,
       apiSecurityNA,
       appFirewallNA,
-      currentVersion,
-      deploymentEnvironment,
-      gitBranch,
       lastDastScanDate,
       lastSastScanDate,
       lastScaScanDate,
@@ -2472,9 +2506,6 @@ router.post('/', requireAuth, async (req, res) => {
         apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null,
         apiSecurityNA: apiSecurityNA || false,
         appFirewallNA: appFirewallNA || false,
-        currentVersion: currentVersion?.trim() || null,
-        deploymentEnvironment: deploymentEnvironment?.trim() || null,
-        gitBranch: gitBranch?.trim() || null,
         lastDastScanDate: lastDastScanDate ? new Date(lastDastScanDate) : null,
         lastSastScanDate: lastSastScanDate ? new Date(lastSastScanDate) : null,
         lastScaScanDate: lastScaScanDate ? new Date(lastScaScanDate) : null,
@@ -2488,6 +2519,21 @@ router.post('/', requireAuth, async (req, res) => {
           },
         },
       },
+    });
+
+    // Every application gets a production environment, empty.
+    //
+    // The migration seeded one for all 91 applications that existed at the time, and
+    // nothing else maintains that invariant: the only other thing in the codebase
+    // that creates an instance is an actual CI deploy. Without this, an application
+    // onboarded today would have no environments, no primary, and a currentVersion
+    // that reads as a permanent gap nobody can fill through the UI.
+    //
+    // Empty on purpose - structure, not invented facts. "We know nothing about this
+    // application's environments" is the honest state and completeness reports it.
+    await ensureDefaultEnvironmentInstance({
+      applicationId: application.id,
+      companyId: application.companyId,
     });
 
     // Create initial version
@@ -2561,9 +2607,6 @@ router.put('/:id', requireAuth, async (req, res) => {
       apiSecurityNA,
       appFirewallNA,
       status,
-      currentVersion,
-      deploymentEnvironment,
-      gitBranch,
       lastDastScanDate,
       lastSastScanDate,
       lastScaScanDate,
@@ -2712,9 +2755,10 @@ router.put('/:id', requireAuth, async (req, res) => {
         ...(apiSecurityIntegrationLevel !== undefined && { apiSecurityIntegrationLevel: apiSecurityIntegrationLevel ? parseInt(apiSecurityIntegrationLevel) : null }),
         ...(apiSecurityNA !== undefined && { apiSecurityNA: apiSecurityNA }),
         ...(appFirewallNA !== undefined && { appFirewallNA: appFirewallNA }),
-        ...(currentVersion !== undefined && { currentVersion: currentVersion?.trim() || null }),
-        ...(deploymentEnvironment !== undefined && { deploymentEnvironment: deploymentEnvironment?.trim() || null }),
-        ...(gitBranch !== undefined && { gitBranch: gitBranch?.trim() || null }),
+        // currentVersion and gitBranch are no longer editable here. They belong to a
+        // particular running copy, so they are edited per instance via
+        // PUT /api/applications/:id/environments/:instanceId, and written by deploys.
+        // deploymentEnvironment is gone entirely - the relation replaced it.
         ...(lastDastScanDate !== undefined && { lastDastScanDate: lastDastScanDate ? new Date(lastDastScanDate) : null }),
         ...(lastSastScanDate !== undefined && { lastSastScanDate: lastSastScanDate ? new Date(lastSastScanDate) : null }),
         ...(lastScaScanDate !== undefined && { lastScaScanDate: lastScaScanDate ? new Date(lastScaScanDate) : null }),
@@ -2812,7 +2856,7 @@ router.put('/:id', requireAuth, async (req, res) => {
         where: { id: application.id },
         include: SCORING_INCLUDE,
       });
-      const scores = calculateApplicationScore(appWithDeployments);
+      const scores = calculateApplicationScore(withEnvironmentValues(appWithDeployments));
       await recordScoreIfChanged(application.id, scores);
     } catch (error) {
       console.error('Error saving score after update:', error);
@@ -2935,7 +2979,7 @@ router.post('/:id/split', requireAuth, async (req, res) => {
       copiedMetadata[field] = existing[field];
     }
 
-    const { original, created } = await prisma.$transaction(async (tx) => {
+    const { original, created, clonedEnvironments } = await prisma.$transaction(async (tx) => {
       const updatedOriginal = await tx.application.update({
         where: { id },
         data: { name: finalOriginalName },
@@ -2960,7 +3004,42 @@ router.post('/:id/split', requireAuth, async (req, res) => {
         },
       });
 
-      return { original: updatedOriginal, created: newApplication };
+      // Environments: the original keeps its instances, and the new application
+      // gets its own copies pointing at the same company vocabulary rows.
+      //
+      // This is a CLONE, not a move, and it is not optional the way the metadata
+      // fields are. currentVersion and gitBranch are no longer splittable scalars -
+      // they live on the instance - so without this a split application would come
+      // out with no environments at all, no primary, and a currentVersion that reads
+      // as a permanent gap. Two applications genuinely do run in the same places
+      // immediately after a split; what is deployed to each diverges from there.
+      //
+      // Domains are deliberately NOT cloned, matching the note below: domains,
+      // deployments, product links, interfaces, threat model and API schema all stay
+      // with the original. A domain serves one of the two, and which one is a
+      // judgement only the user can make.
+      const sourceInstances = await tx.applicationEnvironment.findMany({
+        where: { applicationId: id },
+        select: { environmentId: true, status: true, currentVersion: true, gitBranch: true },
+      });
+
+      if (sourceInstances.length > 0) {
+        await tx.applicationEnvironment.createMany({
+          data: sourceInstances.map((instance) => ({
+            applicationId: newApplication.id,
+            environmentId: instance.environmentId,
+            status: instance.status,
+            currentVersion: instance.currentVersion,
+            gitBranch: instance.gitBranch,
+          })),
+        });
+      }
+
+      return {
+        original: updatedOriginal,
+        created: newApplication,
+        clonedEnvironments: sourceInstances.length,
+      };
     });
 
     const changeSource = auth?.authType === 'apiKey' ? 'api' : 'web_form';
@@ -2983,16 +3062,23 @@ router.post('/:id/split', requireAuth, async (req, res) => {
         ? ''
         : ` This application was renamed from "${existing.name}" to "${finalOriginalName}" as part of the split.`;
 
+    // Environments are cloned rather than copied-or-not, so say so plainly in both
+    // notes - a user who later wonders why the new application already knows it runs
+    // in production should find the answer here.
+    const environmentNote = clonedEnvironments
+      ? ` ${clonedEnvironments} environment${clonedEnvironments === 1 ? '' : 's'} were copied to the new application, with their versions and branches.`
+      : '';
+
     await createNote(
       auth?.userId,
-      `Application split: "${created.name}" was created from this application.${renameNote} ${metadataSummary} Domains, deployments, product links, interfaces, threat model and API schema stayed with this application.`,
+      `Application split: "${created.name}" was created from this application.${renameNote} ${metadataSummary}${environmentNote} Domains, deployments, product links, interfaces, threat model and API schema stayed with this application.`,
       null,
       original.id
     );
 
     await createNote(
       auth?.userId,
-      `Created by splitting "${existing.name}" (now "${original.name}"). ${metadataSummary}`,
+      `Created by splitting "${existing.name}" (now "${original.name}"). ${metadataSummary}${environmentNote}`,
       null,
       created.id
     );
@@ -3024,6 +3110,7 @@ router.post('/:id/split', requireAuth, async (req, res) => {
       application: original,
       newApplication: created,
       copiedFields: fieldsToCopy,
+      clonedEnvironments,
     });
   } catch (error) {
     console.error('Error splitting application:', error);
@@ -3708,36 +3795,14 @@ router.post('/:id/deployments', requireAuth, async (req, res) => {
       },
     });
 
-    // Auto-update application's current deployment info from this new deployment.
+    // The only-when-null backfill onto Application that used to live here is GONE
+    // with its columns. attachDeploymentToEnvironment above is the whole of it now,
+    // and it ALWAYS OVERWRITES - a deploy is authoritative for its own environment.
+    // The old behaviour froze an application's version at whatever its first ever
+    // deploy reported, because every later one found the column non-null.
     //
-    // Superseded by the ApplicationEnvironment write above, which always overwrites
-    // and is per-environment. Kept only because Application is still the read path
-    // for these three fields; it goes away with the columns themselves.
-    const currentApp = await prisma.application.findUnique({
-      where: { id },
-      select: { currentVersion: true, deploymentEnvironment: true, gitBranch: true },
-    });
-
-    const updateData = {};
-    if (!currentApp.currentVersion && deployment.version) {
-      updateData.currentVersion = deployment.version;
-    }
-    if (!currentApp.deploymentEnvironment && deployment.environment) {
-      updateData.deploymentEnvironment = deployment.environment;
-    }
-    if (!currentApp.gitBranch && deployment.gitBranch) {
-      updateData.gitBranch = deployment.gitBranch;
-    }
-
-    if (Object.keys(updateData).length > 0) {
-      await prisma.application.update({
-        where: { id },
-        data: updateData,
-      });
-      // currentVersion / deploymentEnvironment / gitBranch are versioned metadata,
-      // so auto-populating them from a deployment belongs in the history.
-      await createApplicationVersion(id, getAuthContext(req)?.userId || null, 'deployment');
-    }
+    // Same for the createApplicationVersion call: these are not versioned fields any
+    // more, so there is no snapshot for them to appear in.
 
     res.status(201).json(deployment);
   } catch (error) {
@@ -4288,7 +4353,7 @@ router.post('/:id/versions/:versionId/approve', requireAuth, requireAdmin, async
           where: { id },
           include: SCORING_INCLUDE,
         });
-        const scores = calculateApplicationScore(appWithDeployments);
+        const scores = calculateApplicationScore(withEnvironmentValues(appWithDeployments));
         await recordScoreIfChanged(id, scores);
       } catch (error) {
         console.error('Error saving score after approval:', error);

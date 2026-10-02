@@ -29,7 +29,6 @@ const FALLBACK_VERSIONED_FIELDS = [
   'dastTool', 'dastIntegrationLevel', 'scaTool', 'scaIntegrationLevel', 'appFirewallTool', 'appFirewallIntegrationLevel',
   'apiSecurityNA',
   'appFirewallNA',
-  'currentVersion', 'deploymentEnvironment', 'gitBranch',
   'lastDastScanDate', 'lastSastScanDate', 'lastScaScanDate', 'interfaces',
 ];
 
@@ -354,9 +353,6 @@ export function VersionHistory({ applicationId, alwaysExpanded = false, onVersio
       appFirewallIntegrationLevel: 'App Firewall Integration Level',
       apiSecurityNA: 'API Security N/A',
       appFirewallNA: 'App Firewall N/A',
-      currentVersion: 'Current Version',
-      deploymentEnvironment: 'Deployment Environment',
-      gitBranch: 'Git Branch',
       lastDastScanDate: 'Last DAST Scan Date',
       lastSastScanDate: 'Last SAST Scan Date',
       lastScaScanDate: 'Last SCA Scan Date',

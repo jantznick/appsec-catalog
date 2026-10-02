@@ -371,10 +371,19 @@ model Application {
   metadataLastReviewed DateTime?
 
   // Deployment metadata (editable in main form, not onboarding)
-  currentVersion        String? // Current application version (e.g., "1.2.3", "v2.1.0")
-  deploymentEnvironment String? // Primary deployment environment (e.g., "dev", "staging", "prod", "qa")
-  gitBranch             String? // Current git branch or tag (e.g., "main", "v1.2.3", "release/2024-01")
-  lastDastScanDate      DateTime? // Date/time of last DAST (Dynamic Application Security Testing) scan
+  //
+  // currentVersion, gitBranch and deploymentEnvironment USED TO LIVE HERE. They moved
+  // to ApplicationEnvironment, because they describe a particular running copy rather
+  // than the application: a service in prod and the same service in staging do not
+  // share a version. deploymentEnvironment was deleted outright rather than relocated
+  // - its only job was recording which environment a row described, and that is now
+  // the relation itself.
+  //
+  // They are still in APPLICATION_METADATA_FIELDS with source: 'environment', so they
+  // remain targetable by a policy control and countable by completeness.
+  // services/environmentValues.js flattens them back onto the application object at
+  // read time under these same names.
+  lastDastScanDate DateTime? // Date/time of last DAST (Dynamic Application Security Testing) scan
   lastSastScanDate      DateTime? // Date/time of last SAST (Static Application Security Testing) scan
   lastScaScanDate       DateTime? // SCA (dependency) scan; ignored for scoring when sastIncludesSca (uses lastSastScanDate)
   lastSecretsScanDate      DateTime? // Secrets scan; ignored when sastIncludesSecrets (uses lastSastScanDate)
@@ -784,8 +793,14 @@ model ApplicationDomain {
   // alongside it deliberately: the existing domain -> application queries in
   // routes/domains.js read through it. The write path must check that the
   // environment belongs to the same application.
+  //
+  // SetNull, NOT Cascade. This was Cascade, which meant deleting an instance deleted
+  // the whole ApplicationDomain row - unlinking the domain from the APPLICATION, not
+  // merely from the environment, and silently breaking the queries that read through
+  // applicationId two lines above. Losing the environment attribution is the correct
+  // blast radius for deleting an environment.
   applicationEnvironmentId String?
-  applicationEnvironment   ApplicationEnvironment? @relation(fields: [applicationEnvironmentId], references: [id], onDelete: Cascade)
+  applicationEnvironment   ApplicationEnvironment? @relation(fields: [applicationEnvironmentId], references: [id], onDelete: SetNull)
   createdAt     DateTime    @default(now())
 
   // Note: one domain still maps to one application at most once, so a single domain
@@ -800,6 +815,13 @@ model ApplicationDomain {
 /// environments. `name` is theirs ("prod", "uat"); `kind` is the canonical bucket
 /// so cross-company reporting can ask for production without matching on spelling.
 ///
+/// Orbit owns the taxonomy, companies own the words. A company holds at most ONE
+/// row of each kind except OTHER, which it may hold any number of - enforced by the
+/// partial unique index `Environment_companyId_kind_key` (Prisma cannot express a
+/// partial index, see migration 20261001120000). That cardinality is what makes
+/// "the company's production environment" a lookup rather than a tie-break, and is
+/// why ApplicationEnvironment has no isPrimary column.
+///
 /// This is the vocabulary, not the running instance - see ApplicationEnvironment
 /// for a particular application deployed into one of these.
 model Environment {
@@ -808,6 +830,16 @@ model Environment {
   company      Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name         String // what the company calls it: "prod", "uat", "staging"
   kind         String // PRODUCTION | STAGING | DEVELOPMENT | QA | OTHER
+  /// Other strings that resolve here, comma-separated and normalized. Real pipelines
+  /// are inconsistent - one sends "prod", another "production" - and recording the
+  /// extras is cheaper than making a company change its tagging schema. The name is
+  /// implicitly an alias of itself; see environmentMatchNames().
+  ///
+  /// Uniqueness of the name+alias union across a company CANNOT be an index, because
+  /// these are comma-packed in one column. It is validated in routes/environments.js
+  /// by findEnvironmentNameConflicts(), and that check is the only thing standing
+  /// between us and a string that resolves two ways.
+  aliases      String?
   description  String?
   status       String                   @default("active") // active | retired
   displayOrder Int                      @default(0)
@@ -826,9 +858,14 @@ model Environment {
 /// One running instance of an application: "Orbit Backend in production".
 ///
 /// Holds the facts that are true of a particular deployed copy rather than of the
-/// application as a whole - its current version, its branch, its DAST scan date,
-/// its domains, and its Wiz tag. SAST and SCA scan dates stay on Application
-/// because they describe a commit and a dependency manifest, not a deployment.
+/// application as a whole - its current version, its branch, its domains, and its
+/// Wiz tag. SAST and SCA scan dates stay on Application because they describe a
+/// commit and a dependency manifest, not a deployment.
+///
+/// There is no isPrimary column. An application's primary environment is the one
+/// whose kind is PRODUCTION, derived rather than stored, because a company has at
+/// most one PRODUCTION row. An application with none has no primary and nothing is
+/// promoted in its place.
 model ApplicationEnvironment {
   id            String      @id @default(cuid())
   applicationId String
@@ -840,9 +877,19 @@ model ApplicationEnvironment {
   status        String      @default("active") // active | retired
 
   // Facts about this running copy (moved off Application)
-  currentVersion   String? // Version currently deployed here (e.g., "1.2.3")
-  gitBranch        String? // Branch or tag currently deployed here
-  lastDastScanDate DateTime? // DAST runs against a deployed URL, so it is per-instance
+  currentVersion String? // Version currently deployed here (e.g., "1.2.3")
+  gitBranch      String? // Branch or tag currently deployed here
+
+  /// PRESENT BUT UNUSED. Nothing reads or writes this column.
+  ///
+  /// DAST runs against a deployed URL, so per-instance is the obvious home for it -
+  /// but the live value deliberately stays on Application until the DAST work lands
+  /// as one piece (see "Deferred: where DAST lives" in ENVIRONMENT_IMPLEMENTATION_PLAN.md).
+  /// The field is human-entered - no integration writes it - so moving it means
+  /// building a per-environment editor in the same commit, and the current thinking
+  /// is that DAST may end up on Application with scan metadata instead. Dropping and
+  /// re-adding the column would be churn; leaving it costs nothing.
+  lastDastScanDate DateTime?
 
   domains   ApplicationDomain[]
   toolLinks ApplicationToolLink[]
@@ -1006,9 +1053,10 @@ model ApplicationVersion {
   iacContainerScanNA          Boolean?
   apiSecurityNA               Boolean?
   appFirewallNA               Boolean?
-  currentVersion              String?
-  deploymentEnvironment       String?
-  gitBranch                   String?
+  // currentVersion, deploymentEnvironment and gitBranch were dropped here when they
+  // moved to ApplicationEnvironment. They are versioned:false in the registry now,
+  // so pickVersionedMetadata no longer emits them and these columns would be dead.
+  // applicationVersionColumns.test.js asserts both directions of that agreement.
   lastDastScanDate            DateTime?
   lastSastScanDate            DateTime?
   lastScaScanDate             DateTime?
@@ -1372,8 +1420,12 @@ model ApplicationToolLink {
   // link per provider exists today; making links per-environment is a follow-on
   // change that has to move the `applicationId_provider` upsert in routes at the
   // same time.
+  //
+  // SetNull, NOT Cascade - same reasoning as ApplicationDomain above. Deleting an
+  // instance should drop the environment attribution, not silently throw away the
+  // company's Wiz tag link along with it.
   applicationEnvironmentId String?
-  applicationEnvironment   ApplicationEnvironment? @relation(fields: [applicationEnvironmentId], references: [id], onDelete: Cascade)
+  applicationEnvironment   ApplicationEnvironment? @relation(fields: [applicationEnvironmentId], references: [id], onDelete: SetNull)
   provider      String
   filter        Json
   createdAt     DateTime    @default(now())

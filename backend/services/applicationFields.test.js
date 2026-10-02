@@ -88,6 +88,36 @@ const ADDED_UNVERSIONED = ['metadataLastReviewed'];
 const ADDED_SINCE_REGISTRY_NOT_SPLITTABLE = [];
 
 /**
+ * Moved to ApplicationEnvironment, but still in the registry.
+ *
+ * They carry source: 'environment' and versioned/splittable:false — the columns are
+ * gone from Application and ApplicationVersion, so a snapshot has nowhere to put them
+ * and a split clones the environment instances rather than copying these as scalars.
+ *
+ * The ENTRIES deliberately remain, which is the whole point: services/policyFields.js
+ * rejects a control fieldPath that is not a registry field, and findUnknownFieldsInSets
+ * in services/completeness.js throws for a FIELD_SETS member that is not one. Deleting
+ * them would make `currentVersion` un-targetable by any future policy and blow up the
+ * completeness suite. services/environmentValues.js flattens the values back on under
+ * these same keys at read time.
+ */
+const MOVED_TO_ENVIRONMENT = ['currentVersion', 'gitBranch'];
+
+/**
+ * Removed from the registry outright, along with its column.
+ *
+ * `deploymentEnvironment`'s only job was recording which environment a row described,
+ * and the ApplicationEnvironment relation is now that. Nothing resolves it, so leaving
+ * the entry would mean a policy field that silently never matches — the exact failure
+ * services/policyFields.js exists to prevent. Verified against the database before
+ * removal: no PolicyControlField referenced it.
+ */
+const REMOVED_WITH_ITS_COLUMN = ['deploymentEnvironment'];
+
+/** Everything that left the version system in the environments work. */
+const LEFT_THE_VERSION_SYSTEM = [...MOVED_TO_ENVIRONMENT, ...REMOVED_WITH_ITS_COLUMN];
+
+/**
  * Of the versioned additions, the ones the technical onboarding form does NOT post, so
  * they must stay out of the approval write-back. The other six are collected by that
  * form and are therefore approvable.
@@ -96,11 +126,15 @@ const ADDED_SINCE_REGISTRY_NOT_APPROVABLE = ['lastSecretsScanDate', 'lastIacCont
 
 describe('registry matches the lists it replaced', () => {
   it('derives the versioned field list in the same order', () => {
-    // The golden fields keep their original relative order; additions are appended.
+    // The golden fields keep their original relative order; additions are appended,
+    // and the fields that moved to ApplicationEnvironment are subtracted.
     const withoutAdditions = VERSIONED_METADATA_FIELDS.filter(
       (k) => !ADDED_SINCE_REGISTRY.includes(k),
     );
-    assert.deepEqual(withoutAdditions, GOLDEN_VERSIONED_FIELDS);
+    assert.deepEqual(
+      withoutAdditions,
+      GOLDEN_VERSIONED_FIELDS.filter((k) => !LEFT_THE_VERSION_SYSTEM.includes(k)),
+    );
     assert.deepEqual(
       VERSIONED_METADATA_FIELDS.filter((k) => ADDED_SINCE_REGISTRY.includes(k)).sort(),
       [...ADDED_SINCE_REGISTRY].sort(),
@@ -112,7 +146,7 @@ describe('registry matches the lists it replaced', () => {
     // Order is not contractual for splits (the route spreads it into an object), so
     // compare as sets while still catching an added or dropped field.
     const expected = [
-      ...GOLDEN_SPLITTABLE_FIELDS,
+      ...GOLDEN_SPLITTABLE_FIELDS.filter((k) => !LEFT_THE_VERSION_SYSTEM.includes(k)),
       ...ADDED_SINCE_REGISTRY.filter((k) => !ADDED_SINCE_REGISTRY_NOT_SPLITTABLE.includes(k)),
     ];
     assert.deepEqual([...SPLITTABLE_METADATA_FIELDS].sort(), expected.sort());
@@ -123,11 +157,11 @@ describe('registry matches the lists it replaced', () => {
     // copy taken at submit time. Applying it would revert whatever a deploy, a scanner
     // integration or an admin set in the meantime. They stay versioned so history
     // still records when they changed.
+    // currentVersion and gitBranch are absent because they are no longer versioned at
+    // all — see MOVED_TO_ENVIRONMENT. A field that is not in a snapshot cannot be
+    // applied from one, so approvability stops being a question for them.
     const notApprovable = VERSIONED_METADATA_FIELDS.filter((k) => !APPROVABLE_METADATA_FIELDS.includes(k));
     assert.deepEqual(notApprovable.sort(), [
-      'currentVersion',
-      'deploymentEnvironment',
-      'gitBranch',
       'lastDastScanDate',
       'lastSastScanDate',
       'lastScaScanDate',
@@ -209,9 +243,11 @@ describe('isApprovableMetadataField', () => {
     assert.equal(isApprovableMetadataField('lastSastScanDate'), false);
     assert.equal(isApprovableMetadataField('lastScaScanDate'), false);
     assert.equal(isApprovableMetadataField('lastDastScanDate'), false, 'written by the deploy path');
+    // Not versioned any more — they live on ApplicationEnvironment — so they can never
+    // be applied from a snapshot regardless of the approvable flag.
     assert.equal(isApprovableMetadataField('currentVersion'), false);
-    assert.equal(isApprovableMetadataField('deploymentEnvironment'), false);
     assert.equal(isApprovableMetadataField('gitBranch'), false);
+    assert.equal(isApprovableMetadataField('deploymentEnvironment'), false, 'removed from the registry entirely');
     assert.equal(isApprovableMetadataField('nope'), false);
     assert.equal(isApprovableMetadataField('constructor'), false);
   });

@@ -2,7 +2,6 @@ import express from 'express';
 import { prisma } from '../prisma/client.js';
 import { requireAuth } from '../middleware/auth.js';
 import { verifyDeploymentToken } from '../utils/deploymentToken.js';
-import { createApplicationVersion } from '../utils/applicationVersion.js';
 import { getAuthContext } from '../middleware/authContext.js';
 import { attachDeploymentToEnvironment } from '../services/environmentResolver.js';
 
@@ -360,39 +359,17 @@ router.post('/', async (req, res) => {
       data: { lastUsedAt: new Date() },
     });
 
-    // Auto-update application's current deployment info from this new deployment.
+    // The only-when-null backfill onto Application that used to live here is GONE,
+    // along with the columns it wrote. attachDeploymentToEnvironment above is now the
+    // whole of it, and it ALWAYS OVERWRITES: a deploy is authoritative for its own
+    // environment. The old behaviour froze an application's version at whatever its
+    // first ever deploy reported, because every later deploy found the column
+    // non-null and left it alone.
     //
-    // Superseded by the ApplicationEnvironment write above, which always overwrites
-    // and is per-environment. This only-when-null backfill is kept for now because
-    // Application is still the read path for these three fields; it goes away with
-    // the columns themselves once the metadata field registry stops referencing
-    // them. Do not "fix" it here - that would change what the UI shows before the
-    // environment read path exists.
-    const currentApp = await prisma.application.findUnique({
-      where: { id: applicationId },
-      select: { currentVersion: true, deploymentEnvironment: true, gitBranch: true },
-    });
-
-    const updateData = {};
-    if (!currentApp.currentVersion && deployment.version) {
-      updateData.currentVersion = deployment.version;
-    }
-    if (!currentApp.deploymentEnvironment && deployment.environment) {
-      updateData.deploymentEnvironment = deployment.environment;
-    }
-    if (!currentApp.gitBranch && deployment.gitBranch) {
-      updateData.gitBranch = deployment.gitBranch;
-    }
-
-    if (Object.keys(updateData).length > 0) {
-      await prisma.application.update({
-        where: { id: applicationId },
-        data: updateData,
-      });
-      // No user session on a token push, so the version is attributed to the
-      // system; changeSource is what identifies it in the history.
-      await createApplicationVersion(applicationId, null, 'deployment_token');
-    }
+    // No createApplicationVersion call either. These are not versioned fields any
+    // more, so there is no snapshot for a deploy to appear in - and provenance is
+    // better served by the Deployment row itself, which records who deployed what,
+    // from which branch, when, and to which resolved environment.
 
     res.status(201).json(deployment);
   } catch (error) {

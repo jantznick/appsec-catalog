@@ -25,6 +25,7 @@ import { summarizeOsv } from '../utils/osv.js';
 import { useRepoLinkFlow } from '../hooks/useRepoLinkFlow.jsx';
 import { ThreatModelTab } from '../components/threat-model/ThreatModelTab.jsx';
 import { SplitApplicationModal } from '../components/applications/SplitApplicationModal.jsx';
+import { ApplicationEnvironments } from '../components/applications/ApplicationEnvironments.jsx';
 
 /**
  * Sentinel for the deployment environment filter. Not a real environment name, and
@@ -120,9 +121,6 @@ export function ApplicationDetail() {
     apiSecurityNA: false,
     appFirewallNA: false,
     status: 'onboarded',
-    currentVersion: '',
-    deploymentEnvironment: '',
-    gitBranch: '',
     lastDastScanDate: '',
     lastSastScanDate: '',
     lastScaScanDate: '',
@@ -869,9 +867,6 @@ export function ApplicationDetail() {
         apiSecurityNA: data.apiSecurityNA || false,
         appFirewallNA: data.appFirewallNA || false,
         status: data.status || 'onboarded',
-        currentVersion: data.currentVersion || '',
-        deploymentEnvironment: data.deploymentEnvironment || '',
-        gitBranch: data.gitBranch || '',
         lastDastScanDate: data.lastDastScanDate ? new Date(data.lastDastScanDate).toISOString().split('T')[0] : '',
         lastSastScanDate: data.lastSastScanDate ? new Date(data.lastSastScanDate).toISOString().split('T')[0] : '',
         lastScaScanDate: data.lastScaScanDate ? new Date(data.lastScaScanDate).toISOString().split('T')[0] : '',
@@ -1768,13 +1763,20 @@ export function ApplicationDetail() {
                           Deployment Information
                         </h5>
                         <div className="grid grid-cols-2 gap-4">
-                          <Input
-                            label="Current Version"
-                            value={formData.currentVersion}
-                            onChange={(e) => handleFieldChange('currentVersion', e.target.value)}
-                            placeholder="e.g., 1.2.3, v2.1.0"
-                            helperText="Auto-populated from most recent deployment (can be overridden)"
-                          />
+                          {/* Not editable here any more. The version belongs to a
+                              particular running copy, so it is written by deploys to
+                              that environment and edited in the Environments card. */}
+                          <div>
+                            <span className="text-xs font-medium text-gray-600">Current Version</span>
+                            <p className="text-sm text-gray-900 mt-0.5 font-medium">
+                              {application?.currentVersion || <span className="text-gray-400 italic">Not set</span>}
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500">
+                              {application?.primaryEnvironment
+                                ? `Deployed to ${application.primaryEnvironment.name}. Edit it in Environments.`
+                                : 'No production environment yet — add one in Environments.'}
+                            </p>
+                          </div>
                           <div></div>
                         </div>
                         <div className="grid grid-cols-2 gap-4 mt-4">
@@ -1895,7 +1897,7 @@ export function ApplicationDetail() {
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <span className="text-xs font-medium text-gray-600">Current Version:</span>
-                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{formData.currentVersion || emptyMarker('currentVersion')}</p>
+                            <p className="text-sm text-gray-900 mt-0.5 font-medium">{application?.currentVersion || emptyMarker('currentVersion')}</p>
                           </div>
                           <div>
                             <span className="text-xs font-medium text-gray-600">Facing:</span>
@@ -2095,6 +2097,18 @@ export function ApplicationDetail() {
 
         {/* Deployments Tab */}
         <TabPanel>
+          {/* Where this application runs. Sits above the history because the history
+              is a log of writes TO these, and because the version shown on App Data
+              is edited here now that it belongs to a running copy rather than to the
+              application. */}
+          <div className="mb-6">
+            <ApplicationEnvironments
+              applicationId={id}
+              companyId={application?.companyId}
+              canManage={canEdit()}
+              onChanged={loadApplication}
+            />
+          </div>
           <Card>
             <CardContent>
               <div className="flex items-center justify-between mb-4">

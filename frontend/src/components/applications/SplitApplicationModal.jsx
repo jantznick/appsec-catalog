@@ -68,9 +68,10 @@ const SPLIT_FIELD_GROUPS = [
   {
     title: 'Deployment',
     fields: [
-      { key: 'currentVersion', label: 'Current Version' },
-      { key: 'deploymentEnvironment', label: 'Deployment Environment' },
-      { key: 'gitBranch', label: 'Git Branch' },
+      // currentVersion / gitBranch are not selectable fields any more: they live on
+      // ApplicationEnvironment, and a split always clones the environment instances
+      // (with their versions and branches) to the new application rather than copying
+      // these as scalars. deploymentEnvironment was deleted with its column.
       { key: 'lastDastScanDate', label: 'Last DAST Scan Date' },
       { key: 'lastSastScanDate', label: 'Last SAST Scan Date' },
       { key: 'lastScaScanDate', label: 'Last SCA Scan Date' },

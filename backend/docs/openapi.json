@@ -6,7 +6,7 @@
     "license": {
       "name": "Internal use only"
     },
-    "description": "API for managing applications, products, domains, companies, security policies, and integrations in AppSec Catalog.\n\n## Authentication\n\nSend an `api-key` header with every request: `api-key: asc_<tokenId>.<secret>`. Generate a token from **API Tokens** (`POST /api/api-tokens`) while signed in to the web app.\n\nA token can be scoped to a single company (limited access) or to your full account (same access as your user, including admin actions if your account is an admin). The same endpoints also accept the web app's session cookie — the `api-key` header is the supported method for external integrations.\n\n## Change tracking\n\nApplication create/update calls are recorded in that application's version history, tagged with the source of the change (`api` for api-key calls, `web_form` for the web app). Other resources documented here (products, domains, companies, policies, SAMM assessments, notes) do not currently have change history — that gap is tracked separately.\n\n## Scope of this document\n\nThis reference covers the endpoints intended for external integrations and automation. Account creation, login/SSO, and internal admin-console-only operations are intentionally left out."
+    "description": "API for managing applications, products, domains, companies, security policies, and integrations in AppSec Catalog.\n\n## Authentication\n\nSend an `api-key` header with every request: `api-key: asc_<tokenId>.<secret>`. Generate a token from **API Tokens** (`POST /api/api-tokens`) while signed in to the web app.\n\nA token can be scoped to a single company (limited access) or to your full account (same access as your user, including admin actions if your account is an admin). The same endpoints also accept the web app's session cookie \u2014 the `api-key` header is the supported method for external integrations.\n\n## Change tracking\n\nApplication create/update calls are recorded in that application's version history, tagged with the source of the change (`api` for api-key calls, `web_form` for the web app). Other resources documented here (products, domains, companies, policies, SAMM assessments, notes) do not currently have change history \u2014 that gap is tracked separately.\n\n## Scope of this document\n\nThis reference covers the endpoints intended for external integrations and automation. Account creation, login/SSO, and internal admin-console-only operations are intentionally left out."
   },
   "servers": [
     {
@@ -81,7 +81,7 @@
     },
     {
       "name": "Policy Controls",
-      "description": "A policy control is a single, individually-evaluated requirement that belongs to exactly one Policy (e.g. control `3.4.2`, \"Pre-Prod Scanning Required\"). Each control carries one or more field checks (`PolicyControlField`) — a `fieldPath` on an application (e.g. `sastTool`, `facing`), an `operator` (`exists`, `equals`, `gte`, `contains`, `in`, ...), and a comparison `value` — combined with AND/OR `evaluationLogic` to decide whether an application satisfies the control."
+      "description": "A policy control is a single, individually-evaluated requirement that belongs to exactly one Policy (e.g. control `3.4.2`, \"Pre-Prod Scanning Required\"). Each control carries one or more field checks (`PolicyControlField`) \u2014 a `fieldPath` on an application (e.g. `sastTool`, `facing`), an `operator` (`exists`, `equals`, `gte`, `contains`, `in`, ...), and a comparison `value` \u2014 combined with AND/OR `evaluationLogic` to decide whether an application satisfies the control."
     },
     {
       "name": "Product Updates",
@@ -126,7 +126,7 @@
         "type": "apiKey",
         "in": "cookie",
         "name": "connect.sid",
-        "description": "The web app's browser session cookie. Works on the same endpoints as an API key, but isn't intended for external integrations — use ApiKeyAuth instead."
+        "description": "The web app's browser session cookie. Works on the same endpoints as an API key, but isn't intended for external integrations \u2014 use ApiKeyAuth instead."
       },
       "cookieAuth": {
         "type": "apiKey",
@@ -782,7 +782,7 @@
       },
       "ApiTokenSummary": {
         "type": "object",
-        "description": "Metadata about an API token. The plaintext secret is never included here — only at creation time.",
+        "description": "Metadata about an API token. The plaintext secret is never included here \u2014 only at creation time.",
         "properties": {
           "id": {
             "type": "string"
@@ -1490,7 +1490,7 @@
       "post": {
         "operationId": "createDeploymentViaToken",
         "summary": "Report a deployment (CI/CD ingestion, deployment-token authenticated)",
-        "description": "Public endpoint intended for CI/CD systems: no session or api-key header is required. Authentication is instead performed via the `token` field in the JSON request body, which is compared (via hash) against active deployment tokens. On success, records a new Deployment for the target application, updates the token's lastUsedAt, and backfills the application's currentVersion/deploymentEnvironment/gitBranch if they were previously unset.",
+        "description": "Public endpoint intended for CI/CD systems: no session or api-key header is required. Authentication is instead performed via the `token` field in the JSON request body, which is compared (via hash) against active deployment tokens. On success, records a new Deployment for the target application, updates the token's lastUsedAt, and resolves `environment` against the company's environment vocabulary (its name or any of its aliases, matched exactly after trimming and lower-casing). On a match the application's instance for that environment is created if needed and its version and branch are OVERWRITTEN - a deploy is authoritative for its own environment. A value matching nothing is still recorded, with a null environmentId, and surfaces as Unassigned; nothing is created and nothing is inferred.",
         "tags": [
           "Deployment Tokens"
         ],
@@ -2927,15 +2927,13 @@
                       },
                       "currentVersion": {
                         "type": "string",
-                        "nullable": true
-                      },
-                      "deploymentEnvironment": {
-                        "type": "string",
-                        "nullable": true
+                        "nullable": true,
+                        "description": "Resolved from the application's PRODUCTION environment instance. Stored on ApplicationEnvironment, not on the application, and flattened onto the response under this name. Null when the application has no production environment."
                       },
                       "gitBranch": {
                         "type": "string",
-                        "nullable": true
+                        "nullable": true,
+                        "description": "Resolved from the application's PRODUCTION environment instance. Stored on ApplicationEnvironment, not on the application, and flattened onto the response under this name. Null when the application has no production environment."
                       },
                       "lastDastScanDate": {
                         "type": "string",
@@ -3159,21 +3157,6 @@
                   "appFirewallNA": {
                     "type": "boolean"
                   },
-                  "currentVersion": {
-                    "type": "string",
-                    "example": "1.2.3",
-                    "nullable": true
-                  },
-                  "deploymentEnvironment": {
-                    "type": "string",
-                    "example": "prod",
-                    "nullable": true
-                  },
-                  "gitBranch": {
-                    "type": "string",
-                    "example": "main",
-                    "nullable": true
-                  },
                   "lastDastScanDate": {
                     "type": "string",
                     "format": "date-time",
@@ -3334,15 +3317,13 @@
                     },
                     "currentVersion": {
                       "type": "string",
-                      "nullable": true
-                    },
-                    "deploymentEnvironment": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "description": "Resolved from the application's PRODUCTION environment instance. Stored on ApplicationEnvironment, not on the application, and flattened onto the response under this name. Null when the application has no production environment."
                     },
                     "gitBranch": {
                       "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "description": "Resolved from the application's PRODUCTION environment instance. Stored on ApplicationEnvironment, not on the application, and flattened onto the response under this name. Null when the application has no production environment."
                     },
                     "lastDastScanDate": {
                       "type": "string",
@@ -3439,7 +3420,7 @@
       "get": {
         "operationId": "getApplicationById",
         "summary": "Get application detail",
-        "description": "Returns the full record for a single application, including its owning company, linked SCM repository and its dependency list, uploaded API schema metadata, contacts, associated hosting domains, the last 10 deployments, and the products it belongs to. Deployment-derived fields (currentVersion, deploymentEnvironment, gitBranch) are backfilled from the most recent deployment whenever the application record does not already have an explicit value. The caller must be an admin or a member of the application's company; otherwise the request is rejected with 403.",
+        "description": "Returns the full record for a single application, including its owning company, linked SCM repository and its dependency list, uploaded API schema metadata, contacts, associated hosting domains, the last 10 deployments, and the products it belongs to. `currentVersion` and `gitBranch` are resolved from the application's PRODUCTION environment instance and returned under those names; they are null when it has no production environment. `deploymentEnvironment` no longer exists - the environment relation replaced it. The caller must be an admin or a member of the application's company; otherwise the request is rejected with 403.",
         "tags": [
           "Applications"
         ],
@@ -3590,15 +3571,13 @@
                     },
                     "currentVersion": {
                       "type": "string",
-                      "nullable": true
-                    },
-                    "deploymentEnvironment": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "description": "Resolved from the application's PRODUCTION environment instance. Stored on ApplicationEnvironment, not on the application, and flattened onto the response under this name. Null when the application has no production environment."
                     },
                     "gitBranch": {
                       "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "description": "Resolved from the application's PRODUCTION environment instance. Stored on ApplicationEnvironment, not on the application, and flattened onto the response under this name. Null when the application has no production environment."
                     },
                     "lastDastScanDate": {
                       "type": "string",
@@ -4009,21 +3988,6 @@
                     "type": "string",
                     "description": "e.g. pending_executive, pending_technical, onboarded."
                   },
-                  "currentVersion": {
-                    "type": "string",
-                    "example": "1.2.3",
-                    "nullable": true
-                  },
-                  "deploymentEnvironment": {
-                    "type": "string",
-                    "example": "prod",
-                    "nullable": true
-                  },
-                  "gitBranch": {
-                    "type": "string",
-                    "example": "main",
-                    "nullable": true
-                  },
                   "lastDastScanDate": {
                     "type": "string",
                     "format": "date-time",
@@ -4183,15 +4147,13 @@
                     },
                     "currentVersion": {
                       "type": "string",
-                      "nullable": true
-                    },
-                    "deploymentEnvironment": {
-                      "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "description": "Resolved from the application's PRODUCTION environment instance. Stored on ApplicationEnvironment, not on the application, and flattened onto the response under this name. Null when the application has no production environment."
                     },
                     "gitBranch": {
                       "type": "string",
-                      "nullable": true
+                      "nullable": true,
+                      "description": "Resolved from the application's PRODUCTION environment instance. Stored on ApplicationEnvironment, not on the application, and flattened onto the response under this name. Null when the application has no production environment."
                     },
                     "lastDastScanDate": {
                       "type": "string",
@@ -4975,7 +4937,7 @@
       "put": {
         "operationId": "setApplicationIntegrationLink",
         "summary": "Link an application to a tag/folder in a security tool",
-        "description": "Creates or updates the tag-based filter that scopes which vendor findings belong to this application. The body must include `tagValue`, and that value must be one of the tags returned for the company's already-linked Wiz folder — the folder itself cannot be overridden per application. Requires the provider's integration credentials to already be configured at the company or enterprise level.",
+        "description": "Creates or updates the tag-based filter that scopes which vendor findings belong to this application. The body must include `tagValue`, and that value must be one of the tags returned for the company's already-linked Wiz folder \u2014 the folder itself cannot be overridden per application. Requires the provider's integration credentials to already be configured at the company or enterprise level.",
         "tags": [
           "Application Integrations"
         ],
@@ -5239,7 +5201,7 @@
       "put": {
         "operationId": "saveApplicationApiSchema",
         "summary": "Upload or replace the API schema",
-        "description": "Uploads (or replaces the existing) OpenAPI/Swagger schema by pasting its raw text. Content must parse as JSON or YAML, be OpenAPI 3.x or Swagger 2.0, and include `info` and `paths` objects; it is capped at 2 MB and rejected if it contains binary/control characters. The server infers format from the filename extension or content shape and computes size and a SHA-256 checksum. There is exactly one API schema per application — a second call fully replaces the first.",
+        "description": "Uploads (or replaces the existing) OpenAPI/Swagger schema by pasting its raw text. Content must parse as JSON or YAML, be OpenAPI 3.x or Swagger 2.0, and include `info` and `paths` objects; it is capped at 2 MB and rejected if it contains binary/control characters. The server infers format from the filename extension or content shape and computes size and a SHA-256 checksum. There is exactly one API schema per application \u2014 a second call fully replaces the first.",
         "tags": [
           "Application API Schema"
         ],
@@ -5788,7 +5750,7 @@
       "get": {
         "operationId": "getThreatModelOptions",
         "summary": "Get threat-model reference data",
-        "description": "Returns the static reference data used to build threat-model forms (and the AI draft prompt): the component archetype library (auth, payment, data storage, integration, admin, file upload, messaging, other — each with a description and starter STRIDE threats), the six STRIDE prompt categories, the actor and data-type checklist options used in the application-level \"what are we working on\" question, the valid model and per-threat statuses, and the recommended re-review window in days. This data is fixed and identical for every application/company.",
+        "description": "Returns the static reference data used to build threat-model forms (and the AI draft prompt): the component archetype library (auth, payment, data storage, integration, admin, file upload, messaging, other \u2014 each with a description and starter STRIDE threats), the six STRIDE prompt categories, the actor and data-type checklist options used in the application-level \"what are we working on\" question, the valid model and per-threat statuses, and the recommended re-review window in days. This data is fixed and identical for every application/company.",
         "tags": [
           "Application Threat Model"
         ],
@@ -6133,7 +6095,7 @@
       "put": {
         "operationId": "saveApplicationThreatModel",
         "summary": "Create or update the root threat model",
-        "description": "Creates the application's threat model on first call, or partially updates it on subsequent calls — only fields present in the request body are changed. Covers the whole-application scope narrative, in-scope actor and data-type checklists, application-level threats, model status, reviewer, and review timestamp (`markReviewed: true` stamps `lastReviewedAt` with now; `lastReviewedAt: null` clears it). Checking a data type or actor that implies a sensitive surface (e.g. payment data, privileged/admin users) automatically creates a matching component node if one doesn't already exist yet, so that surface can't be left unmodeled.",
+        "description": "Creates the application's threat model on first call, or partially updates it on subsequent calls \u2014 only fields present in the request body are changed. Covers the whole-application scope narrative, in-scope actor and data-type checklists, application-level threats, model status, reviewer, and review timestamp (`markReviewed: true` stamps `lastReviewedAt` with now; `lastReviewedAt: null` clears it). Checking a data type or actor that implies a sensitive surface (e.g. payment data, privileged/admin users) automatically creates a matching component node if one doesn't already exist yet, so that surface can't be left unmodeled.",
         "tags": [
           "Application Threat Model"
         ],
@@ -6321,7 +6283,7 @@
       "post": {
         "operationId": "draftApplicationThreatModelAi",
         "summary": "Generate an AI-drafted threat model",
-        "description": "Asks the configured AI provider to propose threat-model content — scope, actors, data types, application-level threats, and suggested components (each with its own threats) — grounded in the application's stored metadata and any existing threat model. Nothing is persisted by this call; the caller reviews the draft and applies pieces of it through the normal GET/PUT threat-model and component endpoints. The response includes AI usage and cost metadata for the underlying request.",
+        "description": "Asks the configured AI provider to propose threat-model content \u2014 scope, actors, data types, application-level threats, and suggested components (each with its own threats) \u2014 grounded in the application's stored metadata and any existing threat model. Nothing is persisted by this call; the caller reviews the draft and applies pieces of it through the normal GET/PUT threat-model and component endpoints. The response includes AI usage and cost metadata for the underlying request.",
         "tags": [
           "Application Threat Model"
         ],
@@ -6667,7 +6629,7 @@
       "put": {
         "operationId": "updateThreatModelComponent",
         "summary": "Update a threat-model component",
-        "description": "Partially updates one component of the application's threat model — name, archetype, scope narrative, threats list, reviewed flag, or manual order index. Only fields present in the request body are changed.",
+        "description": "Partially updates one component of the application's threat model \u2014 name, archetype, scope narrative, threats list, reviewed flag, or manual order index. Only fields present in the request body are changed.",
         "tags": [
           "Application Threat Model"
         ],
@@ -7457,7 +7419,7 @@
       "post": {
         "operationId": "splitApplication",
         "summary": "Split an application into two",
-        "description": "Splits one application into two: the existing application is renamed to `originalName` (defaults to its current name) and a second application named `newName` is created in the same company with the same `status`. `metadataMode` controls how much of the original's metadata the new application starts with — `all` copies every copyable field, `none` creates a blank record, and `selected` copies only the fields listed in `fields`. Only scalar metadata is ever copied: domains, deployments, deployment tokens, product links, interfaces, contacts, notes, the threat model and the API schema all stay with the original application. Requires the caller to be an admin or a member of the application's company. Both applications get a new entry in their version history (`changeSource` is `\"api\"` for API-key callers, `\"web_form\"` for session callers) and a note recording the split.",
+        "description": "Splits one application into two: the existing application is renamed to `originalName` (defaults to its current name) and a second application named `newName` is created in the same company with the same `status`. `metadataMode` controls how much of the original's metadata the new application starts with \u2014 `all` copies every copyable field, `none` creates a blank record, and `selected` copies only the fields listed in `fields`. Only scalar metadata is ever copied: domains, deployments, deployment tokens, product links, interfaces, contacts, notes, the threat model and the API schema all stay with the original application. Requires the caller to be an admin or a member of the application's company. Both applications get a new entry in their version history (`changeSource` is `\"api\"` for API-key callers, `\"web_form\"` for session callers) and a note recording the split.",
         "tags": [
           "Applications"
         ],
@@ -7512,7 +7474,7 @@
                     "items": {
                       "type": "string"
                     },
-                    "description": "Metadata field names to copy; only used when `metadataMode` is `selected`. Accepts the application's scalar metadata fields (for example `description`, `language`, `businessCriticality`, `sastTool`, `deploymentEnvironment`); `name`, `companyId`, `status`, `interfaces` and `metadataLastReviewed` cannot be listed here.",
+                    "description": "Metadata field names to copy; only used when `metadataMode` is `selected`. Accepts the application's scalar metadata fields (for example `description`, `language`, `businessCriticality`, `sastTool`); `name`, `companyId`, `status`, `interfaces` and `metadataLastReviewed` cannot be listed here. `currentVersion` and `gitBranch` are not listed either - they live on the environment instance, and a split always clones the instances (with their versions and branches) to the new application.",
                     "example": [
                       "description",
                       "language",
@@ -7949,7 +7911,7 @@
       "post": {
         "operationId": "createApplicationDeployment",
         "summary": "Record a new deployment",
-        "description": "Records a deployment event for the application. `environment` is required (non-blank after trimming); all other fields are optional and are trimmed if provided. `deployedAt` defaults to the current time if omitted. After creation, any of the application's own `currentVersion`, `deploymentEnvironment`, or `gitBranch` fields that are currently null/empty are auto-populated from this deployment's `version`, `environment`, and `gitBranch` respectively. Caller must be an admin or a member of the application's company.",
+        "description": "Records a deployment event for the application. `environment` is required (non-blank after trimming); all other fields are optional and are trimmed if provided. `deployedAt` defaults to the current time if omitted. `environment` is resolved against the company's environment vocabulary by name or alias, matched exactly after trimming and lower-casing; nothing is inferred and nothing is auto-created. On a match, the application's instance for that environment is created if needed and its version and branch are OVERWRITTEN. A value matching nothing is recorded with a null environmentId and surfaces as Unassigned. Caller must be an admin or a member of the application's company.",
         "tags": [
           "Application Deployments"
         ],
@@ -17544,7 +17506,7 @@
       "get": {
         "operationId": "listProductIngressPoints",
         "summary": "List a product's ingress points",
-        "description": "Returns the points where external traffic is considered to enter the product's architecture — each tied to a mapped application and a named channel (e.g. \"default\", a specific API path). Used alongside data flows to render the product's threat-model diagram.",
+        "description": "Returns the points where external traffic is considered to enter the product's architecture \u2014 each tied to a mapped application and a named channel (e.g. \"default\", a specific API path). Used alongside data flows to render the product's threat-model diagram.",
         "tags": [
           "Products"
         ],
@@ -17806,7 +17768,7 @@
       "get": {
         "operationId": "listProductDataFlows",
         "summary": "List a product's data flows",
-        "description": "Returns the data flows recorded between applications mapped to a product — each flow describes a directed connection (source to target, with protocol, data classification, and whether it requires an API key). Together with ingress points, these form the edges of the product's architecture/threat-model diagram.",
+        "description": "Returns the data flows recorded between applications mapped to a product \u2014 each flow describes a directed connection (source to target, with protocol, data classification, and whether it requires an API key). Together with ingress points, these form the edges of the product's architecture/threat-model diagram.",
         "tags": [
           "Products"
         ],
@@ -19584,6 +19546,940 @@
           },
           "500": {
             "description": "Failed to delete note."
+          }
+        }
+      }
+    },
+    "/api/environments": {
+      "get": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "List environment vocabulary",
+        "description": "A company's deployment environments: what it calls each of Orbit's five kinds. These names and aliases are what every CI deploy string and every Wiz `Environment` tag is matched against, so they are load-bearing rather than cosmetic. Admins may scope by company or division; everyone else sees their own company.",
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "divisionId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "retired"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Environments, with company and usage counts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "companyId": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "What this company calls this environment, normalized to lower case and trimmed. This is the string its pipelines and its Wiz `Environment` tag send."
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "PRODUCTION",
+                          "STAGING",
+                          "QA",
+                          "DEVELOPMENT",
+                          "OTHER"
+                        ],
+                        "description": "Orbit's canonical bucket. A company holds at most one row of each kind except OTHER, enforced by a partial unique index. Cross-company reporting counts by kind, never by name."
+                      },
+                      "aliases": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "Additional accepted strings, comma-separated and normalized. A submitted value matching any of these resolves to this environment; the name is implicitly included. Use it when pipelines disagree with each other rather than renaming anything."
+                      },
+                      "description": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "active",
+                          "retired"
+                        ]
+                      },
+                      "displayOrder": {
+                        "type": "integer"
+                      },
+                      "sourceLabel": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "The original free text this row was seeded or adopted from."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Add an environment",
+        "description": "Requires `environment.manage`. `kind` defaults to a guess from the name when omitted, which is a convenience for the caller only - nothing infers a kind at resolve time. Rejected with 409 when the kind is single-slot and already taken, or when the name or any alias is already claimed by another of the company's environments (that collision cannot be a database constraint, because aliases are comma-packed in one column).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "PRODUCTION",
+                      "STAGING",
+                      "QA",
+                      "DEVELOPMENT",
+                      "OTHER"
+                    ]
+                  },
+                  "aliases": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ],
+                    "description": "Comma-separated string or array."
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "displayOrder": {
+                    "type": "integer"
+                  },
+                  "companyId": {
+                    "type": "string",
+                    "description": "Admins only; otherwise the caller's company."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "companyId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "What this company calls this environment, normalized to lower case and trimmed. This is the string its pipelines and its Wiz `Environment` tag send."
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "PRODUCTION",
+                        "STAGING",
+                        "QA",
+                        "DEVELOPMENT",
+                        "OTHER"
+                      ],
+                      "description": "Orbit's canonical bucket. A company holds at most one row of each kind except OTHER, enforced by a partial unique index. Cross-company reporting counts by kind, never by name."
+                    },
+                    "aliases": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Additional accepted strings, comma-separated and normalized. A submitted value matching any of these resolves to this environment; the name is implicitly included. Use it when pipelines disagree with each other rather than renaming anything."
+                    },
+                    "description": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "retired"
+                      ]
+                    },
+                    "displayOrder": {
+                      "type": "integer"
+                    },
+                    "sourceLabel": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "The original free text this row was seeded or adopted from."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid name or kind."
+          },
+          "403": {
+            "description": "Missing environment.manage for this company."
+          },
+          "409": {
+            "description": "Kind already in use, or name/alias already claimed."
+          }
+        }
+      }
+    },
+    "/api/environments/kinds": {
+      "get": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "List the environment kinds",
+        "description": "Orbit's canonical kinds, so a client does not hard-code its own copy.",
+        "responses": {
+          "200": {
+            "description": "The kinds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "kinds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/environments/{id}": {
+      "put": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Rename, re-kind, describe, reorder or retire an environment",
+        "description": "Requires `environment.manage`. Validated against the row as it WILL be, so changing name and kind together is checked as one end state. A rename never orphans history - past deployments keep their environmentId - but a pipeline still sending the old name stops matching, so the response reports how many deployments used it and whether the old name is free to keep as an alias.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "PRODUCTION",
+                      "STAGING",
+                      "QA",
+                      "DEVELOPMENT",
+                      "OTHER"
+                    ]
+                  },
+                  "aliases": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "retired"
+                    ]
+                  },
+                  "displayOrder": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "companyId": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string",
+                          "description": "What this company calls this environment, normalized to lower case and trimmed. This is the string its pipelines and its Wiz `Environment` tag send."
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "PRODUCTION",
+                            "STAGING",
+                            "QA",
+                            "DEVELOPMENT",
+                            "OTHER"
+                          ],
+                          "description": "Orbit's canonical bucket. A company holds at most one row of each kind except OTHER, enforced by a partial unique index. Cross-company reporting counts by kind, never by name."
+                        },
+                        "aliases": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Additional accepted strings, comma-separated and normalized. A submitted value matching any of these resolves to this environment; the name is implicitly included. Use it when pipelines disagree with each other rather than renaming anything."
+                        },
+                        "description": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "retired"
+                          ]
+                        },
+                        "displayOrder": {
+                          "type": "integer"
+                        },
+                        "sourceLabel": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "The original free text this row was seeded or adopted from."
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "renamedFrom": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "affectedDeployments": {
+                          "type": "integer",
+                          "description": "Deployments recorded against this environment under the old name."
+                        },
+                        "canKeepOldNameAsAlias": {
+                          "type": "boolean",
+                          "description": "True when the old name is not already an alias, so the UI can offer to add it and keep existing pipelines resolving."
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid field."
+          },
+          "403": {
+            "description": "Missing environment.manage."
+          },
+          "404": {
+            "description": "Not found."
+          },
+          "409": {
+            "description": "Kind already in use, or name/alias already claimed."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Hard-delete an environment",
+        "description": "Admin only, and refused with 409 while any application instance or deployment still references it - that history is the reason to retire instead. Retiring (PUT status) is the delegatable equivalent and is what `environment.manage` holders use.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found."
+          },
+          "409": {
+            "description": "Still in use by instances or deployments."
+          }
+        }
+      }
+    },
+    "/api/applications/{id}/environments": {
+      "get": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "List an application's environment instances",
+        "description": "Which of its company's environments this application runs in, and what is deployed to each. Each row carries a derived `isPrimary`.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Instances, in environment display order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "applicationId": {
+                        "type": "string"
+                      },
+                      "environmentId": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "active",
+                          "retired"
+                        ]
+                      },
+                      "currentVersion": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "Version deployed to THIS environment. Overwritten by every deploy to it."
+                      },
+                      "gitBranch": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "isPrimary": {
+                        "type": "boolean",
+                        "description": "DERIVED, never stored: true when this instance's environment has kind PRODUCTION. There is no column and no endpoint to set it - a company holds at most one PRODUCTION environment, so primary is a lookup. An application with no production instance has no primary and nothing is promoted in its place."
+                      },
+                      "environment": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "companyId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string",
+                            "description": "What this company calls this environment, normalized to lower case and trimmed. This is the string its pipelines and its Wiz `Environment` tag send."
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "PRODUCTION",
+                              "STAGING",
+                              "QA",
+                              "DEVELOPMENT",
+                              "OTHER"
+                            ],
+                            "description": "Orbit's canonical bucket. A company holds at most one row of each kind except OTHER, enforced by a partial unique index. Cross-company reporting counts by kind, never by name."
+                          },
+                          "aliases": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Additional accepted strings, comma-separated and normalized. A submitted value matching any of these resolves to this environment; the name is implicitly included. Use it when pipelines disagree with each other rather than renaming anything."
+                          },
+                          "description": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "retired"
+                            ]
+                          },
+                          "displayOrder": {
+                            "type": "integer"
+                          },
+                          "sourceLabel": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "The original free text this row was seeded or adopted from."
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not your company."
+          },
+          "404": {
+            "description": "Application not found."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Record that an application runs in an environment",
+        "description": "Requires `environment.manage`. The environment must belong to the application's own company - the join table has no company column of its own, so this is the only thing stopping an id from another tenant linking two companies' data together. Deploys create instances on their own; this is for recording one by hand.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "environmentId"
+                ],
+                "properties": {
+                  "environmentId": {
+                    "type": "string"
+                  },
+                  "currentVersion": {
+                    "type": "string",
+                    "description": "Optional. The next deploy to this environment overwrites it."
+                  },
+                  "gitBranch": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "applicationId": {
+                      "type": "string"
+                    },
+                    "environmentId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "retired"
+                      ]
+                    },
+                    "currentVersion": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Version deployed to THIS environment. Overwritten by every deploy to it."
+                    },
+                    "gitBranch": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "isPrimary": {
+                      "type": "boolean",
+                      "description": "DERIVED, never stored: true when this instance's environment has kind PRODUCTION. There is no column and no endpoint to set it - a company holds at most one PRODUCTION environment, so primary is a lookup. An application with no production instance has no primary and nothing is promoted in its place."
+                    },
+                    "environment": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "companyId": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string",
+                          "description": "What this company calls this environment, normalized to lower case and trimmed. This is the string its pipelines and its Wiz `Environment` tag send."
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "PRODUCTION",
+                            "STAGING",
+                            "QA",
+                            "DEVELOPMENT",
+                            "OTHER"
+                          ],
+                          "description": "Orbit's canonical bucket. A company holds at most one row of each kind except OTHER, enforced by a partial unique index. Cross-company reporting counts by kind, never by name."
+                        },
+                        "aliases": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Additional accepted strings, comma-separated and normalized. A submitted value matching any of these resolves to this environment; the name is implicitly included. Use it when pipelines disagree with each other rather than renaming anything."
+                        },
+                        "description": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "retired"
+                          ]
+                        },
+                        "displayOrder": {
+                          "type": "integer"
+                        },
+                        "sourceLabel": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "The original free text this row was seeded or adopted from."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing environmentId, or an environment belonging to another company."
+          },
+          "403": {
+            "description": "Missing environment.manage."
+          },
+          "404": {
+            "description": "Application not found."
+          },
+          "409": {
+            "description": "Already recorded in this environment."
+          }
+        }
+      }
+    },
+    "/api/applications/{id}/environments/{instanceId}": {
+      "put": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Edit one environment instance",
+        "description": "Requires `environment.manage`. Sets the version or branch deployed to this environment, or retires the instance ('this application no longer runs here', as distinct from retiring the environment company-wide). There is no primary flag to set: primary is derived from the environment's kind.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "instanceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "currentVersion": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "gitBranch": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "retired"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "applicationId": {
+                      "type": "string"
+                    },
+                    "environmentId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "retired"
+                      ]
+                    },
+                    "currentVersion": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Version deployed to THIS environment. Overwritten by every deploy to it."
+                    },
+                    "gitBranch": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "isPrimary": {
+                      "type": "boolean",
+                      "description": "DERIVED, never stored: true when this instance's environment has kind PRODUCTION. There is no column and no endpoint to set it - a company holds at most one PRODUCTION environment, so primary is a lookup. An application with no production instance has no primary and nothing is promoted in its place."
+                    },
+                    "environment": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "companyId": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string",
+                          "description": "What this company calls this environment, normalized to lower case and trimmed. This is the string its pipelines and its Wiz `Environment` tag send."
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "PRODUCTION",
+                            "STAGING",
+                            "QA",
+                            "DEVELOPMENT",
+                            "OTHER"
+                          ],
+                          "description": "Orbit's canonical bucket. A company holds at most one row of each kind except OTHER, enforced by a partial unique index. Cross-company reporting counts by kind, never by name."
+                        },
+                        "aliases": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Additional accepted strings, comma-separated and normalized. A submitted value matching any of these resolves to this environment; the name is implicitly included. Use it when pipelines disagree with each other rather than renaming anything."
+                        },
+                        "description": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "retired"
+                          ]
+                        },
+                        "displayOrder": {
+                          "type": "integer"
+                        },
+                        "sourceLabel": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "The original free text this row was seeded or adopted from."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No changes supplied, or an invalid status."
+          },
+          "403": {
+            "description": "Missing environment.manage."
+          },
+          "404": {
+            "description": "Instance not found for this application."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Remove an application from an environment",
+        "description": "Requires `environment.manage`. Deletes the instance and the version and branch stored on it; deploy history is kept. Domains and tool links that pointed at this instance are NOT deleted - their foreign keys are SET NULL, so they stay attached to the application and merely stop being attributed to an environment. The response counts them. Retiring is usually the better answer.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "instanceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Removed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "detachedDomains": {
+                      "type": "integer"
+                    },
+                    "detachedToolLinks": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing environment.manage."
+          },
+          "404": {
+            "description": "Instance not found for this application."
           }
         }
       }

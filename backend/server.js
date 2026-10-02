@@ -21,6 +21,7 @@ import invitationRoutes from './routes/invitations.js';
 import domainRoutes from './routes/domains.js';
 import deploymentTokenRoutes from './routes/deploymentTokens.js';
 import environmentRoutes from './routes/environments.js';
+import applicationEnvironmentRoutes from './routes/applicationEnvironments.js';
 import apiTokenRoutes from './routes/apiTokens.js';
 import notesRoutes from './routes/notes.js';
 import policyControlRoutes from './routes/policyControls.js';
@@ -178,6 +179,9 @@ app.use('/api/users', userRoutes);
 app.use('/api/companies', companySecurityFindings);
 app.use('/api/security-findings', securityFindingsJobRoutes);
 app.use('/api/companies', companyRoutes);
+// Mounted ahead of applicationRoutes so the /:id/environments paths are matched by
+// their own router rather than falling into any broader /:id handler.
+app.use('/api/applications', applicationEnvironmentRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/divisions', divisionRoutes);
