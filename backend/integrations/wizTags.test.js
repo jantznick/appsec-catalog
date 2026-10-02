@@ -170,14 +170,36 @@ describe('wizResourceMatchReason', () => {
     );
   });
 
-  it('still finds shared resources when only a product is given', () => {
+  it('returns EVERY resource in the product when only a product is given', () => {
+    // REGRESSION. The no-filter clause used to be last and guarded on
+    // !productValue, so asking for a product alone returned only its shared
+    // resources - every named application in it fell through to null, and a
+    // product with six resources reported none.
+    for (const value of ['backend', 'frontend', '_shared', null, '']) {
+      assert.equal(
+        wizResourceMatchReason({
+          applicationValue: null,
+          productValue: 'Orbit',
+          resourceApplication: value,
+        }),
+        'product',
+        `Application=${JSON.stringify(value)} should be in the product`,
+      );
+    }
+  });
+
+  it('does not let includeUnassigned hide a product listing', () => {
+    // includeUnassigned is about an APPLICATION's shared resources. Asking for a
+    // whole product is not that question, and the flag must not silently drop the
+    // untagged half of it.
     assert.equal(
       wizResourceMatchReason({
         applicationValue: null,
         productValue: 'Orbit',
-        resourceApplication: '_shared',
+        resourceApplication: null,
+        includeUnassigned: false,
       }),
-      'shared',
+      'product',
     );
   });
 });

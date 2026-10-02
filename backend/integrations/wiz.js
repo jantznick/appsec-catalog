@@ -539,6 +539,8 @@ function sameTagValue(a, b) {
  *                   or carrying no application tag at all. One value per tag key
  *                   means a host serving several applications cannot name one of
  *                   them without being wrong for the rest.
+ *   'product'     - a product was asked for and no application, so everything in
+ *                   the product belongs in the answer
  *   'all'         - no filter was asked for
  *
  * @param {object} args
@@ -558,9 +560,15 @@ export function wizResourceMatchReason({
   const isShared =
     !applicationText || sameTagValue(applicationText, WIZ_SHARED_APPLICATION_VALUE);
 
-  if (applicationValue && sameTagValue(applicationText, applicationValue)) return 'application';
+  // No application asked for means no application filter. Everything that reached
+  // here already passed the product filter, or there was no filter at all, so it
+  // belongs in the answer. This clause used to be last and guarded on
+  // `!productValue`, which made asking for a product alone return only its SHARED
+  // resources - every named application in the product fell through to null.
+  if (!applicationValue) return productValue ? 'product' : 'all';
+
+  if (sameTagValue(applicationText, applicationValue)) return 'application';
   if (isShared && includeUnassigned && productValue) return 'shared';
-  if (!applicationValue && !productValue) return 'all';
   return null;
 }
 
@@ -603,8 +611,13 @@ function wizTagWhereCandidates(pairs) {
  * a missing filter.
  *
  * `applicationValue` narrows to resources carrying that Application tag.
- * `productValue` narrows further and is optional, because an application need not
- * belong to a product.
+ * `productValue` narrows further and is optional - an application need not belong
+ * to a product, and an application belonging to SEVERAL is left unfiltered by
+ * product rather than guessing which one. Less specific beats wrong: an
+ * application's resources must all come back, and losing one because the wrong
+ * product was picked is the worse failure.
+ *
+ * With a product and no application, every resource in the product comes back.
  *
  * `includeUnassigned` also returns the product's SHARED resources: those tagged
  * `Application=_shared` on purpose, and those carrying no application tag at all.
