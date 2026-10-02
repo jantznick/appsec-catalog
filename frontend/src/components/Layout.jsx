@@ -109,8 +109,8 @@ export function Layout({ children }) {
   };
 
   // Everything an admin needs to look at, combined into one number. Drives the
-  // single header indicator next to the account email; the dropdown items carry
-  // their own per-queue badges once the menu is open.
+  // attention pill next to the account email, which is now the only place a
+  // queue count appears — the menu lists Settings and nothing else.
   const adminAttentionCount = isAdmin() ? globalPendingCount + infoRequestCount : 0;
 
   const attentionSummary = [
@@ -195,6 +195,12 @@ export function Layout({ children }) {
                       </>
                     ) : isAdmin() ? (
                       <>
+                        {/* One way in, on purpose: everything an admin can reach
+                            is a tile on the Settings page, so listing those
+                            destinations here as well only made the menu longer.
+                            The per-queue counts live on the attention pill next
+                            to the account email, which still routes straight to
+                            whichever queue is waiting. */}
                         <DropdownSectionLabel>Admin</DropdownSectionLabel>
                         <DropdownItem
                           onClick={() => {
@@ -202,53 +208,6 @@ export function Layout({ children }) {
                           }}
                         >
                           Settings
-                        </DropdownItem>
-                        <DropdownItem
-                          onClick={() => {
-                            navigate('/pending-approvals');
-                          }}
-                          className="relative"
-                        >
-                          <span>Pending approvals</span>
-                          {globalPendingCount > 0 && (
-                            <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
-                              {globalPendingCount > 99 ? '99+' : globalPendingCount}
-                            </span>
-                          )}
-                        </DropdownItem>
-                        <DropdownItem
-                          onClick={() => {
-                            navigate('/settings/roadmap');
-                          }}
-                        >
-                          Roadmap
-                        </DropdownItem>
-                        <DropdownItem
-                          onClick={() => {
-                            navigate('/settings/feature-requests');
-                          }}
-                        >
-                          Feature requests
-                        </DropdownItem>
-                        <DropdownItem
-                          onClick={() => {
-                            navigate('/settings/program-content');
-                          }}
-                        >
-                          Program content
-                        </DropdownItem>
-                        <DropdownItem
-                          onClick={() => {
-                            navigate('/settings/program-requests');
-                          }}
-                          className="relative"
-                        >
-                          <span>Information requests</span>
-                          {infoRequestCount > 0 && (
-                            <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
-                              {infoRequestCount > 99 ? '99+' : infoRequestCount}
-                            </span>
-                          )}
                         </DropdownItem>
                       </>
                     ) : null}
